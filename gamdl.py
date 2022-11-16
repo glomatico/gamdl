@@ -429,6 +429,12 @@ if __name__ == '__main__':
         help = 'Print Execeptions.'
     )
     parser.add_argument(
+        '-v',
+        '--print-video-playlist',
+        action = 'store_true',
+        help = 'Print Video Playlist.'
+    )
+    parser.add_argument(
         '-u',
         '--urls-txt',
         action = 'store_true',
@@ -458,6 +464,8 @@ if __name__ == '__main__':
                 webplayback = gamdl.get_webplayback(track_id)
                 if len(webplayback['assets']) == 0:
                     playlist = gamdl.get_playlist_music_video(webplayback)
+                    if args.print_video_playlist:
+                        print(playlist.dumps())
                     stream_url_audio = gamdl.get_stream_url_music_video_audio(playlist)
                     encrypted_location_audio = gamdl.get_encrypted_location_audio(track_id)
                     gamdl.download(encrypted_location_audio, stream_url_audio)
@@ -494,11 +502,3 @@ if __name__ == '__main__':
                 if args.print_exception:
                     traceback.print_exc()
     print(f'All done ({error_count} error(s)).')
-
-
-
-        
-
-        
-
-

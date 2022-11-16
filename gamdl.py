@@ -494,8 +494,6 @@ if __name__ == '__main__':
                     if not args.no_lrc and lyrics and lyrics[1]:
                         gamdl.make_lrc(final_download_location, lyrics)
                 gamdl.apply_tags(final_download_location, tags)
-                if not args.skip_cleanup and os.path.exists(args.temp_path):
-                    shutil.rmtree(args.temp_path)
             except KeyboardInterrupt:
                 exit(0)
             except:
@@ -503,4 +501,6 @@ if __name__ == '__main__':
                 print(f'* Failed to dowload "{download_queue[j]["title"]}" ({j + 1} of {len(download_queue)}).')
                 if args.print_exception:
                     traceback.print_exc()
+            if not args.skip_cleanup and os.path.exists(args.temp_path):
+                shutil.rmtree(args.temp_path)
     print(f'All done ({error_count} error(s)).')

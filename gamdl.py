@@ -147,6 +147,7 @@ class Gamdl:
             'outtmpl': str(encrypted_location),
             'allow_unplayable_formats': True,
             'fixup': 'never',
+            'overwrites': True,
             'external_downloader': 'aria2c'
         }) as ydl:
             ydl.download(stream_url)

@@ -373,8 +373,8 @@ if __name__ == '__main__':
     parser = ArgumentParser(description = 'A Python script to download Apple Music albums/music videos/playlists/songs.')
     parser.add_argument(
         'url',
-        help='Apple Music albums/music videso/playlists/songs URL',
-        nargs='+',
+        help='Apple Music albums/music videos/playlists/songs URL',
+        nargs='*',
         metavar='<url>'
     )
     parser.add_argument(
@@ -441,11 +441,11 @@ if __name__ == '__main__':
         help = 'Use urls.txt to download URLs.'
     )
     args = parser.parse_args()
-    if not args.url and not args.download_txt:
-        parser.error('the following arguments are required: <url>')
     if args.urls_txt:
         with open('urls.txt', 'r', encoding = 'utf8') as f:
             args.url = f.read().splitlines()
+    elif not args.url:
+        parser.error('the following arguments are required: <url>')
     gamdl = Gamdl(args.disable_music_video_skip, args.auth_path, args.temp_path, args.prefer_hevc, args.final_path)
     error_count = 0
     for i in range(len(args.url)):

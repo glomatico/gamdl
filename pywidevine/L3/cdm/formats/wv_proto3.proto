@@ -1,0 +1,389 @@
+// beware proto3 won't show missing fields it seems, need to change to "proto2" and add "optional" before every field, and remove all the dummy enum members I added:
+syntax = "proto3";
+
+// from x86 (partial), most of it from the ARM version:
+message ClientIdentification {
+  enum TokenType {
+    KEYBOX = 0;
+    DEVICE_CERTIFICATE = 1;
+    REMOTE_ATTESTATION_CERTIFICATE = 2;
+  }
+  message NameValue {
+    string Name = 1;
+    string Value = 2;
+  }
+  message ClientCapabilities {
+    enum HdcpVersion {
+      HDCP_NONE = 0;
+      HDCP_V1 = 1;
+      HDCP_V2 = 2;
+      HDCP_V2_1 = 3;
+      HDCP_V2_2 = 4;
+    }
+    uint32 ClientToken = 1;
+    uint32 SessionToken = 2;
+    uint32 VideoResolutionConstraints = 3;
+    HdcpVersion MaxHdcpVersion = 4;
+    uint32 OemCryptoApiVersion = 5;
+  }
+  TokenType Type = 1;
+  //bytes Token = 2; // by default the client treats this as blob, but it's usually a DeviceCertificate, so for usefulness sake, I'm replacing it with this one:
+  SignedDeviceCertificate Token = 2; 
+  repeated NameValue ClientInfo = 3;
+  bytes ProviderClientToken = 4;
+  uint32 LicenseCounter = 5;
+  ClientCapabilities _ClientCapabilities = 6; // how should we deal with duped names? will have to look at proto docs later
+}
+
+message DeviceCertificate {
+  enum CertificateType {
+    ROOT = 0;
+    INTERMEDIATE = 1;
+    USER_DEVICE = 2;
+    SERVICE = 3;
+  }
+  //ProvisionedDeviceInfo.WvSecurityLevel Type = 1; // is this how one is supposed to call it? (it's an enum) there might be a bug here, with CertificateType getting confused with WvSecurityLevel, for now renaming it (verify against other binaries)
+  CertificateType Type = 1;
+  bytes SerialNumber = 2; 
+  uint32 CreationTimeSeconds = 3;
+  bytes PublicKey = 4;
+  uint32 SystemId = 5;
+  uint32 TestDeviceDeprecated = 6; // is it bool or int?
+  bytes ServiceId = 7; // service URL for service certificates
+}
+
+// missing some references, 
+message DeviceCertificateStatus {
+  enum CertificateStatus {
+    VALID = 0;
+    REVOKED = 1;
+  }
+  bytes SerialNumber = 1;
+  CertificateStatus Status = 2; 
+  ProvisionedDeviceInfo DeviceInfo = 4; // where is 3? is it deprecated?
+}
+
+message DeviceCertificateStatusList {
+  uint32 CreationTimeSeconds = 1;
+  repeated DeviceCertificateStatus CertificateStatus = 2;
+}
+
+message EncryptedClientIdentification {
+  string ServiceId = 1;
+  bytes ServiceCertificateSerialNumber = 2;
+  bytes EncryptedClientId = 3;
+  bytes EncryptedClientIdIv = 4;
+  bytes EncryptedPrivacyKey = 5;
+}
+
+// todo: fill (for this top-level type, it might be impossible/difficult)
+enum LicenseType {
+  ZERO = 0;
+  DEFAULT = 1; // do not know what this is either, but should be 1; on recent versions may go up to 3 (latest x86)
+}
+
+// todo: fill (for this top-level type, it might be impossible/difficult)
+// this is just a guess because these globals got lost, but really, do we need more? 
+enum ProtocolVersion {
+  DUMMY = 0;
+  CURRENT = 21; // don't have symbols for this
+}
+
+
+message LicenseIdentification {
+  bytes RequestId = 1;
+  bytes SessionId = 2;
+  bytes PurchaseId = 3;
+  LicenseType Type = 4;
+  uint32 Version = 5;
+  bytes ProviderSessionToken = 6;
+}
+
+
+message License {
+  message Policy {
+    uint32 CanPlay = 1;
+    uint32 CanPersist = 2;
+    uint32 CanRenew = 3;
+    uint32 RentalDurationSeconds = 4;
+    uint32 PlaybackDurationSeconds = 5;
+    uint32 LicenseDurationSeconds = 6;
+    uint32 RenewalRecoveryDurationSeconds = 7;
+    string RenewalServerUrl = 8;
+    uint32 RenewalDelaySeconds = 9;
+    uint32 RenewalRetryIntervalSeconds = 10;
+    uint32 RenewWithUsage = 11;
+	uint32 UnknownPolicy12 = 12;
+  }
+  message KeyContainer {
+    enum KeyType {
+      _NOKEYTYPE = 0; // dummy, added to satisfy proto3, not present in original
+      SIGNING = 1;
+      CONTENT = 2;
+      KEY_CONTROL = 3;
+      OPERATOR_SESSION = 4;
+    }
+    enum SecurityLevel {
+      _NOSECLEVEL = 0; // dummy, added to satisfy proto3, not present in original
+      SW_SECURE_CRYPTO = 1;
+      SW_SECURE_DECODE = 2;
+      HW_SECURE_CRYPTO = 3;
+      HW_SECURE_DECODE = 4;
+      HW_SECURE_ALL = 5;
+    }
+    message OutputProtection {
+      enum CGMS {
+        COPY_FREE = 0;
+        COPY_ONCE = 2;
+        COPY_NEVER = 3;
+        CGMS_NONE = 0x2A; // PC default!
+      }
+      ClientIdentification.ClientCapabilities.HdcpVersion Hdcp = 1; // it's most likely a copy of Hdcp version available here, but compiler optimized it away
+      CGMS CgmsFlags = 2;
+    }
+    message KeyControl {
+      bytes KeyControlBlock = 1; // what is this?
+      bytes Iv = 2;
+    }
+    message OperatorSessionKeyPermissions {
+      uint32 AllowEncrypt = 1;
+      uint32 AllowDecrypt = 2;
+      uint32 AllowSign = 3;
+      uint32 AllowSignatureVerify = 4;
+    }
+    message VideoResolutionConstraint {
+      uint32 MinResolutionPixels = 1;
+      uint32 MaxResolutionPixels = 2;
+      OutputProtection RequiredProtection = 3;
+    }
+    bytes Id = 1;
+    bytes Iv = 2;
+    bytes Key = 3;
+    KeyType Type = 4;
+    SecurityLevel Level = 5;
+    OutputProtection RequiredProtection = 6;
+    OutputProtection RequestedProtection = 7;
+    KeyControl _KeyControl = 8; // duped names, etc
+    OperatorSessionKeyPermissions _OperatorSessionKeyPermissions = 9; // duped names, etc
+    repeated VideoResolutionConstraint VideoResolutionConstraints = 10;
+  }
+  LicenseIdentification Id = 1;
+  Policy _Policy = 2; // duped names, etc
+  repeated KeyContainer Key = 3;
+  uint32 LicenseStartTime = 4;
+  uint32 RemoteAttestationVerified = 5; // bool?
+  bytes ProviderClientToken = 6;
+  // there might be more, check with newer versions (I see field 7-8 in a lic)
+  // this appeared in latest x86:
+  uint32 ProtectionScheme = 7; // type unconfirmed fully, but it's likely as WidevineCencHeader describesit (fourcc)
+  bytes UnknownHdcpDataField = 8;
+}
+
+message LicenseError {
+  enum Error {
+    DUMMY_NO_ERROR = 0; // dummy, added to satisfy proto3
+    INVALID_DEVICE_CERTIFICATE = 1;
+    REVOKED_DEVICE_CERTIFICATE = 2;
+    SERVICE_UNAVAILABLE = 3;
+  }
+  //LicenseRequest.RequestType ErrorCode; // clang mismatch
+  Error ErrorCode = 1;
+}
+
+message LicenseRequest {
+  message ContentIdentification {
+    message CENC {
+      // bytes Pssh = 1; // the client's definition is opaque, it doesn't care about the contents, but the PSSH has a clear definition that is understood and requested by the server, thus I'll replace it with:
+      WidevineCencHeader Pssh = 1;
+      LicenseType LicenseType = 2; // unfortunately the LicenseType symbols are not present, acceptable value seems to only be 1
+      bytes RequestId = 3;
+    }
+    message WebM {
+      bytes Header = 1; // identical to CENC, aside from PSSH and the parent field number used
+      LicenseType LicenseType = 2;
+      bytes RequestId = 3;
+    }
+    message ExistingLicense {
+      LicenseIdentification LicenseId = 1;
+      uint32 SecondsSinceStarted = 2;
+      uint32 SecondsSinceLastPlayed = 3;
+      bytes SessionUsageTableEntry = 4;
+    }
+    CENC CencId = 1;
+    WebM WebmId = 2;
+    ExistingLicense License = 3;
+  }
+  enum RequestType {
+    DUMMY_REQ_TYPE = 0; // dummy, added to satisfy proto3
+    NEW = 1;
+    RENEWAL = 2;
+    RELEASE = 3;
+  }   
+  ClientIdentification ClientId = 1;
+  ContentIdentification ContentId = 2;
+  RequestType Type = 3;
+  uint32 RequestTime = 4;
+  bytes KeyControlNonceDeprecated = 5;
+  ProtocolVersion ProtocolVersion = 6; // lacking symbols for this
+  uint32 KeyControlNonce = 7;
+  EncryptedClientIdentification EncryptedClientId = 8;
+}
+
+message ProvisionedDeviceInfo {
+  enum WvSecurityLevel {
+    LEVEL_UNSPECIFIED = 0;
+    LEVEL_1 = 1;
+    LEVEL_2 = 2;
+    LEVEL_3 = 3;
+  }
+  uint32 SystemId = 1;
+  string Soc = 2;
+  string Manufacturer = 3;
+  string Model = 4;
+  string DeviceType = 5;
+  uint32 ModelYear = 6;
+  WvSecurityLevel SecurityLevel = 7;
+  uint32 TestDevice = 8; // bool?
+} 
+
+
+// todo: fill
+message ProvisioningOptions {
+}
+
+// todo: fill
+message ProvisioningRequest {
+}
+
+// todo: fill
+message ProvisioningResponse {
+}
+
+message RemoteAttestation {
+  EncryptedClientIdentification Certificate = 1;
+  string Salt = 2;
+  string Signature = 3;
+}
+
+// todo: fill
+message SessionInit {
+}
+
+// todo: fill
+message SessionState {
+}
+
+// todo: fill
+message SignedCertificateStatusList {
+}
+
+message SignedDeviceCertificate {
+  
+  //bytes DeviceCertificate = 1; // again, they use a buffer where it's supposed to be a message, so we'll replace it with what it really is:
+  DeviceCertificate _DeviceCertificate = 1; // how should we deal with duped names? will have to look at proto docs later
+  bytes Signature = 2;
+  SignedDeviceCertificate Signer = 3;
+}
+
+
+// todo: fill
+message SignedProvisioningMessage {
+}
+
+// the root of all messages, from either server or client
+message SignedMessage {
+  enum MessageType {
+    DUMMY_MSG_TYPE = 0; // dummy, added to satisfy proto3
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+  }
+  MessageType Type = 1; // has in incorrect overlap with License_KeyContainer_SecurityLevel
+  bytes Msg = 2; // this has to be casted dynamically, to LicenseRequest, License or LicenseError (? unconfirmed), for Request, no other fields but Type need to be present
+                 // for SERVICE_CERTIFICATE, only Type and Msg are present, and it's just a DeviceCertificate with CertificateType set to SERVICE
+  bytes Signature = 3; // might be different type of signatures (ex. RSA vs AES CMAC(??), unconfirmed for now)
+  bytes SessionKey = 4; // often RSA wrapped for licenses
+  RemoteAttestation RemoteAttestation = 5;
+}
+
+
+
+// This message is copied from google's docs, not reversed:
+message WidevineCencHeader {
+  enum Algorithm {
+    UNENCRYPTED = 0;
+    AESCTR = 1;
+  };
+  Algorithm algorithm = 1;
+  repeated bytes key_id = 2;
+
+  // Content provider name.
+  string provider = 3;
+
+  // A content identifier, specified by content provider.
+  bytes content_id = 4;
+
+  // Track type. Acceptable values are SD, HD and AUDIO. Used to
+  // differentiate content keys used by an asset.
+  string track_type_deprecated = 5;
+
+  // The name of a registered policy to be used for this asset.
+  string policy = 6;
+
+  // Crypto period index, for media using key rotation.
+  uint32 crypto_period_index = 7;
+
+  // Optional protected context for group content. The grouped_license is a
+  // serialized SignedMessage.
+  bytes grouped_license = 8;
+
+  // Protection scheme identifying the encryption algorithm.
+  // Represented as one of the following 4CC values:
+  // 'cenc' (AESCTR), 'cbc1' (AESCBC),
+  // 'cens' (AESCTR subsample), 'cbcs' (AESCBC subsample).
+  uint32 protection_scheme = 9;
+
+  // Optional. For media using key rotation, this represents the duration
+  // of each crypto period in seconds.
+  uint32 crypto_period_seconds = 10;
+}
+
+
+
+
+// from here on, it's just for testing, these messages don't exist in the binaries, I'm adding them to avoid detecting type programmatically
+message SignedLicenseRequest {
+  enum MessageType {
+    DUMMY_MSG_TYPE = 0; // dummy, added to satisfy proto3
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+  }
+  MessageType Type = 1; // has in incorrect overlap with License_KeyContainer_SecurityLevel
+  LicenseRequest Msg = 2; // this has to be casted dynamically, to LicenseRequest, License or LicenseError (? unconfirmed), for Request, no other fields but Type need to be present
+                 // for SERVICE_CERTIFICATE, only Type and Msg are present, and it's just a DeviceCertificate with CertificateType set to SERVICE
+  bytes Signature = 3; // might be different type of signatures (ex. RSA vs AES CMAC(??), unconfirmed for now)
+  bytes SessionKey = 4; // often RSA wrapped for licenses
+  RemoteAttestation RemoteAttestation = 5;
+}
+
+message SignedLicense {
+  enum MessageType {
+    DUMMY_MSG_TYPE = 0; // dummy, added to satisfy proto3
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+  }
+  MessageType Type = 1; // has in incorrect overlap with License_KeyContainer_SecurityLevel
+  License Msg = 2; // this has to be casted dynamically, to LicenseRequest, License or LicenseError (? unconfirmed), for Request, no other fields but Type need to be present
+                 // for SERVICE_CERTIFICATE, only Type and Msg are present, and it's just a DeviceCertificate with CertificateType set to SERVICE
+  bytes Signature = 3; // might be different type of signatures (ex. RSA vs AES CMAC(??), unconfirmed for now)
+  bytes SessionKey = 4; // often RSA wrapped for licenses
+  RemoteAttestation RemoteAttestation = 5;
+}

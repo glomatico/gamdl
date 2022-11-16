@@ -59,8 +59,8 @@ class Gamdl:
             "Sec-Fetch-Site": "same-site",
             'origin': 'https://beta.music.apple.com'
         })
-        self.country = cookies['itua']
-        self.storefront = getattr(storefront_ids, self.country)
+        self.country = cookies['itua'].lower()
+        self.storefront = getattr(storefront_ids, self.country.upper())
     
 
     def get_download_queue(self, url):
@@ -455,6 +455,8 @@ if __name__ == '__main__':
             exit(0)
         except:
             print(f'* Failed to check URL ({i + 1} of {len(args.url)}).')
+            if args.print_exception:
+                traceback.print_exc()
             error_count += 1
             continue
         for j in range(len(download_queue)):

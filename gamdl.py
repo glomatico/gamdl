@@ -92,6 +92,8 @@ class Gamdl:
                 'alt_track_id': response['attributes']['url'].split('/')[-1],
                 'title': response['attributes']['name'],
             })
+        if not download_queue:
+            raise Exception()
         return download_queue
     
 
@@ -502,6 +504,6 @@ if __name__ == '__main__':
                 print(f'* Failed to dowload "{download_queue[j]["title"]}" ({j + 1} of {len(download_queue)}).')
                 if args.print_exception:
                     traceback.print_exc()
-            if not args.skip_cleanup and os.path.exists(args.temp_path):
-                shutil.rmtree(args.temp_path)
+            if not args.skip_cleanup and os.path.exists(Path(args.temp_path)):
+                shutil.rmtree(Path(args.temp_path))
     print(f'All done ({error_count} error(s)).')

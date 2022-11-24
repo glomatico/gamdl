@@ -19,6 +19,7 @@ import os
 from argparse import ArgumentParser
 import shutil
 import traceback
+import subprocess
 
 class Gamdl:
     def __init__(self, disable_music_video_skip, auth_path, temp_path, prefer_hevc, final_path):
@@ -126,20 +127,16 @@ class Gamdl:
             return [x for x in playlist.playlists if 'avc' in x.stream_info.codecs][-1].uri
     
     
-    def get_encrypted_location_audio(self, track_id):
-        return Path(self.temp_path) / f'{track_id}e.m4a'
+    def get_encrypted_location(self, extension, track_id,):
+        return Path(self.temp_path) / f'{track_id}_encrypted{extension}'
     
 
-    def get_encrypted_location_video(self, track_id):
-        return Path(self.temp_path) / f'{track_id}e.mp4'
+    def get_decrypted_location(self, extension, track_id):
+        return Path(self.temp_path) / f'{track_id}_decrypted{extension}'
     
 
-    def get_decrypted_location_audio(self, track_id):
-        return Path(self.temp_path) / f'{track_id}d.m4a'
-    
-
-    def get_decrypted_location_video(self, track_id):
-        return Path(self.temp_path) / f'{track_id}d.mp4'
+    def get_fixed_location(self, extension, track_id):
+        return Path(self.temp_path) / f'{track_id}_fixed{extension}'
     
 
     def download(self, encrypted_location, stream_url):
@@ -344,26 +341,28 @@ class Gamdl:
         return final_location
     
 
-    def fixup_music_video(self, decrypted_location_audio, decrypted_location_video, final_location):
+    def fixup_music_video(self, decrypted_location_audio, decrypted_location_video, fixed_location, final_location):
         os.makedirs(final_location.parents[0], exist_ok = True)
-        os.system(f'MP4Box -quiet -add {decrypted_location_audio} -add {decrypted_location_video} -itags title=placeholder -new "{final_location}"')
+        subprocess.check_output(['MP4Box', '-quiet', '-add', decrypted_location_audio, '-add', decrypted_location_video, '-itags', 'title=placeholder', '-new', fixed_location])
+        shutil.copy(fixed_location, final_location)
     
 
-    def fixup_song(self, decrypted_location, final_location):
+    def fixup_song(self, decrypted_location, fixed_location, final_location):
         os.makedirs(final_location.parents[0], exist_ok = True)
-        os.system(f'MP4Box -quiet -add {decrypted_location} -itags title=placeholder -new "{final_location}"')
+        subprocess.check_output(['MP4Box', '-quiet', '-add', decrypted_location, '-itags', 'title=placeholder', '-new', fixed_location])
+        shutil.copy(fixed_location, final_location)
     
 
-    def make_lrc(self, final_download_location, lyrics):
-        with open(final_download_location.with_suffix('.lrc'), 'w', encoding = 'utf8') as f:
+    def make_lrc(self, final_location, lyrics):
+        with open(final_location.with_suffix('.lrc'), 'w', encoding = 'utf8') as f:
             f.write(lyrics[1])
     
 
-    def apply_tags(self, final_download_location, tags):
-        file = MP4(final_download_location).tags
+    def apply_tags(self, final_location, tags):
+        file = MP4(final_location).tags
         for key, value in tags.items():
             file[key] = value
-        file.save(final_download_location)
+        file.save(final_location)
     
 
 if __name__ == '__main__':
@@ -451,59 +450,64 @@ if __name__ == '__main__':
         parser.error('the following arguments are required: <url>')
     gamdl = Gamdl(args.disable_music_video_skip, args.auth_path, args.temp_path, args.prefer_hevc, args.final_path)
     error_count = 0
+    download_queue = []
     for i in range(len(args.url)):
         try:
-            download_queue = gamdl.get_download_queue(args.url[i])
-        except KeyboardInterrupt:
-            exit(0)
+            download_queue.append(gamdl.get_download_queue(args.url[i]))
         except:
-            print(f'* Failed to check URL ({i + 1} of {len(args.url)}).')
+            error_count += 1
+            print(f'* Failed to check URL {i + 1}.')
             if args.print_exception:
                 traceback.print_exc()
-            error_count += 1
-            continue
-        for j in range(len(download_queue)):
-            track_id = download_queue[j]['track_id']
-            print(f'Downloading "{download_queue[j]["title"]}" ({j + 1} of {len(download_queue)})...')
+        if not download_queue:
+            print('* Failed to check all URLs.')
+            exit(1)
+    for i in range(len(download_queue)):
+        for j in range(len(download_queue[i])):
+            print(f'Downloading "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1})...')
+            track_id = download_queue[i][j]['track_id']
             try:
                 webplayback = gamdl.get_webplayback(track_id)
-                if len(webplayback['assets']) == 0:
+                if 'alt_track_id' in download_queue[i][j]:
                     playlist = gamdl.get_playlist_music_video(webplayback)
                     if args.print_video_playlist:
                         print(playlist.dumps())
                     stream_url_audio = gamdl.get_stream_url_music_video_audio(playlist)
-                    encrypted_location_audio = gamdl.get_encrypted_location_audio(track_id)
+                    encrypted_location_audio = gamdl.get_encrypted_location('.m4a', track_id)
                     gamdl.download(encrypted_location_audio, stream_url_audio)
-                    decrypted_location_audio = gamdl.get_decrypted_location_audio(track_id)
+                    decrypted_location_audio = gamdl.get_decrypted_location('.m4a', track_id)
                     gamdl.decrypt_music_video(decrypted_location_audio, encrypted_location_audio, stream_url_audio, track_id)
                     stream_url_video = gamdl.get_stream_url_music_video_video(playlist)
-                    encrypted_location_video = gamdl.get_encrypted_location_video(track_id)
+                    encrypted_location_video = gamdl.get_encrypted_location('.m4v', track_id)
                     gamdl.download(encrypted_location_video, stream_url_video)
-                    decrypted_location_video = gamdl.get_decrypted_location_video(track_id)
+                    decrypted_location_video = gamdl.get_decrypted_location('.m4v', track_id)
                     gamdl.decrypt_music_video(decrypted_location_video, encrypted_location_video, stream_url_video, track_id)
-                    tags = gamdl.get_tags_music_video(download_queue[j]['alt_track_id'])
-                    final_download_location = gamdl.get_final_location('.m4v', tags)
-                    gamdl.fixup_music_video(decrypted_location_audio, decrypted_location_video, final_download_location)
+                    tags = gamdl.get_tags_music_video(download_queue[i][j]['alt_track_id'])
+                    fixed_location = gamdl.get_fixed_location('.m4v', track_id)
+                    final_location = gamdl.get_final_location('.m4v', tags)
+                    gamdl.fixup_music_video(decrypted_location_audio, decrypted_location_video, fixed_location, final_location)
+                    gamdl.apply_tags(final_location, tags)
                 else:
                     stream_url = gamdl.get_stream_url_song(webplayback)
-                    encrypted_location = gamdl.get_encrypted_location_audio(track_id)
+                    encrypted_location = gamdl.get_encrypted_location('.m4a', track_id)
                     gamdl.download(encrypted_location, stream_url)
-                    decrypted_location = gamdl.get_decrypted_location_audio(track_id)
+                    decrypted_location = gamdl.get_decrypted_location('.m4a', track_id)
                     gamdl.decrypt_song(decrypted_location, encrypted_location, stream_url, track_id)
                     lyrics = gamdl.get_lyrics(track_id)
                     tags = gamdl.get_tags_song(webplayback, lyrics)
-                    final_download_location = gamdl.get_final_location('.m4a', tags)
-                    gamdl.fixup_song(decrypted_location, final_download_location)
+                    fixed_location = gamdl.get_fixed_location('.m4a', track_id)
+                    final_location = gamdl.get_final_location('.m4a', tags)
+                    gamdl.fixup_song(decrypted_location, fixed_location, final_location)
                     if not args.no_lrc and lyrics and lyrics[1]:
-                        gamdl.make_lrc(final_download_location, lyrics)
-                gamdl.apply_tags(final_download_location, tags)
-            except KeyboardInterrupt:
-                exit(0)
+                        gamdl.make_lrc(final_location, lyrics)
+                    gamdl.apply_tags(final_location, tags)
             except:
                 error_count += 1
-                print(f'* Failed to dowload "{download_queue[j]["title"]}" ({j + 1} of {len(download_queue)}).')
+                print(f'* Failed to download "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1}).')
                 if args.print_exception:
                     traceback.print_exc()
-            if not args.skip_cleanup and os.path.exists(Path(args.temp_path)):
-                shutil.rmtree(Path(args.temp_path))
-    print(f'All done ({error_count} error(s)).')
+            if not args.skip_cleanup:
+                shutil.rmtree(gamdl.temp_path)
+    print(f'Finished ({error_count} error(s)).')
+
+

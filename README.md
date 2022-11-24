@@ -1,5 +1,5 @@
 # Glomatico's ✨ Apple Music ✨ Downloader
-This is a rework of https://github.com/Slyyxp/AppleMusic-Downloader.
+This is a rework of https://github.com/Slyyxp/AppleMusic-Downloader/tree/a6e18de8da4694219924affaa2b5686930e39e84.
 
 Some new features that I added:
 - MP4Box for muxing

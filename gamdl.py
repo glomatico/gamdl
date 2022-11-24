@@ -71,7 +71,7 @@ class Gamdl:
         if response['type'] == 'songs':
             download_queue.append({
                 'track_id': response['id'],
-                'title': response['attributes']['name'],
+                'title': response['attributes']['name']
             })
         if response['type'] == 'albums' or response['type'] == 'playlists':
             for track in response['relationships']['tracks']['data']:
@@ -80,18 +80,18 @@ class Gamdl:
                         download_queue.append({
                             'track_id': track['attributes']['playParams']['id'],
                             'alt_track_id': track['attributes']['url'].split('/')[-1],
-                            'title': track['attributes']['name'],
+                            'title': track['attributes']['name']
                         })
                     if track['type'] == 'songs':
                         download_queue.append({
                             'track_id': track['attributes']['playParams']['id'],
-                            'title': track['attributes']['name'],
+                            'title': track['attributes']['name']
                         })
         if response['type'] == 'music-videos':
             download_queue.append({
                 'track_id': response['attributes']['playParams']['id'],
                 'alt_track_id': response['attributes']['url'].split('/')[-1],
-                'title': response['attributes']['name'],
+                'title': response['attributes']['name']
             })
         if not download_queue:
             raise Exception()
@@ -315,9 +315,9 @@ class Gamdl:
         for character in illegal_characters:
             dirty_string = dirty_string.replace(character, '_')
         if is_folder:
+            dirty_string = dirty_string[:40]
             if dirty_string[-1:] == '.':
                 dirty_string = dirty_string[:-1] + '_'
-                dirty_string = dirty_string[:40]
         else:
             dirty_string = dirty_string[:36]
         return dirty_string.strip()
@@ -454,6 +454,8 @@ if __name__ == '__main__':
     for i in range(len(args.url)):
         try:
             download_queue.append(gamdl.get_download_queue(args.url[i]))
+        except KeyboardInterrupt:
+            exit(1)
         except:
             error_count += 1
             print(f'* Failed to check URL {i + 1}.')
@@ -501,6 +503,8 @@ if __name__ == '__main__':
                     if not args.no_lrc and lyrics and lyrics[1]:
                         gamdl.make_lrc(final_location, lyrics)
                     gamdl.apply_tags(final_location, tags)
+            except KeyboardInterrupt:
+                exit(1)
             except:
                 error_count += 1
                 print(f'* Failed to download "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1}).')

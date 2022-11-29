@@ -202,9 +202,12 @@ class Gamdl:
             m = int(unformatted_time.split('.')[-2].split(':')[-2]) * 60000
         except:
             m = 0
-        ms = int(f'{unformatted_time.split(".")[-1]}')
-        ms = int((round(float(f'1.{ms:03d}'), 2) - 1) * 1000)
-        formated_time = datetime.datetime.fromtimestamp((s + m + ms) / 1000.0)
+        ms = f'{int(unformatted_time.split(".")[-1]):03d}'
+        if int(ms[2]) >= 5:
+            ms = int(f'{int(ms[:2]) + 1}') * 10
+        else:
+            ms = int(ms)
+        formated_time = datetime.datetime.fromtimestamp((s + m + ms)/1000.0)
         return formated_time.strftime('%M:%S.%f')[:-4]
 
 

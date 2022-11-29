@@ -202,9 +202,10 @@ class Gamdl:
             m = int(unformatted_time.split('.')[-2].split(':')[-2]) * 60000
         except:
             m = 0
-        ms = int(unformatted_time.split('.')[-1])
-        formated_time = datetime.datetime.fromtimestamp((s + m + ms)/1000.0)
-        return f'{formated_time.minute:02d}:{formated_time.second:02d}.{int(str(formated_time.microsecond)[:2]):02d}'
+        ms = int(f'{unformatted_time.split(".")[-1]}')
+        ms = int((round(float(f'1.{ms:03d}'), 2) - 1) * 1000)
+        formated_time = datetime.datetime.fromtimestamp((s + m + ms) / 1000.0)
+        return formated_time.strftime('%M:%S.%f')[:-4]
 
 
     def get_lyrics(self, track_id):

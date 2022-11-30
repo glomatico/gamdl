@@ -237,7 +237,7 @@ class Gamdl:
                     if verse.getAttribute('begin'):
                         synced_lyrics += f'[{self.get_synced_lyrics_formated_time(verse.getAttribute("begin"))}]{verse.firstChild.nodeValue}\n'
             unsynced_lyrics += '\n'
-        return [unsynced_lyrics.strip(), synced_lyrics]
+        return [unsynced_lyrics[:-1], synced_lyrics]
     
 
     def get_tags_song(self, webplayback, lyrics):

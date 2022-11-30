@@ -380,22 +380,19 @@ if __name__ == '__main__':
     parser.add_argument(
         'url',
         help='Apple Music albums/music videos/playlists/songs URL',
-        nargs='*',
-        metavar='<url>'
+        nargs='*'
     )
     parser.add_argument(
         '-d',
         '--final-path',
         default = 'Apple Music',
         help = 'Set Final Path.',
-        metavar = '<final path>'
     )
     parser.add_argument(
         '-a',
         '--auth-path',
         default = 'login',
-        help = 'Set Auth Path.',
-        metavar = '<auth path>'
+        help = 'Set Auth Path.'
     )
     parser.add_argument(
         '-m',
@@ -419,8 +416,7 @@ if __name__ == '__main__':
         '-t',
         '--temp-path',
         default = 'temp',
-        help = 'Set Temp Path.',
-        metavar = '<temp path>'
+        help = 'Set Temp Path.'
     )
     parser.add_argument(
         '-s',
@@ -443,15 +439,15 @@ if __name__ == '__main__':
     parser.add_argument(
         '-u',
         '--urls-txt',
-        action = 'store_true',
-        help = 'Use urls.txt to download URLs.'
+        help = 'Read URLs from a text file.',
+        nargs = '?'
     )
     args = parser.parse_args()
+    if not args.url and not args.urls_txt:
+        parser.error('you must specify an url or a text file using -u/--urls-txt.')
     if args.urls_txt:
-        with open('urls.txt', 'r', encoding = 'utf8') as f:
+        with open(args.urls_txt, 'r', encoding = 'utf8') as f:
             args.url = f.read().splitlines()
-    elif not args.url:
-        parser.error('the following arguments are required: <url>')
     gamdl = Gamdl(args.disable_music_video_skip, args.auth_path, args.temp_path, args.prefer_hevc, args.final_path)
     error_count = 0
     download_queue = []

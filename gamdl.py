@@ -327,6 +327,15 @@ class Gamdl:
         return dirty_string.strip()
     
 
+    def get_final_location_overwrite_prevented_music_video(self, final_location):
+        count = 1
+        while True:
+            if final_location.with_name(f'{final_location.stem} {count}.m4v').exists():
+                count += 1
+            else:
+                return final_location.with_name(f'{final_location.stem} {count}.m4v')
+    
+
     def get_final_location(self, file_extension, tags):
         final_location = Path(self.final_path)
         if 'plID' in tags.keys():
@@ -342,6 +351,8 @@ class Gamdl:
             filename = self.get_sanizated_string(tags["©nam"][0])
             final_location /= f'{self.get_sanizated_string(tags["©ART"][0], True)}/Unknown Album/'
         final_location /= f'{filename}{file_extension}'
+        if final_location.exists() and file_extension == '.m4v' and MP4(final_location).tags['cnID'][0] != tags['cnID'][0]:
+            final_location = self.get_final_location_overwrite_prevented_music_video(final_location)
         return final_location
     
 

@@ -390,23 +390,33 @@ if __name__ == '__main__':
     if not shutil.which('MP4Box'):
         print('MP4Box is not on PATH.')
         exit(1)
-    parser = ArgumentParser(description = 'A Python script to download Apple Music albums/music videos/playlists/songs.')
+    parser = ArgumentParser(description = 'A Python script to download Apple Music songs/music videos/albums/playlists.')
     parser.add_argument(
         'url',
-        help='Apple Music albums/music videos/playlists/songs URL',
-        nargs='*'
+        help='Apple Music song/music video/album/playlist URL(s)',
+        nargs='*',
+        metavar = '<url>'
     )
     parser.add_argument(
         '-d',
         '--final-path',
         default = 'Apple Music',
-        help = 'Set Final Path.',
+        help = 'Final Path.',
+        metavar = '<final_path>'
+    )
+    parser.add_argument(
+        '-t',
+        '--temp-path',
+        default = 'temp',
+        help = 'Temp Path.',
+        metavar = '<temp_path>'
     )
     parser.add_argument(
         '-a',
         '--auth-path',
         default = 'login',
-        help = 'Set Auth Path.'
+        help = 'Auth Path.',
+        metavar = '<auth_path>'
     )
     parser.add_argument(
         '-m',
@@ -427,12 +437,6 @@ if __name__ == '__main__':
         help = "Don't create .lrc file."
     )
     parser.add_argument(
-        '-t',
-        '--temp-path',
-        default = 'temp',
-        help = 'Set Temp Path.'
-    )
-    parser.add_argument(
         '-s',
         '--skip-cleanup',
         action = 'store_true',
@@ -440,7 +444,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '-e',
-        '--print-exception',
+        '--print-exceptions',
         action = 'store_true',
         help = 'Print Execeptions.'
     )
@@ -448,13 +452,14 @@ if __name__ == '__main__':
         '-v',
         '--print-video-playlist',
         action = 'store_true',
-        help = 'Print Video Playlist.'
+        help = 'Print Video M3U8 Playlist.'
     )
     parser.add_argument(
         '-u',
         '--urls-txt',
         help = 'Read URLs from a text file.',
-        nargs = '?'
+        nargs = '?',
+        metavar = '<txt_file>'
     )
     args = parser.parse_args()
     if not args.url and not args.urls_txt:
@@ -522,7 +527,7 @@ if __name__ == '__main__':
             except:
                 error_count += 1
                 print(f'* Failed to download "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1}).')
-                if args.print_exception:
+                if args.print_exceptions:
                     traceback.print_exc()
             if not args.skip_cleanup:
                 shutil.rmtree(gamdl.temp_path)

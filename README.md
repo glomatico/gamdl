@@ -31,13 +31,14 @@ pip install -r requirements.txt
 4. Create a folder called `login` on the same folder as the script and put your `cookies.txt` and `token.txt` files there
     * You can get your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/cookies-txt/njabckikapfpffapmjgojcnbfjonfjfg. Make sure to export it as `cookies.txt` and put it on the `login` folder as described above.
     * You can get your token by looking at the network requests on Apple Music website. 
-        * On Google Chrome, you can do this by pressing F12 on Apple Music website and then clicking on the `Network` tab. Then, start navigating throught Apple Music website, filter the requests by `amp-api` and click on one that has `authorization` on the `Request Headers` section. Copy the value of the `authorization` header, paste it on a text file and save it as `token.txt` on the `login` folder.
-        ![](https://i.imgur.com/9YyfGn4.png)
+        * On Google Chrome, you can do this by pressing F12 on Apple Music website  then clicking on the `Network` tab. Then, start navigating throught Apple Music website, filter the requests by `amp-api` and click on one that has `authorization` on the `Request Headers` section. Copy the value of the `authorization` header, paste it on a text file and save it as `token.txt` on the `login` folder.
+        ![Google Chrome token grab example](https://i.imgur.com/9YyfGn4.png)
     * If you have previously used the old version of this script, you can just copy your `cookies.txt` and `token.txt` files from the old version to the `login` folder. You will have to add `Bearer ` before your token on the `token.txt` file.
-5. Get your L3 CDM (`device_client_id_blob` and `device_private_key` files) and put them on `pywidevine/L3/cdm/devices` folder
+5. Put your L3 CDM (`device_client_id_blob` and `device_private_key` files) on `pywidevine/L3/cdm/devices` folder
     * You can get your L3 CDM by using wvdumper: https://github.com/wvdumper/dumper
 ## Usage
 ```
 python gamdl.py [OPTIONS] [URLS]
 ```
+![Windows CMD usage example](https://i.imgur.com/byjqmGF.png)
 Use `--help` argument to see all available options.

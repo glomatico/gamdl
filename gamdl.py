@@ -478,7 +478,7 @@ if __name__ == '__main__':
         except:
             error_count += 1
             print(f'* Failed to check URL {i + 1}.')
-            if args.print_exception:
+            if args.print_exceptions:
                 traceback.print_exc()
         if not download_queue:
             print('* Failed to check all URLs.')

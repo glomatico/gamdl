@@ -34,7 +34,7 @@ pip install -r requirements.txt
         * On Google Chrome, you can do this by pressing F12 on Apple Music website and clicking on the "Network" tab. Then, start navigating throught Apple Music website, filter the requests by "amp-api" and click on one that has `authorization` on the "Request Headers" section. Copy the value of the `authorization` header, paste it on a text file and save it as `token.txt` on the `login` folder.
         ![Google Chrome token grab example](https://i.imgur.com/9YyfGn4.png)
     * If you have previously used the old version of this script, you can just copy your `cookies.txt` and `token.txt` files from the old version to the `login` folder. You will have to add `Bearer ` before your token on the `token.txt` file.
-5. Put your L3 CDM (`device_client_id_blob` and `device_private_key` files) on `pywidevine/L3/cdm/devices` folder
+5. Put your L3 CDM (`device_client_id_blob` and `device_private_key` files) on `pywidevine/L3/cdm/devices/android_generic` folder
     * You can get your L3 CDM by using wvdumper: https://github.com/wvdumper/dumper
 ## Usage
 ```

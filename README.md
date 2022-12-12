@@ -3,7 +3,7 @@ A Python script to download Apple Music songs/music videos/albums/playlists.
 
 ![Windows CMD usage example](https://i.imgur.com/byjqmGF.png)
 
-This is a rework of https://github.com/Slyyxp/AppleMusic-Downloader/tree/a6e18de8da4694219924affaa2b5686930e39e84.
+This is a rework of https://github.com/loveyoursupport/AppleMusic-Downloader/tree/661a274d62586b521feec5a7de6bee0e230fdb7d.
 
 Some new features that I added:
 - MP4Box for muxing

@@ -1,6 +1,8 @@
 # Glomatico's ✨ Apple Music ✨ Downloader
 A Python script to download Apple Music songs/music videos/albums/playlists.
 
+![Windows CMD usage example](https://i.imgur.com/byjqmGF.png)
+
 This is a rework of https://github.com/Slyyxp/AppleMusic-Downloader/tree/a6e18de8da4694219924affaa2b5686930e39e84.
 
 Some new features that I added:
@@ -26,7 +28,7 @@ pip install -r requirements.txt
     * Or you can use the ones I provided and add them to your PATH or put them on the same folder as the script:
         * MP4Box (Windows): https://drive.google.com/open?id=1o202Kese9Q4dKzzgEtZnznuUx_eJp0bH
         * mp4decrypt (Windows): https://drive.google.com/open?id=1K6Y98zSfHowALq4FJ6MYrhg1oFBltci9
-        * MP4Box (Linux): https://drive.google.com/open?id=1rgEkkmsDnzF3SECEpyxz3m-EuJzUj182
+        * MP4Box (Linux): TBD
         * mp4decrypt (Linux): https://drive.google.com/open?id=16qZfStVibIGgH3xSKmAE1Wuf17DTDR8q
 4. Create a folder called `login` on the same folder as the script and put your `cookies.txt` and `token.txt` files there
     * You can get your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/cookies-txt/njabckikapfpffapmjgojcnbfjonfjfg. Make sure to export it as `cookies.txt` and put it on the `login` folder as described above.
@@ -40,5 +42,6 @@ pip install -r requirements.txt
 ```
 python gamdl.py [OPTIONS] [URLS]
 ```
-![Windows CMD usage example](https://i.imgur.com/byjqmGF.png)
+Tracks are saved in `./Apple Music` by default, but the directory can be changed using `--final-path` argument.
+
 Use `--help` argument to see all available options.

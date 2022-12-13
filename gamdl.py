@@ -532,5 +532,3 @@ if __name__ == '__main__':
             if not args.skip_cleanup:
                 shutil.rmtree(gamdl.temp_path)
     print(f'Finished ({error_count} error(s)).')
-
-

@@ -18,9 +18,9 @@ Some new features that I added:
 ## Setup
 1. Install Python 3.8 or higher
 2. Install the required packages using pip: 
-```
-pip install -r requirements.txt
-```
+    ```
+    pip install -r requirements.txt
+    ```
 3. Add MP4Box and mp4decrypt to your PATH
     * You can get them from here:
         * MP4Box: https://gpac.wp.imt.fr/downloads/
@@ -38,6 +38,7 @@ pip install -r requirements.txt
     * If you have previously used the old version of this script, you can just copy your `cookies.txt` and `token.txt` files from the old version to the `login` folder. You will have to add `Bearer ` before your token on the `token.txt` file.
 5. Put your L3 CDM (`device_client_id_blob` and `device_private_key` files) on `pywidevine/L3/cdm/devices/android_generic` folder
     * You can get your L3 CDM by using wvdumper: https://github.com/wvdumper/dumper
+
 ## Usage
 ```
 python gamdl.py [OPTIONS] [URLS]

@@ -22,24 +22,22 @@ import traceback
 import subprocess
 
 class Gamdl:
-    def __init__(self, disable_music_video_skip, auth_path, temp_path, prefer_hevc, final_path):
+    def __init__(self, disable_music_video_skip, cookies_location, temp_path, prefer_hevc, final_path):
         self.disable_music_video_skip = disable_music_video_skip
-        self.auth_path = auth_path
-        self.temp_path = temp_path
+        self.cookies_location = Path(cookies_location)
+        self.temp_path = Path(temp_path)
         self.prefer_hevc = prefer_hevc
-        self.final_path = final_path
+        self.final_path = Path(final_path)
         self.login()
     
     
     def login(self):
         cookies = {}
-        with open(Path(self.auth_path) / 'cookies.txt', 'r') as f:
+        with open(self.cookies_location, 'r') as f:
             for l in f:
                 if not re.match(r"^#", l) and not re.match(r"^\n", l):
                     line_fields = l.strip().replace('&quot;', '"').split('\t')
                     cookies[line_fields[5]] = line_fields[6]
-        with open(Path(self.auth_path) / 'token.txt', 'r') as f:
-            token = f.read()
         self.session = requests.Session()
         self.session.verify = False
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -49,7 +47,6 @@ class Gamdl:
             "Accept": "application/json",
             "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",
-            "authorization": token,
             "content-type": "application/json",
             "Media-User-Token": self.session.cookies.get_dict()["media-user-token"],
             "x-apple-renewal": "true",
@@ -60,6 +57,11 @@ class Gamdl:
             "Sec-Fetch-Site": "same-site",
             'origin': 'https://beta.music.apple.com'
         })
+        r = self.session.get('https://beta.music.apple.com')
+        index_js = re.search('(?<=index\.)(.*?)(?=\.js")', r.text).group(1)
+        r = self.session.get(f'https://beta.music.apple.com/assets/index.{index_js}.js')
+        access_token = re.search('(?=eyJh)(.*?)(?=")', r.text).group(1)
+        self.session.headers.update({"authorization": f'Bearer {access_token}'})
         self.country = cookies['itua'].lower()
         self.storefront = getattr(storefront_ids, self.country.upper())
     
@@ -128,15 +130,15 @@ class Gamdl:
     
     
     def get_encrypted_location(self, extension, track_id,):
-        return Path(self.temp_path) / f'{track_id}_encrypted{extension}'
+        return self.temp_path / f'{track_id}_encrypted{extension}'
     
 
     def get_decrypted_location(self, extension, track_id):
-        return Path(self.temp_path) / f'{track_id}_decrypted{extension}'
+        return self.temp_path / f'{track_id}_decrypted{extension}'
     
 
     def get_fixed_location(self, extension, track_id):
-        return Path(self.temp_path) / f'{track_id}_fixed{extension}'
+        return self.temp_path / f'{track_id}_fixed{extension}'
     
 
     def download(self, encrypted_location, stream_url):
@@ -337,7 +339,7 @@ class Gamdl:
     
 
     def get_final_location(self, file_extension, tags):
-        final_location = Path(self.final_path)
+        final_location = self.final_path
         if 'plID' in tags.keys():
             if 'cpil' in tags.keys() and tags['cpil']:
                 final_location /= f'Compilations/{self.get_sanizated_string(tags["©alb"][0], True)}'
@@ -412,11 +414,11 @@ if __name__ == '__main__':
         metavar = '<temp_path>'
     )
     parser.add_argument(
-        '-a',
-        '--auth-path',
-        default = 'login',
-        help = 'Auth Path.',
-        metavar = '<auth_path>'
+        '-c',
+        '--cookies-location',
+        default = 'cookies.txt',
+        help = 'Cookies location.',
+        metavar = '<cookies_location>'
     )
     parser.add_argument(
         '-m',
@@ -467,7 +469,7 @@ if __name__ == '__main__':
     if args.urls_txt:
         with open(args.urls_txt, 'r', encoding = 'utf8') as f:
             args.url = f.read().splitlines()
-    gamdl = Gamdl(args.disable_music_video_skip, args.auth_path, args.temp_path, args.prefer_hevc, args.final_path)
+    gamdl = Gamdl(args.disable_music_video_skip, args.cookies_location, args.temp_path, args.prefer_hevc, args.final_path)
     error_count = 0
     download_queue = []
     for i in range(len(args.url)):
@@ -529,6 +531,6 @@ if __name__ == '__main__':
                 print(f'* Failed to download "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1}).')
                 if args.print_exceptions:
                     traceback.print_exc()
-            if not args.skip_cleanup:
+            if not args.skip_cleanup and gamdl.temp_path.exists():
                 shutil.rmtree(gamdl.temp_path)
     print(f'Finished ({error_count} error(s)).')

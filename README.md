@@ -25,11 +25,6 @@ Some new features that I added:
     * You can get them from here:
         * MP4Box: https://gpac.wp.imt.fr/downloads/
         * mp4decrypt: https://www.bento4.com/downloads/
-    * Or you can use the ones I provided and add them to your PATH or put them on the same folder as the script:
-        * MP4Box (Windows): https://drive.google.com/open?id=1o202Kese9Q4dKzzgEtZnznuUx_eJp0bH
-        * mp4decrypt (Windows): https://drive.google.com/open?id=1K6Y98zSfHowALq4FJ6MYrhg1oFBltci9
-        * MP4Box (Linux): TBD
-        * mp4decrypt (Linux): https://drive.google.com/open?id=16qZfStVibIGgH3xSKmAE1Wuf17DTDR8q
 4. Export your Apple Music cookies as `cookies.txt` and put it in the same folder as the script
     * You can export your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/cookies-txt/njabckikapfpffapmjgojcnbfjonfjfg. Make sure to be logged in.
 5. Put your L3 CDM (`device_client_id_blob` and `device_private_key` files) on `pywidevine/L3/cdm/devices/android_generic` folder

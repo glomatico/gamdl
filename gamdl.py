@@ -400,7 +400,7 @@ if __name__ == '__main__':
         metavar = '<url>'
     )
     parser.add_argument(
-        '-d',
+        '-f',
         '--final-path',
         default = 'Apple Music',
         help = 'Final Path.',
@@ -421,7 +421,7 @@ if __name__ == '__main__':
         metavar = '<cookies_location>'
     )
     parser.add_argument(
-        '-m',
+        '-d',
         '--disable-music-video-skip',
         action = 'store_true',
         help = 'Disable music video skip on playlists/albums.'

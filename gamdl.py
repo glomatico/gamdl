@@ -474,7 +474,7 @@ if __name__ == '__main__':
     download_queue = []
     for i in range(len(args.url)):
         try:
-            download_queue.append(gamdl.get_download_queue(args.url[i]))
+            download_queue.append(gamdl.get_download_queue(args.url[i].strip()))
         except KeyboardInterrupt:
             exit(1)
         except:

@@ -42,7 +42,7 @@ Use `--help` argument to see all available options.
 * Songs:
     * M4A 256 kbps AAC
 * Music Videos:
-    * M4V 4K HEVC 12~20 Mbps / 256 kbps AAC
+    * M4V 4K HEVC 12~20 Mbps / 256 kbps AAC (Achieved by using `--prefer-hevc` argument)
     * M4V 1080p AVC 6.5~10 Mbps / 256 kbps AAC
     * M4V 720p AVC 4 Mbps / 256 kbps AAC
     * M4V 480p AVC 1.5 Mbps / 256 kbps AAC

@@ -37,3 +37,13 @@ python gamdl.py [OPTIONS] [URLS]
 Tracks are saved in `./Apple Music` by default, but the directory can be changed using `--final-path` argument.
 
 Use `--help` argument to see all available options.
+
+## Songs/Music Videos quality
+* Songs:
+    * M4A 256 kbps AAC
+* Music Videos:
+    * M4V 4K HEVC 12~20 Mbps / 256 kbps AAC
+    * M4V 1080p AVC 6.5~10 Mbps / 256 kbps AAC
+    * M4V 720p AVC 4 Mbps / 256 kbps AAC
+    * M4V 480p AVC 1.5 Mbps / 256 kbps AAC
+    * M4V 360p AVC 1 Mbps / 256 kbps AAC

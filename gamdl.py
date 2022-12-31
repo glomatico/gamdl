@@ -387,11 +387,9 @@ class Gamdl:
 
 if __name__ == '__main__':
     if not shutil.which('mp4decrypt'):
-        print('mp4decrypt is not on PATH.')
-        exit(1)
+        raise Exception('mp4decrypt is not on PATH.')
     if not shutil.which('MP4Box'):
-        print('MP4Box is not on PATH.')
-        exit(1)
+        raise Exception('MP4Box is not on PATH.')
     parser = ArgumentParser(description = 'A Python script to download Apple Music songs/music videos/albums/playlists.')
     parser.add_argument(
         'url',

@@ -363,7 +363,7 @@ class Gamdl:
 
     def fixup_music_video(self, decrypted_location_audio, decrypted_location_video, fixed_location, final_location):
         os.makedirs(final_location.parents[0], exist_ok = True)
-        subprocess.check_output(['MP4Box', '-quiet', '-add', decrypted_location_audio, '-add', decrypted_location_video, '-itags', 'name=placeholder', '-new', fixed_location])
+        subprocess.check_output(['MP4Box', '-quiet', '-add', decrypted_location_audio, '-add', decrypted_location_video, '-itags', 'artist=placeholder', '-new', fixed_location])
         shutil.copy(fixed_location, final_location)
     
 

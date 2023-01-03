@@ -27,8 +27,10 @@ Some new features that I added:
         * mp4decrypt: https://www.bento4.com/downloads/
 4. Export your Apple Music cookies as `cookies.txt` and put it in the same folder as the script
     * You can export your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/cookies-txt/njabckikapfpffapmjgojcnbfjonfjfg. Make sure to be logged in.
-5. Put your L3 CDM (`device_client_id_blob` and `device_private_key` files) on `pywidevine/L3/cdm/devices/android_generic` folder
-    * You can get your L3 CDM by using wvdumper: https://github.com/wvdumper/dumper
+5. Put your L3 Widevine Keys (`device_client_id_blob` and `device_private_key` files) on `./pywidevine/L3/cdm/devices/android_generic` folder
+    * You can get your L3 Widevine Keys by using wvdumper: https://github.com/Diazole/dumper.
+6. (optional) Add aria2c to your PATH for faster downloads
+    * You can get it from here: https://aria2.github.io/.
 
 ## Usage
 ```
@@ -40,10 +42,10 @@ Use `--help` argument to see all available options.
 
 ## Songs/Music Videos quality
 * Songs:
-    * M4A 256 kbps AAC
-* Music Videos:
-    * M4V 4K HEVC 12~20 Mbps / 256 kbps AAC (Achieved by using `--prefer-hevc` argument)
-    * M4V 1080p AVC 6.5~10 Mbps / 256 kbps AAC
-    * M4V 720p AVC 4 Mbps / 256 kbps AAC
-    * M4V 480p AVC 1.5 Mbps / 256 kbps AAC
-    * M4V 360p AVC 1 Mbps / 256 kbps AAC
+    * AAC 256kbps M4A
+* Music Videos (varies depending on the video):
+    * HEVC 4K 12~20mbps M4V / AAC 256kbps (achieved by using `--prefer-hevc` argument)
+    * AVC 1080p 6.5~10mbps M4V / AAC 256kbps
+    * AVC 720p 4mbps M4V / AAC 256kbps
+    * AVC 480p 1.5mbps M4V / AAC 256kbps
+    * AVC 360p 1mbps M4V / AAC 256kbps

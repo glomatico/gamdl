@@ -28,7 +28,8 @@ Some new features that I added:
 4. Export your Apple Music cookies as `cookies.txt` and put it in the same folder as the script
     * You can export your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/cookies-txt/njabckikapfpffapmjgojcnbfjonfjfg. Make sure to be logged in.
 5. Put your L3 Widevine Keys (`device_client_id_blob` and `device_private_key` files) on `./pywidevine/L3/cdm/devices/android_generic` folder
-    * You can get your L3 Widevine Keys by using wvdumper: https://github.com/Diazole/dumper.
+    * You can get your L3 Widevine Keys by using Dumper: https://github.com/Diazole/dumper
+        * The generated `private_key.pem` and `client_id.bin` files should be renamed to `device_private_key` and `device_client_id_blob` respectively.
 6. (optional) Add aria2c to your PATH for faster downloads
     * You can get it from here: https://aria2.github.io/.
 

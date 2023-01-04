@@ -38,9 +38,9 @@ class Gamdl:
         self.session = requests.Session()
         self.session.verify = False
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        self.session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0"})
         self.session.cookies.update(cookies)
         self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
             "Accept": "application/json",
             "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",
@@ -340,15 +340,15 @@ class Gamdl:
         final_location = self.final_path
         if 'plID' in tags:
             if tags['disk'][0][1] > 1:
-                file_name = self.get_sanizated_string(f'{tags["disk"][0][0]}-{tags["trkn"][0][0]:02d} {tags["©nam"][0]}')
+                file_name = self.get_sanizated_string(f'{tags["disk"][0][0]}-{tags["trkn"][0][0]:02d} {tags["©nam"][0]}', False)
             else:
-                file_name = self.get_sanizated_string(f'{tags["trkn"][0][0]:02d} {tags["©nam"][0]}')
+                file_name = self.get_sanizated_string(f'{tags["trkn"][0][0]:02d} {tags["©nam"][0]}', False)
             if 'cpil' in tags and tags['cpil']:
                 final_location /= f'Compilations/{self.get_sanizated_string(tags["©alb"][0], True)}'
             else:
                 final_location /= f'{self.get_sanizated_string(tags["aART"][0], True)}/{self.get_sanizated_string(tags["©alb"][0], True)}'
         else:
-            file_name = self.get_sanizated_string(tags["©nam"][0])
+            file_name = self.get_sanizated_string(tags["©nam"][0], False)
             final_location /= f'{self.get_sanizated_string(tags["©ART"][0], True)}/Unknown Album/'
         final_location /= f'{file_name}{file_extension}'
         try:

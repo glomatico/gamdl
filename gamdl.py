@@ -14,7 +14,6 @@ import song_genres
 import music_video_genres
 from xml.dom import minidom
 import datetime
-import os
 from argparse import ArgumentParser
 import shutil
 import traceback
@@ -30,10 +29,6 @@ class Gamdl:
         self.skip_cleanup = skip_cleanup
         self.print_video_playlist = print_video_playlist
         self.no_lrc = no_lrc
-        self.login()
-    
-    
-    def login(self):
         cookies = {}
         with open(self.cookies_location, 'r') as f:
             for l in f:
@@ -79,7 +74,7 @@ class Gamdl:
             })
         if response['type'] == 'albums' or response['type'] == 'playlists':
             for track in response['relationships']['tracks']['data']:
-                if 'playParams' in track['attributes'].keys():
+                if 'playParams' in track['attributes']:
                     if track['type'] == 'music-videos' and self.disable_music_video_skip:
                         download_queue.append({
                             'track_id': track['attributes']['playParams']['id'],
@@ -272,15 +267,15 @@ class Gamdl:
             'covr': [MP4Cover(requests.get(artwork_url).content, MP4Cover.FORMAT_JPEG)],
             'stik': [1]
         }
-        if 'copyright' in metadata.keys():
+        if 'copyright' in metadata:
             tags['cprt'] = [metadata['copyright']]
-        if 'releaseDate' in metadata.keys():
+        if 'releaseDate' in metadata:
             tags['\xa9day'] = [metadata['releaseDate']]
-        if 'comments' in metadata.keys():
+        if 'comments' in metadata:
             tags['\xa9cmt'] = [metadata['comments']]
-        if 'xid' in metadata.keys():
+        if 'xid' in metadata:
             tags['xid '] = [metadata['xid']]
-        if 'composerId' in metadata.keys():
+        if 'composerId' in metadata:
             tags['cmID'] = [int(metadata['composerId'])]
             tags['\xa9wrt'] = [metadata['composerName']]
             tags['soco'] = [metadata['sort-composer']]
@@ -320,9 +315,8 @@ class Gamdl:
         return tags
     
 
-    def get_sanizated_string(self, dirty_string, is_folder = False):
-        illegal_characters = ['\\', '/', ':', '*', '?', '"', '<', '>', '|', ';']
-        for character in illegal_characters:
+    def get_sanizated_string(self, dirty_string, is_folder):
+        for character in ['\\', '/', ':', '*', '?', '"', '<', '>', '|', ';']:
             dirty_string = dirty_string.replace(character, '_')
         if is_folder:
             dirty_string = dirty_string[:40]
@@ -344,19 +338,19 @@ class Gamdl:
 
     def get_final_location(self, file_extension, tags):
         final_location = self.final_path
-        if 'plID' in tags.keys():
-            if 'cpil' in tags.keys() and tags['cpil']:
+        if 'plID' in tags:
+            if tags['disk'][0][1] > 1:
+                file_name = self.get_sanizated_string(f'{tags["disk"][0][0]}-{tags["trkn"][0][0]:02d} {tags["©nam"][0]}')
+            else:
+                file_name = self.get_sanizated_string(f'{tags["trkn"][0][0]:02d} {tags["©nam"][0]}')
+            if 'cpil' in tags and tags['cpil']:
                 final_location /= f'Compilations/{self.get_sanizated_string(tags["©alb"][0], True)}'
             else:
                 final_location /= f'{self.get_sanizated_string(tags["aART"][0], True)}/{self.get_sanizated_string(tags["©alb"][0], True)}'
-            if tags['disk'][0][1] > 1:
-                filename = self.get_sanizated_string(f'{tags["disk"][0][0]}-{tags["trkn"][0][0]:02d} {tags["©nam"][0]}')
-            else:
-                filename = self.get_sanizated_string(f'{tags["trkn"][0][0]:02d} {tags["©nam"][0]}')
         else:
-            filename = self.get_sanizated_string(tags["©nam"][0])
+            file_name = self.get_sanizated_string(tags["©nam"][0])
             final_location /= f'{self.get_sanizated_string(tags["©ART"][0], True)}/Unknown Album/'
-        final_location /= f'{filename}{file_extension}'
+        final_location /= f'{file_name}{file_extension}'
         try:
             if final_location.exists() and file_extension == '.m4v' and MP4(final_location).tags['cnID'][0] != tags['cnID'][0]:
                 final_location = self.get_final_location_overwrite_prevented_music_video(final_location)
@@ -365,8 +359,7 @@ class Gamdl:
         return final_location
     
 
-    def fixup_music_video(self, decrypted_location_audio, decrypted_location_video, fixed_location, final_location):
-        os.makedirs(final_location.parents[0], exist_ok = True)
+    def fixup_music_video(self, decrypted_location_audio, decrypted_location_video, fixed_location):
         subprocess.check_output([
             'MP4Box',
             '-quiet',
@@ -379,11 +372,9 @@ class Gamdl:
             '-new',
             fixed_location
         ])
-        shutil.copy(fixed_location, final_location)
     
 
-    def fixup_song(self, decrypted_location, fixed_location, final_location):
-        os.makedirs(final_location.parents[0], exist_ok = True)
+    def fixup_song(self, decrypted_location, fixed_location):
         subprocess.check_output([
             'MP4Box',
             '-quiet',
@@ -394,7 +385,6 @@ class Gamdl:
             '-new',
             fixed_location
         ])
-        shutil.copy(fixed_location, final_location)
     
 
     def make_lrc(self, final_location, lyrics):
@@ -403,7 +393,9 @@ class Gamdl:
                 f.write(lyrics[1])
     
 
-    def apply_tags(self, final_location, tags):
+    def make_final(self, final_location, fixed_location, tags):
+        final_location.parent.mkdir(parents = True, exist_ok = True)
+        shutil.copy(fixed_location, final_location)
         file = MP4(final_location).tags
         for key, value in tags.items():
             file[key] = value
@@ -509,9 +501,9 @@ if __name__ == '__main__':
     )
     error_count = 0
     download_queue = []
-    for i in range(len(args.url)):
+    for i, url in enumerate(args.url):
         try:
-            download_queue.append(dl.get_download_queue(args.url[i].strip()))
+            download_queue.append(dl.get_download_queue(url.strip()))
         except KeyboardInterrupt:
             exit(1)
         except:
@@ -519,13 +511,13 @@ if __name__ == '__main__':
             print(f'* Failed to check URL {i + 1}.')
             if args.print_exceptions:
                 traceback.print_exc()
-    for i in range(len(download_queue)):
-        for j in range(len(download_queue[i])):
-            print(f'Downloading "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1})...')
-            track_id = download_queue[i][j]['track_id']
+    for i, url in enumerate(download_queue):
+        for j, track in enumerate(download_queue[i]):
+            print(f'Downloading "{track["title"]}" (track {j + 1} from URL {i + 1})...')
+            track_id = track['track_id']
             try:
                 webplayback = dl.get_webplayback(track_id)
-                if 'alt_track_id' in download_queue[i][j]:
+                if 'alt_track_id' in track:
                     playlist = dl.get_playlist_music_video(webplayback)
                     stream_url_audio = dl.get_stream_url_music_video_audio(playlist)
                     encrypted_location_audio = dl.get_encrypted_location('.m4a', track_id)
@@ -537,11 +529,11 @@ if __name__ == '__main__':
                     dl.download(encrypted_location_video, stream_url_video)
                     decrypted_location_video = dl.get_decrypted_location('.m4v', track_id)
                     dl.decrypt_music_video(decrypted_location_video, encrypted_location_video, stream_url_video, track_id)
-                    tags = dl.get_tags_music_video(download_queue[i][j]['alt_track_id'])
+                    tags = dl.get_tags_music_video(track['alt_track_id'])
                     fixed_location = dl.get_fixed_location('.m4v', track_id)
                     final_location = dl.get_final_location('.m4v', tags)
-                    dl.fixup_music_video(decrypted_location_audio, decrypted_location_video, fixed_location, final_location)
-                    dl.apply_tags(final_location, tags)
+                    dl.fixup_music_video(decrypted_location_audio, decrypted_location_video, fixed_location)
+                    dl.make_final(final_location, fixed_location, tags)
                 else:
                     stream_url = dl.get_stream_url_song(webplayback)
                     encrypted_location = dl.get_encrypted_location('.m4a', track_id)
@@ -552,14 +544,14 @@ if __name__ == '__main__':
                     tags = dl.get_tags_song(webplayback, lyrics)
                     fixed_location = dl.get_fixed_location('.m4a', track_id)
                     final_location = dl.get_final_location('.m4a', tags)
-                    dl.fixup_song(decrypted_location, fixed_location, final_location)
+                    dl.fixup_song(decrypted_location, fixed_location)
+                    dl.make_final(final_location, fixed_location, tags)
                     dl.make_lrc(final_location, lyrics)
-                    dl.apply_tags(final_location, tags)
             except KeyboardInterrupt:
                 exit(1)
             except:
                 error_count += 1
-                print(f'* Failed to download "{download_queue[i][j]["title"]}" (track {j + 1} from URL {i + 1}).')
+                print(f'* Failed to download "{track["title"]}" (track {j + 1} from URL {i + 1}).')
                 if args.print_exceptions:
                     traceback.print_exc()
             dl.cleanup()

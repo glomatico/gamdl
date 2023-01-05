@@ -5,8 +5,8 @@ import urllib3
 import storefront_ids
 import m3u8
 from yt_dlp import YoutubeDL
-from pywidevine.L3.decrypt.wvdecrypt import WvDecrypt
-from pywidevine.L3.decrypt.wvdecryptconfig import WvDecryptConfig
+from pywidevine.L3.cdm.cdm import Cdm
+from pywidevine.L3.cdm import deviceconfig
 import base64
 from pywidevine.L3.cdm.formats.widevine_pssh_data_pb2 import WidevinePsshData
 from mutagen.mp4 import MP4Cover, MP4
@@ -14,13 +14,14 @@ import song_genres
 import music_video_genres
 from xml.dom import minidom
 import datetime
-from argparse import ArgumentParser
+import argparse
 import shutil
 import traceback
 import subprocess
 
 class Gamdl:
     def __init__(self, disable_music_video_skip, cookies_location, temp_path, prefer_hevc, final_path, skip_cleanup, print_video_playlist, no_lrc):
+        self.cdm = Cdm()
         self.disable_music_video_skip = disable_music_video_skip
         self.cookies_location = Path(cookies_location)
         self.temp_path = Path(temp_path)
@@ -166,32 +167,69 @@ class Gamdl:
                 'user-initiated': True
             }
         ).json()['license']
-        
-    
-    def decrypt_music_video(self, decrypted_location, encrypted_location, stream_url, track_id):
-        playlist = m3u8.load(stream_url)
-        track_uri = next(x for x in playlist.keys if x.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed").uri
-        wvdecryptconfig = WvDecryptConfig(decrypted_location, encrypted_location, track_uri)
-        wvdecryptconfig.init_data_b64 = wvdecryptconfig.init_data_b64.split(",")[1]
-        wvdecrypt = WvDecrypt(wvdecryptconfig)
-        challenge = base64.b64encode(wvdecrypt.get_challenge()).decode('utf-8')
-        license_b64 = self.get_license_b64(challenge, track_uri, track_id)
-        wvdecrypt.update_license(license_b64)
-        wvdecrypt.start_process()
     
 
-    def decrypt_song(self, decrypted_location, encrypted_location, stream_url, track_id):
+    def fix_pssh(self, pssh_b64):
+        WV_SYSTEM_ID = [237, 239, 139, 169, 121, 214, 74, 206, 163, 200, 39, 220, 213, 29, 33, 237]
+        pssh = base64.b64decode(pssh_b64)
+        if not pssh[12:28] == bytes(WV_SYSTEM_ID):
+            new_pssh = bytearray([0,0,0])
+            new_pssh.append(32+len(pssh))
+            new_pssh[4:] = bytearray(b'pssh')
+            new_pssh[8:] = [0,0,0,0]
+            new_pssh[13:] = WV_SYSTEM_ID
+            new_pssh[29:] = [0,0,0,0]
+            new_pssh[31] = len(pssh)
+            new_pssh[32:] = pssh
+            return base64.b64encode(new_pssh)
+        else:
+            return pssh_b64
+    
+    
+    def get_decryption_keys_music_video(self, stream_url, track_id):
+        playlist = m3u8.load(stream_url)
+        track_uri = next(x for x in playlist.keys if x.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed").uri
+        session = self.cdm.open_session(
+            self.fix_pssh(track_uri.split(',')[1]),
+            deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
+        )
+        challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf-8')
+        license_b64 = self.get_license_b64(challenge, track_uri, track_id)
+        self.cdm.provide_license(session, license_b64)
+        decryption_keys = []
+        for key in self.cdm.get_keys(session):
+            if key.type == 'CONTENT':
+                decryption_keys.append(f'1:{key.key.hex()}')
+        return decryption_keys[0]
+
+    
+    def get_decryption_keys_song(self, stream_url, track_id):
         track_uri = m3u8.load(stream_url).keys[0].uri
         wvpsshdata = WidevinePsshData()
         wvpsshdata.algorithm = 1
-        wvdecryptconfig = WvDecryptConfig(decrypted_location, encrypted_location, track_uri)
-        wvpsshdata.key_id.append(base64.b64decode(wvdecryptconfig.init_data_b64.split(",")[1]))
-        wvdecryptconfig.init_data_b64 = base64.b64encode(wvpsshdata.SerializeToString()).decode("utf8")
-        wvdecrypt = WvDecrypt(wvdecryptconfig)
-        challenge = base64.b64encode(wvdecrypt.get_challenge()).decode('utf-8')
+        wvpsshdata.key_id.append(base64.b64decode(track_uri.split(",")[1]))
+        session = self.cdm.open_session(
+            self.fix_pssh(base64.b64encode(wvpsshdata.SerializeToString()).decode("utf-8")),
+            deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
+        )
+        challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf-8')
         license_b64 = self.get_license_b64(challenge, track_uri, track_id)
-        wvdecrypt.update_license(license_b64)
-        wvdecrypt.start_process()
+        self.cdm.provide_license(session, license_b64)
+        decryption_keys = []
+        for key in self.cdm.get_keys(session):
+            if key.type == 'CONTENT':
+                decryption_keys.append(f'{key.kid.hex()}:{key.key.hex()}')
+        return decryption_keys[0]
+    
+
+    def decrypt(self, encrypted_location, decrypted_location, decryption_keys):
+        subprocess.check_output([
+            'mp4decrypt',
+            encrypted_location,
+            '--key',
+            decryption_keys,
+            decrypted_location
+        ])
     
 
     def get_synced_lyrics_formated_time(self, unformatted_time):
@@ -412,7 +450,10 @@ if __name__ == '__main__':
         raise Exception('mp4decrypt is not on PATH.')
     if not shutil.which('MP4Box'):
         raise Exception('MP4Box is not on PATH.')
-    parser = ArgumentParser(description = 'A Python script to download Apple Music songs/music videos/albums/playlists.')
+    parser = argparse.ArgumentParser(
+        description = 'A Python script to download Apple Music songs/music videos/albums/playlists.',
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         'url',
         help='Apple Music song/music video/album/playlist URL(s)',
@@ -512,7 +553,7 @@ if __name__ == '__main__':
             if args.print_exceptions:
                 traceback.print_exc()
     for i, url in enumerate(download_queue):
-        for j, track in enumerate(download_queue[i]):
+        for j, track in enumerate(url):
             print(f'Downloading "{track["title"]}" (track {j + 1} from URL {i + 1})...')
             track_id = track['track_id']
             try:
@@ -520,15 +561,17 @@ if __name__ == '__main__':
                 if 'alt_track_id' in track:
                     playlist = dl.get_playlist_music_video(webplayback)
                     stream_url_audio = dl.get_stream_url_music_video_audio(playlist)
+                    decryption_keys_audio = dl.get_decryption_keys_music_video(stream_url_audio, track_id)
                     encrypted_location_audio = dl.get_encrypted_location('.m4a', track_id)
                     dl.download(encrypted_location_audio, stream_url_audio)
                     decrypted_location_audio = dl.get_decrypted_location('.m4a', track_id)
-                    dl.decrypt_music_video(decrypted_location_audio, encrypted_location_audio, stream_url_audio, track_id)
+                    dl.decrypt(encrypted_location_audio, decrypted_location_audio, decryption_keys_audio)
                     stream_url_video = dl.get_stream_url_music_video_video(playlist)
+                    decryption_keys_video = dl.get_decryption_keys_music_video(stream_url_video, track_id)
                     encrypted_location_video = dl.get_encrypted_location('.m4v', track_id)
                     dl.download(encrypted_location_video, stream_url_video)
                     decrypted_location_video = dl.get_decrypted_location('.m4v', track_id)
-                    dl.decrypt_music_video(decrypted_location_video, encrypted_location_video, stream_url_video, track_id)
+                    dl.decrypt(encrypted_location_video, decrypted_location_video, decryption_keys_video)
                     tags = dl.get_tags_music_video(track['alt_track_id'])
                     fixed_location = dl.get_fixed_location('.m4v', track_id)
                     final_location = dl.get_final_location('.m4v', tags)
@@ -536,10 +579,11 @@ if __name__ == '__main__':
                     dl.make_final(final_location, fixed_location, tags)
                 else:
                     stream_url = dl.get_stream_url_song(webplayback)
+                    decryption_keys = dl.get_decryption_keys_song(stream_url, track_id)
                     encrypted_location = dl.get_encrypted_location('.m4a', track_id)
                     dl.download(encrypted_location, stream_url)
                     decrypted_location = dl.get_decrypted_location('.m4a', track_id)
-                    dl.decrypt_song(decrypted_location, encrypted_location, stream_url, track_id)
+                    dl.decrypt(encrypted_location, decrypted_location, decryption_keys)
                     lyrics = dl.get_lyrics(track_id)
                     tags = dl.get_tags_song(webplayback, lyrics)
                     fixed_location = dl.get_fixed_location('.m4a', track_id)

@@ -1,23 +1,23 @@
 from pathlib import Path
-import re
-import requests
-import urllib3
-import storefront_ids
-import m3u8
-from yt_dlp import YoutubeDL
-from pywidevine.L3.cdm.cdm import Cdm
-from pywidevine.L3.cdm import deviceconfig
-import base64
-from pywidevine.L3.cdm.formats.widevine_pssh_data_pb2 import WidevinePsshData
-from mutagen.mp4 import MP4Cover, MP4
-import song_genres
-import music_video_genres
-from xml.dom import minidom
 import datetime
 import argparse
 import shutil
 import traceback
 import subprocess
+import re
+from xml.dom import minidom
+import base64
+from pywidevine.L3.cdm.cdm import Cdm
+from pywidevine.L3.cdm import deviceconfig
+from pywidevine.L3.cdm.formats.widevine_pssh_data_pb2 import WidevinePsshData
+import requests
+import storefront_ids
+import m3u8
+import urllib3
+from yt_dlp import YoutubeDL
+from mutagen.mp4 import MP4Cover, MP4
+import song_genres
+import music_video_genres
 
 class Gamdl:
     def __init__(self, disable_music_video_skip, cookies_location, temp_path, prefer_hevc, final_path, skip_cleanup, print_video_playlist, no_lrc):
@@ -169,16 +169,16 @@ class Gamdl:
         ).json()['license']
     
 
-    def fix_pssh(self, pssh_b64):
+    def check_pssh(self, pssh_b64):
         WV_SYSTEM_ID = [237, 239, 139, 169, 121, 214, 74, 206, 163, 200, 39, 220, 213, 29, 33, 237]
         pssh = base64.b64decode(pssh_b64)
         if not pssh[12:28] == bytes(WV_SYSTEM_ID):
-            new_pssh = bytearray([0,0,0])
-            new_pssh.append(32+len(pssh))
+            new_pssh = bytearray([0, 0, 0])
+            new_pssh.append(32 + len(pssh))
             new_pssh[4:] = bytearray(b'pssh')
-            new_pssh[8:] = [0,0,0,0]
+            new_pssh[8:] = [0, 0, 0, 0]
             new_pssh[13:] = WV_SYSTEM_ID
-            new_pssh[29:] = [0,0,0,0]
+            new_pssh[29:] = [0, 0, 0, 0]
             new_pssh[31] = len(pssh)
             new_pssh[32:] = pssh
             return base64.b64encode(new_pssh)
@@ -190,7 +190,7 @@ class Gamdl:
         playlist = m3u8.load(stream_url)
         track_uri = next(x for x in playlist.keys if x.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed").uri
         session = self.cdm.open_session(
-            self.fix_pssh(track_uri.split(',')[1]),
+            self.check_pssh(track_uri.split(',')[1]),
             deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
         )
         challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf-8')
@@ -209,7 +209,7 @@ class Gamdl:
         wvpsshdata.algorithm = 1
         wvpsshdata.key_id.append(base64.b64decode(track_uri.split(",")[1]))
         session = self.cdm.open_session(
-            self.fix_pssh(base64.b64encode(wvpsshdata.SerializeToString()).decode("utf-8")),
+            self.check_pssh(base64.b64encode(wvpsshdata.SerializeToString()).decode("utf-8")),
             deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
         )
         challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf-8')
@@ -457,36 +457,31 @@ if __name__ == '__main__':
     parser.add_argument(
         'url',
         help='Apple Music song/music video/album/playlist URL(s)',
-        nargs='*',
-        metavar = '<url>'
+        nargs='*'
     )
     parser.add_argument(
         '-u',
         '--urls-txt',
         help = 'Read URLs from a text file.',
-        nargs = '?',
-        metavar = '<txt_file>'
+        nargs = '?'
     )
     parser.add_argument(
         '-f',
         '--final-path',
         default = 'Apple Music',
-        help = 'Final Path.',
-        metavar = '<final_path>'
+        help = 'Final Path.'
     )
     parser.add_argument(
         '-t',
         '--temp-path',
         default = 'temp',
-        help = 'Temp Path.',
-        metavar = '<temp_path>'
+        help = 'Temp Path.'
     )
     parser.add_argument(
         '-c',
         '--cookies-location',
         default = 'cookies.txt',
-        help = 'Cookies location.',
-        metavar = '<cookies_location>'
+        help = 'Cookies location.'
     )
     parser.add_argument(
         '-d',

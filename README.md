@@ -26,7 +26,7 @@ Some new features that I added:
         * MP4Box: https://gpac.wp.imt.fr/downloads/
         * mp4decrypt: https://www.bento4.com/downloads/
 4. Export your Apple Music cookies as `cookies.txt` and put it in the same folder as the script
-    * You can export your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/cookies-txt/njabckikapfpffapmjgojcnbfjonfjfg. Make sure to be logged in.
+    * You can export your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/open-cookiestxt/gdocmgbfkjnnpapoeobnolbbkoibbcif. Make sure to be logged in.
 5. Put your L3 Widevine Keys (`device_client_id_blob` and `device_private_key` files) on `./pywidevine/L3/cdm/devices/android_generic` folder
     * You can get your L3 Widevine Keys by using Dumper: https://github.com/Diazole/dumper
         * The generated `private_key.pem` and `client_id.bin` files should be renamed to `device_private_key` and `device_client_id_blob` respectively.
@@ -50,3 +50,5 @@ Use `--help` argument to see all available options.
     * AVC 720p 4mbps M4V / AAC 256kbps
     * AVC 480p 1.5mbps M4V / AAC 256kbps
     * AVC 360p 1mbps M4V / AAC 256kbps
+
+Some videos may include c608 captions.

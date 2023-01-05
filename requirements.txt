@@ -1,4 +1,4 @@
-m3u8
-google-api-python-client
 yt-dlp
+protobuf==3.20.*
 requests
+m3u8

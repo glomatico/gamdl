@@ -51,4 +51,4 @@ Use `--help` argument to see all available options.
     * AVC 480p 1.5mbps M4V / AAC 256kbps
     * AVC 360p 1mbps M4V / AAC 256kbps
 
-Some videos may include c608 captions.
+Some videos may include EIA-608 captions.

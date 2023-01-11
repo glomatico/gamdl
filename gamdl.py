@@ -7,17 +7,18 @@ import subprocess
 import re
 from xml.dom import minidom
 import base64
+import functools
+import song_genres
+import music_video_genres
+import storefront_ids
 from pywidevine.L3.cdm.cdm import Cdm
 from pywidevine.L3.cdm import deviceconfig
 from pywidevine.L3.cdm.formats.widevine_pssh_data_pb2 import WidevinePsshData
 import requests
-import storefront_ids
 import m3u8
-import urllib3
 from yt_dlp import YoutubeDL
 from mutagen.mp4 import MP4Cover, MP4
-import song_genres
-import music_video_genres
+
 
 class Gamdl:
     def __init__(self, disable_music_video_skip, cookies_location, temp_path, prefer_hevc, final_path, skip_cleanup, print_video_playlist, no_lrc):
@@ -37,8 +38,6 @@ class Gamdl:
                     line_fields = l.strip().replace('&quot;', '"').split('\t')
                     cookies[line_fields[5]] = line_fields[6]
         self.session = requests.Session()
-        self.session.verify = False
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.session.cookies.update(cookies)
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
@@ -55,10 +54,10 @@ class Gamdl:
             "Sec-Fetch-Site": "same-site",
             'origin': 'https://beta.music.apple.com'
         })
-        r = self.session.get('https://beta.music.apple.com')
-        index_js = re.search('(?<=index\.)(.*?)(?=\.js")', r.text).group(1)
-        r = self.session.get(f'https://beta.music.apple.com/assets/index.{index_js}.js')
-        access_token = re.search('(?=eyJh)(.*?)(?=")', r.text).group(1)
+        web_page = self.session.get('https://beta.music.apple.com').text
+        index_js_uri = re.search('(?<=index\.)(.*?)(?=\.js")', web_page).group(1)
+        index_js_page = self.session.get(f'https://beta.music.apple.com/assets/index.{index_js_uri}.js').text
+        access_token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f'Bearer {access_token}'})
         self.country = cookies['itua'].lower()
         self.storefront = getattr(storefront_ids, self.country.upper())
@@ -68,33 +67,17 @@ class Gamdl:
         download_queue = []
         product_id = url.split('/')[-1].split('i=')[-1].split('&')[0].split('?')[0]
         response = self.session.get(f'https://api.music.apple.com/v1/catalog/{self.country}/?ids[songs]={product_id}&ids[albums]={product_id}&ids[playlists]={product_id}&ids[music-videos]={product_id}').json()['data'][0]
-        if response['type'] == 'songs':
-            download_queue.append({
-                'track_id': response['id'],
-                'title': response['attributes']['name']
-            })
+        if response['type'] in ('songs', 'music-videos') and 'playParams' in response['attributes']:
+            download_queue.append(response)
         if response['type'] == 'albums' or response['type'] == 'playlists':
             for track in response['relationships']['tracks']['data']:
                 if 'playParams' in track['attributes']:
                     if track['type'] == 'music-videos' and self.disable_music_video_skip:
-                        download_queue.append({
-                            'track_id': track['attributes']['playParams']['id'],
-                            'alt_track_id': track['attributes']['url'].split('/')[-1],
-                            'title': track['attributes']['name']
-                        })
+                        download_queue.append(track)
                     if track['type'] == 'songs':
-                        download_queue.append({
-                            'track_id': track['attributes']['playParams']['id'],
-                            'title': track['attributes']['name']
-                        })
-        if response['type'] == 'music-videos':
-            download_queue.append({
-                'track_id': response['attributes']['playParams']['id'],
-                'alt_track_id': response['attributes']['url'].split('/')[-1],
-                'title': response['attributes']['name']
-            })
+                        download_queue.append(track)
         if not download_queue:
-            raise Exception()
+            raise Exception('Not a valid Apple Music URL or criteria not met')
         return download_queue
     
 
@@ -116,18 +99,18 @@ class Gamdl:
     
 
     def get_stream_url_song(self, webplayback):
-        return next((x for x in webplayback["assets"] if x["flavor"] == "28:ctrp256"))['URL']
+        return next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['URL']
     
 
     def get_stream_url_music_video_audio(self, playlist):
-        return [x for x in playlist.media if x.type == "AUDIO"][-1].uri
+        return [i for i in playlist.media if i.type == "AUDIO"][-1].uri
     
 
     def get_stream_url_music_video_video(self, playlist):
         if self.prefer_hevc:
             return playlist.playlists[-1].uri
         else:
-            return [x for x in playlist.playlists if 'avc' in x.stream_info.codecs][-1].uri
+            return [i for i in playlist.playlists if 'avc' in i.stream_info.codecs][-1].uri
     
     
     def get_encrypted_location(self, extension, track_id,):
@@ -188,7 +171,7 @@ class Gamdl:
     
     def get_decryption_keys_music_video(self, stream_url, track_id):
         playlist = m3u8.load(stream_url)
-        track_uri = next(x for x in playlist.keys if x.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed").uri
+        track_uri = next(i for i in playlist.keys if i.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed").uri
         session = self.cdm.open_session(
             self.check_pssh(track_uri.split(',')[1]),
             deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
@@ -255,7 +238,7 @@ class Gamdl:
         try:
             raw_lyrics = minidom.parseString(self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics').json()['data'][0]['attributes']['ttml'])
         except:
-            return
+            return None, None
         unsynced_lyrics = ''
         synced_lyrics = ''
         for stanza in raw_lyrics.getElementsByTagName("div"):
@@ -277,12 +260,17 @@ class Gamdl:
                     if verse.getAttribute('begin'):
                         synced_lyrics += f'[{self.get_synced_lyrics_formated_time(verse.getAttribute("begin"))}]{verse.firstChild.nodeValue}\n'
             unsynced_lyrics += '\n'
-        return [unsynced_lyrics[:-2], synced_lyrics]
+        return unsynced_lyrics[:-2], synced_lyrics
     
 
-    def get_tags_song(self, webplayback, lyrics):
-        metadata = next((x for x in webplayback["assets"] if x["flavor"] == "28:ctrp256"))['metadata']
-        artwork_url = next((x for x in webplayback["assets"] if x["flavor"] == "28:ctrp256"))['artworkURL']
+    @functools.lru_cache()
+    def get_cover(self, url):
+        return requests.get(url).content
+    
+
+    def get_tags_song(self, webplayback, unsynced_lyrics):
+        metadata = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['metadata']
+        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['artworkURL']
         tags = {
             '\xa9nam': [metadata['itemName']],
             '\xa9gen': [getattr(song_genres, f'ID{metadata["genreId"]}')],
@@ -302,7 +290,7 @@ class Gamdl:
             'cpil': metadata['compilation'],
             'disk': [(metadata['discNumber'], metadata['discCount'])],
             'trkn': [(metadata['trackNumber'], metadata['trackCount'])],
-            'covr': [MP4Cover(requests.get(artwork_url).content, MP4Cover.FORMAT_JPEG)],
+            'covr': [MP4Cover(self.get_cover(cover_url), MP4Cover.FORMAT_JPEG)],
             'stik': [1]
         }
         if 'copyright' in metadata:
@@ -317,8 +305,8 @@ class Gamdl:
             tags['cmID'] = [int(metadata['composerId'])]
             tags['\xa9wrt'] = [metadata['composerName']]
             tags['soco'] = [metadata['sort-composer']]
-        if lyrics:
-            tags['\xa9lyr'] = [lyrics[0]]
+        if unsynced_lyrics:
+            tags['\xa9lyr'] = [unsynced_lyrics]
         return tags
     
 
@@ -336,7 +324,7 @@ class Gamdl:
             'cnID': [metadata[0]["trackId"]],
             'geID': [int(extra_metadata['genres'][0]['genreId'])],
             'sfID': [int(self.storefront.split('-')[0])],
-            'covr': [MP4Cover(requests.get(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')).content, MP4Cover.FORMAT_JPEG)]
+            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')), MP4Cover.FORMAT_JPEG)]
         }
         if metadata[0]['trackExplicitness'] == 'notExplicit':
             tags['rtng'] = [0]
@@ -390,7 +378,7 @@ class Gamdl:
             final_location /= f'{self.get_sanizated_string(tags["©ART"][0], True)}/Unknown Album/'
         final_location /= f'{file_name}{file_extension}'
         try:
-            if final_location.exists() and file_extension == '.m4v' and MP4(final_location).tags['cnID'][0] != tags['cnID'][0]:
+            if file_extension == '.m4v' and final_location.exists() and MP4(final_location).tags['cnID'][0] != tags['cnID'][0]:
                 final_location = self.get_final_location_overwrite_prevented_music_video(final_location)
         except:
             pass
@@ -425,10 +413,10 @@ class Gamdl:
         ])
     
 
-    def make_lrc(self, final_location, lyrics):
-        if lyrics and lyrics[1] and not self.no_lrc:
+    def make_lrc(self, final_location, synced_lyrics):
+        if synced_lyrics and not self.no_lrc:
             with open(final_location.with_suffix('.lrc'), 'w', encoding = 'utf8') as f:
-                f.write(lyrics[1])
+                f.write(synced_lyrics)
     
 
     def make_final(self, final_location, fixed_location, tags):
@@ -447,17 +435,17 @@ class Gamdl:
 
 if __name__ == '__main__':
     if not shutil.which('mp4decrypt'):
-        raise Exception('mp4decrypt is not on PATH.')
+        raise Exception('mp4decrypt is not on PATH')
     if not shutil.which('MP4Box'):
-        raise Exception('MP4Box is not on PATH.')
+        raise Exception('MP4Box is not on PATH')
     parser = argparse.ArgumentParser(
         description = 'A Python script to download Apple Music songs/music videos/albums/playlists.',
         formatter_class = argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         'url',
-        help='Apple Music song/music video/album/playlist URL(s)',
-        nargs='*'
+        help = 'Apple Music song/music video/album/playlist URL(s).',
+        nargs = '*'
     )
     parser.add_argument(
         '-u',
@@ -511,7 +499,7 @@ if __name__ == '__main__':
         '-e',
         '--print-exceptions',
         action = 'store_true',
-        help = 'Print Execeptions.'
+        help = 'Print execeptions.'
     )
     parser.add_argument(
         '-v',
@@ -549,11 +537,11 @@ if __name__ == '__main__':
                 traceback.print_exc()
     for i, url in enumerate(download_queue):
         for j, track in enumerate(url):
-            print(f'Downloading "{track["title"]}" (track {j + 1} from URL {i + 1})...')
-            track_id = track['track_id']
+            print(f'Downloading "{track["attributes"]["name"]}" (track {j + 1} from URL {i + 1})...')
+            track_id = track['id']
             try:
                 webplayback = dl.get_webplayback(track_id)
-                if 'alt_track_id' in track:
+                if track['type'] == 'music-videos':
                     playlist = dl.get_playlist_music_video(webplayback)
                     stream_url_audio = dl.get_stream_url_music_video_audio(playlist)
                     decryption_keys_audio = dl.get_decryption_keys_music_video(stream_url_audio, track_id)
@@ -567,7 +555,7 @@ if __name__ == '__main__':
                     dl.download(encrypted_location_video, stream_url_video)
                     decrypted_location_video = dl.get_decrypted_location('.m4v', track_id)
                     dl.decrypt(encrypted_location_video, decrypted_location_video, decryption_keys_video)
-                    tags = dl.get_tags_music_video(track['alt_track_id'])
+                    tags = dl.get_tags_music_video(track['attributes']['url'].split('/')[-1])
                     fixed_location = dl.get_fixed_location('.m4v', track_id)
                     final_location = dl.get_final_location('.m4v', tags)
                     dl.fixup_music_video(decrypted_location_audio, decrypted_location_video, fixed_location)
@@ -579,18 +567,18 @@ if __name__ == '__main__':
                     dl.download(encrypted_location, stream_url)
                     decrypted_location = dl.get_decrypted_location('.m4a', track_id)
                     dl.decrypt(encrypted_location, decrypted_location, decryption_keys)
-                    lyrics = dl.get_lyrics(track_id)
-                    tags = dl.get_tags_song(webplayback, lyrics)
+                    unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
+                    tags = dl.get_tags_song(webplayback, unsynced_lyrics)
                     fixed_location = dl.get_fixed_location('.m4a', track_id)
                     final_location = dl.get_final_location('.m4a', tags)
                     dl.fixup_song(decrypted_location, fixed_location)
                     dl.make_final(final_location, fixed_location, tags)
-                    dl.make_lrc(final_location, lyrics)
+                    dl.make_lrc(final_location, synced_lyrics)
             except KeyboardInterrupt:
                 exit(1)
             except:
                 error_count += 1
-                print(f'* Failed to download "{track["title"]}" (track {j + 1} from URL {i + 1}).')
+                print(f'* Failed to download "{track["attributes"]["name"]}" (track {j + 1} from URL {i + 1}).')
                 if args.print_exceptions:
                     traceback.print_exc()
             dl.cleanup()

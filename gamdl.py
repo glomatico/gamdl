@@ -5,7 +5,7 @@ import shutil
 import traceback
 import subprocess
 import re
-from xml.dom import minidom
+from xml.etree import ElementTree
 import base64
 import functools
 import song_genres
@@ -236,29 +236,17 @@ class Gamdl:
 
     def get_lyrics(self, track_id):
         try:
-            raw_lyrics = minidom.parseString(self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics').json()['data'][0]['attributes']['ttml'])
+            raw_lyrics =  ElementTree.fromstring(self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics').json()['data'][0]['attributes']['ttml'])
         except:
             return None, None
         unsynced_lyrics = ''
         synced_lyrics = ''
-        for stanza in raw_lyrics.getElementsByTagName("div"):
-            for verse in stanza.getElementsByTagName("p"):
-                if not verse.firstChild.nodeValue:
-                    subverse_time = []
-                    subverse_text = []
-                    for subserve in verse.getElementsByTagName("span"):
-                        if subserve.firstChild.nodeValue:
-                            subverse_time.append(subserve.getAttribute('begin'))
-                            subverse_text.append(subserve.firstChild.nodeValue)
-                    subverse_time = subverse_time[0]
-                    subverse_text = ' '.join(subverse_text)
-                    unsynced_lyrics += subverse_text + '\n'
-                    if subverse_time:
-                        synced_lyrics += f'[{self.get_synced_lyrics_formated_time(subverse_time)}]{subverse_text}\n'
-                else:
-                    unsynced_lyrics += verse.firstChild.nodeValue + '\n'
-                    if verse.getAttribute('begin'):
-                        synced_lyrics += f'[{self.get_synced_lyrics_formated_time(verse.getAttribute("begin"))}]{verse.firstChild.nodeValue}\n'
+        for div in raw_lyrics.iter('{http://www.w3.org/ns/ttml}div'):
+            for p in div.iter('{http://www.w3.org/ns/ttml}p'):
+                if p.attrib.get('begin'):
+                    synced_lyrics += f'[{self.get_synced_lyrics_formated_time(p.attrib.get("begin"))}]{p.text}\n'
+                if p.text:
+                    unsynced_lyrics += p.text + '\n'
             unsynced_lyrics += '\n'
         return unsynced_lyrics[:-2], synced_lyrics
     

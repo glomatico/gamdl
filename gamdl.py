@@ -57,8 +57,8 @@ class Gamdl:
         web_page = self.session.get('https://beta.music.apple.com').text
         index_js_uri = re.search('(?<=index\.)(.*?)(?=\.js")', web_page).group(1)
         index_js_page = self.session.get(f'https://beta.music.apple.com/assets/index.{index_js_uri}.js').text
-        access_token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
-        self.session.headers.update({"authorization": f'Bearer {access_token}'})
+        token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
+        self.session.headers.update({"authorization": f'Bearer {token}'})
         self.country = cookies['itua'].lower()
         self.storefront = getattr(storefront_ids, self.country.upper())
     
@@ -66,7 +66,7 @@ class Gamdl:
     def get_download_queue(self, url):
         download_queue = []
         product_id = url.split('/')[-1].split('i=')[-1].split('&')[0].split('?')[0]
-        response = self.session.get(f'https://api.music.apple.com/v1/catalog/{self.country}/?ids[songs]={product_id}&ids[albums]={product_id}&ids[playlists]={product_id}&ids[music-videos]={product_id}').json()['data'][0]
+        response = self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/?ids[songs]={product_id}&ids[albums]={product_id}&ids[playlists]={product_id}&ids[music-videos]={product_id}').json()['data'][0]
         if response['type'] in ('songs', 'music-videos') and 'playParams' in response['attributes']:
             download_queue.append(response)
         if response['type'] == 'albums' or response['type'] == 'playlists':
@@ -77,7 +77,7 @@ class Gamdl:
                     if track['type'] == 'songs':
                         download_queue.append(track)
         if not download_queue:
-            raise Exception('Not a valid Apple Music URL or criteria not met')
+            raise Exception('Criteria not met')
         return download_queue
     
 
@@ -113,7 +113,7 @@ class Gamdl:
             return [i for i in playlist.playlists if 'avc' in i.stream_info.codecs][-1].uri
     
     
-    def get_encrypted_location(self, extension, track_id,):
+    def get_encrypted_location(self, extension, track_id):
         return self.temp_path / f'{track_id}_encrypted{extension}'
     
 
@@ -176,7 +176,7 @@ class Gamdl:
             self.check_pssh(track_uri.split(',')[1]),
             deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
         )
-        challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf-8')
+        challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf8')
         license_b64 = self.get_license_b64(challenge, track_uri, track_id)
         self.cdm.provide_license(session, license_b64)
         decryption_keys = []
@@ -192,10 +192,10 @@ class Gamdl:
         wvpsshdata.algorithm = 1
         wvpsshdata.key_id.append(base64.b64decode(track_uri.split(",")[1]))
         session = self.cdm.open_session(
-            self.check_pssh(base64.b64encode(wvpsshdata.SerializeToString()).decode("utf-8")),
+            self.check_pssh(base64.b64encode(wvpsshdata.SerializeToString()).decode("utf8")),
             deviceconfig.DeviceConfig(deviceconfig.device_android_generic)
         )
-        challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf-8')
+        challenge = base64.b64encode(self.cdm.get_license_request(session)).decode('utf8')
         license_b64 = self.get_license_b64(challenge, track_uri, track_id)
         self.cdm.provide_license(session, license_b64)
         decryption_keys = []
@@ -206,13 +206,16 @@ class Gamdl:
     
 
     def decrypt(self, encrypted_location, decrypted_location, decryption_keys):
-        subprocess.check_output([
-            'mp4decrypt',
-            encrypted_location,
-            '--key',
-            decryption_keys,
-            decrypted_location
-        ])
+        subprocess.run(
+            [
+                'mp4decrypt',
+                encrypted_location,
+                '--key',
+                decryption_keys,
+                decrypted_location
+            ],
+            check = True
+        )
     
 
     def get_synced_lyrics_formated_time(self, unformatted_time):
@@ -236,12 +239,12 @@ class Gamdl:
 
     def get_lyrics(self, track_id):
         try:
-            raw_lyrics =  ElementTree.fromstring(self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics').json()['data'][0]['attributes']['ttml'])
+            lyrics_ttml = ElementTree.fromstring(self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics').json()['data'][0]['attributes']['ttml'])
         except:
             return None, None
         unsynced_lyrics = ''
         synced_lyrics = ''
-        for div in raw_lyrics.iter('{http://www.w3.org/ns/ttml}div'):
+        for div in lyrics_ttml.iter('{http://www.w3.org/ns/ttml}div'):
             for p in div.iter('{http://www.w3.org/ns/ttml}p'):
                 if p.attrib.get('begin'):
                     synced_lyrics += f'[{self.get_synced_lyrics_formated_time(p.attrib.get("begin"))}]{p.text}\n'
@@ -374,31 +377,37 @@ class Gamdl:
     
 
     def fixup_music_video(self, decrypted_location_audio, decrypted_location_video, fixed_location):
-        subprocess.check_output([
-            'MP4Box',
-            '-quiet',
-            '-add',
-            decrypted_location_audio,
-            '-add',
-            decrypted_location_video,
-            '-itags',
-            'artist=placeholder',
-            '-new',
-            fixed_location
-        ])
+        subprocess.run(
+            [
+                'MP4Box',
+                '-quiet',
+                '-add',
+                decrypted_location_audio,
+                '-add',
+                decrypted_location_video,
+                '-itags',
+                'artist=placeholder',
+                '-new',
+                fixed_location
+            ],
+            check = True
+        )
     
 
     def fixup_song(self, decrypted_location, fixed_location):
-        subprocess.check_output([
-            'MP4Box',
-            '-quiet',
-            '-add',
-            decrypted_location,
-            '-itags',
-            'album=placeholder',
-            '-new',
-            fixed_location
-        ])
+        subprocess.run(
+            [
+                'MP4Box',
+                '-quiet',
+                '-add',
+                decrypted_location,
+                '-itags',
+                'album=placeholder',
+                '-new',
+                fixed_location
+            ],
+            check = True
+        )
     
 
     def make_lrc(self, final_location, synced_lyrics):

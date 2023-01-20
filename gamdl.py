@@ -24,7 +24,6 @@ class Gamdl:
     def __init__(self, disable_music_video_skip, cookies_location, temp_path, prefer_hevc, final_path, skip_cleanup, print_video_playlist, no_lrc):
         self.cdm = Cdm()
         self.disable_music_video_skip = disable_music_video_skip
-        self.cookies_location = Path(cookies_location)
         self.temp_path = Path(temp_path)
         self.prefer_hevc = prefer_hevc
         self.final_path = Path(final_path)
@@ -32,7 +31,7 @@ class Gamdl:
         self.print_video_playlist = print_video_playlist
         self.no_lrc = no_lrc
         cookies = {}
-        with open(self.cookies_location, 'r') as f:
+        with open(Path(cookies_location), 'r') as f:
             for l in f:
                 if not re.match(r"^#", l) and not re.match(r"^\n", l):
                     line_fields = l.strip().replace('&quot;', '"').split('\t')
@@ -248,7 +247,7 @@ class Gamdl:
             for p in div.iter('{http://www.w3.org/ns/ttml}p'):
                 if p.attrib.get('begin'):
                     synced_lyrics += f'[{self.get_synced_lyrics_formated_time(p.attrib.get("begin"))}]{p.text}\n'
-                if p.text:
+                if p.text is not None:
                     unsynced_lyrics += p.text + '\n'
             unsynced_lyrics += '\n'
         return unsynced_lyrics[:-2], synced_lyrics

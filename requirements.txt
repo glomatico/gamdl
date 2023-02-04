@@ -1,4 +1,4 @@
-yt-dlp
-protobuf==3.20.*
-requests
+pywidevine
+pyyaml
 m3u8
+yt-dlp

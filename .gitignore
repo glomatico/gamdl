@@ -1,11 +1,5 @@
 /*
-__pycache__/
-!gamdl.py
-!song_genres.py
-!music_video_genres.py
-!storefront_ids.py
-!pywidevine
+__pycache__
+!gamdl
 !requirements.txt
-!.gitignore
-device_client_id_blob
-device_private_key
+!pyproject.toml

@@ -1,4 +1,5 @@
 from pathlib import Path
+import glob
 from http.cookiejar import MozillaCookieJar
 import re
 import base64
@@ -19,23 +20,17 @@ from mutagen.mp4 import MP4, MP4Cover
 
 
 class Gamdl:
-    def __init__(self, device_path, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, skip_cleanup):
+    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, skip_cleanup):
         self.disable_music_video_skip = disable_music_video_skip
         self.prefer_hevc = prefer_hevc
         self.temp_path = Path(temp_path)
         self.final_path = Path(final_path)
         self.no_lrc = no_lrc
         self.skip_cleanup = skip_cleanup
-        with open(Path(device_path) / 'device_client_id_blob', 'rb') as client_id, open(Path(device_path) / 'device_private_key', 'rb') as private_key:
-            self.cdm = Cdm.from_device(
-                Device(
-                    type_ = 'ANDROID',
-                    security_level = 3,
-                    flags = None,
-                    private_key = private_key.read(),
-                    client_id = client_id.read()
-                )
-            )
+        wvd_location = glob.glob(wvd_location)
+        if not wvd_location:
+            raise Exception('.wvd file not found')
+        self.cdm = Cdm.from_device(Device.load(Path(wvd_location[0])))
         self.cdm_session = self.cdm.open()
         cookies = MozillaCookieJar(Path(cookies_location))
         cookies.load(ignore_discard = True, ignore_expires = True)
@@ -393,12 +388,11 @@ class Gamdl:
     def make_final(self, final_location, fixed_location, tags):
         final_location.parent.mkdir(parents = True, exist_ok = True)
         shutil.copy(fixed_location, final_location)
-        file = MP4(final_location).tags
+        file = MP4(final_location)
         file.update(tags)
-        file.save(final_location)
+        file.save()
     
 
     def cleanup(self):
         if self.temp_path.exists() and not self.skip_cleanup:
             shutil.rmtree(self.temp_path)
-

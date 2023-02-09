@@ -3,7 +3,7 @@ import argparse
 import traceback
 from .gamdl import Gamdl
 
-__version__ = '1.0'
+__version__ = '1.1'
 
 
 def main():
@@ -27,10 +27,10 @@ def main():
         nargs = '?'
     )
     parser.add_argument(
-        '-d',
-        '--device-path',
-        default = '.',
-        help = 'Widevine L3 device keys path'
+        '-w',
+        '--wvd-location',
+        default = '*.wvd',
+        help = '.wvd file location'
     )
     parser.add_argument(
         '-f',
@@ -99,7 +99,7 @@ def main():
         with open(args.urls_txt, 'r', encoding = 'utf8') as f:
             args.url = f.read().splitlines()
     dl = Gamdl(
-        args.device_path,
+        args.wvd_location,
         args.cookies_location,
         args.disable_music_video_skip,
         args.prefer_hevc,
@@ -122,7 +122,7 @@ def main():
                 traceback.print_exc()
     for i, url in enumerate(download_queue):
         for j, track in enumerate(url):
-            print(f'Downloading "{track["attributes"]["name"]}" (track {j + 1} from URL {i + 1})...')
+            print(f'Downloading "{track["attributes"]["name"]}" (track {j + 1}/{len(url)} from URL {i + 1}/{len(download_queue)})')
             track_id = track['id']
             try:
                 webplayback = dl.get_webplayback(track_id)
@@ -165,8 +165,8 @@ def main():
                 exit(1)
             except:
                 error_count += 1
-                print(f'* Failed to download "{track["attributes"]["name"]}" (track {j + 1} from URL {i + 1}).')
+                print(f'Failed to download "{track["attributes"]["name"]}" (track {j + 1}/{len(url)} from URL {i + 1}/{len(download_queue)})')
                 if args.print_exceptions:
                     traceback.print_exc()
             dl.cleanup()
-    print(f'Done ({error_count} error(s)).')
+    print(f'Done ({error_count} error(s))')

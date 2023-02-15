@@ -3,7 +3,7 @@ import argparse
 import traceback
 from .gamdl import Gamdl
 
-__version__ = '1.1'
+__version__ = '1.2'
 
 
 def main():
@@ -63,6 +63,12 @@ def main():
         help = 'Prefer HEVC over AVC'
     )
     parser.add_argument(
+        '-o',
+        '--overwrite',
+        action = 'store_true',
+        help = 'Overwrite existing files'
+    )
+    parser.add_argument(
         '-n',
         '--no-lrc',
         action = 'store_true',
@@ -81,10 +87,10 @@ def main():
         help = 'Print execeptions'
     )
     parser.add_argument(
-        '-y',
-        '--print-video-playlist',
+        '-i',
+        '--print-video-m3u8-url',
         action = 'store_true',
-        help = 'Print Video M3U8 Playlist'
+        help = 'Print Video M3U8 URL'
     )
     parser.add_argument(
         '-v',
@@ -106,6 +112,7 @@ def main():
         args.temp_path,
         args.final_path,
         args.no_lrc,
+        args.overwrite,
         args.skip_cleanup
     )
     error_count = 0
@@ -127,9 +134,13 @@ def main():
             try:
                 webplayback = dl.get_webplayback(track_id)
                 if track['type'] == 'music-videos':
+                    if args.print_video_m3u8_url:
+                        print(webplayback['hls-playlist-url'])
+                    tags = dl.get_tags_music_video(track['attributes']['url'].split('/')[-1].split('?')[0])
+                    final_location = dl.get_final_location('.m4v', tags)
+                    if dl.check_exists(final_location) and not args.overwrite:
+                        continue
                     playlist = dl.get_playlist_music_video(webplayback)
-                    if args.print_video_playlist:
-                        print(playlist.dumps())
                     stream_url_audio = dl.get_stream_url_music_video_audio(playlist)
                     decryption_keys_audio = dl.get_decryption_keys_music_video(stream_url_audio, track_id)
                     encrypted_location_audio = dl.get_encrypted_location_audio(track_id)
@@ -142,22 +153,22 @@ def main():
                     dl.download(encrypted_location_video, stream_url_video)
                     decrypted_location_video = dl.get_decrypted_location_video(track_id)
                     dl.decrypt(encrypted_location_video, decrypted_location_video, decryption_keys_video)
-                    tags = dl.get_tags_music_video(track['attributes']['url'].split('/')[-1])
                     fixed_location = dl.get_fixed_location(track_id, '.m4v')
-                    final_location = dl.get_final_location('.m4v', tags)
                     dl.fixup_music_video(decrypted_location_audio, decrypted_location_video, fixed_location)
                     dl.make_final(final_location, fixed_location, tags)
                 else:
+                    unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
+                    tags = dl.get_tags_song(webplayback, unsynced_lyrics)
+                    final_location = dl.get_final_location('.m4a', tags)
+                    if dl.check_exists(final_location) and not args.overwrite:
+                        continue
                     stream_url = dl.get_stream_url_song(webplayback)
                     decryption_keys = dl.get_decryption_keys_song(stream_url, track_id)
                     encrypted_location = dl.get_encrypted_location_audio(track_id)
                     dl.download(encrypted_location, stream_url)
                     decrypted_location = dl.get_decrypted_location_audio(track_id)
                     dl.decrypt(encrypted_location, decrypted_location, decryption_keys)
-                    unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
-                    tags = dl.get_tags_song(webplayback, unsynced_lyrics, track['attributes']['genreNames'][0])
                     fixed_location = dl.get_fixed_location(track_id, '.m4a')
-                    final_location = dl.get_final_location('.m4a', tags)
                     dl.fixup_song(decrypted_location, fixed_location)
                     dl.make_final(final_location, fixed_location, tags)
                     dl.make_lrc(final_location, synced_lyrics)

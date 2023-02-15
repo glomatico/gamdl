@@ -20,12 +20,13 @@ from mutagen.mp4 import MP4, MP4Cover
 
 
 class Gamdl:
-    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, skip_cleanup):
+    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, overwrite, skip_cleanup):
         self.disable_music_video_skip = disable_music_video_skip
         self.prefer_hevc = prefer_hevc
         self.temp_path = Path(temp_path)
         self.final_path = Path(final_path)
         self.no_lrc = no_lrc
+        self.overwrite = overwrite
         self.skip_cleanup = skip_cleanup
         wvd_location = glob.glob(wvd_location)
         if not wvd_location:
@@ -63,7 +64,7 @@ class Gamdl:
     def get_download_queue(self, url):
         download_queue = []
         product_id = url.split('/')[-1].split('i=')[-1].split('&')[0].split('?')[0]
-        response = self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/?ids[songs]={product_id}&ids[albums]={product_id}&ids[playlists]={product_id}&ids[music-videos]={product_id}&l=en').json()['data'][0]
+        response = self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/?ids[songs]={product_id}&ids[albums]={product_id}&ids[playlists]={product_id}&ids[music-videos]={product_id}').json()['data'][0]
         if response['type'] in ('songs', 'music-videos') and 'playParams' in response['attributes']:
             download_queue.append(response)
         if response['type'] == 'albums' or response['type'] == 'playlists':
@@ -82,7 +83,8 @@ class Gamdl:
         response = self.session.post(
             'https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback',
             json = {
-                'salableAdamId': track_id
+                'salableAdamId': track_id,
+                'language': 'en-US'
             }
         ).json()["songList"][0]
         return response
@@ -105,6 +107,10 @@ class Gamdl:
             return playlist.playlists[-1].uri
         else:
             return [i for i in playlist.playlists if 'avc' in i.stream_info.codecs][-1].uri
+    
+
+    def check_exists(self, final_location):
+        return Path(final_location).exists()
     
 
     def get_encrypted_location_video(self, track_id):
@@ -134,7 +140,7 @@ class Gamdl:
             'outtmpl': str(encrypted_location),
             'allow_unplayable_formats': True,
             'fixup': 'never',
-            'overwrites': True,
+            'overwrites': self.overwrite,
             'external_downloader': 'aria2c'
         }) as ydl:
             ydl.download(stream_url)
@@ -166,10 +172,10 @@ class Gamdl:
     
     def get_decryption_keys_song(self, stream_url, track_id):
         track_uri = m3u8.load(stream_url).keys[0].uri
-        wvpsshdata = WidevinePsshData()
-        wvpsshdata.algorithm = 1
-        wvpsshdata.key_ids.append(base64.b64decode(track_uri.split(",")[1]))
-        pssh = PSSH(base64.b64encode(wvpsshdata.SerializeToString()).decode('utf-8'))
+        widevine_pssh_data = WidevinePsshData()
+        widevine_pssh_data.algorithm = 1
+        widevine_pssh_data.key_ids.append(base64.b64decode(track_uri.split(",")[1]))
+        pssh = PSSH(base64.b64encode(widevine_pssh_data.SerializeToString()).decode('utf-8'))
         challenge = base64.b64encode(self.cdm.get_license_challenge(self.cdm_session, pssh)).decode('utf-8')
         license_b64 = self.get_license_b64(challenge, track_uri, track_id)
         self.cdm.parse_license(self.cdm_session, license_b64)
@@ -230,12 +236,12 @@ class Gamdl:
         return requests.get(url).content
     
 
-    def get_tags_song(self, webplayback, unsynced_lyrics, genre):
+    def get_tags_song(self, webplayback, unsynced_lyrics):
         metadata = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['metadata']
         cover_url = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['artworkURL']
         tags = {
             '\xa9nam': [metadata['itemName']],
-            '\xa9gen': [genre],
+            '\xa9gen': [metadata['genre']],
             'aART': [metadata['playlistArtistName']],
             '\xa9alb': [metadata['playlistName']],
             'soar': [metadata['sort-artist']],

@@ -43,7 +43,7 @@ Some new features that I added:
 ## Usage
 ```
 usage: gamdl [-h] [-u [URLS_TXT]] [-w WVD_LOCATION] [-f FINAL_PATH] [-t TEMP_PATH] [-c COOKIES_LOCATION] [-m] [-p]
-             [-n] [-s] [-e] [-y] [-v]
+             [-o] [-n] [-s] [-e] [-i] [-v]
              [url ...]
 
 Download Apple Music songs/music videos/albums/playlists
@@ -66,12 +66,13 @@ options:
   -m, --disable-music-video-skip
                         Disable music video skip on playlists/albums (default: False)
   -p, --prefer-hevc     Prefer HEVC over AVC (default: False)
+  -o, --overwrite       Overwrite existing files (default: False)
   -n, --no-lrc          Don't create .lrc file (default: False)
   -s, --skip-cleanup    Skip cleanup (default: False)
   -e, --print-exceptions
                         Print execeptions (default: False)
-  -y, --print-video-playlist
-                        Print Video M3U8 Playlist (default: False)
+  -i, --print-video-m3u8-url
+                        Print Video M3U8 URL (default: False)
   -v, --version         show program's version number and exit
 ```
 

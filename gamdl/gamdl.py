@@ -9,13 +9,10 @@ import functools
 import subprocess
 import shutil
 import gamdl.storefront_ids
-from pywidevine import Cdm
-from pywidevine import Device
+from pywidevine import Cdm, Device, PSSH, WidevinePsshData
 import requests
 import m3u8
 from yt_dlp import YoutubeDL
-from pywidevine.pssh import PSSH
-from pywidevine.license_protocol_pb2 import WidevinePsshData
 from mutagen.mp4 import MP4, MP4Cover
 
 

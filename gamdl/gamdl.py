@@ -362,6 +362,7 @@ class Gamdl:
                 decrypted_location_video,
                 '-itags',
                 'artist=placeholder',
+                '-new',
                 fixed_location
             ],
             check = True
@@ -377,6 +378,7 @@ class Gamdl:
                 decrypted_location,
                 '-itags',
                 'artist=placeholder',
+                '-new',
                 fixed_location
             ],
             check = True

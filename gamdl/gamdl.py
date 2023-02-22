@@ -347,7 +347,7 @@ class Gamdl:
             final_location /= f'{self.get_sanizated_string(tags["©ART"][0], True)}/Unknown Album/'
         final_location /= f'{file_name}{file_extension}'
         try:
-            if file_extension == '.m4v' and final_location.exists() and MP4(final_location).tags['cnID'][0] != tags['cnID'][0]:
+            if file_extension == '.m4v' and final_location.exists() and MP4(final_location)['cnID'][0] != tags['cnID'][0]:
                 final_location = self.get_final_location_overwrite_prevented_music_video(final_location)
         except:
             pass

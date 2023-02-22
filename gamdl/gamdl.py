@@ -285,7 +285,6 @@ class Gamdl:
             '\xa9ART': [metadata[0]["artistName"]],
             '\xa9nam': [metadata[0]["trackCensoredName"]],
             '\xa9day': [metadata[0]["releaseDate"]],
-            'cprt': [extra_metadata['copyright']],
             '\xa9gen': [metadata[0]['primaryGenreName']],
             'stik': [6],
             'atID': [metadata[0]['artistId']],
@@ -294,6 +293,8 @@ class Gamdl:
             'sfID': [int(self.storefront.split('-')[0])],
             'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')), MP4Cover.FORMAT_JPEG)]
         }
+        if 'copyright' in extra_metadata:
+            tags['cprt'] = [extra_metadata['copyright']]
         if metadata[0]['trackExplicitness'] == 'notExplicit':
             tags['rtng'] = [0]
         elif metadata[0]['trackExplicitness'] == 'explicit':

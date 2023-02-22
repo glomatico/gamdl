@@ -276,7 +276,7 @@ class Gamdl:
 
 
     def get_tags_music_video(self, track_id):
-        metadata = requests.get(f'https://itunes.apple.com/lookup?id={track_id}&entity=album&limit=200&country={self.country}&lang=en_US').json()['results']
+        metadata = requests.get(f'https://itunes.apple.com/lookup?id={track_id}&entity=album&country={self.country}&lang=en_US').json()['results']
         extra_metadata = requests.get(f'https://music.apple.com/music-video/{metadata[0]["trackId"]}', headers = {'X-Apple-Store-Front': f'{self.storefront} t:music31'}).json()['storePlatformData']['product-dv']['results'][str(metadata[0]['trackId'])]
         tags = {
             '\xa9ART': [metadata[0]["artistName"]],

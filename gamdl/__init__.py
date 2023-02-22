@@ -124,7 +124,7 @@ def main():
             exit(1)
         except:
             error_count += 1
-            print(f'* Failed to check URL {i + 1}.')
+            print(f'Failed to check URL {i + 1}/{len(args.url)}')
             if args.print_exceptions:
                 traceback.print_exc()
     for i, url in enumerate(download_queue):

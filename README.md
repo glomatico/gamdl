@@ -85,6 +85,7 @@ options:
     * 1080p AVC 10mbps / AAC 256kbps
     * 1080p AVC 6.5bps / AAC 256kbps
     * 720p AVC 4mbps / AAC 256kbps
+    * 480p AVC 2mbps / AAC 256kbps
     * 480p AVC 1.5mbps / AAC 256kbps
     * 360p AVC 1mbps / AAC 256kbps
 

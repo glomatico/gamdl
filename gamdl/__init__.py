@@ -3,7 +3,7 @@ import argparse
 import traceback
 from .gamdl import Gamdl
 
-__version__ = '1.3'
+__version__ = '1.4'
 
 
 def main():
@@ -140,14 +140,12 @@ def main():
                     final_location = dl.get_final_location('.m4v', tags)
                     if dl.check_exists(final_location) and not args.overwrite:
                         continue
-                    playlist = dl.get_playlist_music_video(webplayback)
-                    stream_url_audio = dl.get_stream_url_music_video_audio(playlist)
+                    stream_url_video, stream_url_audio = dl.get_stream_url_music_video(webplayback)
                     decryption_keys_audio = dl.get_decryption_keys_music_video(stream_url_audio, track_id)
                     encrypted_location_audio = dl.get_encrypted_location_audio(track_id)
                     dl.download(encrypted_location_audio, stream_url_audio)
                     decrypted_location_audio = dl.get_decrypted_location_audio(track_id)
                     dl.decrypt(encrypted_location_audio, decrypted_location_audio, decryption_keys_audio)
-                    stream_url_video = dl.get_stream_url_music_video_video(playlist)
                     decryption_keys_video = dl.get_decryption_keys_music_video(stream_url_video, track_id)
                     encrypted_location_video = dl.get_encrypted_location_video(track_id)
                     dl.download(encrypted_location_video, stream_url_video)

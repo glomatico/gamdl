@@ -87,10 +87,6 @@ class Gamdl:
         return response
     
 
-    def get_playlist_music_video(self, webplayback):
-        return m3u8.load(webplayback['hls-playlist-url'])
-    
-
     def get_stream_url_song(self, webplayback):
         return next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['URL']
     
@@ -104,6 +100,21 @@ class Gamdl:
             return playlist.playlists[-1].uri
         else:
             return [i for i in playlist.playlists if 'avc' in i.stream_info.codecs][-1].uri
+    
+
+    def get_stream_url_music_video(self, webplayback):
+        with YoutubeDL({
+            'allow_unplayable_formats': True,
+            'quiet': True,
+            'no_warnings': True,
+        }) as ydl:
+            playlist = ydl.extract_info(webplayback['hls-playlist-url'], download = False)
+        if self.prefer_hevc:
+            stream_url_video = playlist['formats'][-1]['url']
+        else:
+            stream_url_video = [i['url'] for i in playlist['formats'] if i['vcodec'] is not None and 'avc1' in i['vcodec']][-1]
+        stream_url_audio = next(i['url'] for i in playlist['formats'] if 'audio-stereo-256' in i['format_id'])
+        return stream_url_video, stream_url_audio
     
 
     def check_exists(self, final_location):

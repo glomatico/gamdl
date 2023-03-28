@@ -205,7 +205,7 @@ class Gamdl:
         ms_new = f'{int(str(unformatted_time.microsecond)[:3]):03d}'
         if int(ms_new[2]) >= 5:
             ms = int(f'{int(ms_new[:2]) + 1}') * 10
-            unformatted_time = unformatted_time + datetime.timedelta(milliseconds=ms) - datetime.timedelta(microseconds=unformatted_time.microsecond)
+            unformatted_time += datetime.timedelta(milliseconds=ms) - datetime.timedelta(microseconds=unformatted_time.microsecond)
         return unformatted_time.strftime('%M:%S.%f')[:-4]
 
 

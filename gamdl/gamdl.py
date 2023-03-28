@@ -91,17 +91,6 @@ class Gamdl:
         return next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['URL']
     
 
-    def get_stream_url_music_video_audio(self, playlist):
-        return [i for i in playlist.media if i.type == "AUDIO"][-1].uri
-    
-
-    def get_stream_url_music_video_video(self, playlist):
-        if self.prefer_hevc:
-            return playlist.playlists[-1].uri
-        else:
-            return [i for i in playlist.playlists if 'avc' in i.stream_info.codecs][-1].uri
-    
-
     def get_stream_url_music_video(self, webplayback):
         with YoutubeDL({
             'allow_unplayable_formats': True,

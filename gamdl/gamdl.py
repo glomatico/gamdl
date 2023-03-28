@@ -193,7 +193,7 @@ class Gamdl:
 
     
     def get_synced_lyrics_formated_time(self, unformatted_time):
-        unformatted_time = unformatted_time.replace('ms', '').replace('s', '').replace(':', '.')
+        unformatted_time = unformatted_time.replace('m', '').replace('s', '').replace(':', '.')
         unformatted_time = unformatted_time.split('.')
         m, s, ms = 0, 0, 0
         ms = int(unformatted_time[-1])

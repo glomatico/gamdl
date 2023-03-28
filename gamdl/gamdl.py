@@ -201,25 +201,24 @@ class Gamdl:
             ],
             check = True
         )
-    
 
+    
     def get_synced_lyrics_formated_time(self, unformatted_time):
-        if 's' in unformatted_time:
-            unformatted_time = unformatted_time.replace('s', '')
-        if '.' not in unformatted_time:
-            unformatted_time += '.0'
-        s = int(unformatted_time.split('.')[-2].split(':')[-1]) * 1000
-        try:
-            m = int(unformatted_time.split('.')[-2].split(':')[-2]) * 60000
-        except:
-            m = 0
-        ms = f'{int(unformatted_time.split(".")[-1]):03d}'
-        if int(ms[2]) >= 5:
-            ms = int(f'{int(ms[:2]) + 1}') * 10
-        else:
-            ms = int(ms)
-        formated_time = datetime.datetime.fromtimestamp((s + m + ms)/1000.0)
-        return formated_time.strftime('%M:%S.%f')[:-4]
+        unformatted_time = unformatted_time.replace('ms', '').replace('s', '').replace(':', '.')
+        unformatted_time = unformatted_time.split('.')
+        m, s, ms = 0, 0, 0
+        if len(unformatted_time) >= 1:
+            ms = int(unformatted_time[-1])
+        if len(unformatted_time) >= 2:
+            s = int(unformatted_time[-2]) * 1000
+        if len(unformatted_time) >= 3:
+            m = int(unformatted_time[-3]) * 60000
+        unformatted_time = datetime.datetime.fromtimestamp((ms + s + m)/1000.0)
+        ms_new = f'{int(str(unformatted_time.microsecond)[:3]):03d}'
+        if int(ms_new[2]) >= 5:
+            ms = int(f'{int(ms_new[:2]) + 1}') * 10
+            unformatted_time = unformatted_time + datetime.timedelta(milliseconds=ms) - datetime.timedelta(microseconds=unformatted_time.microsecond)
+        return unformatted_time.strftime('%M:%S.%f')[:-4]
 
 
     def get_lyrics(self, track_id):

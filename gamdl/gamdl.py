@@ -196,8 +196,7 @@ class Gamdl:
         unformatted_time = unformatted_time.replace('ms', '').replace('s', '').replace(':', '.')
         unformatted_time = unformatted_time.split('.')
         m, s, ms = 0, 0, 0
-        if len(unformatted_time) >= 1:
-            ms = int(unformatted_time[-1])
+        ms = int(unformatted_time[-1])
         if len(unformatted_time) >= 2:
             s = int(unformatted_time[-2]) * 1000
         if len(unformatted_time) >= 3:

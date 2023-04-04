@@ -268,6 +268,8 @@ class Gamdl:
             tags['cmID'] = [int(metadata['composerId'])]
             tags['\xa9wrt'] = [metadata['composerName']]
             tags['soco'] = [metadata['sort-composer']]
+        if 'gapless' in metadata:
+            tags['pgap'] = metadata['gapless']
         if unsynced_lyrics:
             tags['\xa9lyr'] = [unsynced_lyrics]
         return tags

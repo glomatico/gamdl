@@ -17,9 +17,15 @@ from mutagen.mp4 import MP4, MP4Cover
 
 
 class Gamdl:
-    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, overwrite, skip_cleanup):
+    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, heaac, temp_path, final_path, no_lrc, overwrite, skip_cleanup):
         self.disable_music_video_skip = disable_music_video_skip
         self.prefer_hevc = prefer_hevc
+        if heaac:
+            self.song_audio_quality = '32:ctrp64'
+            self.music_video_audio_quality = 'audio-HE-stereo-64'
+        else:
+            self.song_audio_quality = '28:ctrp256'
+            self.music_video_audio_quality = 'audio-stereo-256'
         self.temp_path = Path(temp_path)
         self.final_path = Path(final_path)
         self.no_lrc = no_lrc
@@ -31,7 +37,7 @@ class Gamdl:
         self.cdm = Cdm.from_device(Device.load(Path(wvd_location[0])))
         self.cdm_session = self.cdm.open()
         cookies = MozillaCookieJar(Path(cookies_location))
-        cookies.load(ignore_discard = True, ignore_expires = True)
+        cookies.load(ignore_discard=True, ignore_expires=True)
         self.session = requests.Session()
         self.session.cookies.update(cookies)
         self.session.headers.update({
@@ -47,7 +53,7 @@ class Gamdl:
             'Sec-Fetch-Dest': 'empty',
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-site',
-            'origin': 'https://beta.music.apple.com'
+            'origin': 'https://beta.music.apple.com',
         })
         web_page = self.session.get('https://beta.music.apple.com').text
         index_js_uri = re.search('(?<=index\.)(.*?)(?=\.js")', web_page).group(1)
@@ -81,14 +87,14 @@ class Gamdl:
             'https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback',
             json = {
                 'salableAdamId': track_id,
-                'language': 'en-US'
+                'language': 'en-US',
             }
         ).json()["songList"][0]
         return response
     
 
     def get_stream_url_song(self, webplayback):
-        return next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['URL']
+        return next(i for i in webplayback["assets"] if i["flavor"] == self.song_audio_quality)['URL']
     
 
     def get_stream_url_music_video(self, webplayback):
@@ -102,7 +108,7 @@ class Gamdl:
             stream_url_video = playlist['formats'][-1]['url']
         else:
             stream_url_video = [i['url'] for i in playlist['formats'] if i['vcodec'] is not None and 'avc1' in i['vcodec']][-1]
-        stream_url_audio = next(i['url'] for i in playlist['formats'] if 'audio-stereo-256' in i['format_id'])
+        stream_url_audio = next(i['url'] for i in playlist['formats'] if self.music_video_audio_quality in i['format_id'])
         return stream_url_video, stream_url_audio
     
 
@@ -138,7 +144,7 @@ class Gamdl:
             'allow_unplayable_formats': True,
             'fixup': 'never',
             'overwrites': self.overwrite,
-            'external_downloader': 'aria2c'
+            'external_downloader': 'aria2c',
         }) as ydl:
             ydl.download(stream_url)
     
@@ -152,7 +158,7 @@ class Gamdl:
                 'uri': track_uri,
                 'adamId': track_id,
                 'isLibrary': False,
-                'user-initiated': True
+                'user-initiated': True,
             }
         ).json()['license']
 
@@ -186,9 +192,9 @@ class Gamdl:
                 encrypted_location,
                 '--key',
                 decryption_keys,
-                decrypted_location
+                decrypted_location,
             ],
-            check = True
+            check=True
         )
 
     
@@ -232,8 +238,8 @@ class Gamdl:
     
 
     def get_tags_song(self, webplayback, unsynced_lyrics):
-        metadata = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['metadata']
-        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")['artworkURL']
+        metadata = next(i for i in webplayback["assets"] if i["flavor"] == self.song_audio_quality)['metadata']
+        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == self.song_audio_quality)['artworkURL']
         tags = {
             '\xa9nam': [metadata['itemName']],
             '\xa9gen': [metadata['genre']],
@@ -254,7 +260,7 @@ class Gamdl:
             'disk': [(metadata['discNumber'], metadata['discCount'])],
             'trkn': [(metadata['trackNumber'], metadata['trackCount'])],
             'covr': [MP4Cover(self.get_cover(cover_url), MP4Cover.FORMAT_JPEG)],
-            'stik': [1]
+            'stik': [1],
         }
         if 'copyright' in metadata:
             tags['cprt'] = [metadata['copyright']]
@@ -286,7 +292,7 @@ class Gamdl:
             'cnID': [metadata[0]["trackId"]],
             'geID': [int(extra_metadata['genres'][0]['genreId'])],
             'sfID': [int(self.storefront.split('-')[0])],
-            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')), MP4Cover.FORMAT_JPEG)]
+            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')), MP4Cover.FORMAT_JPEG)],
         }
         if 'copyright' in extra_metadata:
             tags['cprt'] = [extra_metadata['copyright']]
@@ -361,9 +367,9 @@ class Gamdl:
                 '-itags',
                 'artist=placeholder',
                 '-new',
-                fixed_location
+                fixed_location,
             ],
-            check = True
+            check=True
         )
     
 
@@ -377,9 +383,9 @@ class Gamdl:
                 '-itags',
                 'artist=placeholder',
                 '-new',
-                fixed_location
+                fixed_location,
             ],
-            check = True
+            check=True
         )
     
 

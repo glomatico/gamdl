@@ -3,7 +3,7 @@ import argparse
 import traceback
 from .gamdl import Gamdl
 
-__version__ = '1.6'
+__version__ = '1.8'
 
 
 def main():
@@ -13,18 +13,18 @@ def main():
         raise Exception('MP4Box is not on PATH')
     parser = argparse.ArgumentParser(
         description = 'Download Apple Music songs/music videos/albums/playlists',
-        formatter_class = argparse.ArgumentDefaultsHelpFormatter
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         'url',
         help = 'Apple Music song/music video/album/playlist URL(s)',
-        nargs = '*'
+        nargs = '*',
     )
     parser.add_argument(
         '-u',
         '--urls-txt',
         help = 'Read URLs from a text file',
-        nargs = '?'
+        nargs = '?',
     )
     parser.add_argument(
         '-w',
@@ -36,67 +36,73 @@ def main():
         '-f',
         '--final-path',
         default = 'Apple Music',
-        help = 'Final Path'
+        help = 'Final Path',
     )
     parser.add_argument(
         '-t',
         '--temp-path',
         default = 'temp',
-        help = 'Temp Path'
+        help = 'Temp Path',
     )
     parser.add_argument(
         '-c',
         '--cookies-location',
         default = 'cookies.txt',
-        help = 'Cookies location'
+        help = 'Cookies location',
     )
     parser.add_argument(
         '-m',
         '--disable-music-video-skip',
         action = 'store_true',
-        help = 'Disable music video skip on playlists/albums'
+        help = 'Disable music video skip on playlists/albums',
     )
     parser.add_argument(
         '-p',
         '--prefer-hevc',
         action = 'store_true',
-        help = 'Prefer HEVC over AVC'
+        help = 'Prefer HEVC over AVC',
+    )
+    parser.add_argument(
+        '-a',
+        '--heaac',
+        action = 'store_true',
+        help = 'Download songs/music videos with HE-AAC instead of AAC',
     )
     parser.add_argument(
         '-o',
         '--overwrite',
         action = 'store_true',
-        help = 'Overwrite existing files'
+        help = 'Overwrite existing files',
     )
     parser.add_argument(
         '-n',
         '--no-lrc',
         action = 'store_true',
-        help = "Don't create .lrc file"
+        help = "Don't create .lrc file",
     )
     parser.add_argument(
         '-s',
         '--skip-cleanup',
         action = 'store_true',
-        help = 'Skip cleanup'
+        help = 'Skip cleanup',
     )
     parser.add_argument(
         '-e',
         '--print-exceptions',
         action = 'store_true',
-        help = 'Print execeptions'
+        help = 'Print execeptions',
     )
     parser.add_argument(
         '-i',
         '--print-video-m3u8-url',
         action = 'store_true',
-        help = 'Print Video M3U8 URL'
+        help = 'Print Video M3U8 URL',
     )
     parser.add_argument(
         '-v',
         '--version',
         action = 'version',
-        version = f'%(prog)s {__version__}'
+        version = f'%(prog)s {__version__}',
     )
     args = parser.parse_args()
     if not args.url and not args.urls_txt:
@@ -109,11 +115,12 @@ def main():
         args.cookies_location,
         args.disable_music_video_skip,
         args.prefer_hevc,
+        args.heaac,
         args.temp_path,
         args.final_path,
         args.no_lrc,
         args.overwrite,
-        args.skip_cleanup
+        args.skip_cleanup,
     )
     error_count = 0
     download_queue = []

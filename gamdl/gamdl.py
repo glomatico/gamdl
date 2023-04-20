@@ -56,8 +56,8 @@ class Gamdl:
             'origin': 'https://beta.music.apple.com',
         })
         web_page = self.session.get('https://beta.music.apple.com').text
-        index_js_uri = re.search('(?<=index\.)(.*?)(?=\.js")', web_page).group(1)
-        index_js_page = self.session.get(f'https://beta.music.apple.com/assets/index.{index_js_uri}.js').text
+        index_js_uri = re.search(r"/assets/index-legacy-[^/]+\.js", web_page).group(0)
+        index_js_page = self.session.get(f'https://beta.music.apple.com{index_js_uri}').text
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f'Bearer {token}'})
         self.country = self.session.cookies.get_dict()['itua']

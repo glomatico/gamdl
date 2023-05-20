@@ -3,7 +3,7 @@ import argparse
 import traceback
 from .gamdl import Gamdl
 
-__version__ = '1.9'
+__version__ = '1.9.1'
 
 
 def main():

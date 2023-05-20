@@ -17,19 +17,20 @@ from mutagen.mp4 import MP4, MP4Cover
 
 
 class Gamdl:
-    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, overwrite, skip_cleanup):
+    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, lrc_only, overwrite, skip_cleanup):
         self.disable_music_video_skip = disable_music_video_skip
         self.prefer_hevc = prefer_hevc
         self.temp_path = Path(temp_path)
         self.final_path = Path(final_path)
-        self.no_lrc = no_lrc
         self.overwrite = overwrite
         self.skip_cleanup = skip_cleanup
-        wvd_location = glob.glob(wvd_location)
-        if not wvd_location:
-            raise Exception('.wvd file not found')
-        self.cdm = Cdm.from_device(Device.load(wvd_location[0]))
-        self.cdm_session = self.cdm.open()
+        self.lrc_only = lrc_only
+        if not self.lrc_only:
+            wvd_location = glob.glob(wvd_location)
+            if not wvd_location:
+                raise Exception('.wvd file not found')
+            self.cdm = Cdm.from_device(Device.load(wvd_location[0]))
+            self.cdm_session = self.cdm.open()
         cookies = MozillaCookieJar(cookies_location)
         cookies.load(ignore_discard=True, ignore_expires=True)
         self.session = requests.Session()
@@ -62,12 +63,14 @@ class Gamdl:
         download_queue = []
         product_id = url.split('/')[-1].split('i=')[-1].split('&')[0].split('?')[0]
         response = self.session.get(f'https://amp-api.music.apple.com/v1/catalog/{self.country}/?ids[songs]={product_id}&ids[albums]={product_id}&ids[playlists]={product_id}&ids[music-videos]={product_id}').json()['data'][0]
-        if response['type'] in ('songs', 'music-videos') and 'playParams' in response['attributes']:
+        if response['type'] == 'songs' and 'playParams' in response['attributes']:
+            download_queue.append(response)
+        if response['type'] == 'music-videos' and 'playParams' in response['attributes'] and not self.lrc_only:
             download_queue.append(response)
         if response['type'] == 'albums' or response['type'] == 'playlists':
             for track in response['relationships']['tracks']['data']:
                 if 'playParams' in track['attributes']:
-                    if track['type'] == 'music-videos' and self.disable_music_video_skip:
+                    if track['type'] == 'music-videos' and self.disable_music_video_skip and not self.lrc_only:
                         download_queue.append(track)
                     if track['type'] == 'songs':
                         download_queue.append(track)
@@ -104,10 +107,6 @@ class Gamdl:
             stream_url_video = [i['url'] for i in playlist['formats'] if i['vcodec'] is not None and 'avc1' in i['vcodec']][-1]
         stream_url_audio = next(i['url'] for i in playlist['formats'] if 'audio-stereo-256' in i['format_id'])
         return stream_url_video, stream_url_audio
-    
-
-    def check_exists(self, final_location):
-        return Path(final_location).exists()
     
 
     def get_encrypted_location_video(self, track_id):
@@ -383,13 +382,12 @@ class Gamdl:
     
 
     def make_lrc(self, final_location, synced_lyrics):
-        if synced_lyrics and not self.no_lrc:
+        if synced_lyrics:
             with open(final_location.with_suffix('.lrc'), 'w', encoding='utf8') as f:
                 f.write(synced_lyrics)
     
 
-    def make_final(self, final_location, fixed_location, tags):
-        final_location.parent.mkdir(parents=True, exist_ok=True)
+    def move_final(self, final_location, fixed_location, tags):
         shutil.move(fixed_location, final_location)
         file = MP4(final_location)
         file.update(tags)

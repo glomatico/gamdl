@@ -42,9 +42,9 @@ Some new features that I added:
 
 ## Usage
 ```
-usage: gamdl [-h] [-u [URLS_TXT]] [-w WVD_LOCATION] [-f FINAL_PATH]
+usage: __main__.py [-h] [-u [URLS_TXT]] [-w WVD_LOCATION] [-f FINAL_PATH]
                    [-t TEMP_PATH] [-c COOKIES_LOCATION] [-m] [-p] [-o] [-n]
-                   [-s] [-e] [-v]
+                   [-l] [-s] [-e] [-v]
                    [url ...]
 
 Download Apple Music songs/music videos/albums/playlists
@@ -58,19 +58,23 @@ options:
   -u [URLS_TXT], --urls-txt [URLS_TXT]
                         Read URLs from a text file (default: None)
   -w WVD_LOCATION, --wvd-location WVD_LOCATION
-                        .wvd file location (default: *.wvd)
+                        .wvd file location (ignored if using -l/--lrc-only)
+                        (default: ./*.wvd)
   -f FINAL_PATH, --final-path FINAL_PATH
-                        Final Path (default: Apple Music)
+                        Final Path (default: ./Apple Music)
   -t TEMP_PATH, --temp-path TEMP_PATH
-                        Temp Path (default: temp)
+                        Temp Path (default: ./temp)
   -c COOKIES_LOCATION, --cookies-location COOKIES_LOCATION
-                        Cookies location (default: cookies.txt)
+                        Cookies location (default: ./cookies.txt)
   -m, --disable-music-video-skip
                         Disable music video skip on playlists/albums (default:
                         False)
   -p, --prefer-hevc     Prefer HEVC over AVC (default: False)
   -o, --overwrite       Overwrite existing files (default: False)
-  -n, --no-lrc          Don't create .lrc file (default: False)
+  -n, --no-lrc          Don't create .lrc file (ignored if using -l/--lrc-
+                        only) (default: False)
+  -l, --lrc-only        Skip downloading songs and only create .lrc files
+                        (default: False)
   -s, --skip-cleanup    Skip cleanup (default: False)
   -e, --print-exceptions
                         Print execeptions (default: False)

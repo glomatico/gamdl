@@ -17,15 +17,9 @@ from mutagen.mp4 import MP4, MP4Cover
 
 
 class Gamdl:
-    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, heaac, temp_path, final_path, no_lrc, overwrite, skip_cleanup):
+    def __init__(self, wvd_location, cookies_location, disable_music_video_skip, prefer_hevc, temp_path, final_path, no_lrc, overwrite, skip_cleanup):
         self.disable_music_video_skip = disable_music_video_skip
         self.prefer_hevc = prefer_hevc
-        if heaac:
-            self.song_audio_quality = '32:ctrp64'
-            self.music_video_audio_quality = 'audio-HE-stereo-64'
-        else:
-            self.song_audio_quality = '28:ctrp256'
-            self.music_video_audio_quality = 'audio-stereo-256'
         self.temp_path = Path(temp_path)
         self.final_path = Path(final_path)
         self.no_lrc = no_lrc
@@ -94,7 +88,7 @@ class Gamdl:
     
 
     def get_stream_url_song(self, webplayback):
-        return next(i for i in webplayback["assets"] if i["flavor"] == self.song_audio_quality)['URL']
+        return next(i for i in webplayback["assets"] if i["flavor"] == '28:ctrp256')['URL']
     
 
     def get_stream_url_music_video(self, webplayback):
@@ -108,7 +102,7 @@ class Gamdl:
             stream_url_video = playlist['formats'][-1]['url']
         else:
             stream_url_video = [i['url'] for i in playlist['formats'] if i['vcodec'] is not None and 'avc1' in i['vcodec']][-1]
-        stream_url_audio = next(i['url'] for i in playlist['formats'] if self.music_video_audio_quality in i['format_id'])
+        stream_url_audio = next(i['url'] for i in playlist['formats'] if 'audio-stereo-256' in i['format_id'])
         return stream_url_video, stream_url_audio
     
 
@@ -238,8 +232,8 @@ class Gamdl:
     
 
     def get_tags_song(self, webplayback, unsynced_lyrics):
-        metadata = next(i for i in webplayback["assets"] if i["flavor"] == self.song_audio_quality)['metadata']
-        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == self.song_audio_quality)['artworkURL']
+        metadata = next(i for i in webplayback["assets"] if i["flavor"] == '28:ctrp256')['metadata']
+        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == '28:ctrp256')['artworkURL']
         tags = {
             '\xa9nam': [metadata['itemName']],
             '\xa9gen': [metadata['genre']],

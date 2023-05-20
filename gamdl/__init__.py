@@ -63,12 +63,6 @@ def main():
         help = 'Prefer HEVC over AVC',
     )
     parser.add_argument(
-        '-a',
-        '--heaac',
-        action = 'store_true',
-        help = 'Download songs/music videos with HE-AAC instead of AAC',
-    )
-    parser.add_argument(
         '-o',
         '--overwrite',
         action = 'store_true',
@@ -115,7 +109,6 @@ def main():
         args.cookies_location,
         args.disable_music_video_skip,
         args.prefer_hevc,
-        args.heaac,
         args.temp_path,
         args.final_path,
         args.no_lrc,

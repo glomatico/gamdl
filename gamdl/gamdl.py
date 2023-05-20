@@ -312,11 +312,10 @@ class Gamdl:
 
 
     def get_sanizated_string(self, dirty_string, is_folder):
-        for character in ['\\', '/', ':', '*', '?', '"', '<', '>', '|', ';']:
-            dirty_string = dirty_string.replace(character, '_')
+        dirty_string = re.sub(r'[\\/:\*\?"<>\|;]', '_', dirty_string)
         if is_folder:
             dirty_string = dirty_string[:40]
-            if dirty_string[-1:] == '.':
+            if dirty_string.endswith('.') == '.':
                 dirty_string = dirty_string[:-1] + '_'
         else:
             dirty_string = dirty_string[:36]

@@ -390,7 +390,7 @@ class Gamdl:
 
     def make_final(self, final_location, fixed_location, tags):
         final_location.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(fixed_location, final_location)
+        shutil.move(fixed_location, final_location)
         file = MP4(final_location)
         file.update(tags)
         file.save()

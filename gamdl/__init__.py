@@ -87,12 +87,6 @@ def main():
         help = 'Print execeptions',
     )
     parser.add_argument(
-        '-i',
-        '--print-video-m3u8-url',
-        action = 'store_true',
-        help = 'Print Video M3U8 URL',
-    )
-    parser.add_argument(
         '-v',
         '--version',
         action = 'version',
@@ -134,8 +128,6 @@ def main():
             try:
                 webplayback = dl.get_webplayback(track_id)
                 if track['type'] == 'music-videos':
-                    if args.print_video_m3u8_url:
-                        print(webplayback['hls-playlist-url'])
                     tags = dl.get_tags_music_video(track['attributes']['url'].split('/')[-1].split('?')[0])
                     final_location = dl.get_final_location('.m4v', tags)
                     if dl.check_exists(final_location) and not args.overwrite:

@@ -44,7 +44,7 @@ Some new features that I added:
 ```
 usage: gamdl [-h] [-u [URLS_TXT]] [-w WVD_LOCATION] [-f FINAL_PATH]
                    [-t TEMP_PATH] [-c COOKIES_LOCATION] [-m] [-p] [-o] [-n]
-                   [-s] [-e] [-i] [-v]
+                   [-s] [-e] [-v]
                    [url ...]
 
 Download Apple Music songs/music videos/albums/playlists
@@ -74,8 +74,6 @@ options:
   -s, --skip-cleanup    Skip cleanup (default: False)
   -e, --print-exceptions
                         Print execeptions (default: False)
-  -i, --print-video-m3u8-url
-                        Print Video M3U8 URL (default: False)
   -v, --version         show program's version number and exit
 ```
 

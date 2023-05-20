@@ -34,9 +34,9 @@ class Gamdl:
         wvd_location = glob.glob(wvd_location)
         if not wvd_location:
             raise Exception('.wvd file not found')
-        self.cdm = Cdm.from_device(Device.load(Path(wvd_location[0])))
+        self.cdm = Cdm.from_device(Device.load(wvd_location[0]))
         self.cdm_session = self.cdm.open()
-        cookies = MozillaCookieJar(Path(cookies_location))
+        cookies = MozillaCookieJar(cookies_location)
         cookies.load(ignore_discard=True, ignore_expires=True)
         self.session = requests.Session()
         self.session.cookies.update(cookies)
@@ -103,7 +103,7 @@ class Gamdl:
             'quiet': True,
             'no_warnings': True,
         }) as ydl:
-            playlist = ydl.extract_info(webplayback['hls-playlist-url'], download = False)
+            playlist = ydl.extract_info(webplayback['hls-playlist-url'], download=False)
         if self.prefer_hevc:
             stream_url_video = playlist['formats'][-1]['url']
         else:
@@ -167,7 +167,7 @@ class Gamdl:
         playlist = m3u8.load(stream_url)
         track_uri = next(i for i in playlist.keys if i.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed").uri
         pssh = PSSH(track_uri.split(',')[1])
-        challenge = base64.b64encode(self.cdm.get_license_challenge(self.cdm_session, pssh)).decode('utf-8')
+        challenge = base64.b64encode(self.cdm.get_license_challenge(self.cdm_session, pssh)).decode()
         license_b64 = self.get_license_b64(challenge, track_uri, track_id)
         self.cdm.parse_license(self.cdm_session, license_b64)
         return f'1:{next(i for i in self.cdm.get_keys(self.cdm_session) if i.type == "CONTENT").key.hex()}'
@@ -178,8 +178,8 @@ class Gamdl:
         widevine_pssh_data = WidevinePsshData()
         widevine_pssh_data.algorithm = 1
         widevine_pssh_data.key_ids.append(base64.b64decode(track_uri.split(",")[1]))
-        pssh = PSSH(base64.b64encode(widevine_pssh_data.SerializeToString()).decode('utf-8'))
-        challenge = base64.b64encode(self.cdm.get_license_challenge(self.cdm_session, pssh)).decode('utf-8')
+        pssh = PSSH(base64.b64encode(widevine_pssh_data.SerializeToString()).decode())
+        challenge = base64.b64encode(self.cdm.get_license_challenge(self.cdm_session, pssh)).decode()
         license_b64 = self.get_license_b64(challenge, track_uri, track_id)
         self.cdm.parse_license(self.cdm_session, license_b64)
         return f'1:{next(i for i in self.cdm.get_keys(self.cdm_session) if i.type == "CONTENT").key.hex()}'
@@ -259,7 +259,7 @@ class Gamdl:
             'cpil': metadata['compilation'],
             'disk': [(metadata['discNumber'], metadata['discCount'])],
             'trkn': [(metadata['trackNumber'], metadata['trackCount'])],
-            'covr': [MP4Cover(self.get_cover(cover_url), MP4Cover.FORMAT_JPEG)],
+            'covr': [MP4Cover(self.get_cover(cover_url))],
             'stik': [1],
         }
         if 'copyright' in metadata:
@@ -292,7 +292,7 @@ class Gamdl:
             'cnID': [metadata[0]["trackId"]],
             'geID': [int(extra_metadata['genres'][0]['genreId'])],
             'sfID': [int(self.storefront.split('-')[0])],
-            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')), MP4Cover.FORMAT_JPEG)],
+            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')))],
         }
         if 'copyright' in extra_metadata:
             tags['cprt'] = [extra_metadata['copyright']]
@@ -391,12 +391,12 @@ class Gamdl:
 
     def make_lrc(self, final_location, synced_lyrics):
         if synced_lyrics and not self.no_lrc:
-            with open(final_location.with_suffix('.lrc'), 'w', encoding = 'utf8') as f:
+            with open(final_location.with_suffix('.lrc'), 'w', encoding='utf8') as f:
                 f.write(synced_lyrics)
     
 
     def make_final(self, final_location, fixed_location, tags):
-        final_location.parent.mkdir(parents = True, exist_ok = True)
+        final_location.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(fixed_location, final_location)
         file = MP4(final_location)
         file.update(tags)

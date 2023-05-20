@@ -42,7 +42,7 @@ Some new features that I added:
 
 ## Usage
 ```
-usage: __main__.py [-h] [-u [URLS_TXT]] [-w WVD_LOCATION] [-f FINAL_PATH]
+usage: gamdl [-h] [-u [URLS_TXT]] [-w WVD_LOCATION] [-f FINAL_PATH]
                    [-t TEMP_PATH] [-c COOKIES_LOCATION] [-m] [-p] [-o] [-n]
                    [-l] [-s] [-e] [-v]
                    [url ...]

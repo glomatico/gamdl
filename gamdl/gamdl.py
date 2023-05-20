@@ -233,7 +233,7 @@ class Gamdl:
 
     def get_tags_song(self, webplayback, unsynced_lyrics):
         metadata = next(i for i in webplayback["assets"] if i["flavor"] == '28:ctrp256')['metadata']
-        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == '28:ctrp256')['artworkURL']
+        cover_url = next(i for i in webplayback["assets"] if i["flavor"] == '28:ctrp256')['artworkURL'].replace('600x600bb', '1200x1200bb')
         tags = {
             '\xa9nam': [metadata['itemName']],
             '\xa9gen': [metadata['genre']],
@@ -286,7 +286,7 @@ class Gamdl:
             'cnID': [metadata[0]["trackId"]],
             'geID': [int(extra_metadata['genres'][0]['genreId'])],
             'sfID': [int(self.storefront.split('-')[0])],
-            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '600x600bb.jpg')))],
+            'covr': [MP4Cover(self.get_cover(metadata[0]["artworkUrl30"].replace('30x30bb.jpg', '1280x720bb.jpg')))],
         }
         if 'copyright' in extra_metadata:
             tags['cprt'] = [extra_metadata['copyright']]

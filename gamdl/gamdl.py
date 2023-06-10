@@ -336,7 +336,7 @@ class Gamdl:
                 MP4Cover(
                     self.get_cover(
                         metadata[0]["artworkUrl30"].replace(
-                            "30x30bb.jpg", "1280x720bb.jpg"
+                            "30x30bb.jpg", "1920x1080bb.jpg"
                         )
                     )
                 )

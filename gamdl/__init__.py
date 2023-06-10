@@ -82,12 +82,6 @@ def main():
         help="Skip downloading songs and only create .lrc files",
     )
     parser.add_argument(
-        "-s",
-        "--skip-cleanup",
-        action="store_true",
-        help="Skip cleanup",
-    )
-    parser.add_argument(
         "-e",
         "--print-exceptions",
         action="store_true",
@@ -114,7 +108,6 @@ def main():
         args.final_path,
         args.lrc_only,
         args.overwrite,
-        args.skip_cleanup,
     )
     error_count = 0
     download_queue = []

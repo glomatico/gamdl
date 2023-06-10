@@ -29,14 +29,12 @@ class Gamdl:
         final_path,
         lrc_only,
         overwrite,
-        skip_cleanup,
     ):
         self.disable_music_video_skip = disable_music_video_skip
         self.prefer_hevc = prefer_hevc
         self.temp_path = Path(temp_path)
         self.final_path = Path(final_path)
         self.overwrite = overwrite
-        self.skip_cleanup = skip_cleanup
         self.lrc_only = lrc_only
         if not self.lrc_only:
             wvd_location = glob.glob(wvd_location)
@@ -463,5 +461,5 @@ class Gamdl:
         file.save()
 
     def cleanup(self):
-        if self.temp_path.exists() and not self.skip_cleanup:
+        if self.temp_path.exists():
             shutil.rmtree(self.temp_path)

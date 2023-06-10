@@ -1,4 +1,4 @@
-import gamdl
+from . import main
 
 if __name__ == "__main__":
-    gamdl.main()
+    main()

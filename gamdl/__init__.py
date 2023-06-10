@@ -19,13 +19,13 @@ def main():
     parser.add_argument(
         "url",
         help="Apple Music song/music video/album/playlist URL(s)",
-        nargs="*",
+        nargs="+",
     )
     parser.add_argument(
         "-u",
         "--urls-txt",
         help="Read URLs from a text file",
-        nargs="?",
+        action="store_true",
     )
     parser.add_argument(
         "-w",
@@ -94,11 +94,11 @@ def main():
         version=f"%(prog)s {__version__}",
     )
     args = parser.parse_args()
-    if not args.url and not args.urls_txt:
-        parser.error("you must specify an url or a text file using -u/--urls-txt")
     if args.urls_txt:
-        with open(args.urls_txt, "r", encoding="utf8") as f:
-            args.url = f.read().splitlines()
+        _url = []
+        for url_txt in args.url:
+            with open(url_txt, "r", encoding="utf8") as f:
+                _url.extend(f.read().splitlines())
     dl = Gamdl(
         args.wvd_location,
         args.cookies_location,

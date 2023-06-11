@@ -98,6 +98,7 @@ def main():
         for url_txt in args.url:
             with open(url_txt, "r", encoding="utf8") as f:
                 _url.extend(f.read().splitlines())
+        args.url = _url
     dl = Gamdl(
         args.wvd_location,
         args.cookies_location,

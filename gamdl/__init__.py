@@ -8,10 +8,9 @@ __version__ = "1.9.1"
 
 
 def main():
-    if not shutil.which("mp4decrypt"):
-        raise Exception("mp4decrypt is not on PATH")
-    if not shutil.which("MP4Box"):
-        raise Exception("MP4Box is not on PATH")
+    for tool in ("MP4Box", "mp4decrypt"):
+        if not shutil.which(tool):
+            raise Exception(f"{tool} is not on PATH")
     parser = argparse.ArgumentParser(
         description="Download Apple Music songs/music videos/albums/playlists",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,

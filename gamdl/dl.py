@@ -372,8 +372,8 @@ class Dl:
         return unsynced_lyrics[:-2], synced_lyrics
 
     @functools.lru_cache()
-    def get_cover(self, url):
-        return requests.get(url).content
+    def get_cover(self, cover_url):
+        return requests.get(cover_url).content
 
     def get_tags_song(self, webplayback, unsynced_lyrics):
         flavor = next(

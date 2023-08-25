@@ -344,7 +344,7 @@ class Dl:
         lrc_timestamp = datetime.datetime.fromtimestamp(
             (mins * 60) + secs + (ms / 1000)
         )
-        ms_new = lrc_timestamp.strftime("%f")[:-4]
+        ms_new = lrc_timestamp.strftime("%f")[:-3]
         if int(ms_new[-1]) >= 5:
             ms = int(f"{int(ms_new[:2]) + 1}") * 10
             lrc_timestamp += datetime.timedelta(milliseconds=ms) - datetime.timedelta(

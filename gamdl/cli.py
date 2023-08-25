@@ -130,13 +130,13 @@ def no_config_callback(
     "--template-file-single-disc",
     type=str,
     default="{track:02d} {title}",
-    help="Template of the song files for single-disc albums as a format string.",
+    help="Template of the track files for single-disc albums as a format string.",
 )
 @click.option(
     "--template-file-multi-disc",
     type=str,
     default="{disc}-{track:02d} {title}",
-    help="Template of the song files for multi-disc albums as a format string.",
+    help="Template of the track files for multi-disc albums as a format string.",
 )
 @click.option(
     "--template-folder-music-video",

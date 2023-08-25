@@ -277,7 +277,6 @@ def main(
     template_file_music_video: str,
     cover_size: int,
     cover_format: str,
-    cover_quality: int,
     remux_mode: str,
     download_mode: str,
     exclude_tags: str,

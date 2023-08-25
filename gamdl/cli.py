@@ -310,7 +310,7 @@ def main(
         if not mp4decrypt_path:
             logger.warning(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
-                + ". Music videos videos will not be downloaded."
+                + ", music videos videos will not be downloaded"
             )
     if remux_mode == "mp4box" and not lrc_only:
         if not mp4box_path:
@@ -357,9 +357,10 @@ def main(
     error_count = 0
     for i, url in enumerate(download_queue, start=1):
         for j, track in enumerate(url, start=1):
-            logger.info(
-                f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'
-            )
+            if track["type"] == "music-videos" and not mp4decrypt_path:
+                logger.info(
+                    f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'
+                )
             try:
                 track_id = track["id"]
                 webplayback = dl.get_webplayback(track_id)

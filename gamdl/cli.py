@@ -194,6 +194,13 @@ def no_config_callback(
     help="Maximum length of the file/folder names.",
 )
 @click.option(
+    "--log-level",
+    "-l",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default="INFO",
+    help="Log level.",
+)
+@click.option(
     "--prefer-hevc",
     is_flag=True,
     help="Prefer HEVC over AVC when downloading music videos.",
@@ -231,13 +238,6 @@ def no_config_callback(
     "-o",
     is_flag=True,
     help="Overwrite existing files.",
-)
-@click.option(
-    "--log-level",
-    "-l",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-    default="INFO",
-    help="Log level.",
 )
 @click.option(
     "--print-exceptions",
@@ -283,6 +283,7 @@ def main(
     download_mode: str,
     exclude_tags: str,
     truncate: int,
+    log_level: str,
     prefer_hevc: bool,
     ask_video_format: bool,
     disable_music_video_album_skip: bool,
@@ -290,7 +291,6 @@ def main(
     no_lrc: bool,
     save_cover: bool,
     overwrite: bool,
-    log_level: str,
     print_exceptions: bool,
     url_txt: bool,
     no_config_file: bool,

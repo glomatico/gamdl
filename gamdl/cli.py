@@ -333,6 +333,9 @@ def main(
     if not wvd_location.exists() and not lrc_only:
         logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
         return
+    if not cookies_location.exists():
+        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_location))
+        return
     if url_txt:
         logger.debug("Reading URLs from text files")
         _urls = []

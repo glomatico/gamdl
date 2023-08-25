@@ -304,7 +304,7 @@ def main(
     mp4box_path = shutil.which(str(mp4box_location))
     mp4decrypt_path = shutil.which(str(mp4decrypt_location))
     nm3u8dlre_path = shutil.which(str(nm3u8dlre_location))
-    if remux_mode == "ffmpeg":
+    if remux_mode == "ffmpeg" and not lrc_only:
         if not ffmpeg_path:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
         if not mp4decrypt_path:
@@ -312,7 +312,7 @@ def main(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
                 + ". Music videos videos will not be downloaded."
             )
-    if remux_mode == "mp4box":
+    if remux_mode == "mp4box" and not lrc_only:
         if not mp4box_path:
             logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
             return
@@ -321,7 +321,7 @@ def main(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
             )
             return
-    if download_mode == "nm3u8dlre":
+    if download_mode == "nm3u8dlre" and not lrc_only:
         if not nm3u8dlre_path:
             logger.critical(
                 X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)

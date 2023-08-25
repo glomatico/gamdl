@@ -357,7 +357,7 @@ def main(
     error_count = 0
     for i, url in enumerate(download_queue, start=1):
         for j, track in enumerate(url, start=1):
-            if track["type"] == "music-videos" and not mp4decrypt_path:
+            if track["type"] == "music-videos" and not mp4decrypt_path or lrc_only:
                 continue
             logger.info(
                 f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'
@@ -427,7 +427,7 @@ def main(
                             dl.make_lrc(lrc_location, synced_lyrics)
                         else:
                             logger.warning(f'"{lrc_location}" already exists, skipping')
-                if track["type"] == "music-videos" and not no_lrc:
+                if track["type"] == "music-videos":
                     tags = dl.get_tags_music_video(
                         track["attributes"]["url"].split("/")[-1].split("?")[0]
                     )

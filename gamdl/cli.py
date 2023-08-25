@@ -358,9 +358,10 @@ def main(
     for i, url in enumerate(download_queue, start=1):
         for j, track in enumerate(url, start=1):
             if track["type"] == "music-videos" and not mp4decrypt_path:
-                logger.info(
-                    f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'
-                )
+                continue
+            logger.info(
+                f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'
+            )
             try:
                 track_id = track["id"]
                 webplayback = dl.get_webplayback(track_id)

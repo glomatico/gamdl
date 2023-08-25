@@ -159,7 +159,6 @@ class Dl:
                     if (
                         track["type"] == "music-videos"
                         and self.disable_music_video_album_skip
-                        and not self.lrc_only
                     ):
                         download_queue.append(track)
                     if track["type"] == "songs":

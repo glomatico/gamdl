@@ -61,7 +61,6 @@ class Dl:
         template_file_music_video: str = None,
         cover_size: int = None,
         cover_format: str = None,
-        cover_quality: int = None,
         remux_mode: str = None,
         download_mode: str = None,
         exclude_tags: str = None,
@@ -70,6 +69,7 @@ class Dl:
         ask_video_format: bool = None,
         disable_music_video_album_skip: bool = None,
         lrc_only: bool = None,
+        songs_heaac: bool = None,
         **kwargs,
     ):
         self.final_path = final_path
@@ -86,7 +86,6 @@ class Dl:
         self.template_file_music_video = template_file_music_video
         self.cover_size = cover_size
         self.cover_format = cover_format
-        self.cover_quality = cover_quality
         self.remux_mode = remux_mode
         self.download_mode = download_mode
         self.exclude_tags = (
@@ -98,6 +97,7 @@ class Dl:
         self.prefer_hevc = prefer_hevc
         self.ask_video_format = ask_video_format
         self.disable_music_video_album_skip = disable_music_video_album_skip
+        self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
         if not lrc_only:
             self.cdm = Cdm.from_device(Device.load(wvd_location))
             self.cdm_session = self.cdm.open()
@@ -179,9 +179,9 @@ class Dl:
         return response
 
     def get_stream_url_song(self, webplayback):
-        return next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")[
-            "URL"
-        ]
+        return next(
+            i for i in webplayback["assets"] if i["flavor"] == self.songs_flavor
+        )["URL"]
 
     def get_stream_url_music_video(self, webplayback):
         ydl = YoutubeDL(
@@ -332,25 +332,25 @@ class Dl:
             i for i in self.cdm.get_keys(self.cdm_session) if i.type == "CONTENT"
         ).key.hex()
 
-    def get_synced_lyrics_formated_time(self, unformatted_time):
-        unformatted_time = (
-            unformatted_time.replace("m", "").replace("s", "").replace(":", ".")
+    def get_synced_lyrics_lrc_timestamp(self, ttml_timestamp):
+        mins = int(ttml_timestamp.split(":")[-2]) if ":" in ttml_timestamp else 0
+        secs, ms = str(
+            float(ttml_timestamp.split(":")[-1])
+            if ":" in ttml_timestamp
+            else float(ttml_timestamp.replace("s", ""))
+        ).split(".")
+        secs = int(secs)
+        ms = int(ms)
+        lrc_timestamp = datetime.datetime.fromtimestamp(
+            (mins * 60) + secs + (ms / 1000)
         )
-        unformatted_time = unformatted_time.split(".")
-        m, s, ms = 0, 0, 0
-        ms = int(unformatted_time[-1])
-        if len(unformatted_time) >= 2:
-            s = int(unformatted_time[-2]) * 1000
-        if len(unformatted_time) >= 3:
-            m = int(unformatted_time[-3]) * 60000
-        unformatted_time = datetime.datetime.fromtimestamp((ms + s + m) / 1000.0)
-        ms_new = f"{int(str(unformatted_time.microsecond)[:3]):03d}"
-        if int(ms_new[2]) >= 5:
+        ms_new = lrc_timestamp.strftime("%f")[:-4]
+        if int(ms_new[-1]) >= 5:
             ms = int(f"{int(ms_new[:2]) + 1}") * 10
-            unformatted_time += datetime.timedelta(
-                milliseconds=ms
-            ) - datetime.timedelta(microseconds=unformatted_time.microsecond)
-        return unformatted_time.strftime("%M:%S.%f")[:-4]
+            lrc_timestamp += datetime.timedelta(milliseconds=ms) - datetime.timedelta(
+                microseconds=lrc_timestamp.microsecond
+            )
+        return lrc_timestamp.strftime("%M:%S.%f")[:-4]
 
     def get_lyrics(self, track_id):
         try:
@@ -366,7 +366,7 @@ class Dl:
         for div in lyrics_ttml.iter("{http://www.w3.org/ns/ttml}div"):
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
                 if p.attrib.get("begin"):
-                    synced_lyrics += f'[{self.get_synced_lyrics_formated_time(p.attrib.get("begin"))}]{p.text}\n'
+                    synced_lyrics += f'[{self.get_synced_lyrics_lrc_timestamp(p.attrib.get("begin"))}]{p.text}\n'
                 if p.text is not None:
                     unsynced_lyrics += p.text + "\n"
             unsynced_lyrics += "\n"
@@ -377,7 +377,9 @@ class Dl:
         return requests.get(url).content
 
     def get_tags_song(self, webplayback, unsynced_lyrics):
-        flavor = next(i for i in webplayback["assets"] if i["flavor"] == "28:ctrp256")
+        flavor = next(
+            i for i in webplayback["assets"] if i["flavor"] == self.songs_flavor
+        )
         metadata = flavor["metadata"]
         cover_url = flavor["artworkURL"].replace(
             "600x600bb.jpg",

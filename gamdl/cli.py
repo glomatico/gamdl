@@ -163,12 +163,6 @@ def no_config_callback(
     help="Format of the cover.",
 )
 @click.option(
-    "--cover-quality",
-    type=click.IntRange(1, 100),
-    default=94,
-    help="JPEG quality of the cover.",
-)
-@click.option(
     "--remux-mode",
     type=click.Choice(["ffmpeg", "mp4box"]),
     default="ffmpeg",
@@ -234,6 +228,11 @@ def no_config_callback(
     help="Save cover as a separate file.",
 )
 @click.option(
+    "--songs-heaac",
+    is_flag=True,
+    help="Download songs in 64kbps HE-AAC.",
+)
+@click.option(
     "--overwrite",
     "-o",
     is_flag=True,
@@ -290,6 +289,7 @@ def main(
     lrc_only: bool,
     no_lrc: bool,
     save_cover: bool,
+    songs_heaac: bool,
     overwrite: bool,
     print_exceptions: bool,
     url_txt: bool,

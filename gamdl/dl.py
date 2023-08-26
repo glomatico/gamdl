@@ -485,7 +485,7 @@ class Dl:
         return dirty_string.strip()
 
     def get_final_location(self, tags):
-        if tags["media_type"] == 1 or "album" in tags:
+        if "album" in tags:
             final_location_folder = (
                 self.template_folder_compilation.split("/")
                 if "compilation" in tags and tags["compilation"]

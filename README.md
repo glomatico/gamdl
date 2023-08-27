@@ -124,6 +124,6 @@ Music videos will be downloaded in the highest quality available by default. The
 
 By enabling the `prefer_hevc` option, music videos will be downloaded in the highest HEVC quality available. The available qualities are:
 * HEVC 4K 20mbps, AAC 256kbps
-* HEVC 4K  12mbps, AAC 256kbps
+* HEVC 4K 12mbps, AAC 256kbps
 
 Enable `ask_video_format` to select a custom audio/video format.

@@ -300,20 +300,20 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
-    ffmpeg_path = shutil.which(str(ffmpeg_location))
-    mp4box_path = shutil.which(str(mp4box_location))
-    mp4decrypt_path = shutil.which(str(mp4decrypt_location))
-    nm3u8dlre_path = shutil.which(str(nm3u8dlre_location))
+    ffmpeg_location = shutil.which(str(ffmpeg_location))
+    mp4box_location = shutil.which(str(mp4box_location))
+    mp4decrpyt_location = shutil.which(str(mp4decrypt_location))
+    nm3u8dlre_location = shutil.which(str(nm3u8dlre_location))
     if remux_mode == "ffmpeg" and not lrc_only:
-        if not ffmpeg_path:
+        if not ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
-        if not mp4decrypt_path:
+        if not mp4decrpyt_location:
             logger.warning(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
                 + ", music videos videos will not be downloaded"
             )
     if remux_mode == "mp4box" and not lrc_only:
-        if not mp4box_path:
+        if not mp4box_location:
             logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
             return
         if not shutil.which(str(mp4decrypt_location)):
@@ -322,12 +322,12 @@ def main(
             )
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
-        if not nm3u8dlre_path:
+        if not nm3u8dlre_location:
             logger.critical(
                 X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)
             )
             return
-        if not ffmpeg_path:
+        if not ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
             return
     if not wvd_location.exists() and not lrc_only:
@@ -360,7 +360,7 @@ def main(
     error_count = 0
     for i, url in enumerate(download_queue, start=1):
         for j, track in enumerate(url, start=1):
-            if track["type"] == "music-videos" and (not mp4decrypt_path or lrc_only):
+            if track["type"] == "music-videos" and (not mp4decrpyt_location or lrc_only):
                 continue
             logger.info(
                 f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'

@@ -16,7 +16,7 @@ EXCLUDED_PARAMS = (
     "help",
 )
 
-X_NOT_FOUND_STRING = "{} not found at {}"
+X_NOT_FOUND_STRING = '{} not found at "{}"'
 
 
 def write_default_config_file(ctx: click.Context):

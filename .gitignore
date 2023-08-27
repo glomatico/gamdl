@@ -1,5 +1,7 @@
 /*
 __pycache__
 !gamdl
-!requirements.txt
+!.gitignore
 !pyproject.toml
+!README.md
+!requirements.txt

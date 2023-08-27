@@ -72,7 +72,7 @@ gamdl can be configured using the command line arguments or the config file. The
 | `-n`, `--no-config-file` / - | Don't use the config file. | `false` |
 
 ### Tags variables
-The following variables can be used in the template folder/file and/or in the exclude_tags list:
+The following variables can be used in the template folders/files and/or in the exclude_tags list:
 * `album`
 * `album_artist`
 * `album_id`

@@ -86,25 +86,25 @@ def no_config_callback(
 )
 @click.option(
     "--ffmpeg-location",
-    type=Path,
+    type=str,
     default="ffmpeg",
     help="Location of the FFmpeg binary.",
 )
 @click.option(
     "--mp4box-location",
-    type=Path,
+    type=str,
     default="MP4Box",
     help="Location of the MP4Box binary.",
 )
 @click.option(
     "--mp4decrypt-location",
-    type=Path,
+    type=str,
     default="mp4decrypt",
     help="Location of the mp4decrypt binary.",
 )
 @click.option(
     "--nm3u8dlre-location",
-    type=Path,
+    type=str,
     default="N_m3u8DL-RE",
     help="Location of the N_m3u8DL-RE binary.",
 )
@@ -300,10 +300,10 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
-    ffmpeg_location = shutil.which(str(ffmpeg_location))
-    mp4box_location = shutil.which(str(mp4box_location))
-    mp4decrpyt_location = shutil.which(str(mp4decrypt_location))
-    nm3u8dlre_location = shutil.which(str(nm3u8dlre_location))
+    ffmpeg_location = shutil.which(ffmpeg_location)
+    mp4box_location = shutil.which(mp4box_location)
+    mp4decrpyt_location = shutil.which(mp4decrypt_location)
+    nm3u8dlre_location = shutil.which(nm3u8dlre_location)
     if remux_mode == "ffmpeg" and not lrc_only:
         if not ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))

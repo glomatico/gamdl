@@ -33,6 +33,7 @@ MP4_TAGS_MAP = {
     "genre_id": "geID",
     "lyrics": "\xa9lyr",
     "media_type": "stik",
+    "rating": "rtng",
     "release_date": "\xa9day",
     "storefront": "sfID",
     "title": "\xa9nam",

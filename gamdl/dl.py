@@ -276,6 +276,8 @@ class Dl:
                     "--no-log",
                     "--log-level",
                     "off",
+                    "--ffmpeg-binary-path",
+                    self.ffmpeg_location,
                     "--save-name",
                     encrypted_location.stem,
                     "--save-dir",

@@ -105,7 +105,7 @@ The following variables can be used in the template folder/file and/or in the ex
 * `xid`
   
 ### Remux mode
-Can be either `ffmpeg` or `mp4box`. `mp4box` requires `mp4decrypt` for songs and music videos but it keeps the closed captions track present in some music videos.
+Can be either `ffmpeg` or `mp4box`. `mp4decrypt` is required for music videos and remuxing with `mp4box`. `mp4box` keeps the closed captions track present in some music videos.
 
 ### Download mode
 Can be either `yt-dlp` or `nm3u8dlre`.

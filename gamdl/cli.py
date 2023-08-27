@@ -230,7 +230,7 @@ def no_config_callback(
 @click.option(
     "--songs-heaac",
     is_flag=True,
-    help="Download songs in 64kbps HE-AAC.",
+    help="Download songs in HE-AAC 64kbps.",
 )
 @click.option(
     "--overwrite",

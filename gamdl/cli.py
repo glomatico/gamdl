@@ -345,6 +345,9 @@ def main(
         urls = tuple(_urls)
     logger.debug("Starting downloader")
     dl = Dl(**locals())
+    if not dl.session.cookies.get_dict().get("media-user-token"):
+        logger.critical("Invalid cookies file")
+        return
     download_queue = []
     for i, url in enumerate(urls, start=1):
         try:

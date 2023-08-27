@@ -473,7 +473,7 @@ class Dl:
             tags["track_total"] = metadata[0]["trackCount"]
         return tags
 
-    def get_sanizated_string(self, dirty_string, is_folder):
+    def get_sanitized_string(self, dirty_string, is_folder):
         dirty_string = re.sub(r'[\\/:*?"<>|;]', "_", dirty_string)
         if is_folder:
             dirty_string = dirty_string[: self.truncate]
@@ -501,14 +501,14 @@ class Dl:
             final_location_file = self.template_file_music_video.split("/")
         file_extension = ".m4a" if tags["media_type"] == 1 else ".m4v"
         final_location_folder = [
-            self.get_sanizated_string(i.format(**tags), True)
+            self.get_sanitized_string(i.format(**tags), True)
             for i in final_location_folder
         ]
         final_location_file = [
-            self.get_sanizated_string(i.format(**tags), True)
+            self.get_sanitized_string(i.format(**tags), True)
             for i in final_location_file[:-1]
         ] + [
-            self.get_sanizated_string(final_location_file[-1].format(**tags), False)
+            self.get_sanitized_string(final_location_file[-1].format(**tags), False)
             + file_extension
         ]
         return self.final_path.joinpath(*final_location_folder).joinpath(

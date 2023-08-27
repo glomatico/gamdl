@@ -318,6 +318,7 @@ def main(
     if remux_mode == "ffmpeg" and not lrc_only:
         if not dl.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
+            return
         if not dl.mp4decrypt_location:
             logger.warning(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)

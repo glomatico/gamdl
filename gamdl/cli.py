@@ -300,36 +300,6 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
-    ffmpeg_location = shutil.which(ffmpeg_location)
-    mp4box_location = shutil.which(mp4box_location)
-    mp4decrpyt_location = shutil.which(mp4decrypt_location)
-    nm3u8dlre_location = shutil.which(nm3u8dlre_location)
-    if remux_mode == "ffmpeg" and not lrc_only:
-        if not ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
-        if not mp4decrpyt_location:
-            logger.warning(
-                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
-                + ", music videos videos will not be downloaded"
-            )
-    if remux_mode == "mp4box" and not lrc_only:
-        if not mp4box_location:
-            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
-            return
-        if not shutil.which(str(mp4decrypt_location)):
-            logger.critical(
-                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
-            )
-            return
-    if download_mode == "nm3u8dlre" and not lrc_only:
-        if not nm3u8dlre_location:
-            logger.critical(
-                X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)
-            )
-            return
-        if not ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
-            return
     if not wvd_location.exists() and not lrc_only:
         logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
         return
@@ -345,6 +315,32 @@ def main(
         urls = tuple(_urls)
     logger.debug("Starting downloader")
     dl = Dl(**locals())
+    if remux_mode == "ffmpeg" and not lrc_only:
+        if not dl.ffmpeg_location:
+            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
+        if not dl.mp4decrypt_location:
+            logger.warning(
+                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
+                + ", music videos videos will not be downloaded"
+            )
+    if remux_mode == "mp4box" and not lrc_only:
+        if not dl.mp4box_location:
+            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
+            return
+        if not dl.mp4decrypt_location:
+            logger.critical(
+                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
+            )
+            return
+    if download_mode == "nm3u8dlre" and not lrc_only:
+        if not dl.nm3u8dlre_location:
+            logger.critical(
+                X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)
+            )
+            return
+        if not dl.ffmpeg_location:
+            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
+            return
     if not dl.session.cookies.get_dict().get("media-user-token"):
         logger.critical("Invalid cookies file")
         return
@@ -360,7 +356,7 @@ def main(
     error_count = 0
     for i, url in enumerate(download_queue, start=1):
         for j, track in enumerate(url, start=1):
-            if track["type"] == "music-videos" and (not mp4decrpyt_location or lrc_only):
+            if track["type"] == "music-videos" and (not dl.mp4decrypt_location or lrc_only):
                 continue
             logger.info(
                 f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'

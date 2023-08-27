@@ -1,4 +1,5 @@
+click
+m3u8
 pywidevine
 pyyaml
-m3u8
 yt-dlp

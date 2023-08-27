@@ -65,14 +65,14 @@ gamdl can be configured using the command line arguments or the config file. The
 | `-l`, `--lrc-only` / `lrc_only` | Download only the synced lyrics. | `false` |
 | `-n`, `--no-lrc` / `no_lrc` | Don't download the synced lyrics. | `false` |
 | `-s`, `--save-cover` / `save_cover` | Save cover as a separate file. | `false` |
-| `--songs-heaac` / `songs_heaac` | Download songs in 64kbps HE-AAC. | `false` |
+| `--songs-heaac` / `songs_heaac` | Download songs in HE-AAC 64kbps. | `false` |
 | `-o`, `--overwrite` / `overwrite` | Overwrite existing files. | `false` |
 | `--print-exceptions` / `print_exceptions` | Print exceptions. | `false` |
 | `-u`, `--url-txt` / - | Read URLs as location of text files containing URLs. | `false` |
 | `-n`, `--no-config-file` / - | Don't use the config file. | `false` |
 
 ### Tags variables
-The following variables can be used in the template folders/files and/or in the exclude_tags list:
+The following variables can be used in the template folders/files and/or in the `exclude_tags` list:
 * `album`
 * `album_artist`
 * `album_id`
@@ -105,7 +105,25 @@ The following variables can be used in the template folders/files and/or in the 
 * `xid`
   
 ### Remux mode
-Can be either `ffmpeg` or `mp4box`. `mp4decrypt` is required for music videos and remuxing with `mp4box`. `mp4box` is slower but will keep the closed captions track in music videos that have one.
+Can be either `ffmpeg` or `mp4box`. `mp4decrypt` is required for music videos and remuxing with `mp4box`. `mp4box` is slower but will keep the closed captions track in music videos that have one. `mp4box` can be obtained from [here](https://gpac.wp.imt.fr/downloads).
 
 ### Download mode
-Can be either `yt-dlp` or `nm3u8dlre`. `nm3u8dlre` is faster but requires `ffmpeg`.
+Can be either `yt-dlp` or `nm3u8dlre`. `nm3u8dlre` is faster but requires `ffmpeg`. `nm3u8dlre` can be obtained from [here](https://github.com/nilaoda/N_m3u8DL-RE/releases).
+
+## Songs quality
+Songs will be downloaded in AAC 256kbps by default or in HE-AAC 64kbps if the `songs_heaac` option is enabled.
+
+## Music videos quality
+Music videos will be downloaded in the highest quality available by default. The available qualities are:
+* AVC 1080p 10mbps, AAC 256kbps
+* AVC 1080p 6.5mbps, AAC 256kbps
+* AVC 720p 4mbps, AAC 256kbps
+* AVC 576p 2mbps, AAC 256kbps
+* AVC 480p 1.5mbps, AAC 256kbps
+* AVC 360p 1mbps, AAC 256kbps
+
+By enabling the `prefer_hevc` option, it will download the highest quality available in HEVC. The available qualities are:
+* HEVC 4K 20mbps, AAC 256kbps
+* HEVC 4K  12mbps, AAC 256kbps
+
+Enable `ask_video_format` to select a custom audio/video format.

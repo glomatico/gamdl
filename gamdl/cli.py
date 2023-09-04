@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from .dl import Dl
+from .downloader import Downloader
 
 EXCLUDED_PARAMS = (
     "urls",
@@ -300,7 +300,7 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
-    dl = Dl(**locals())
+    dl = Downloader(**locals())
     if not wvd_location.exists() and not lrc_only:
         logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
         return

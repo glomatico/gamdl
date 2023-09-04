@@ -75,10 +75,18 @@ class Dl:
     ):
         self.final_path = final_path
         self.temp_path = temp_path
-        self.ffmpeg_location = shutil.which(ffmpeg_location)
-        self.mp4box_location = shutil.which(mp4box_location)
-        self.mp4decrypt_location = shutil.which(mp4decrypt_location)
-        self.nm3u8dlre_location = shutil.which(nm3u8dlre_location)
+        self.ffmpeg_location = (
+            shutil.which(ffmpeg_location) if ffmpeg_location else None
+        )
+        self.mp4box_location = (
+            shutil.which(mp4box_location) if mp4box_location else None
+        )
+        self.mp4decrypt_location = (
+            shutil.which(mp4decrypt_location) if mp4decrypt_location else None
+        )
+        self.nm3u8dlre_location = (
+            shutil.which(nm3u8dlre_location) if nm3u8dlre_location else None
+        )
         self.template_folder_album = template_folder_album
         self.template_folder_compilation = template_folder_compilation
         self.template_file_single_disc = template_file_single_disc

@@ -300,21 +300,13 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
+    dl = Dl(**locals())
     if not wvd_location.exists() and not lrc_only:
         logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
         return
     if not cookies_location.exists():
         logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_location))
         return
-    if url_txt:
-        logger.debug("Reading URLs from text files")
-        _urls = []
-        for url in urls:
-            with open(url, "r") as f:
-                _urls.extend(f.read().splitlines())
-        urls = tuple(_urls)
-    logger.debug("Starting downloader")
-    dl = Dl(**locals())
     if remux_mode == "ffmpeg" and not lrc_only:
         if not dl.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
@@ -342,10 +334,33 @@ def main(
         if not dl.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
             return
-    if not dl.session.cookies.get_dict().get("media-user-token"):
-        logger.critical("Invalid cookies file")
+    logger.debug("Setting up session")
+    try:
+        dl.setup_session()
+    except Exception:
+        logger.critical(
+            "Failed to setup session, check your cookies file",
+            exc_info=print_exceptions,
+        )
         return
+    if not lrc_only:
+        logger.debug("Setting up CDM")
+        try:
+            dl.setup_cdm()
+        except Exception:
+            logger.critical(
+                "Failed to setup CDM, check your .wvd file",
+                exc_info=print_exceptions,
+            )
+            return
     download_queue = []
+    if url_txt:
+        logger.debug("Reading URLs from text files")
+        _urls = []
+        for url in urls:
+            with open(url, "r") as f:
+                _urls.extend(f.read().splitlines())
+        urls = tuple(_urls)
     for i, url in enumerate(urls, start=1):
         try:
             logger.debug(f'Checking "{url}" (URL {i}/{len(urls)})')
@@ -357,7 +372,9 @@ def main(
     error_count = 0
     for i, url in enumerate(download_queue, start=1):
         for j, track in enumerate(url, start=1):
-            if track["type"] == "music-videos" and (not dl.mp4decrypt_location or lrc_only):
+            if track["type"] == "music-videos" and (
+                not dl.mp4decrypt_location or lrc_only
+            ):
                 continue
             logger.info(
                 f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'

@@ -69,12 +69,13 @@ class Dl:
         prefer_hevc: bool = None,
         ask_video_format: bool = None,
         disable_music_video_album_skip: bool = None,
-        lrc_only: bool = None,
         songs_heaac: bool = None,
         **kwargs,
     ):
         self.final_path = final_path
         self.temp_path = temp_path
+        self.cookies_location = cookies_location
+        self.wvd_location = wvd_location
         self.ffmpeg_location = (
             shutil.which(ffmpeg_location) if ffmpeg_location else None
         )
@@ -107,10 +108,9 @@ class Dl:
         self.ask_video_format = ask_video_format
         self.disable_music_video_album_skip = disable_music_video_album_skip
         self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
-        if not lrc_only:
-            self.cdm = Cdm.from_device(Device.load(wvd_location))
-            self.cdm_session = self.cdm.open()
-        cookies = MozillaCookieJar(cookies_location)
+
+    def setup_session(self):
+        cookies = MozillaCookieJar(self.cookies_location)
         cookies.load(ignore_discard=True, ignore_expires=True)
         self.session = requests.Session()
         self.session.cookies.update(cookies)
@@ -142,6 +142,10 @@ class Dl:
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.country = self.session.cookies.get_dict()["itua"]
         self.storefront = getattr(gamdl.storefronts, self.country.upper())
+
+    def setup_cdm(self):
+        self.cdm = Cdm.from_device(Device.load(self.wvd_location))
+        self.cdm_session = self.cdm.open()
 
     def get_download_queue(self, url):
         download_queue = []

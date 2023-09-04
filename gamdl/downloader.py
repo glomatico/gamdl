@@ -14,33 +14,7 @@ from mutagen.mp4 import MP4, MP4Cover
 from pywidevine import PSSH, Cdm, Device, WidevinePsshData
 from yt_dlp import YoutubeDL
 
-import gamdl.storefronts
-
-MP4_TAGS_MAP = {
-    "album": "\xa9alb",
-    "album_artist": "aART",
-    "album_id": "plID",
-    "album_sort": "soal",
-    "artist": "\xa9ART",
-    "artist_id": "atID",
-    "artist_sort": "soar",
-    "comment": "\xa9cmt",
-    "composer": "\xa9wrt",
-    "composer_id": "cmID",
-    "composer_sort": "soco",
-    "copyright": "cprt",
-    "genre": "\xa9gen",
-    "genre_id": "geID",
-    "lyrics": "\xa9lyr",
-    "media_type": "stik",
-    "rating": "rtng",
-    "release_date": "\xa9day",
-    "storefront": "sfID",
-    "title": "\xa9nam",
-    "title_id": "cnID",
-    "title_sort": "sonm",
-    "xid": "xid ",
-}
+from gamdl.constants import STOREFRONT_IDS, MP4_TAGS_MAP
 
 
 class Downloader:
@@ -141,7 +115,7 @@ class Downloader:
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.country = self.session.cookies.get_dict()["itua"]
-        self.storefront = getattr(gamdl.storefronts, self.country.upper())
+        self.storefront = STOREFRONT_IDS[self.country.upper()]
 
     def setup_cdm(self):
         self.cdm = Cdm.from_device(Device.load(self.wvd_location))

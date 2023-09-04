@@ -5,18 +5,12 @@ from pathlib import Path
 
 import click
 
-from .downloader import Downloader
-
-EXCLUDED_PARAMS = (
-    "urls",
-    "config_location",
-    "url_txt",
-    "no_config_file",
-    "version",
-    "help",
+from .constants import (
+    EXCLUDED_CONFIG_FILE_PARAMS,
+    FAILED_TO_SETUP_X_STRING,
+    X_NOT_FOUND_STRING,
 )
-
-X_NOT_FOUND_STRING = '{} not found at "{}"'
+from .downloader import Downloader
 
 
 def write_default_config_file(ctx: click.Context):
@@ -24,7 +18,7 @@ def write_default_config_file(ctx: click.Context):
     config_file = {
         param.name: param.default
         for param in ctx.command.params
-        if param.name not in EXCLUDED_PARAMS
+        if param.name not in EXCLUDED_CONFIG_FILE_PARAMS
     }
     with open(ctx.params["config_location"], "w") as f:
         f.write(json.dumps(config_file, indent=4))
@@ -339,7 +333,7 @@ def main(
         dl.setup_session()
     except Exception:
         logger.critical(
-            "Failed to setup session, check your cookies file",
+            FAILED_TO_SETUP_X_STRING.format("session") + ", check your cookies file",
             exc_info=print_exceptions,
         )
         return
@@ -349,7 +343,7 @@ def main(
             dl.setup_cdm()
         except Exception:
             logger.critical(
-                "Failed to setup CDM, check your .wvd file",
+                FAILED_TO_SETUP_X_STRING.format("CDM") + ", check your .wvd file",
                 exc_info=print_exceptions,
             )
             return

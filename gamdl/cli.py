@@ -395,8 +395,12 @@ def main(
                             stream_url, track_id
                         )
                         encrypted_location = dl.get_encrypted_location_audio(track_id)
-                        logger.debug(f'Downloading to "{encrypted_location}"')
-                        dl.download(encrypted_location, stream_url)
+                        if download_mode == "yt-dlp":
+                            logger.debug(f'Downloading with yt-dlp to "{encrypted_location}"')
+                            dl.download_yt_dlp(encrypted_location, stream_url)
+                        if download_mode == "nm3u8dlre":
+                            logger.debug(f'Downloading with N_m3u8DL-RE to "{encrypted_location}"')
+                            dl.download_nm3u8dlre(encrypted_location, stream_url)
                         decrypted_location = dl.get_decrypted_location_audio(track_id)
                         fixed_location = dl.get_fixed_location(track_id, ".m4a")
                         if remux_mode == "ffmpeg":
@@ -478,7 +482,7 @@ def main(
                         logger.debug(
                             f'Downloading video to "{encrypted_location_video}"'
                         )
-                        dl.download(encrypted_location_video, stream_url_video)
+                        dl.download_yt_dlp(encrypted_location_video, stream_url_video)
                         encrypted_location_audio = dl.get_encrypted_location_audio(
                             track_id
                         )
@@ -488,7 +492,7 @@ def main(
                         logger.debug(
                             f'Downloading audio to "{encrypted_location_audio}"'
                         )
-                        dl.download(encrypted_location_audio, stream_url_audio)
+                        dl.download_yt_dlp(encrypted_location_audio, stream_url_audio)
                         logger.debug(
                             f'Decrypting video to "{decrypted_location_video}"'
                         )

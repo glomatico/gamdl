@@ -36,8 +36,6 @@ class Downloader:
         template_file_music_video: str = None,
         cover_size: int = None,
         cover_format: str = None,
-        remux_mode: str = None,
-        download_mode: str = None,
         exclude_tags: str = None,
         truncate: int = None,
         prefer_hevc: bool = None,
@@ -69,8 +67,6 @@ class Downloader:
         self.template_file_music_video = template_file_music_video
         self.cover_size = cover_size
         self.cover_format = cover_format
-        self.remux_mode = remux_mode
-        self.download_mode = download_mode
         self.exclude_tags = (
             [i.lower() for i in exclude_tags.split(",")]
             if exclude_tags is not None
@@ -230,37 +226,38 @@ class Downloader:
     def get_lrc_location(self, final_location):
         return final_location.with_suffix(".lrc")
 
-    def download(self, encrypted_location, stream_url):
-        if self.download_mode == "yt-dlp":
-            params = {
+    def download_yt_dlp(self, encrypted_location, stream_url):
+        with YoutubeDL(
+            {
                 "quiet": True,
                 "no_warnings": True,
                 "outtmpl": str(encrypted_location),
                 "allow_unplayable_formats": True,
                 "fixup": "never",
             }
-            with YoutubeDL(params) as ydl:
-                ydl.download(stream_url)
-        else:
-            subprocess.run(
-                [
-                    self.nm3u8dlre_location,
-                    stream_url,
-                    "--binary-merge",
-                    "--no-log",
-                    "--log-level",
-                    "off",
-                    "--ffmpeg-binary-path",
-                    self.ffmpeg_location,
-                    "--save-name",
-                    encrypted_location.stem,
-                    "--save-dir",
-                    encrypted_location.parent,
-                    "--tmp-dir",
-                    encrypted_location.parent,
-                ],
-                check=True,
-            )
+        ) as ydl:
+            ydl.download(stream_url)
+
+    def download_nm3u8dlre(self, encrypted_location, stream_url):
+        subprocess.run(
+            [
+                self.nm3u8dlre_location,
+                stream_url,
+                "--binary-merge",
+                "--no-log",
+                "--log-level",
+                "off",
+                "--ffmpeg-binary-path",
+                self.ffmpeg_location,
+                "--save-name",
+                encrypted_location.stem,
+                "--save-dir",
+                encrypted_location.parent,
+                "--tmp-dir",
+                encrypted_location.parent,
+            ],
+            check=True,
+        )
 
     def get_license_b64(self, challenge, track_uri, track_id):
         return self.session.post(

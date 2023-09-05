@@ -372,10 +372,13 @@ def main(
                     logger.warning("Track is not streamable, skipping")
                     continue
                 track_id = track["id"]
+                logger.debug("Getting webplayback")
                 webplayback = dl.get_webplayback(track_id)
                 cover_url = dl.get_cover_url(webplayback)
                 if track["type"] == "songs":
+                    logger.debug("Getting lyrics")
                     unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
+                    logger.debug("Getting tags")
                     tags = dl.get_tags_song(webplayback, unsynced_lyrics)
                     final_location = dl.get_final_location(tags)
                     cover_location = dl.get_cover_location_song(final_location)
@@ -396,10 +399,14 @@ def main(
                         )
                         encrypted_location = dl.get_encrypted_location_audio(track_id)
                         if download_mode == "yt-dlp":
-                            logger.debug(f'Downloading with yt-dlp to "{encrypted_location}"')
+                            logger.debug(
+                                f'Downloading with yt-dlp to "{encrypted_location}"'
+                            )
                             dl.download_yt_dlp(encrypted_location, stream_url)
                         if download_mode == "nm3u8dlre":
-                            logger.debug(f'Downloading with N_m3u8DL-RE to "{encrypted_location}"')
+                            logger.debug(
+                                f'Downloading with N_m3u8DL-RE to "{encrypted_location}"'
+                            )
                             dl.download_nm3u8dlre(encrypted_location, stream_url)
                         decrypted_location = dl.get_decrypted_location_audio(track_id)
                         fixed_location = dl.get_fixed_location(track_id, ".m4a")
@@ -476,23 +483,41 @@ def main(
                         encrypted_location_video = dl.get_encrypted_location_video(
                             track_id
                         )
-                        decrypted_location_video = dl.get_decrypted_location_video(
+                        encrypted_location_audio = dl.get_encrypted_location_audio(
                             track_id
                         )
-                        logger.debug(
-                            f'Downloading video to "{encrypted_location_video}"'
-                        )
-                        dl.download_yt_dlp(encrypted_location_video, stream_url_video)
-                        encrypted_location_audio = dl.get_encrypted_location_audio(
+                        decrypted_location_video = dl.get_decrypted_location_video(
                             track_id
                         )
                         decrypted_location_audio = dl.get_decrypted_location_audio(
                             track_id
                         )
-                        logger.debug(
-                            f'Downloading audio to "{encrypted_location_audio}"'
-                        )
-                        dl.download_yt_dlp(encrypted_location_audio, stream_url_audio)
+                        if download_mode == "yt-dlp":
+                            logger.debug(
+                                f'Downloading video with yt-dlp to "{encrypted_location_video}"'
+                            )
+                            dl.download_yt_dlp(
+                                encrypted_location_video, stream_url_video
+                            )
+                            logger.debug(
+                                f'Downloading audio with yt-dlp to "{encrypted_location_audio}"'
+                            )
+                            dl.download_yt_dlp(
+                                encrypted_location_audio, stream_url_audio
+                            )
+                        if download_mode == "nm3u8dlre":
+                            logger.debug(
+                                f'Downloading video with N_m3u8DL-RE to "{encrypted_location_video}"'
+                            )
+                            dl.download_nm3u8dlre(
+                                encrypted_location_video, stream_url_video
+                            )
+                            logger.debug(
+                                f'Downloading audio with N_m3u8DL-RE to "{encrypted_location_audio}"'
+                            )
+                            dl.download_nm3u8dlre(
+                                encrypted_location_audio, stream_url_audio
+                            )
                         logger.debug(
                             f'Decrypting video to "{decrypted_location_video}"'
                         )

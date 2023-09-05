@@ -7,8 +7,8 @@ import click
 
 from .constants import (
     EXCLUDED_CONFIG_FILE_PARAMS,
-    FAILED_TO_SETUP_X_STRING,
-    X_NOT_FOUND_STRING,
+    FAILED_TO_SETUP_X_STR,
+    X_NOT_FOUND_STR,
 )
 from .downloader import Downloader
 
@@ -296,44 +296,44 @@ def main(
     logger.setLevel(log_level)
     dl = Downloader(**locals())
     if not wvd_location.exists() and not lrc_only:
-        logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
+        logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
         return
     if not cookies_location.exists():
-        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_location))
+        logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))
         return
     if remux_mode == "ffmpeg" and not lrc_only:
         if not dl.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
+            logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
             return
         if not dl.mp4decrypt_location:
             logger.warning(
-                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
+                X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location)
                 + ", music videos videos will not be downloaded"
             )
     if remux_mode == "mp4box" and not lrc_only:
         if not dl.mp4box_location:
-            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
+            logger.critical(X_NOT_FOUND_STR.format("MP4Box", mp4box_location))
             return
         if not dl.mp4decrypt_location:
             logger.critical(
-                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
+                X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location)
             )
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
         if not dl.nm3u8dlre_location:
             logger.critical(
-                X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)
+                X_NOT_FOUND_STR.format("N_m3u8DL-RE", nm3u8dlre_location)
             )
             return
         if not dl.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
+            logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
             return
     logger.debug("Setting up session")
     try:
         dl.setup_session()
     except Exception:
         logger.critical(
-            FAILED_TO_SETUP_X_STRING.format("session") + ", check your cookies file",
+            FAILED_TO_SETUP_X_STR.format("session") + ", check your cookies file",
             exc_info=print_exceptions,
         )
         return
@@ -343,7 +343,7 @@ def main(
             dl.setup_cdm()
         except Exception:
             logger.critical(
-                FAILED_TO_SETUP_X_STRING.format("CDM") + ", check your .wvd file",
+                FAILED_TO_SETUP_X_STR.format("CDM") + ", check your .wvd file",
                 exc_info=print_exceptions,
             )
             return

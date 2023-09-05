@@ -191,6 +191,6 @@ EXCLUDED_CONFIG_FILE_PARAMS = (
     "help",
 )
 
-X_NOT_FOUND_STRING = '{} not found at "{}"'
+X_NOT_FOUND_STR = '{} not found at "{}"'
 
-FAILED_TO_SETUP_X_STRING = "Failed to setup {}"
+FAILED_TO_SETUP_X_STR = "Failed to setup {}"

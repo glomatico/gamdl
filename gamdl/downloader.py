@@ -368,13 +368,22 @@ class Downloader:
             "artist": metadata["artistName"],
             "artist_id": int(metadata["artistId"]),
             "artist_sort": metadata["sort-artist"],
+            "comments": metadata.get("comments"),
             "compilation": metadata["compilation"],
+            "composer": metadata.get("composerName"),
+            "composer_id": int(metadata.get("composerId"))
+            if metadata.get("composerId")
+            else None,
+            "composer_sort": metadata.get("sort-composer"),
+            "copyright": metadata.get("copyright"),
             "cover_url": cover_url,
+            "date": metadata.get("releaseDate"),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],
             "genre": metadata["genre"],
             "genre_id": metadata["genreId"],
+            "lyrics": unsynced_lyrics if unsynced_lyrics else None,
             "media_type": 1,
             "rating": metadata["explicit"],
             "storefront": metadata["s"],
@@ -383,21 +392,8 @@ class Downloader:
             "title_sort": metadata["sort-name"],
             "track": metadata["trackNumber"],
             "track_total": metadata["trackCount"],
+            "xid": metadata.get("xid"),
         }
-        if "comments" in metadata:
-            tags["comment"] = metadata["comments"]
-        if "composerId" in metadata:
-            tags["composer"] = metadata["composerName"]
-            tags["composer_id"] = int(metadata["composerId"])
-            tags["composer_sort"] = metadata["sort-composer"]
-        if "copyright" in metadata:
-            tags["copyright"] = metadata["copyright"]
-        if "releaseDate" in metadata:
-            tags["release_date"] = metadata["releaseDate"]
-        if "xid" in metadata:
-            tags["xid"] = metadata["xid"]
-        if unsynced_lyrics:
-            tags["lyrics"] = unsynced_lyrics
         return tags
 
     def get_tags_music_video(self, track_id):
@@ -419,20 +415,19 @@ class Downloader:
         tags = {
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],
+            "copyright": extra_metadata.get("copyright"),
             "cover_url": metadata[0]["artworkUrl30"].replace(
                 "30x30bb.jpg",
                 f"{self.cover_size}x{self.cover_size}bb.{self.cover_format}",
             ),
+            "date": metadata[0]["releaseDate"],
             "genre": metadata[0]["primaryGenreName"],
             "genre_id": int(extra_metadata["genres"][0]["genreId"]),
             "media_type": 6,
-            "release_date": metadata[0]["releaseDate"],
             "storefront": int(self.storefront.split("-")[0]),
             "title": metadata[0]["trackCensoredName"],
             "title_id": metadata[0]["trackId"],
         }
-        if "copyright" in extra_metadata:
-            tags["copyright"] = extra_metadata["copyright"]
         if metadata[0]["trackExplicitness"] == "notExplicit":
             tags["rating"] = 0
         elif metadata[0]["trackExplicitness"] == "explicit":

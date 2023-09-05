@@ -347,6 +347,12 @@ class Downloader:
             unsynced_lyrics += "\n"
         return unsynced_lyrics[:-2], synced_lyrics
 
+    def get_cover_url(self, webplayback):
+        return (
+            webplayback["artwork-urls"]["default"]["url"].rsplit("/", 1)[0]
+            + f"/{self.cover_size}x{self.cover_size}bb.{self.cover_format}"
+        )
+
     @functools.lru_cache()
     def get_cover(self, cover_url):
         return requests.get(cover_url).content
@@ -356,10 +362,6 @@ class Downloader:
             i for i in webplayback["assets"] if i["flavor"] == self.songs_flavor
         )
         metadata = flavor["metadata"]
-        cover_url = flavor["artworkURL"].replace(
-            "600x600bb.jpg",
-            f"{self.cover_size}x{self.cover_size}bb.{self.cover_format}",
-        )
         tags = {
             "album": metadata["playlistName"],
             "album_artist": metadata["playlistArtistName"],
@@ -376,7 +378,6 @@ class Downloader:
             else None,
             "composer_sort": metadata.get("sort-composer"),
             "copyright": metadata.get("copyright"),
-            "cover_url": cover_url,
             "date": metadata.get("releaseDate"),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
@@ -416,10 +417,6 @@ class Downloader:
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],
             "copyright": extra_metadata.get("copyright"),
-            "cover_url": metadata[0]["artworkUrl30"].replace(
-                "30x30bb.jpg",
-                f"{self.cover_size}x{self.cover_size}bb.{self.cover_format}",
-            ),
             "date": metadata[0]["releaseDate"],
             "genre": metadata[0]["primaryGenreName"],
             "genre_id": int(extra_metadata["genres"][0]["genreId"]),
@@ -574,7 +571,7 @@ class Downloader:
             check=True,
         )
 
-    def apply_tags(self, fixed_location, tags):
+    def apply_tags(self, fixed_location, tags, cover_url):
         mp4_tags = {
             v: [tags[k]]
             for k, v in MP4_TAGS_MAP.items()
@@ -589,7 +586,7 @@ class Downloader:
         if "cover" not in self.exclude_tags:
             mp4_tags["covr"] = [
                 MP4Cover(
-                    self.get_cover(tags["cover_url"]),
+                    self.get_cover(cover_url),
                     imageformat=MP4Cover.FORMAT_JPEG
                     if self.cover_format == "jpg"
                     else MP4Cover.FORMAT_PNG,
@@ -614,9 +611,9 @@ class Downloader:
         final_location.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(fixed_location, final_location)
 
-    def save_cover(self, tags, cover_location):
+    def save_cover(self, cover_location, cover_url):
         with open(cover_location, "wb") as f:
-            f.write(self.get_cover(tags["cover_url"]))
+            f.write(self.get_cover(cover_url))
 
     def make_lrc(self, lrc_location, synced_lyrics):
         lrc_location.parent.mkdir(parents=True, exist_ok=True)

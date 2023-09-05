@@ -315,15 +315,11 @@ def main(
             logger.critical(X_NOT_FOUND_STR.format("MP4Box", mp4box_location))
             return
         if not dl.mp4decrypt_location:
-            logger.critical(
-                X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location)
-            )
+            logger.critical(X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location))
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
         if not dl.nm3u8dlre_location:
-            logger.critical(
-                X_NOT_FOUND_STR.format("N_m3u8DL-RE", nm3u8dlre_location)
-            )
+            logger.critical(X_NOT_FOUND_STR.format("N_m3u8DL-RE", nm3u8dlre_location))
             return
         if not dl.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
@@ -377,6 +373,7 @@ def main(
                     continue
                 track_id = track["id"]
                 webplayback = dl.get_webplayback(track_id)
+                cover_url = dl.get_cover_url(webplayback)
                 if track["type"] == "songs":
                     unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
                     tags = dl.get_tags_song(webplayback, unsynced_lyrics)
@@ -419,7 +416,7 @@ def main(
                             logger.debug(f'Remuxing with MP4Box to "{fixed_location}"')
                             dl.fixup_song_mp4box(decrypted_location, fixed_location)
                         logger.debug("Applying tags")
-                        dl.apply_tags(fixed_location, tags)
+                        dl.apply_tags(fixed_location, tags, cover_url)
                         logger.debug("Moving to final location")
                         dl.move_to_final_location(fixed_location, final_location)
                     if not save_cover or lrc_only:
@@ -430,7 +427,7 @@ def main(
                         )
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
-                        dl.save_cover(tags, cover_location)
+                        dl.save_cover(cover_location, cover_url)
                     if no_lrc or not synced_lyrics:
                         pass
                     elif lrc_location.exists() and not overwrite:
@@ -524,7 +521,7 @@ def main(
                                 fixed_location,
                             )
                         logger.debug("Applying tags")
-                        dl.apply_tags(fixed_location, tags)
+                        dl.apply_tags(fixed_location, tags, cover_url)
                         logger.debug("Moving to final location")
                         dl.move_to_final_location(fixed_location, final_location)
                     if not save_cover:
@@ -535,7 +532,7 @@ def main(
                         )
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
-                        dl.save_cover(tags, cover_location)
+                        dl.save_cover(cover_location, cover_url)
             except Exception:
                 error_count += 1
                 logger.error(

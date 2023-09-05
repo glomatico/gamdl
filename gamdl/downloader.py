@@ -42,7 +42,6 @@ class Downloader:
         truncate: int = None,
         prefer_hevc: bool = None,
         ask_video_format: bool = None,
-        disable_music_video_album_skip: bool = None,
         songs_heaac: bool = None,
         **kwargs,
     ):
@@ -80,7 +79,6 @@ class Downloader:
         self.truncate = None if truncate is not None and truncate < 4 else truncate
         self.prefer_hevc = prefer_hevc
         self.ask_video_format = ask_video_format
-        self.disable_music_video_album_skip = disable_music_video_album_skip
         self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
 
     def setup_session(self):
@@ -133,26 +131,15 @@ class Downloader:
                 "ids[music-videos]": track_id,
             },
         ).json()["data"][0]
-        if response["type"] == "songs" and "playParams" in response["attributes"]:
-            download_queue.append(response)
-        if (
-            response["type"] == "music-videos"
-            and "playParams" in response["attributes"]
-        ):
+        if response["type"] in ("songs", "music-videos"):
             download_queue.append(response)
         if response["type"] in ("albums", "playlists"):
-            for track in response["relationships"]["tracks"]["data"]:
-                if "playParams" in track["attributes"]:
-                    if (
-                        track["type"] == "music-videos"
-                        and self.disable_music_video_album_skip
-                    ):
-                        download_queue.append(track)
-                    if track["type"] == "songs":
-                        download_queue.append(track)
+            download_queue.extend(
+                [track for track in response["relationships"]["tracks"]["data"]]
+            )
         if not download_queue:
             raise Exception("Criteria not met")
-        return download_queue
+        return response["type"], download_queue
 
     def get_webplayback(self, track_id):
         response = self.session.post(

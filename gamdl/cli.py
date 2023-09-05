@@ -355,96 +355,111 @@ def main(
             with open(url, "r") as f:
                 _urls.extend(f.read().splitlines())
         urls = tuple(_urls)
-    for i, url in enumerate(urls, start=1):
+    for url_index, url in enumerate(urls, start=1):
         try:
-            logger.debug(f'Checking "{url}" (URL {i}/{len(urls)})')
+            logger.debug(f'Checking "{url}" (URL {url_index}/{len(urls)})')
             download_queue.append(dl.get_download_queue(url))
         except Exception:
             logger.error(
-                f"Failed to check URL {i}/{len(urls)}", exc_info=print_exceptions
+                f"Failed to check URL {url_index}/{len(urls)}",
+                exc_info=print_exceptions,
             )
     error_count = 0
-    for i, url in enumerate(download_queue, start=1):
-        for j, track in enumerate(url, start=1):
-            if track["type"] == "music-videos" and (
-                not dl.mp4decrypt_location or lrc_only
-            ):
-                continue
+    for queue_item_index, queue_item in enumerate(download_queue, start=1):
+        download_type, tracks = queue_item
+        for track_index, track in enumerate(tracks, start=1):
             logger.info(
-                f'Downloading "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL {i}/{len(download_queue)})'
+                f'Downloading "{track["attributes"]["name"]}" (track {track_index}/{len(tracks)} from URL {queue_item_index}/{len(download_queue)})'
             )
             try:
+                if not track["attributes"].get("playParams"):
+                    logger.warning("Track is not streamable, skipping")
+                    continue
                 track_id = track["id"]
                 webplayback = dl.get_webplayback(track_id)
                 if track["type"] == "songs":
                     unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
                     tags = dl.get_tags_song(webplayback, unsynced_lyrics)
                     final_location = dl.get_final_location(tags)
+                    cover_location = dl.get_cover_location_song(final_location)
+                    lrc_location = dl.get_lrc_location(final_location)
                     logger.debug(f'Final location is "{final_location}"')
-                    if not lrc_only:
-                        if not final_location.exists() or overwrite:
-                            logger.debug("Getting stream URL")
-                            stream_url = dl.get_stream_url_song(webplayback)
-                            logger.debug("Getting decryption key")
-                            decryption_key = dl.get_decryption_key_song(
-                                stream_url, track_id
+                    if lrc_only:
+                        pass
+                    elif final_location.exists() and not overwrite:
+                        logger.warning(
+                            f"File already exists at {final_location}, skipping"
+                        )
+                    else:
+                        logger.debug("Getting stream URL")
+                        stream_url = dl.get_stream_url_song(webplayback)
+                        logger.debug("Getting decryption key")
+                        decryption_key = dl.get_decryption_key_song(
+                            stream_url, track_id
+                        )
+                        encrypted_location = dl.get_encrypted_location_audio(track_id)
+                        logger.debug(f'Downloading to "{encrypted_location}"')
+                        dl.download(encrypted_location, stream_url)
+                        decrypted_location = dl.get_decrypted_location_audio(track_id)
+                        fixed_location = dl.get_fixed_location(track_id, ".m4a")
+                        if remux_mode == "ffmpeg":
+                            logger.debug(
+                                f'Decrypting and remuxing with FFmpeg to "{fixed_location}"'
                             )
-                            encrypted_location = dl.get_encrypted_location_audio(
-                                track_id
+                            dl.fixup_song_ffmpeg(
+                                encrypted_location, decryption_key, fixed_location
                             )
-                            logger.debug(f'Downloading to "{encrypted_location}"')
-                            dl.download(encrypted_location, stream_url)
-                            decrypted_location = dl.get_decrypted_location_audio(
-                                track_id
+                        if remux_mode == "mp4box":
+                            logger.debug(f'Decrypting to "{decrypted_location}"')
+                            dl.decrypt(
+                                encrypted_location,
+                                decrypted_location,
+                                decryption_key,
                             )
-                            fixed_location = dl.get_fixed_location(track_id, ".m4a")
-                            if remux_mode == "ffmpeg":
-                                logger.debug(
-                                    f'Decrypting and remuxing to "{fixed_location}"'
-                                )
-                                dl.fixup_song_ffmpeg(
-                                    encrypted_location, decryption_key, fixed_location
-                                )
-                            if remux_mode == "mp4box":
-                                logger.debug(f'Decrypting to "{decrypted_location}"')
-                                dl.decrypt(
-                                    encrypted_location,
-                                    decrypted_location,
-                                    decryption_key,
-                                )
-                                logger.debug(f'Remuxing to "{fixed_location}"')
-                                dl.fixup_song_mp4box(decrypted_location, fixed_location)
-                            logger.debug("Applying tags")
-                            dl.apply_tags(fixed_location, tags)
-                            logger.debug("Moving to final location")
-                            dl.move_to_final_location(fixed_location, final_location)
-                        else:
-                            logger.warning(
-                                f"File already exists at {final_location}, skipping"
-                            )
-                        if save_cover:
-                            cover_location = dl.get_cover_location_song(final_location)
-                            if not cover_location.exists() or overwrite:
-                                logger.debug(f'Saving cover to "{cover_location}"')
-                                dl.save_cover(tags, cover_location)
-                            else:
-                                logger.debug(
-                                    f'File already exists at "{cover_location}", skipping'
-                                )
-                    if not no_lrc and synced_lyrics:
-                        lrc_location = dl.get_lrc_location(final_location)
-                        if overwrite or not lrc_location.exists():
-                            logger.debug(f'Saving synced lyrics to "{lrc_location}"')
-                            dl.make_lrc(lrc_location, synced_lyrics)
-                        else:
-                            logger.warning(f'"{lrc_location}" already exists, skipping')
+                            logger.debug(f'Remuxing with MP4Box to "{fixed_location}"')
+                            dl.fixup_song_mp4box(decrypted_location, fixed_location)
+                        logger.debug("Applying tags")
+                        dl.apply_tags(fixed_location, tags)
+                        logger.debug("Moving to final location")
+                        dl.move_to_final_location(fixed_location, final_location)
+                    if not save_cover or lrc_only:
+                        pass
+                    elif cover_location.exists() and not overwrite:
+                        logger.debug(
+                            f'File already exists at "{cover_location}", skipping'
+                        )
+                    else:
+                        logger.debug(f'Saving cover to "{cover_location}"')
+                        dl.save_cover(tags, cover_location)
+                    if no_lrc or not synced_lyrics:
+                        pass
+                    elif lrc_location.exists() and not overwrite:
+                        logger.warning(f'"{lrc_location}" already exists, skipping')
+                    else:
+                        logger.debug(f'Saving synced lyrics to "{lrc_location}"')
+                        dl.make_lrc(lrc_location, synced_lyrics)
                 if track["type"] == "music-videos":
+                    if (
+                        not disable_music_video_album_skip
+                        and download_type in ("albums", "playlists")
+                        or lrc_only
+                        or not dl.mp4decrypt_location
+                    ):
+                        logger.warning(
+                            "Music video is not downloadable with current settings, skipping"
+                        )
+                        continue
                     tags = dl.get_tags_music_video(
                         track["attributes"]["url"].split("/")[-1].split("?")[0]
                     )
                     final_location = dl.get_final_location(tags)
+                    cover_location = dl.get_cover_location_music_video(final_location)
                     logger.debug(f'Final location is "{final_location}"')
-                    if not final_location.exists() or overwrite:
+                    if final_location.exists() and not overwrite:
+                        logger.warning(
+                            f'File already exists at "{final_location}", skipping'
+                        )
+                    else:
                         logger.debug("Getting stream URLs")
                         (
                             stream_url_video,
@@ -494,14 +509,15 @@ def main(
                             decryption_key_video,
                         )
                         fixed_location = dl.get_fixed_location(track_id, ".m4v")
-                        logger.debug(f'Remuxing to "{fixed_location}"')
                         if remux_mode == "ffmpeg":
+                            logger.debug(f'Remuxing with FFmpeg to "{fixed_location}"')
                             dl.fixup_music_video_ffmpeg(
                                 decrypted_location_video,
                                 decrypted_location_audio,
                                 fixed_location,
                             )
                         if remux_mode == "mp4box":
+                            logger.debug(f'Remuxing with MP4Box to "{fixed_location}"')
                             dl.fixup_music_video_mp4box(
                                 decrypted_location_audio,
                                 decrypted_location_video,
@@ -511,26 +527,20 @@ def main(
                         dl.apply_tags(fixed_location, tags)
                         logger.debug("Moving to final location")
                         dl.move_to_final_location(fixed_location, final_location)
+                    if not save_cover:
+                        pass
+                    elif cover_location.exists() and not overwrite:
+                        logger.debug(
+                            f'File already exists at "{cover_location}", skipping'
+                        )
                     else:
-                        logger.warning(
-                            f'File already exists at "{final_location}", skipping'
-                        )
-                    if save_cover:
-                        cover_location = dl.get_cover_location_music_video(
-                            final_location
-                        )
-                        if not cover_location.exists() or overwrite:
-                            logger.debug(f'Saving cover to "{cover_location}"')
-                            dl.save_cover(tags, cover_location)
-                        else:
-                            logger.debug(
-                                f'File already exists at "{cover_location}", skipping'
-                            )
+                        logger.debug(f'Saving cover to "{cover_location}"')
+                        dl.save_cover(tags, cover_location)
             except Exception:
                 error_count += 1
                 logger.error(
-                    f'Failed to download "{track["attributes"]["name"]}" (track {j}/{len(url)} from URL '
-                    + f"{i}/{len(download_queue)})",
+                    f'Failed to download "{track["attributes"]["name"]}" (track {track_index}/{len(url)} from URL '
+                    + f"{queue_item_index}/{len(download_queue)})",
                     exc_info=print_exceptions,
                 )
             finally:

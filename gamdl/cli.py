@@ -5,11 +5,7 @@ from pathlib import Path
 
 import click
 
-from .constants import (
-    EXCLUDED_CONFIG_FILE_PARAMS,
-    FAILED_TO_SETUP_X_STR,
-    X_NOT_FOUND_STR,
-)
+from .constants import *
 from .downloader import Downloader
 
 
@@ -295,11 +291,11 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     dl = Downloader(**locals())
-    if not wvd_location.exists() and not lrc_only:
-        logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
-        return
     if not cookies_location.exists():
         logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))
+        return
+    if not wvd_location.exists() and not lrc_only:
+        logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
         return
     if remux_mode == "ffmpeg" and not lrc_only:
         if not dl.ffmpeg_location:
@@ -325,24 +321,9 @@ def main(
             logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
             return
     logger.debug("Setting up session")
-    try:
-        dl.setup_session()
-    except Exception:
-        logger.critical(
-            FAILED_TO_SETUP_X_STR.format("session") + ", check your cookies file",
-            exc_info=print_exceptions,
-        )
-        return
-    if not lrc_only:
-        logger.debug("Setting up CDM")
-        try:
-            dl.setup_cdm()
-        except Exception:
-            logger.critical(
-                FAILED_TO_SETUP_X_STR.format("CDM") + ", check your .wvd file",
-                exc_info=print_exceptions,
-            )
-            return
+    dl.setup_session()
+    logger.debug("Setting up CDM")
+    dl.setup_cdm()
     download_queue = []
     if url_txt:
         logger.debug("Reading URLs from text files")

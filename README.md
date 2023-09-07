@@ -87,6 +87,7 @@ The following variables can be used in the template folders/files and/or in the 
 * `composer_sort`
 * `copyright`
 * `cover`
+* `date`
 * `disc`
 * `disc_total`
 * `gapless`
@@ -95,7 +96,6 @@ The following variables can be used in the template folders/files and/or in the 
 * `lyrics`
 * `media_type`
 * `rating`
-* `release_date`
 * `storefront`
 * `title`
 * `title_id`

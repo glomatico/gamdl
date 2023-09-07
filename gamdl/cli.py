@@ -347,7 +347,8 @@ def main(
         download_type, tracks = queue_item
         for track_index, track in enumerate(tracks, start=1):
             logger.info(
-                f'Downloading "{track["attributes"]["name"]}" (track {track_index}/{len(tracks)} from URL {queue_item_index}/{len(download_queue)})'
+                f'Downloading "{track["attributes"]["name"]}" (track {track_index}/{len(tracks)} '
+                f"from URL {queue_item_index}/{len(download_queue)})"
             )
             try:
                 if not track["attributes"].get("playParams"):
@@ -548,7 +549,7 @@ def main(
                 error_count += 1
                 logger.error(
                     f'Failed to download "{track["attributes"]["name"]}" (track {track_index}/{len(tracks)} from URL '
-                    + f"{queue_item_index}/{len(download_queue)})",
+                    f"{queue_item_index}/{len(download_queue)})",
                     exc_info=print_exceptions,
                 )
             finally:

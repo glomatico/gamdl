@@ -359,9 +359,9 @@ def main(
                 cover_url = dl.get_cover_url(webplayback)
                 if track["type"] == "songs":
                     logger.debug("Getting lyrics")
-                    unsynced_lyrics, synced_lyrics = dl.get_lyrics(track_id)
+                    lyrics_unsynced, lyrics_synced = dl.get_lyrics(track_id)
                     logger.debug("Getting tags")
-                    tags = dl.get_tags_song(webplayback, unsynced_lyrics)
+                    tags = dl.get_tags_song(webplayback, lyrics_unsynced)
                     final_location = dl.get_final_location(tags)
                     cover_location = dl.get_cover_location_song(final_location)
                     lrc_location = dl.get_lrc_location(final_location)
@@ -421,13 +421,13 @@ def main(
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
                         dl.save_cover(cover_location, cover_url)
-                    if no_lrc or not synced_lyrics:
+                    if no_lrc or not lyrics_synced:
                         pass
                     elif lrc_location.exists() and not overwrite:
                         logger.warning(f'"{lrc_location}" already exists, skipping')
                     else:
                         logger.debug(f'Saving synced lyrics to "{lrc_location}"')
-                        dl.make_lrc(lrc_location, synced_lyrics)
+                        dl.make_lrc(lrc_location, lyrics_synced)
                 if track["type"] == "music-videos":
                     if (
                         not disable_music_video_album_skip

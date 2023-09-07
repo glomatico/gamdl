@@ -14,7 +14,7 @@ from mutagen.mp4 import MP4, MP4Cover
 from pywidevine import PSSH, Cdm, Device, WidevinePsshData
 from yt_dlp import YoutubeDL
 
-from gamdl.constants import STOREFRONT_IDS, MP4_TAGS_MAP
+from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS
 
 
 class Downloader:
@@ -563,6 +563,8 @@ class Downloader:
                 "mp4",
                 "-c",
                 "copy",
+                "-c:s",
+                "mov_text",
                 fixed_location,
             ],
             check=True,

@@ -61,7 +61,7 @@ gamdl can be configured using the command line arguments or the config file. The
 | `-l`, `--log-level` / `log_level` | Log level. | `INFO` |
 | `--prefer-hevc` / `prefer_hevc` | Prefer HEVC over AVC when downloading music videos. | `false` |
 | `--ask-video-format` / `ask_video_format` | Ask for the video format when downloading music videos. | `false` |
-| `--disable-music-video-album-skip` / `disable_music_video_album_skip` | Don't skip downloading music videos in albums. | `false` |
+| `--disable-music-video-skip` / `disable_music_video_skip` | Don't skip downloading music videos in albums/playlists. | `false` |
 | `-l`, `--lrc-only` / `lrc_only` | Download only the synced lyrics. | `false` |
 | `-n`, `--no-lrc` / `no_lrc` | Don't download the synced lyrics. | `false` |
 | `-s`, `--save-cover` / `save_cover` | Save cover as a separate file. | `false` |

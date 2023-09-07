@@ -195,9 +195,9 @@ def no_config_callback(
     help="Ask for the video format when downloading music videos.",
 )
 @click.option(
-    "--disable-music-video-album-skip",
+    "--disable-music-video-skip",
     is_flag=True,
-    help="Don't skip downloading music videos in albums.",
+    help="Don't skip downloading music videos in albums/playlists.",
 )
 @click.option(
     "--lrc-only",
@@ -274,7 +274,7 @@ def main(
     log_level: str,
     prefer_hevc: bool,
     ask_video_format: bool,
-    disable_music_video_album_skip: bool,
+    disable_music_video_skip: bool,
     lrc_only: bool,
     no_lrc: bool,
     save_cover: bool,
@@ -430,7 +430,7 @@ def main(
                         dl.make_lrc(lrc_location, lyrics_synced)
                 if track["type"] == "music-videos":
                     if (
-                        not disable_music_video_album_skip
+                        not disable_music_video_skip
                         and download_type in ("albums", "playlists")
                         or lrc_only
                         or not dl.mp4decrypt_location

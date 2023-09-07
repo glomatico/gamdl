@@ -9,7 +9,7 @@ from .constants import *
 from .downloader import Downloader
 
 
-def write_default_config_file(ctx: click.Context):
+def write_default_config_file(ctx: click.Context) -> None:
     ctx.params["config_location"].parent.mkdir(parents=True, exist_ok=True)
     config_file = {
         param.name: param.default
@@ -22,7 +22,7 @@ def write_default_config_file(ctx: click.Context):
 
 def no_config_callback(
     ctx: click.Context, param: click.Parameter, no_config_file: bool
-):
+) -> click.Context:
     if no_config_file:
         return ctx
     if not ctx.params["config_location"].exists():

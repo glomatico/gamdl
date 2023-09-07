@@ -290,6 +290,7 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
+    logger.debug("Starting downloader")
     dl = Downloader(**locals())
     if not cookies_location.exists():
         logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))

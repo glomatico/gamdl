@@ -622,6 +622,7 @@ class Downloader:
         final_location.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(fixed_location, final_location)
 
+    @functools.lru_cache()
     def save_cover(self, cover_location: Path, cover_url: str) -> None:
         with open(cover_location, "wb") as f:
             f.write(self.get_cover(cover_url))

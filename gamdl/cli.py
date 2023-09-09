@@ -160,8 +160,8 @@ def no_config_callback(
 )
 @click.option(
     "--download-mode",
-    type=click.Choice(["nm3u8dlre", "yt-dlp"]),
-    default="yt-dlp",
+    type=click.Choice(["nm3u8dlre", "ytdlp"]),
+    default="ytdlp",
     help="Download mode.",
 )
 @click.option(
@@ -381,11 +381,11 @@ def main(
                             stream_url, track_id
                         )
                         encrypted_location = dl.get_encrypted_location_audio(track_id)
-                        if download_mode == "yt-dlp":
+                        if download_mode == "ytdlp":
                             logger.debug(
                                 f'Downloading with yt-dlp to "{encrypted_location}"'
                             )
-                            dl.download_yt_dlp(encrypted_location, stream_url)
+                            dl.download_ytdlp(encrypted_location, stream_url)
                         if download_mode == "nm3u8dlre":
                             logger.debug(
                                 f'Downloading with N_m3u8DL-RE to "{encrypted_location}"'
@@ -475,17 +475,17 @@ def main(
                         decrypted_location_audio = dl.get_decrypted_location_audio(
                             track_id
                         )
-                        if download_mode == "yt-dlp":
+                        if download_mode == "ytdlp":
                             logger.debug(
                                 f'Downloading video with yt-dlp to "{encrypted_location_video}"'
                             )
-                            dl.download_yt_dlp(
+                            dl.download_ytdlp(
                                 encrypted_location_video, stream_url_video
                             )
                             logger.debug(
                                 f'Downloading audio with yt-dlp to "{encrypted_location_audio}"'
                             )
-                            dl.download_yt_dlp(
+                            dl.download_ytdlp(
                                 encrypted_location_audio, stream_url_audio
                             )
                         if download_mode == "nm3u8dlre":

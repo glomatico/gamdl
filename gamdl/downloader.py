@@ -226,7 +226,7 @@ class Downloader:
     def get_lrc_location(self, final_location: Path) -> Path:
         return final_location.with_suffix(".lrc")
 
-    def download_yt_dlp(self, encrypted_location: Path, stream_url: str) -> None:
+    def download_ytdlp(self, encrypted_location: Path, stream_url: str) -> None:
         with YoutubeDL(
             {
                 "quiet": True,

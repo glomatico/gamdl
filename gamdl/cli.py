@@ -325,6 +325,7 @@ def main(
     downloader.setup_session()
     logger.debug("Setting up CDM")
     downloader.setup_cdm()
+    error_count = 0
     download_queue = []
     if url_txt:
         logger.debug("Reading URLs from text files")
@@ -339,10 +340,10 @@ def main(
             download_queue.append(downloader.get_download_queue(url))
         except Exception:
             logger.error(
-                f"Failed to check URL {url_index}/{len(urls)}",
+                f'Failed to check "{url}" (URL {url_index}/{len(urls)})',
                 exc_info=print_exceptions,
             )
-    error_count = 0
+            error_count += 1
     for queue_item_index, queue_item in enumerate(download_queue, start=1):
         download_type, tracks = queue_item
         for track_index, track in enumerate(tracks, start=1):

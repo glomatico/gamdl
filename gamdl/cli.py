@@ -408,6 +408,13 @@ def main(
                         dl.apply_tags(fixed_location, tags, cover_url)
                         logger.debug("Moving to final location")
                         dl.move_to_final_location(fixed_location, final_location)
+                    if no_lrc or not lyrics_synced:
+                        pass
+                    elif lrc_location.exists() and not overwrite:
+                        logger.warning(f'"{lrc_location}" already exists, skipping')
+                    else:
+                        logger.debug(f'Saving synced lyrics to "{lrc_location}"')
+                        dl.make_lrc(lrc_location, lyrics_synced)
                     if not save_cover or lrc_only:
                         pass
                     elif cover_location.exists() and not overwrite:
@@ -417,13 +424,6 @@ def main(
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
                         dl.save_cover(cover_location, cover_url)
-                    if no_lrc or not lyrics_synced:
-                        pass
-                    elif lrc_location.exists() and not overwrite:
-                        logger.warning(f'"{lrc_location}" already exists, skipping')
-                    else:
-                        logger.debug(f'Saving synced lyrics to "{lrc_location}"')
-                        dl.make_lrc(lrc_location, lyrics_synced)
                 if track["type"] == "music-videos":
                     if (
                         not disable_music_video_skip

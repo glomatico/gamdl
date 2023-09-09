@@ -160,7 +160,7 @@ def no_config_callback(
 )
 @click.option(
     "--download-mode",
-    type=click.Choice(["nm3u8dlre", "ytdlp"]),
+    type=click.Choice(["ytdlp", "nm3u8dlre"]),
     default="ytdlp",
     help="Download mode.",
 )

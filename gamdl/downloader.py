@@ -130,9 +130,7 @@ class Downloader:
         if response["type"] in ("songs", "music-videos"):
             download_queue.append(response)
         if response["type"] in ("albums", "playlists"):
-            download_queue.extend(
-                [track for track in response["relationships"]["tracks"]["data"]]
-            )
+            download_queue.extend(response["relationships"]["tracks"]["data"])
         if not download_queue:
             raise Exception("Criteria not met")
         return response["type"], download_queue

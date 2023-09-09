@@ -54,8 +54,8 @@ gamdl can be configured using the command line arguments or the config file. The
 | `--template-file-music-video` / `template_file_music_video` | Template of the music video files as a format string. | `{title}` |
 | `--cover-size` / `cover_size` | Size of the cover. | `1200` |
 | `--cover-format` / `cover_format` | Format of the cover. | `jpg` |
-| `--remux-mode` / `remux_mode` | Remuxing mode. | `ffmpeg` |
-| `--download-mode` / `download_mode` | Download mode. | `yt-dlp` |
+| `--remux-mode` / `remux_mode` | Remux mode. | `ffmpeg` |
+| `--download-mode` / `download_mode` | Download mode. | `ytdlp` |
 | `-e`, `--exclude-tags` / `exclude_tags` | List of tags to exclude from file tagging separated by commas. | `null` |
 | `--truncate` / `truncate` | Maximum length of the file/folder names. | `40` |
 | `-l`, `--log-level` / `log_level` | Log level. | `INFO` |
@@ -108,7 +108,7 @@ The following variables can be used in the template folders/files and/or in the 
 Can be either `ffmpeg` or `mp4box`. `mp4decrypt` is required for music videos and remuxing with `mp4box`. `mp4box` is slower but will not convert the closed captions track in music videos that have one. `mp4box` can be obtained from [here](https://gpac.wp.imt.fr/downloads).
 
 ### Download mode
-Can be either `yt-dlp` or `nm3u8dlre`. `nm3u8dlre` is faster but requires `ffmpeg`. `nm3u8dlre` can be obtained from [here](https://github.com/nilaoda/N_m3u8DL-RE/releases).
+Can be either `ytdlp` or `nm3u8dlre`. `nm3u8dlre` is faster but requires `ffmpeg`. `nm3u8dlre` can be obtained from [here](https://github.com/nilaoda/N_m3u8DL-RE/releases).
 
 ## Songs quality
 Songs will be downloaded in AAC 256kbps by default or in HE-AAC 64kbps if the `songs_heaac` option is enabled.

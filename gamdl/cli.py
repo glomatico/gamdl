@@ -291,7 +291,7 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     logger.debug("Starting downloader")
-    dl = Downloader(**locals())
+    downloader = Downloader(**locals())
     if not cookies_location.exists():
         logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))
         return
@@ -299,32 +299,32 @@ def main(
         logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
         return
     if remux_mode == "ffmpeg" and not lrc_only:
-        if not dl.ffmpeg_location:
+        if not downloader.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
             return
-        if not dl.mp4decrypt_location:
+        if not downloader.mp4decrypt_location:
             logger.warning(
                 X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location)
                 + ", music videos videos will not be downloaded"
             )
     if remux_mode == "mp4box" and not lrc_only:
-        if not dl.mp4box_location:
+        if not downloader.mp4box_location:
             logger.critical(X_NOT_FOUND_STR.format("MP4Box", mp4box_location))
             return
-        if not dl.mp4decrypt_location:
+        if not downloader.mp4decrypt_location:
             logger.critical(X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location))
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
-        if not dl.nm3u8dlre_location:
+        if not downloader.nm3u8dlre_location:
             logger.critical(X_NOT_FOUND_STR.format("N_m3u8DL-RE", nm3u8dlre_location))
             return
-        if not dl.ffmpeg_location:
+        if not downloader.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
             return
     logger.debug("Setting up session")
-    dl.setup_session()
+    downloader.setup_session()
     logger.debug("Setting up CDM")
-    dl.setup_cdm()
+    downloader.setup_cdm()
     download_queue = []
     if url_txt:
         logger.debug("Reading URLs from text files")
@@ -336,7 +336,7 @@ def main(
     for url_index, url in enumerate(urls, start=1):
         try:
             logger.debug(f'Checking "{url}" (URL {url_index}/{len(urls)})')
-            download_queue.append(dl.get_download_queue(url))
+            download_queue.append(downloader.get_download_queue(url))
         except Exception:
             logger.error(
                 f"Failed to check URL {url_index}/{len(urls)}",
@@ -356,16 +356,16 @@ def main(
                     continue
                 track_id = track["id"]
                 logger.debug("Getting webplayback")
-                webplayback = dl.get_webplayback(track_id)
-                cover_url = dl.get_cover_url(webplayback)
+                webplayback = downloader.get_webplayback(track_id)
+                cover_url = downloader.get_cover_url(webplayback)
                 if track["type"] == "songs":
                     logger.debug("Getting lyrics")
-                    lyrics_unsynced, lyrics_synced = dl.get_lyrics(track_id)
+                    lyrics_unsynced, lyrics_synced = downloader.get_lyrics(track_id)
                     logger.debug("Getting tags")
-                    tags = dl.get_tags_song(webplayback, lyrics_unsynced)
-                    final_location = dl.get_final_location(tags)
-                    cover_location = dl.get_cover_location_song(final_location)
-                    lrc_location = dl.get_lrc_location(final_location)
+                    tags = downloader.get_tags_song(webplayback, lyrics_unsynced)
+                    final_location = downloader.get_final_location(tags)
+                    cover_location = downloader.get_cover_location_song(final_location)
+                    lrc_location = downloader.get_lrc_location(final_location)
                     logger.debug(f'Final location is "{final_location}"')
                     if lrc_only:
                         pass
@@ -375,46 +375,56 @@ def main(
                         )
                     else:
                         logger.debug("Getting stream URL")
-                        stream_url = dl.get_stream_url_song(webplayback)
+                        stream_url = downloader.get_stream_url_song(webplayback)
                         logger.debug("Getting decryption key")
-                        decryption_key = dl.get_decryption_key_song(
+                        decryption_key = downloader.get_decryption_key_song(
                             stream_url, track_id
                         )
-                        encrypted_location = dl.get_encrypted_location_audio(track_id)
+                        encrypted_location = downloader.get_encrypted_location_audio(
+                            track_id
+                        )
                         logger.debug(f'Downloading to "{encrypted_location}"')
                         if download_mode == "ytdlp":
-                            dl.download_ytdlp(encrypted_location, stream_url)
+                            downloader.download_ytdlp(encrypted_location, stream_url)
                         if download_mode == "nm3u8dlre":
-                            dl.download_nm3u8dlre(encrypted_location, stream_url)
-                        decrypted_location = dl.get_decrypted_location_audio(track_id)
-                        fixed_location = dl.get_fixed_location(track_id, ".m4a")
+                            downloader.download_nm3u8dlre(
+                                encrypted_location, stream_url
+                            )
+                        decrypted_location = downloader.get_decrypted_location_audio(
+                            track_id
+                        )
+                        fixed_location = downloader.get_fixed_location(track_id, ".m4a")
                         if remux_mode == "ffmpeg":
                             logger.debug(
                                 f'Decrypting and remuxing to "{fixed_location}"'
                             )
-                            dl.fixup_song_ffmpeg(
+                            downloader.fixup_song_ffmpeg(
                                 encrypted_location, decryption_key, fixed_location
                             )
                         if remux_mode == "mp4box":
                             logger.debug(f'Decrypting to "{decrypted_location}"')
-                            dl.decrypt(
+                            downloader.decrypt(
                                 encrypted_location,
                                 decrypted_location,
                                 decryption_key,
                             )
                             logger.debug(f'Remuxing to "{fixed_location}"')
-                            dl.fixup_song_mp4box(decrypted_location, fixed_location)
+                            downloader.fixup_song_mp4box(
+                                decrypted_location, fixed_location
+                            )
                         logger.debug("Applying tags")
-                        dl.apply_tags(fixed_location, tags, cover_url)
+                        downloader.apply_tags(fixed_location, tags, cover_url)
                         logger.debug("Moving to final location")
-                        dl.move_to_final_location(fixed_location, final_location)
+                        downloader.move_to_final_location(
+                            fixed_location, final_location
+                        )
                     if no_lrc or not lyrics_synced:
                         pass
                     elif lrc_location.exists() and not overwrite:
                         logger.warning(f'"{lrc_location}" already exists, skipping')
                     else:
                         logger.debug(f'Saving synced lyrics to "{lrc_location}"')
-                        dl.make_lrc(lrc_location, lyrics_synced)
+                        downloader.make_lrc(lrc_location, lyrics_synced)
                     if not save_cover or lrc_only:
                         pass
                     elif cover_location.exists() and not overwrite:
@@ -423,23 +433,25 @@ def main(
                         )
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
-                        dl.save_cover(cover_location, cover_url)
+                        downloader.save_cover(cover_location, cover_url)
                 if track["type"] == "music-videos":
                     if (
                         not disable_music_video_skip
                         and download_type in ("albums", "playlists")
                         or lrc_only
-                        or not dl.mp4decrypt_location
+                        or not downloader.mp4decrypt_location
                     ):
                         logger.warning(
                             "Music video is not downloadable with current settings, skipping"
                         )
                         continue
-                    tags = dl.get_tags_music_video(
+                    tags = downloader.get_tags_music_video(
                         track["attributes"]["url"].split("/")[-1].split("?")[0]
                     )
-                    final_location = dl.get_final_location(tags)
-                    cover_location = dl.get_cover_location_music_video(final_location)
+                    final_location = downloader.get_final_location(tags)
+                    cover_location = downloader.get_cover_location_music_video(
+                        final_location
+                    )
                     logger.debug(f'Final location is "{final_location}"')
                     if final_location.exists() and not overwrite:
                         logger.warning(
@@ -450,52 +462,56 @@ def main(
                         (
                             stream_url_video,
                             stream_url_audio,
-                        ) = dl.get_stream_url_music_video(webplayback)
+                        ) = downloader.get_stream_url_music_video(webplayback)
                         logger.debug("Getting decryption keys")
-                        decryption_key_video = dl.get_decryption_key_music_video(
-                            stream_url_video, track_id
+                        decryption_key_video = (
+                            downloader.get_decryption_key_music_video(
+                                stream_url_video, track_id
+                            )
                         )
-                        decryption_key_audio = dl.get_decryption_key_music_video(
-                            stream_url_audio, track_id
+                        decryption_key_audio = (
+                            downloader.get_decryption_key_music_video(
+                                stream_url_audio, track_id
+                            )
                         )
-                        encrypted_location_video = dl.get_encrypted_location_video(
-                            track_id
+                        encrypted_location_video = (
+                            downloader.get_encrypted_location_video(track_id)
                         )
-                        encrypted_location_audio = dl.get_encrypted_location_audio(
-                            track_id
+                        encrypted_location_audio = (
+                            downloader.get_encrypted_location_audio(track_id)
                         )
-                        decrypted_location_video = dl.get_decrypted_location_video(
-                            track_id
+                        decrypted_location_video = (
+                            downloader.get_decrypted_location_video(track_id)
                         )
-                        decrypted_location_audio = dl.get_decrypted_location_audio(
-                            track_id
+                        decrypted_location_audio = (
+                            downloader.get_decrypted_location_audio(track_id)
                         )
                         logger.debug(
                             f'Downloading video to "{encrypted_location_video}"'
                         )
                         if download_mode == "ytdlp":
-                            dl.download_ytdlp(
+                            downloader.download_ytdlp(
                                 encrypted_location_video, stream_url_video
                             )
                         if download_mode == "nm3u8dlre":
-                            dl.download_nm3u8dlre(
+                            downloader.download_nm3u8dlre(
                                 encrypted_location_video, stream_url_video
                             )
                         logger.debug(
                             f'Downloading audio to "{encrypted_location_audio}"'
                         )
                         if download_mode == "ytdlp":
-                            dl.download_ytdlp(
+                            downloader.download_ytdlp(
                                 encrypted_location_audio, stream_url_audio
                             )
                         if download_mode == "nm3u8dlre":
-                            dl.download_nm3u8dlre(
+                            downloader.download_nm3u8dlre(
                                 encrypted_location_audio, stream_url_audio
                             )
                         logger.debug(
                             f'Decrypting video to "{decrypted_location_video}"'
                         )
-                        dl.decrypt(
+                        downloader.decrypt(
                             encrypted_location_audio,
                             decrypted_location_audio,
                             decryption_key_audio,
@@ -503,29 +519,31 @@ def main(
                         logger.debug(
                             f'Decrypting audio to "{decrypted_location_audio}"'
                         )
-                        dl.decrypt(
+                        downloader.decrypt(
                             encrypted_location_video,
                             decrypted_location_video,
                             decryption_key_video,
                         )
-                        fixed_location = dl.get_fixed_location(track_id, ".m4v")
+                        fixed_location = downloader.get_fixed_location(track_id, ".m4v")
                         logger.debug(f'Remuxing to "{fixed_location}"')
                         if remux_mode == "ffmpeg":
-                            dl.fixup_music_video_ffmpeg(
+                            downloader.fixup_music_video_ffmpeg(
                                 decrypted_location_video,
                                 decrypted_location_audio,
                                 fixed_location,
                             )
                         if remux_mode == "mp4box":
-                            dl.fixup_music_video_mp4box(
+                            downloader.fixup_music_video_mp4box(
                                 decrypted_location_audio,
                                 decrypted_location_video,
                                 fixed_location,
                             )
                         logger.debug("Applying tags")
-                        dl.apply_tags(fixed_location, tags, cover_url)
+                        downloader.apply_tags(fixed_location, tags, cover_url)
                         logger.debug("Moving to final location")
-                        dl.move_to_final_location(fixed_location, final_location)
+                        downloader.move_to_final_location(
+                            fixed_location, final_location
+                        )
                     if not save_cover:
                         pass
                     elif cover_location.exists() and not overwrite:
@@ -534,7 +552,7 @@ def main(
                         )
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
-                        dl.save_cover(cover_location, cover_url)
+                        downloader.save_cover(cover_location, cover_url)
             except Exception:
                 error_count += 1
                 logger.error(

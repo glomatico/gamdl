@@ -54,14 +54,14 @@ gamdl can be configured using the command line arguments or the config file. The
 | `--template-file-music-video` / `template_file_music_video` | Template of the music video files as a format string. | `{title}` |
 | `--cover-size` / `cover_size` | Size of the cover. | `1200` |
 | `--cover-format` / `cover_format` | Format of the cover. | `jpg` |
-| `--remux-mode` / `remux_mode` | Remuxing mode. | `ffmpeg` |
-| `--download-mode` / `download_mode` | Download mode. | `yt-dlp` |
+| `--remux-mode` / `remux_mode` | Remux mode. | `ffmpeg` |
+| `--download-mode` / `download_mode` | Download mode. | `ytdlp` |
 | `-e`, `--exclude-tags` / `exclude_tags` | List of tags to exclude from file tagging separated by commas. | `null` |
 | `--truncate` / `truncate` | Maximum length of the file/folder names. | `40` |
 | `-l`, `--log-level` / `log_level` | Log level. | `INFO` |
 | `--prefer-hevc` / `prefer_hevc` | Prefer HEVC over AVC when downloading music videos. | `false` |
 | `--ask-video-format` / `ask_video_format` | Ask for the video format when downloading music videos. | `false` |
-| `--disable-music-video-album-skip` / `disable_music_video_album_skip` | Don't skip downloading music videos in albums. | `false` |
+| `--disable-music-video-skip` / `disable_music_video_skip` | Don't skip downloading music videos in albums/playlists. | `false` |
 | `-l`, `--lrc-only` / `lrc_only` | Download only the synced lyrics. | `false` |
 | `-n`, `--no-lrc` / `no_lrc` | Don't download the synced lyrics. | `false` |
 | `-s`, `--save-cover` / `save_cover` | Save cover as a separate file. | `false` |
@@ -87,6 +87,7 @@ The following variables can be used in the template folders/files and/or in the 
 * `composer_sort`
 * `copyright`
 * `cover`
+* `date`
 * `disc`
 * `disc_total`
 * `gapless`
@@ -95,7 +96,6 @@ The following variables can be used in the template folders/files and/or in the 
 * `lyrics`
 * `media_type`
 * `rating`
-* `release_date`
 * `storefront`
 * `title`
 * `title_id`
@@ -105,10 +105,10 @@ The following variables can be used in the template folders/files and/or in the 
 * `xid`
   
 ### Remux mode
-Can be either `ffmpeg` or `mp4box`. `mp4decrypt` is required for music videos and remuxing with `mp4box`. `mp4box` is slower but will keep the closed captions track in music videos that have one. `mp4box` can be obtained from [here](https://gpac.wp.imt.fr/downloads).
+Can be either `ffmpeg` or `mp4box`. `mp4decrypt` is required for music videos and remuxing with `mp4box`. `mp4box` is slower but will not convert the closed captions track in music videos that have one. `mp4box` can be obtained from [here](https://gpac.wp.imt.fr/downloads).
 
 ### Download mode
-Can be either `yt-dlp` or `nm3u8dlre`. `nm3u8dlre` is faster but requires `ffmpeg`. `nm3u8dlre` can be obtained from [here](https://github.com/nilaoda/N_m3u8DL-RE/releases).
+Can be either `ytdlp` or `nm3u8dlre`. `nm3u8dlre` is faster but requires `ffmpeg`. `nm3u8dlre` can be obtained from [here](https://github.com/nilaoda/N_m3u8DL-RE/releases).
 
 ## Songs quality
 Songs will be downloaded in AAC 256kbps by default or in HE-AAC 64kbps if the `songs_heaac` option is enabled.

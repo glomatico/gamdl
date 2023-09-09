@@ -14,36 +14,10 @@ from mutagen.mp4 import MP4, MP4Cover
 from pywidevine import PSSH, Cdm, Device, WidevinePsshData
 from yt_dlp import YoutubeDL
 
-import gamdl.storefronts
-
-MP4_TAGS_MAP = {
-    "album": "\xa9alb",
-    "album_artist": "aART",
-    "album_id": "plID",
-    "album_sort": "soal",
-    "artist": "\xa9ART",
-    "artist_id": "atID",
-    "artist_sort": "soar",
-    "comment": "\xa9cmt",
-    "composer": "\xa9wrt",
-    "composer_id": "cmID",
-    "composer_sort": "soco",
-    "copyright": "cprt",
-    "genre": "\xa9gen",
-    "genre_id": "geID",
-    "lyrics": "\xa9lyr",
-    "media_type": "stik",
-    "rating": "rtng",
-    "release_date": "\xa9day",
-    "storefront": "sfID",
-    "title": "\xa9nam",
-    "title_id": "cnID",
-    "title_sort": "sonm",
-    "xid": "xid ",
-}
+from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS
 
 
-class Dl:
+class Downloader:
     def __init__(
         self,
         final_path: Path = None,
@@ -62,23 +36,29 @@ class Dl:
         template_file_music_video: str = None,
         cover_size: int = None,
         cover_format: str = None,
-        remux_mode: str = None,
-        download_mode: str = None,
         exclude_tags: str = None,
         truncate: int = None,
         prefer_hevc: bool = None,
         ask_video_format: bool = None,
-        disable_music_video_album_skip: bool = None,
-        lrc_only: bool = None,
         songs_heaac: bool = None,
         **kwargs,
     ):
         self.final_path = final_path
         self.temp_path = temp_path
-        self.ffmpeg_location = shutil.which(ffmpeg_location)
-        self.mp4box_location = shutil.which(mp4box_location)
-        self.mp4decrypt_location = shutil.which(mp4decrypt_location)
-        self.nm3u8dlre_location = shutil.which(nm3u8dlre_location)
+        self.cookies_location = cookies_location
+        self.wvd_location = wvd_location
+        self.ffmpeg_location = (
+            shutil.which(ffmpeg_location) if ffmpeg_location else None
+        )
+        self.mp4box_location = (
+            shutil.which(mp4box_location) if mp4box_location else None
+        )
+        self.mp4decrypt_location = (
+            shutil.which(mp4decrypt_location) if mp4decrypt_location else None
+        )
+        self.nm3u8dlre_location = (
+            shutil.which(nm3u8dlre_location) if nm3u8dlre_location else None
+        )
         self.template_folder_album = template_folder_album
         self.template_folder_compilation = template_folder_compilation
         self.template_file_single_disc = template_file_single_disc
@@ -87,8 +67,6 @@ class Dl:
         self.template_file_music_video = template_file_music_video
         self.cover_size = cover_size
         self.cover_format = cover_format
-        self.remux_mode = remux_mode
-        self.download_mode = download_mode
         self.exclude_tags = (
             [i.lower() for i in exclude_tags.split(",")]
             if exclude_tags is not None
@@ -97,12 +75,10 @@ class Dl:
         self.truncate = None if truncate is not None and truncate < 4 else truncate
         self.prefer_hevc = prefer_hevc
         self.ask_video_format = ask_video_format
-        self.disable_music_video_album_skip = disable_music_video_album_skip
         self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
-        if not lrc_only:
-            self.cdm = Cdm.from_device(Device.load(wvd_location))
-            self.cdm_session = self.cdm.open()
-        cookies = MozillaCookieJar(cookies_location)
+
+    def setup_session(self):
+        cookies = MozillaCookieJar(self.cookies_location)
         cookies.load(ignore_discard=True, ignore_expires=True)
         self.session = requests.Session()
         self.session.cookies.update(cookies)
@@ -133,9 +109,13 @@ class Dl:
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.country = self.session.cookies.get_dict()["itua"]
-        self.storefront = getattr(gamdl.storefronts, self.country.upper())
+        self.storefront = STOREFRONT_IDS[self.country.upper()]
 
-    def get_download_queue(self, url):
+    def setup_cdm(self):
+        self.cdm = Cdm.from_device(Device.load(self.wvd_location))
+        self.cdm_session = self.cdm.open()
+
+    def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []
         track_id = url.split("/")[-1].split("i=")[-1].split("&")[0].split("?")[0]
         response = self.session.get(
@@ -147,28 +127,15 @@ class Dl:
                 "ids[music-videos]": track_id,
             },
         ).json()["data"][0]
-        if response["type"] == "songs" and "playParams" in response["attributes"]:
-            download_queue.append(response)
-        if (
-            response["type"] == "music-videos"
-            and "playParams" in response["attributes"]
-        ):
+        if response["type"] in ("songs", "music-videos"):
             download_queue.append(response)
         if response["type"] in ("albums", "playlists"):
-            for track in response["relationships"]["tracks"]["data"]:
-                if "playParams" in track["attributes"]:
-                    if (
-                        track["type"] == "music-videos"
-                        and self.disable_music_video_album_skip
-                    ):
-                        download_queue.append(track)
-                    if track["type"] == "songs":
-                        download_queue.append(track)
+            download_queue.extend(response["relationships"]["tracks"]["data"])
         if not download_queue:
             raise Exception("Criteria not met")
-        return download_queue
+        return response["type"], download_queue
 
-    def get_webplayback(self, track_id):
+    def get_webplayback(self, track_id: str) -> dict:
         response = self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
             json={
@@ -178,12 +145,12 @@ class Dl:
         ).json()["songList"][0]
         return response
 
-    def get_stream_url_song(self, webplayback):
+    def get_stream_url_song(self, webplayback: dict) -> str:
         return next(
             i for i in webplayback["assets"] if i["flavor"] == self.songs_flavor
         )["URL"]
 
-    def get_stream_url_music_video(self, webplayback):
+    def get_stream_url_music_video(self, webplayback: dict) -> tuple[str, str]:
         ydl = YoutubeDL(
             {
                 "allow_unplayable_formats": True,
@@ -233,63 +200,64 @@ class Dl:
             )
         return stream_url_video, stream_url_audio
 
-    def get_encrypted_location_video(self, track_id):
+    def get_encrypted_location_video(self, track_id: str) -> Path:
         return self.temp_path / f"{track_id}_encrypted_video.mp4"
 
-    def get_encrypted_location_audio(self, track_id):
+    def get_encrypted_location_audio(self, track_id: str) -> Path:
         return self.temp_path / f"{track_id}_encrypted_audio.m4a"
 
-    def get_decrypted_location_video(self, track_id):
+    def get_decrypted_location_video(self, track_id: str) -> Path:
         return self.temp_path / f"{track_id}_decrypted_video.mp4"
 
-    def get_decrypted_location_audio(self, track_id):
+    def get_decrypted_location_audio(self, track_id: str) -> Path:
         return self.temp_path / f"{track_id}_decrypted_audio.m4a"
 
-    def get_fixed_location(self, track_id, file_extension):
+    def get_fixed_location(self, track_id: str, file_extension: str) -> Path:
         return self.temp_path / f"{track_id}_fixed{file_extension}"
 
-    def get_cover_location_song(self, final_location):
+    def get_cover_location_song(self, final_location: Path) -> Path:
         return final_location.parent / f"Cover.{self.cover_format}"
 
-    def get_cover_location_music_video(self, final_location):
+    def get_cover_location_music_video(self, final_location: Path) -> Path:
         return final_location.with_suffix(f".{self.cover_format}")
 
-    def get_lrc_location(self, final_location):
+    def get_lrc_location(self, final_location: Path) -> Path:
         return final_location.with_suffix(".lrc")
 
-    def download(self, encrypted_location, stream_url):
-        if self.download_mode == "yt-dlp":
-            params = {
+    def download_ytdlp(self, encrypted_location: Path, stream_url: str) -> None:
+        with YoutubeDL(
+            {
                 "quiet": True,
                 "no_warnings": True,
                 "outtmpl": str(encrypted_location),
                 "allow_unplayable_formats": True,
                 "fixup": "never",
             }
-            with YoutubeDL(params) as ydl:
-                ydl.download(stream_url)
-        else:
-            subprocess.run(
-                [
-                    self.nm3u8dlre_location,
-                    stream_url,
-                    "--binary-merge",
-                    "--no-log",
-                    "--log-level",
-                    "off",
-                    "--ffmpeg-binary-path",
-                    self.ffmpeg_location,
-                    "--save-name",
-                    encrypted_location.stem,
-                    "--save-dir",
-                    encrypted_location.parent,
-                    "--tmp-dir",
-                    encrypted_location.parent,
-                ],
-                check=True,
-            )
+        ) as ydl:
+            ydl.download(stream_url)
 
-    def get_license_b64(self, challenge, track_uri, track_id):
+    def download_nm3u8dlre(self, encrypted_location: Path, stream_url: str) -> None:
+        subprocess.run(
+            [
+                self.nm3u8dlre_location,
+                stream_url,
+                "--binary-merge",
+                "--no-log",
+                "--log-level",
+                "off",
+                "--ffmpeg-binary-path",
+                self.ffmpeg_location,
+                "--save-name",
+                encrypted_location.stem,
+                "--save-dir",
+                encrypted_location.parent,
+                "--tmp-dir",
+                encrypted_location.parent,
+            ],
+            check=True,
+        )
+
+    def get_license_b64(self, challenge: str, track_uri: str, track_id: str) -> str:
         return self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/acquireWebPlaybackLicense",
             json={
@@ -302,7 +270,7 @@ class Dl:
             },
         ).json()["license"]
 
-    def get_decryption_key_music_video(self, stream_url, track_id):
+    def get_decryption_key_music_video(self, stream_url: str, track_id: str) -> str:
         playlist = m3u8.load(stream_url)
         track_uri = next(
             i
@@ -319,7 +287,7 @@ class Dl:
             i for i in self.cdm.get_keys(self.cdm_session) if i.type == "CONTENT"
         ).key.hex()
 
-    def get_decryption_key_song(self, stream_url, track_id):
+    def get_decryption_key_song(self, stream_url: str, track_id: str) -> str:
         track_uri = m3u8.load(stream_url).keys[0].uri
         widevine_pssh_data = WidevinePsshData()
         widevine_pssh_data.algorithm = 1
@@ -334,7 +302,7 @@ class Dl:
             i for i in self.cdm.get_keys(self.cdm_session) if i.type == "CONTENT"
         ).key.hex()
 
-    def get_synced_lyrics_lrc_timestamp(self, ttml_timestamp):
+    def get_lyrics_synced_lrc_timestamp(self, ttml_timestamp: str) -> str:
         mins = int(ttml_timestamp.split(":")[-2]) if ":" in ttml_timestamp else 0
         secs, ms = str(
             float(ttml_timestamp.split(":")[-1])
@@ -354,7 +322,7 @@ class Dl:
             )
         return lrc_timestamp.strftime("%M:%S.%f")[:-4]
 
-    def get_lyrics(self, track_id):
+    def get_lyrics(self, track_id: str) -> tuple[str, str]:
         try:
             lyrics_ttml = ElementTree.fromstring(
                 self.session.get(
@@ -363,30 +331,32 @@ class Dl:
             )
         except:
             return None, None
-        unsynced_lyrics = ""
-        synced_lyrics = ""
+        lyrics_unsynced = ""
+        lyrics_synced = ""
         for div in lyrics_ttml.iter("{http://www.w3.org/ns/ttml}div"):
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
                 if p.attrib.get("begin"):
-                    synced_lyrics += f'[{self.get_synced_lyrics_lrc_timestamp(p.attrib.get("begin"))}]{p.text}\n'
+                    lyrics_synced += f'[{self.get_lyrics_synced_lrc_timestamp(p.attrib.get("begin"))}]{p.text}\n'
                 if p.text is not None:
-                    unsynced_lyrics += p.text + "\n"
-            unsynced_lyrics += "\n"
-        return unsynced_lyrics[:-2], synced_lyrics
+                    lyrics_unsynced += p.text + "\n"
+            lyrics_unsynced += "\n"
+        return lyrics_unsynced[:-2], lyrics_synced
+
+    def get_cover_url(self, webplayback: dict) -> str:
+        return (
+            webplayback["artwork-urls"]["default"]["url"].rsplit("/", 1)[0]
+            + f"/{self.cover_size}x{self.cover_size}bb.{self.cover_format}"
+        )
 
     @functools.lru_cache()
-    def get_cover(self, cover_url):
+    def get_cover(self, cover_url: str) -> bytes:
         return requests.get(cover_url).content
 
-    def get_tags_song(self, webplayback, unsynced_lyrics):
+    def get_tags_song(self, webplayback: dict, lyrics_unsynced: str) -> dict:
         flavor = next(
             i for i in webplayback["assets"] if i["flavor"] == self.songs_flavor
         )
         metadata = flavor["metadata"]
-        cover_url = flavor["artworkURL"].replace(
-            "600x600bb.jpg",
-            f"{self.cover_size}x{self.cover_size}bb.{self.cover_format}",
-        )
         tags = {
             "album": metadata["playlistName"],
             "album_artist": metadata["playlistArtistName"],
@@ -395,13 +365,21 @@ class Dl:
             "artist": metadata["artistName"],
             "artist_id": int(metadata["artistId"]),
             "artist_sort": metadata["sort-artist"],
+            "comments": metadata.get("comments"),
             "compilation": metadata["compilation"],
-            "cover_url": cover_url,
+            "composer": metadata.get("composerName"),
+            "composer_id": int(metadata.get("composerId"))
+            if metadata.get("composerId")
+            else None,
+            "composer_sort": metadata.get("sort-composer"),
+            "copyright": metadata.get("copyright"),
+            "date": metadata.get("releaseDate"),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],
             "genre": metadata["genre"],
             "genre_id": metadata["genreId"],
+            "lyrics": lyrics_unsynced if lyrics_unsynced else None,
             "media_type": 1,
             "rating": metadata["explicit"],
             "storefront": metadata["s"],
@@ -410,24 +388,11 @@ class Dl:
             "title_sort": metadata["sort-name"],
             "track": metadata["trackNumber"],
             "track_total": metadata["trackCount"],
+            "xid": metadata.get("xid"),
         }
-        if "comments" in metadata:
-            tags["comment"] = metadata["comments"]
-        if "composerId" in metadata:
-            tags["composer"] = metadata["composerName"]
-            tags["composer_id"] = int(metadata["composerId"])
-            tags["composer_sort"] = metadata["sort-composer"]
-        if "copyright" in metadata:
-            tags["copyright"] = metadata["copyright"]
-        if "releaseDate" in metadata:
-            tags["release_date"] = metadata["releaseDate"]
-        if "xid" in metadata:
-            tags["xid"] = metadata["xid"]
-        if unsynced_lyrics:
-            tags["lyrics"] = unsynced_lyrics
         return tags
 
-    def get_tags_music_video(self, track_id):
+    def get_tags_music_video(self, track_id: str) -> dict:
         metadata = requests.get(
             f"https://itunes.apple.com/lookup",
             params={
@@ -446,20 +411,15 @@ class Dl:
         tags = {
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],
-            "cover_url": metadata[0]["artworkUrl30"].replace(
-                "30x30bb.jpg",
-                f"{self.cover_size}x{self.cover_size}bb.{self.cover_format}",
-            ),
+            "copyright": extra_metadata.get("copyright"),
+            "date": metadata[0]["releaseDate"],
             "genre": metadata[0]["primaryGenreName"],
             "genre_id": int(extra_metadata["genres"][0]["genreId"]),
             "media_type": 6,
-            "release_date": metadata[0]["releaseDate"],
             "storefront": int(self.storefront.split("-")[0]),
             "title": metadata[0]["trackCensoredName"],
             "title_id": metadata[0]["trackId"],
         }
-        if "copyright" in extra_metadata:
-            tags["copyright"] = extra_metadata["copyright"]
         if metadata[0]["trackExplicitness"] == "notExplicit":
             tags["rating"] = 0
         elif metadata[0]["trackExplicitness"] == "explicit":
@@ -476,7 +436,7 @@ class Dl:
             tags["track_total"] = metadata[0]["trackCount"]
         return tags
 
-    def get_sanitized_string(self, dirty_string, is_folder):
+    def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(r'[\\/:*?"<>|;]', "_", dirty_string)
         if is_folder:
             dirty_string = dirty_string[: self.truncate]
@@ -487,7 +447,7 @@ class Dl:
                 dirty_string = dirty_string[: self.truncate - 4]
         return dirty_string.strip()
 
-    def get_final_location(self, tags):
+    def get_final_location(self, tags: dict) -> Path:
         if "album" in tags:
             final_location_folder = (
                 self.template_folder_compilation.split("/")
@@ -518,7 +478,9 @@ class Dl:
             *final_location_file
         )
 
-    def decrypt(self, encrypted_location, decrypted_location, decryption_key):
+    def decrypt(
+        self, encrypted_location: Path, decrypted_location: Path, decryption_key: str
+    ) -> None:
         subprocess.run(
             [
                 self.mp4decrypt_location,
@@ -529,7 +491,7 @@ class Dl:
             ],
         )
 
-    def fixup_song_mp4box(self, decrypted_location, fixed_location):
+    def fixup_song_mp4box(self, decrypted_location: Path, fixed_location: Path) -> None:
         subprocess.run(
             [
                 self.mp4box_location,
@@ -544,7 +506,10 @@ class Dl:
         )
 
     def fixup_music_video_mp4box(
-        self, decrypted_location_audio, decrypted_location_video, fixed_location
+        self,
+        decrypted_location_audio: Path,
+        decrypted_location_video: Path,
+        fixed_location: Path,
     ):
         subprocess.run(
             [
@@ -562,7 +527,9 @@ class Dl:
             check=True,
         )
 
-    def fixup_song_ffmpeg(self, encrypted_location, decryption_key, fixed_location):
+    def fixup_song_ffmpeg(
+        self, encrypted_location: Path, decryption_key: str, fixed_location: Path
+    ) -> None:
         subprocess.run(
             [
                 self.ffmpeg_location,
@@ -583,8 +550,11 @@ class Dl:
         )
 
     def fixup_music_video_ffmpeg(
-        self, decrypted_location_video, decrypted_location_audio, fixed_location
-    ):
+        self,
+        decrypted_location_video: Path,
+        decrypted_location_audio: Path,
+        fixed_location: Path,
+    ) -> None:
         subprocess.run(
             [
                 self.ffmpeg_location,
@@ -601,12 +571,14 @@ class Dl:
                 "mp4",
                 "-c",
                 "copy",
+                "-c:s",
+                "mov_text",
                 fixed_location,
             ],
             check=True,
         )
 
-    def apply_tags(self, fixed_location, tags):
+    def apply_tags(self, fixed_location: Path, tags: dict, cover_url: str) -> None:
         mp4_tags = {
             v: [tags[k]]
             for k, v in MP4_TAGS_MAP.items()
@@ -621,7 +593,7 @@ class Dl:
         if "cover" not in self.exclude_tags:
             mp4_tags["covr"] = [
                 MP4Cover(
-                    self.get_cover(tags["cover_url"]),
+                    self.get_cover(cover_url),
                     imageformat=MP4Cover.FORMAT_JPEG
                     if self.cover_format == "jpg"
                     else MP4Cover.FORMAT_PNG,
@@ -642,15 +614,18 @@ class Dl:
         mp4.update(mp4_tags)
         mp4.save()
 
-    def move_to_final_location(self, fixed_location, final_location):
+    def move_to_final_location(
+        self, fixed_location: Path, final_location: Path
+    ) -> None:
         final_location.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(fixed_location, final_location)
 
-    def save_cover(self, tags, cover_location):
+    @functools.lru_cache()
+    def save_cover(self, cover_location: Path, cover_url: str) -> None:
         with open(cover_location, "wb") as f:
-            f.write(self.get_cover(tags["cover_url"]))
+            f.write(self.get_cover(cover_url))
 
-    def make_lrc(self, lrc_location, synced_lyrics):
+    def make_lrc(self, lrc_location: Path, lyrics_synced: str) -> None:
         lrc_location.parent.mkdir(parents=True, exist_ok=True)
         with open(lrc_location, "w", encoding="utf8") as f:
-            f.write(synced_lyrics)
+            f.write(lyrics_synced)

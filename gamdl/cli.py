@@ -156,7 +156,7 @@ def no_config_callback(
     "--remux-mode",
     type=click.Choice(["ffmpeg", "mp4box"]),
     default="ffmpeg",
-    help="Remuxing mode.",
+    help="Remux mode.",
 )
 @click.option(
     "--download-mode",

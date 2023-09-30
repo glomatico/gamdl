@@ -633,5 +633,5 @@ class Downloader:
         with open(lrc_location, "w", encoding="utf8") as f:
             f.write(lyrics_synced)
 
-    def cleanup(self):
+    def cleanup_temp_path(self):
         shutil.rmtree(self.temp_path)

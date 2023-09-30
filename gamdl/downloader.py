@@ -10,7 +10,6 @@ from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from xml.etree import ElementTree
 
-
 import m3u8
 import requests
 from mutagen.mp4 import MP4, MP4Cover

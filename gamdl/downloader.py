@@ -632,3 +632,6 @@ class Downloader:
         lrc_location.parent.mkdir(parents=True, exist_ok=True)
         with open(lrc_location, "w", encoding="utf8") as f:
             f.write(lyrics_synced)
+
+    def cleanup(self):
+        shutil.rmtree(self.temp_path)

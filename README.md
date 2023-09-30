@@ -7,6 +7,7 @@ A Python script to download Apple Music songs/music videos/albums/playlists. Thi
 * Download synced lyrics
 * Choose between MP4Box and FFmpeg for remuxing
 * Choose between yt-dlp and N_m3u8DL-RE for downloading
+* Highly customizable
   
 ## Installation
 1. Install Python 3.7 or higher

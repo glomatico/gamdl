@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from . import __version__
 from .constants import *
 from .downloader import Downloader
 
@@ -248,7 +249,7 @@ def no_config_callback(
     callback=no_config_callback,
     help="Don't use the config file.",
 )
-@click.version_option()
+@click.version_option(__version__, "-v", "--version")
 @click.help_option("-h", "--help")
 def main(
     urls: tuple[str],
@@ -297,9 +298,6 @@ def main(
     if not cookies_location.exists():
         logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))
         return
-    if not wvd_location.exists() and not lrc_only:
-        logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
-        return
     if remux_mode == "ffmpeg" and not lrc_only:
         if not downloader.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
@@ -325,8 +323,12 @@ def main(
             return
     logger.debug("Setting up session")
     downloader.setup_session()
-    logger.debug("Setting up CDM")
-    downloader.setup_cdm()
+    if lrc_only:
+        if not wvd_location.exists():
+            logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
+            return
+        logger.debug("Setting up CDM")
+        downloader.setup_cdm()
     error_count = 0
     download_queue = []
     if url_txt:

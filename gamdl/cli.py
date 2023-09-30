@@ -295,36 +295,36 @@ def main(
     logger.debug("Starting downloader")
     downloader = Downloader(**locals())
     if not cookies_location.exists():
-        logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))
+        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_location))
         return
     if remux_mode == "ffmpeg" and not lrc_only:
         if not downloader.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
+            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
             return
         if not downloader.mp4decrypt_location:
             logger.warning(
-                X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location)
+                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
                 + ", music videos videos will not be downloaded"
             )
     if remux_mode == "mp4box" and not lrc_only:
         if not downloader.mp4box_location:
-            logger.critical(X_NOT_FOUND_STR.format("MP4Box", mp4box_location))
+            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
             return
         if not downloader.mp4decrypt_location:
-            logger.critical(X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location))
+            logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location))
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
         if not downloader.nm3u8dlre_location:
-            logger.critical(X_NOT_FOUND_STR.format("N_m3u8DL-RE", nm3u8dlre_location))
+            logger.critical(X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location))
             return
         if not downloader.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
+            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
             return
     logger.debug("Setting up session")
     downloader.setup_session()
     if not lrc_only:
         if not wvd_location.exists():
-            logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
+            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
             return
         logger.debug("Setting up CDM")
         downloader.setup_cdm()

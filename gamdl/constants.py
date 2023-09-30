@@ -191,4 +191,4 @@ EXCLUDED_CONFIG_FILE_PARAMS = (
     "help",
 )
 
-X_NOT_FOUND_STR = '{} not found at "{}"'
+X_NOT_FOUND_STRING = '{} not found at "{}"'

@@ -116,9 +116,9 @@ The following remux modes are available:
     * Can decrypt and remux songs but can't decrypt music videos by itself
     * Decryption may not work on older versions of FFmpeg
 * `mp4box`
-    * Requires mp4decrpyt
+    * Requires mp4decrypt
     * Doesn't convert closed captions in music videos that have them
-    * Can be get from here: https://gpac.wp.imt.fr/downloads
+    * Can be obtained from here: https://gpac.wp.imt.fr/downloads
 
 ### Download mode
 The following download modes are available:
@@ -126,7 +126,7 @@ The following download modes are available:
 * `nm3u8dlre`
     * Faster than `ytdlp`
     * Requires FFmpeg
-    * Can be get from here: https://github.com/nilaoda/N_m3u8DL-RE/releases
+    * Can be obtained from here: https://github.com/nilaoda/N_m3u8DL-RE/releases
 
 ## Music videos quality
 Music videos will be downloaded in the highest quality available by default. The available qualities are:

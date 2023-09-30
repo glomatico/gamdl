@@ -627,7 +627,7 @@ class Downloader:
         with open(cover_location, "wb") as f:
             f.write(self.get_cover(cover_url))
 
-    def make_lrc(self, lrc_location: Path, lyrics_synced: str) -> None:
+    def save_lrc(self, lrc_location: Path, lyrics_synced: str) -> None:
         lrc_location.parent.mkdir(parents=True, exist_ok=True)
         with open(lrc_location, "w", encoding="utf8") as f:
             f.write(lyrics_synced)

@@ -166,7 +166,9 @@ class Downloader:
         )
         if self.ask_video_format:
             ydl.list_formats(playlist)
-            while True:
+            stream_url_video = None
+            stream_url_audio = None
+            while stream_url_video is None or stream_url_audio is None:
                 format_ids = input("Enter video and audio id: ").split()
                 if len(format_ids) != 2:
                     continue
@@ -184,8 +186,6 @@ class Downloader:
                     (i["url"] for i in matching_formats if i["audio_ext"] != "none"),
                     None,
                 )
-                if stream_url_video is not None and stream_url_audio is not None:
-                    break
         else:
             if self.prefer_hevc:
                 stream_url_video = playlist["formats"][-1]["url"]

@@ -79,7 +79,7 @@ class Downloader:
         self.ask_video_format = ask_video_format
         self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
 
-    def setup_session(self):
+    def setup_session(self) -> None:
         cookies = MozillaCookieJar(self.cookies_location)
         cookies.load(ignore_discard=True, ignore_expires=True)
         self.session = requests.Session()
@@ -113,7 +113,7 @@ class Downloader:
         self.country = self.session.cookies.get_dict()["itua"]
         self.storefront = STOREFRONT_IDS[self.country.upper()]
 
-    def setup_cdm(self):
+    def setup_cdm(self) -> None:
         self.cdm = Cdm.from_device(Device.load(self.wvd_location))
         self.cdm_session = self.cdm.open()
 
@@ -512,7 +512,7 @@ class Downloader:
         decrypted_location_audio: Path,
         decrypted_location_video: Path,
         fixed_location: Path,
-    ):
+    ) -> None:
         subprocess.run(
             [
                 self.mp4box_location,
@@ -632,5 +632,5 @@ class Downloader:
         with open(lrc_location, "w", encoding="utf8") as f:
             f.write(lyrics_synced)
 
-    def cleanup_temp_path(self):
+    def cleanup_temp_path(self) -> None:
         shutil.rmtree(self.temp_path)

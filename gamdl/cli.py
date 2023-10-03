@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import json
 import logging
-import shutil
 from pathlib import Path
 
 import click
 
+from . import __version__
 from .constants import *
 from .downloader import Downloader
 
@@ -246,7 +248,7 @@ def no_config_callback(
     callback=no_config_callback,
     help="Don't use the config file.",
 )
-@click.version_option()
+@click.version_option(__version__, "-v", "--version")
 @click.help_option("-h", "--help")
 def main(
     urls: tuple[str],
@@ -293,38 +295,39 @@ def main(
     logger.debug("Starting downloader")
     downloader = Downloader(**locals())
     if not cookies_location.exists():
-        logger.critical(X_NOT_FOUND_STR.format("Cookies file", cookies_location))
-        return
-    if not wvd_location.exists() and not lrc_only:
-        logger.critical(X_NOT_FOUND_STR.format(".wvd file", wvd_location))
+        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_location))
         return
     if remux_mode == "ffmpeg" and not lrc_only:
         if not downloader.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
+            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
             return
         if not downloader.mp4decrypt_location:
             logger.warning(
-                X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location)
+                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
                 + ", music videos videos will not be downloaded"
             )
     if remux_mode == "mp4box" and not lrc_only:
         if not downloader.mp4box_location:
-            logger.critical(X_NOT_FOUND_STR.format("MP4Box", mp4box_location))
+            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
             return
         if not downloader.mp4decrypt_location:
-            logger.critical(X_NOT_FOUND_STR.format("mp4decrypt", mp4decrypt_location))
+            logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location))
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
         if not downloader.nm3u8dlre_location:
-            logger.critical(X_NOT_FOUND_STR.format("N_m3u8DL-RE", nm3u8dlre_location))
+            logger.critical(X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location))
             return
         if not downloader.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STR.format("FFmpeg", ffmpeg_location))
+            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
             return
     logger.debug("Setting up session")
     downloader.setup_session()
-    logger.debug("Setting up CDM")
-    downloader.setup_cdm()
+    if not lrc_only:
+        if not wvd_location.exists():
+            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
+            return
+        logger.debug("Setting up CDM")
+        downloader.setup_cdm()
     error_count = 0
     download_queue = []
     if url_txt:
@@ -335,25 +338,28 @@ def main(
                 _urls.extend(f.read().splitlines())
         urls = tuple(_urls)
     for url_index, url in enumerate(urls, start=1):
+        current_url = f"URL {url_index}/{len(urls)}"
         try:
-            logger.debug(f'Checking "{url}" (URL {url_index}/{len(urls)})')
+            logger.debug(f'({current_url}) Checking "{url}"')
             download_queue.append(downloader.get_download_queue(url))
         except Exception:
+            error_count += 1
             logger.error(
-                f'Failed to check "{url}" (URL {url_index}/{len(urls)})',
+                f'({current_url}) Failed to check "{url}"',
                 exc_info=print_exceptions,
             )
-            error_count += 1
     for queue_item_index, queue_item in enumerate(download_queue, start=1):
         download_type, tracks = queue_item
         for track_index, track in enumerate(tracks, start=1):
-            logger.info(
-                f'Downloading "{track["attributes"]["name"]}" (track {track_index}/{len(tracks)} '
-                f"from URL {queue_item_index}/{len(download_queue)})"
-            )
+            current_track = f"Track {track_index}/{len(tracks)} from URL {queue_item_index}/{len(download_queue)}"
             try:
+                logger.info(
+                    f'({current_track}) Downloading "{track["attributes"]["name"]}"'
+                )
                 if not track["attributes"].get("playParams"):
-                    logger.warning("Track is not streamable, skipping")
+                    logger.warning(
+                        f"({current_track}) Track is not streamable, skipping"
+                    )
                     continue
                 track_id = track["id"]
                 logger.debug("Getting webplayback")
@@ -365,14 +371,14 @@ def main(
                     logger.debug("Getting tags")
                     tags = downloader.get_tags_song(webplayback, lyrics_unsynced)
                     final_location = downloader.get_final_location(tags)
-                    cover_location = downloader.get_cover_location_song(final_location)
                     lrc_location = downloader.get_lrc_location(final_location)
+                    cover_location = downloader.get_cover_location_song(final_location)
                     logger.debug(f'Final location is "{final_location}"')
                     if lrc_only:
                         pass
                     elif final_location.exists() and not overwrite:
                         logger.warning(
-                            f"File already exists at {final_location}, skipping"
+                            f'({current_track}) Track already exists at "{final_location}", skipping'
                         )
                     else:
                         logger.debug("Getting stream URL")
@@ -422,15 +428,17 @@ def main(
                     if no_lrc or not lyrics_synced:
                         pass
                     elif lrc_location.exists() and not overwrite:
-                        logger.warning(f'"{lrc_location}" already exists, skipping')
+                        logger.debug(
+                            f'Synced lyrics already exists at "{lrc_location}", skipping'
+                        )
                     else:
                         logger.debug(f'Saving synced lyrics to "{lrc_location}"')
-                        downloader.make_lrc(lrc_location, lyrics_synced)
+                        downloader.save_lrc(lrc_location, lyrics_synced)
                     if not save_cover or lrc_only:
                         pass
                     elif cover_location.exists() and not overwrite:
                         logger.debug(
-                            f'File already exists at "{cover_location}", skipping'
+                            f'Cover already exists at "{cover_location}", skipping'
                         )
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
@@ -443,7 +451,7 @@ def main(
                         or not downloader.mp4decrypt_location
                     ):
                         logger.warning(
-                            "Music video is not downloadable with current settings, skipping"
+                            f"({current_track}) Music video is not downloadable with current settings, skipping"
                         )
                         continue
                     tags = downloader.get_tags_music_video(
@@ -456,7 +464,7 @@ def main(
                     logger.debug(f'Final location is "{final_location}"')
                     if final_location.exists() and not overwrite:
                         logger.warning(
-                            f'File already exists at "{final_location}", skipping'
+                            f'({current_track}) Music video already exists at "{final_location}", skipping'
                         )
                     else:
                         logger.debug("Getting stream URLs")
@@ -549,7 +557,7 @@ def main(
                         pass
                     elif cover_location.exists() and not overwrite:
                         logger.debug(
-                            f'File already exists at "{cover_location}", skipping'
+                            f'Cover already exists at "{cover_location}", skipping'
                         )
                     else:
                         logger.debug(f'Saving cover to "{cover_location}"')
@@ -557,12 +565,11 @@ def main(
             except Exception:
                 error_count += 1
                 logger.error(
-                    f'Failed to download "{track["attributes"]["name"]}" (track {track_index}/{len(tracks)} '
-                    f"from URL {queue_item_index}/{len(download_queue)})",
+                    f'({current_track}) Failed to download "{track["attributes"]["name"]}"',
                     exc_info=print_exceptions,
                 )
             finally:
                 if temp_path.exists():
                     logger.debug(f'Cleaning up "{temp_path}"')
-                    shutil.rmtree(temp_path)
+                    downloader.cleanup_temp_path()
     logger.info(f"Done ({error_count} error(s))")

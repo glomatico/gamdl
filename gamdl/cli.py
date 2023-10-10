@@ -311,11 +311,15 @@ def main(
             logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
             return
         if not downloader.mp4decrypt_location:
-            logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location))
+            logger.critical(
+                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
+            )
             return
     if download_mode == "nm3u8dlre" and not lrc_only:
         if not downloader.nm3u8dlre_location:
-            logger.critical(X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location))
+            logger.critical(
+                X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)
+            )
             return
         if not downloader.ffmpeg_location:
             logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
@@ -367,7 +371,9 @@ def main(
                 cover_url = downloader.get_cover_url(webplayback)
                 if track["type"] == "songs":
                     logger.debug("Getting lyrics")
-                    lyrics_unsynced, lyrics_synced = downloader.get_lyrics(track_id)
+                    lyrics_unsynced, lyrics_synced = downloader.get_lyrics(
+                        track_id, track["attributes"]["hasLyrics"]
+                    )
                     logger.debug("Getting tags")
                     tags = downloader.get_tags_song(webplayback, lyrics_unsynced)
                     final_location = downloader.get_final_location(tags)

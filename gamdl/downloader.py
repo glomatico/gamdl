@@ -324,15 +324,14 @@ class Downloader:
             )
         return lrc_timestamp.strftime("%M:%S.%f")[:-4]
 
-    def get_lyrics(self, track_id: str) -> tuple[str, str]:
-        try:
-            lyrics_ttml = ElementTree.fromstring(
-                self.session.get(
-                    f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics"
-                ).json()["data"][0]["attributes"]["ttml"]
-            )
-        except:
+    def get_lyrics(self, track_id: str, has_lyrics: bool) -> tuple[str, str]:
+        if not has_lyrics:
             return None, None
+        lyrics_ttml = ElementTree.fromstring(
+            self.session.get(
+                f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics"
+            ).json()["data"][0]["attributes"]["ttml"]
+        )
         lyrics_unsynced = ""
         lyrics_synced = ""
         for div in lyrics_ttml.iter("{http://www.w3.org/ns/ttml}div"):

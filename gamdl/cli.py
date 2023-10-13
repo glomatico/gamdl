@@ -370,10 +370,13 @@ def main(
                 webplayback = downloader.get_webplayback(track_id)
                 cover_url = downloader.get_cover_url(webplayback)
                 if track["type"] == "songs":
-                    logger.debug("Getting lyrics")
-                    lyrics_unsynced, lyrics_synced = downloader.get_lyrics(
-                        track_id, track["attributes"]["hasLyrics"]
-                    )
+                    if track["attributes"]["hasLyrics"]:
+                        logger.debug("Getting lyrics")
+                        lyrics_unsynced, lyrics_synced = downloader.get_lyrics(
+                            track_id,
+                        )
+                    else:
+                        lyrics_unsynced, lyrics_synced = None, None
                     logger.debug("Getting tags")
                     tags = downloader.get_tags_song(webplayback, lyrics_unsynced)
                     final_location = downloader.get_final_location(tags)

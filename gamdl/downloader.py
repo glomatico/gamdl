@@ -304,29 +304,27 @@ class Downloader:
             i for i in self.cdm.get_keys(self.cdm_session) if i.type == "CONTENT"
         ).key.hex()
 
-    def get_lyrics_synced_lrc_timestamp(self, ttml_timestamp: str) -> str:
-        mins = int(ttml_timestamp.split(":")[-2]) if ":" in ttml_timestamp else 0
+    def get_lyrics_synced_timestamp_lrc(self, timestamp_ttml: str) -> str:
+        mins = int(timestamp_ttml.split(":")[-2]) if ":" in timestamp_ttml else 0
         secs, ms = str(
-            float(ttml_timestamp.split(":")[-1])
-            if ":" in ttml_timestamp
-            else float(ttml_timestamp.replace("s", ""))
+            float(timestamp_ttml.split(":")[-1])
+            if ":" in timestamp_ttml
+            else float(timestamp_ttml.replace("s", ""))
         ).split(".")
         secs = int(secs)
         ms = int(ms)
-        lrc_timestamp = datetime.datetime.fromtimestamp(
+        timestamp_lrc = datetime.datetime.fromtimestamp(
             (mins * 60) + secs + (ms / 1000)
         )
-        ms_new = lrc_timestamp.strftime("%f")[:-3]
+        ms_new = timestamp_lrc.strftime("%f")[:-3]
         if int(ms_new[-1]) >= 5:
             ms = int(f"{int(ms_new[:2]) + 1}") * 10
-            lrc_timestamp += datetime.timedelta(milliseconds=ms) - datetime.timedelta(
-                microseconds=lrc_timestamp.microsecond
+            timestamp_lrc += datetime.timedelta(milliseconds=ms) - datetime.timedelta(
+                microseconds=timestamp_lrc.microsecond
             )
-        return lrc_timestamp.strftime("%M:%S.%f")[:-4]
+        return timestamp_lrc.strftime("%M:%S.%f")[:-4]
 
-    def get_lyrics(self, track_id: str, has_lyrics: bool) -> tuple[str, str]:
-        if not has_lyrics:
-            return None, None
+    def get_lyrics(self, track_id: str) -> tuple[str, str]:
         lyrics_ttml = ElementTree.fromstring(
             self.session.get(
                 f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics"
@@ -337,7 +335,7 @@ class Downloader:
         for div in lyrics_ttml.iter("{http://www.w3.org/ns/ttml}div"):
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
                 if p.attrib.get("begin"):
-                    lyrics_synced += f'[{self.get_lyrics_synced_lrc_timestamp(p.attrib.get("begin"))}]{p.text}\n'
+                    lyrics_synced += f'[{self.get_lyrics_synced_timestamp_lrc(p.attrib.get("begin"))}]{p.text}\n'
                 if p.text is not None:
                     lyrics_unsynced += p.text + "\n"
             lyrics_unsynced += "\n"

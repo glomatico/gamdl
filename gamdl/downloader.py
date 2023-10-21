@@ -313,12 +313,10 @@ class Downloader:
             secs, mins = int(mins_secs_ms[-1]), int(mins_secs_ms[-2])
         elif len(mins_secs_ms) == 1:
             ms = int(mins_secs_ms[-1])
-            secs = 0
-            mins = 0
+            secs, mins = 0, 0
         else:
             ms = int(mins_secs_ms[-1].ljust(3, "0"))
-            secs = 0
-            mins = 0
+            secs, mins = 0, 0
             try:
                 secs = int(mins_secs_ms[-2])
                 mins = int(mins_secs_ms[-3])

@@ -158,6 +158,7 @@ class Downloader:
                 "allow_unplayable_formats": True,
                 "quiet": True,
                 "no_warnings": True,
+                "allowed_extractors": ["generic"],
             }
         )
         playlist = ydl.extract_info(
@@ -234,6 +235,7 @@ class Downloader:
                 "outtmpl": str(encrypted_location),
                 "allow_unplayable_formats": True,
                 "fixup": "never",
+                "allowed_extractors": ["generic"],
             }
         ) as ydl:
             ydl.download(stream_url)

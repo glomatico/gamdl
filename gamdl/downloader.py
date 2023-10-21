@@ -305,14 +305,23 @@ class Downloader:
         ).key.hex()
 
     def get_lyrics_synced_timestamp_lrc(self, timestamp_ttml: str) -> str:
-        mins = int(timestamp_ttml.split(":")[-2]) if ":" in timestamp_ttml else 0
-        secs, ms = str(
-            float(timestamp_ttml.split(":")[-1])
-            if ":" in timestamp_ttml
-            else float(timestamp_ttml.replace("s", ""))
-        ).split(".")
-        secs = int(secs)
-        ms = int(ms)
+        mins_secs_ms = re.findall(r"\d+", timestamp_ttml)
+        if len(mins_secs_ms) == 2 and ":" in timestamp_ttml:
+            ms = 0
+            secs, mins = int(mins_secs_ms[-1]), int(mins_secs_ms[-2])
+        elif len(mins_secs_ms) == 1:
+            ms = int(mins_secs_ms[-1])
+            secs = 0
+            mins = 0
+        else:
+            ms = int(mins_secs_ms[-1].ljust(3, "0"))
+            secs = 0
+            mins = 0
+            try:
+                secs = int(mins_secs_ms[-2])
+                mins = int(mins_secs_ms[-3])
+            except IndexError:
+                pass
         timestamp_lrc = datetime.datetime.fromtimestamp(
             (mins * 60) + secs + (ms / 1000)
         )

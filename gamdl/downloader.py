@@ -500,6 +500,7 @@ class Downloader:
                 f"1:{decryption_key}",
                 decrypted_location,
             ],
+            check=True,
         )
 
     def fixup_song_mp4box(self, decrypted_location: Path, fixed_location: Path) -> None:
@@ -514,6 +515,7 @@ class Downloader:
                 "-new",
                 fixed_location,
             ],
+            check=True,
         )
 
     def fixup_music_video_mp4box(

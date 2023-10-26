@@ -315,7 +315,7 @@ class Downloader:
             ms = int(mins_secs_ms[-1])
             secs, mins = 0, 0
         else:
-            ms = int(mins_secs_ms[-1].ljust(3, "0"))
+            ms = int(mins_secs_ms[-1][:3].ljust(3, "0"))
             secs, mins = 0, 0
             try:
                 secs = int(mins_secs_ms[-2])

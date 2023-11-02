@@ -308,17 +308,14 @@ class Downloader:
 
     def get_lyrics_synced_timestamp_lrc(self, timestamp_ttml: str) -> str:
         mins_secs_ms = re.findall(r"\d+", timestamp_ttml)
+        ms, secs, mins = 0, 0, 0
         if len(mins_secs_ms) == 2 and ":" in timestamp_ttml:
-            ms = 0
             secs, mins = int(mins_secs_ms[-1]), int(mins_secs_ms[-2])
         elif len(mins_secs_ms) == 1:
             ms = int(mins_secs_ms[-1])
-            secs, mins = 0, 0
         else:
-            ms = int(mins_secs_ms[-1][:3].ljust(3, "0"))
-            secs, mins = 0, 0
+            secs = float(f"{mins_secs_ms[-2]}.{mins_secs_ms[-1]}")
             try:
-                secs = int(mins_secs_ms[-2])
                 mins = int(mins_secs_ms[-3])
             except IndexError:
                 pass

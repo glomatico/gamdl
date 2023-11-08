@@ -177,14 +177,16 @@ class Downloader:
         return catalog_resource_type, download_queue
 
     def get_webplayback(self, track_id: str) -> dict:
-        response = self.session.post(
+        webplayback_response = self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
             json={
                 "salableAdamId": track_id,
                 "language": "en-US",
             },
-        ).json()["songList"][0]
-        return response
+        )
+        if webplayback_response.status_code != 200:
+            raise Exception(f"Failed to get webplayback: {webplayback_response.text}")
+        return webplayback_response.json()["songList"][0]
 
     def get_stream_url_song(self, webplayback: dict) -> str:
         return next(
@@ -301,7 +303,7 @@ class Downloader:
         )
 
     def get_license_b64(self, challenge: str, track_uri: str, track_id: str) -> str:
-        return self.session.post(
+        license_b64_response = self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/acquireWebPlaybackLicense",
             json={
                 "challenge": challenge,
@@ -311,7 +313,10 @@ class Downloader:
                 "isLibrary": False,
                 "user-initiated": True,
             },
-        ).json()["license"]
+        )
+        if license_b64_response.status_code != 200:
+            raise Exception(f"Failed to get license_b64: {license_b64_response.text}")
+        return license_b64_response.json()["license"]
 
     def get_decryption_key_music_video(self, stream_url: str, track_id: str) -> str:
         playlist = m3u8.load(stream_url)
@@ -370,14 +375,12 @@ class Downloader:
         return timestamp_lrc.strftime("%M:%S.%f")[:-4]
 
     def get_lyrics(self, track_id: str) -> tuple[str, str]:
-        lyrics_response = self.session.get(
+        lyrics = self.session.get(
             f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics"
         ).json()
-        if lyrics_response["data"][0].get("attributes") is None:
+        if lyrics["data"][0].get("attributes") is None:
             return None, None
-        lyrics_ttml = ElementTree.fromstring(
-            lyrics_response["data"][0]["attributes"]["ttml"]
-        )
+        lyrics_ttml = ElementTree.fromstring(lyrics["data"][0]["attributes"]["ttml"])
         lyrics_unsynced = ""
         lyrics_synced = ""
         for div in lyrics_ttml.iter("{http://www.w3.org/ns/ttml}div"):
@@ -440,7 +443,7 @@ class Downloader:
         return tags
 
     def get_tags_music_video(self, track_id: str) -> dict:
-        metadata = requests.get(
+        metadata_response = requests.get(
             f"https://itunes.apple.com/lookup",
             params={
                 "id": track_id,
@@ -448,13 +451,21 @@ class Downloader:
                 "country": self.country,
                 "lang": "en_US",
             },
-        ).json()["results"]
-        extra_metadata = requests.get(
+        )
+        if metadata_response.status_code != 200:
+            raise Exception(f"Failed to get metadata: {metadata_response.text}")
+        metadata = metadata_response.json()["results"]
+        extra_metadata_response = requests.get(
             f'https://music.apple.com/music-video/{metadata[0]["trackId"]}',
             headers={"X-Apple-Store-Front": f"{self.storefront} t:music31"},
-        ).json()["storePlatformData"]["product-dv"]["results"][
-            str(metadata[0]["trackId"])
-        ]
+        )
+        if extra_metadata_response.status_code != 200:
+            raise Exception(
+                f"Failed to get extra metadata: {extra_metadata_response.text}"
+            )
+        extra_metadata = extra_metadata_response.json()["storePlatformData"][
+            "product-dv"
+        ]["results"][str(metadata[0]["trackId"])]
         tags = {
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],

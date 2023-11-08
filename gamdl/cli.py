@@ -455,7 +455,7 @@ def main(
                 if track["type"] == "music-videos":
                     if (
                         not disable_music_video_skip
-                        and download_type in ("albums", "playlists")
+                        and download_type in ("album", "playlist")
                         or lrc_only
                         or not downloader.mp4decrypt_location
                     ):

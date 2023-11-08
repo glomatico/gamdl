@@ -117,25 +117,64 @@ class Downloader:
         self.cdm = Cdm.from_device(Device.load(self.wvd_location))
         self.cdm_session = self.cdm.open()
 
+    def get_song(self, song_id: str) -> dict:
+        song_response = self.session.get(
+            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{song_id}"
+        )
+        if song_response.status_code != 200:
+            raise Exception(f"Failed to get song: {song_response.text}")
+        return song_response.json()["data"][0]
+
+    def get_music_video(self, music_video_id: str) -> dict:
+        music_video_response = self.session.get(
+            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/music-videos/{music_video_id}"
+        )
+        if music_video_response.status_code != 200:
+            raise Exception(f"Failed to get music video: {music_video_response.text}")
+        return music_video_response.json()["data"][0]
+
+    def get_album(self, album_id: str) -> dict:
+        album_response = self.session.get(
+            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/albums/{album_id}"
+        )
+        if album_response.status_code != 200:
+            raise Exception(f"Failed to get album: {album_response.text}")
+        return album_response.json()["data"][0]
+
+    def get_playlist(self, playlist_id: str) -> dict:
+        playlist_response = self.session.get(
+            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/playlists/{playlist_id}",
+            params={
+                "limit[tracks]": 300,
+            },
+        )
+        if playlist_response.status_code != 200:
+            raise Exception(f"Failed to get playlist: {playlist_response.text}")
+        return playlist_response.json()["data"][0]
+
     def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []
-        track_id = url.split("/")[-1].split("i=")[-1].split("&")[0].split("?")[0]
-        response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}",
-            params={
-                "ids[songs]": track_id,
-                "ids[albums]": track_id,
-                "ids[playlists]": track_id,
-                "ids[music-videos]": track_id,
-            },
-        ).json()["data"][0]
-        if response["type"] in ("songs", "music-videos"):
-            download_queue.append(response)
-        if response["type"] in ("albums", "playlists"):
-            download_queue.extend(response["relationships"]["tracks"]["data"])
-        if not download_queue:
-            raise Exception("Criteria not met")
-        return response["type"], download_queue
+        url_regex_result = re.search(
+            r"/([a-z]{2})/(album|playlist|song|music-video)/(.*)/([a-z]{2}.[0-9a-z]*|[0-9]*)(?:\?i=)?([0-9a-z]*)",
+            url,
+        )
+        catalog_resource_type = url_regex_result.group(2)
+        catalog_id = url_regex_result.group(5) or url_regex_result.group(4)
+        if catalog_resource_type == "song" or url_regex_result.group(5):
+            download_queue.append(self.get_song(catalog_id))
+        elif catalog_resource_type == "music-video":
+            download_queue.append(self.get_music_video(catalog_id))
+        elif catalog_resource_type == "album":
+            download_queue.append(
+                self.get_album(catalog_id)["relationships"]["tracks"]["data"]
+            )
+        elif catalog_resource_type == "playlist":
+            download_queue.append(
+                self.get_playlist(catalog_id)["relationships"]["tracks"]["data"]
+            )
+        else:
+            raise Exception("Invalid URL")
+        return catalog_resource_type, download_queue
 
     def get_webplayback(self, track_id: str) -> dict:
         response = self.session.post(

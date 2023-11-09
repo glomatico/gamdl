@@ -165,11 +165,11 @@ class Downloader:
         elif catalog_resource_type == "music-video":
             download_queue.append(self.get_music_video(catalog_id))
         elif catalog_resource_type == "album":
-            download_queue.append(
+            download_queue.extend(
                 self.get_album(catalog_id)["relationships"]["tracks"]["data"]
             )
         elif catalog_resource_type == "playlist":
-            download_queue.append(
+            download_queue.extend(
                 self.get_playlist(catalog_id)["relationships"]["tracks"]["data"]
             )
         else:

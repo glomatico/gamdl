@@ -3,3 +3,4 @@ m3u8
 pywidevine
 pyyaml
 yt-dlp
+ciso8601

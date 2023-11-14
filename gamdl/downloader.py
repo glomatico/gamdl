@@ -9,6 +9,7 @@ import subprocess
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from xml.etree import ElementTree
+from ciso8601 import parse_datetime
 
 import m3u8
 import requests
@@ -36,6 +37,7 @@ class Downloader:
         template_file_multi_disc: str = None,
         template_folder_music_video: str = None,
         template_file_music_video: str = None,
+        template_date: str = None,
         cover_size: int = None,
         cover_format: str = None,
         exclude_tags: str = None,
@@ -67,6 +69,7 @@ class Downloader:
         self.template_file_multi_disc = template_file_multi_disc
         self.template_folder_music_video = template_folder_music_video
         self.template_file_music_video = template_file_music_video
+        self.date_template = template_date
         self.cover_size = cover_size
         self.cover_format = cover_format
         self.exclude_tags = (
@@ -176,12 +179,12 @@ class Downloader:
             raise Exception("Invalid URL")
         return catalog_resource_type, download_queue
 
-    def get_webplayback(self, track_id: str) -> dict:
+    def get_webplayback(self, track_id: str, use_original_language: bool = None) -> dict:
         webplayback_response = self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
             json={
                 "salableAdamId": track_id,
-                "language": "en-US",
+                "language": "" if use_original_language else "en-US",
             },
         )
         if webplayback_response.status_code != 200:
@@ -423,7 +426,7 @@ class Downloader:
             else None,
             "composer_sort": metadata.get("sort-composer"),
             "copyright": metadata.get("copyright"),
-            "date": metadata.get("releaseDate"),
+            "date": self.sanitize_date(metadata.get("releaseDate"), self.date_template),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],
@@ -470,7 +473,7 @@ class Downloader:
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],
             "copyright": extra_metadata.get("copyright"),
-            "date": metadata[0]["releaseDate"],
+            "date": self.sanitize_date(metadata[0]["releaseDate"], self.date_template),
             "genre": metadata[0]["primaryGenreName"],
             "genre_id": int(extra_metadata["genres"][0]["genreId"]),
             "media_type": 6,
@@ -493,7 +496,7 @@ class Downloader:
             tags["track"] = metadata[0]["trackNumber"]
             tags["track_total"] = metadata[0]["trackCount"]
         return tags
-
+    
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(r'[\\/:*?"<>|;]', "_", dirty_string)
         if is_folder:
@@ -535,6 +538,11 @@ class Downloader:
         return self.final_path.joinpath(*final_location_folder).joinpath(
             *final_location_file
         )
+        
+    @staticmethod
+    def sanitize_date(date: str, datetime_format: str = None):
+        datetime_obj = parse_datetime(date)
+        return f"{datetime_obj.isoformat().rsplit('+', 1)[0]}Z" if not datetime_format else datetime_obj.strftime(datetime_format)
 
     def decrypt(
         self, encrypted_location: Path, decrypted_location: Path, decryption_key: str

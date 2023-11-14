@@ -143,6 +143,12 @@ def no_config_callback(
     help="Template of the music video files as a format string.",
 )
 @click.option(
+    "--template-date",
+    type=str,
+    default="",
+    help="Template of the tagged date as a string with format codes (by default uses ISO 8601 date format).",
+)
+@click.option(
     "--cover-size",
     type=int,
     default=1200,
@@ -185,6 +191,11 @@ def no_config_callback(
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
     default="INFO",
     help="Log level.",
+)
+@click.option(
+    "--prefer-original-language",
+    is_flag=True,
+    help="Prefer the language associated with the account rather than English.",
 )
 @click.option(
     "--prefer-hevc",
@@ -267,6 +278,7 @@ def main(
     template_file_multi_disc: str,
     template_folder_music_video: str,
     template_file_music_video: str,
+    template_date: str,
     cover_size: int,
     cover_format: str,
     remux_mode: str,
@@ -285,6 +297,7 @@ def main(
     print_exceptions: bool,
     url_txt: bool,
     no_config_file: bool,
+    prefer_original_language: bool
 ):
     logging.basicConfig(
         format="[%(levelname)-8s %(asctime)s] %(message)s",
@@ -367,7 +380,7 @@ def main(
                     continue
                 track_id = track["id"]
                 logger.debug("Getting webplayback")
-                webplayback = downloader.get_webplayback(track_id)
+                webplayback = downloader.get_webplayback(track_id, prefer_original_language)
                 cover_url = downloader.get_cover_url(webplayback)
                 if track["type"] == "songs":
                     if track["attributes"]["hasLyrics"]:

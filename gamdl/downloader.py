@@ -176,12 +176,12 @@ class Downloader:
             raise Exception("Invalid URL")
         return catalog_resource_type, download_queue
 
-    def get_webplayback(self, track_id: str) -> dict:
+    def get_webplayback(self, track_id: str, use_original_language: bool = None) -> dict:
         webplayback_response = self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
             json={
                 "salableAdamId": track_id,
-                "language": "en-US",
+                "language": "" if use_original_language else "en-US",
             },
         )
         if webplayback_response.status_code != 200:
@@ -493,7 +493,7 @@ class Downloader:
             tags["track"] = metadata[0]["trackNumber"]
             tags["track_total"] = metadata[0]["trackCount"]
         return tags
-
+    
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(r'[\\/:*?"<>|;]', "_", dirty_string)
         if is_folder:

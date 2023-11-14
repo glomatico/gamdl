@@ -9,8 +9,8 @@ import subprocess
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from xml.etree import ElementTree
-from ciso8601 import parse_datetime
 
+import ciso8601
 import m3u8
 import requests
 from mutagen.mp4 import MP4, MP4Cover
@@ -69,7 +69,7 @@ class Downloader:
         self.template_file_multi_disc = template_file_multi_disc
         self.template_folder_music_video = template_folder_music_video
         self.template_file_music_video = template_file_music_video
-        self.date_template = template_date
+        self.template_date = template_date
         self.cover_size = cover_size
         self.cover_format = cover_format
         self.exclude_tags = (
@@ -426,7 +426,7 @@ class Downloader:
             else None,
             "composer_sort": metadata.get("sort-composer"),
             "copyright": metadata.get("copyright"),
-            "date": self.sanitize_date(metadata.get("releaseDate"), self.date_template),
+            "date": self.sanitize_date(metadata.get("releaseDate"), self.template_date),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],
@@ -473,7 +473,7 @@ class Downloader:
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],
             "copyright": extra_metadata.get("copyright"),
-            "date": self.sanitize_date(metadata[0]["releaseDate"], self.date_template),
+            "date": self.sanitize_date(metadata[0]["releaseDate"], self.template_date),
             "genre": metadata[0]["primaryGenreName"],
             "genre_id": int(extra_metadata["genres"][0]["genreId"]),
             "media_type": 6,
@@ -540,9 +540,9 @@ class Downloader:
         )
         
     @staticmethod
-    def sanitize_date(date: str, datetime_format: str = None):
-        datetime_obj = parse_datetime(date)
-        return f"{datetime_obj.isoformat().rsplit('+', 1)[0]}Z" if not datetime_format else datetime_obj.strftime(datetime_format)
+    def sanitize_date(date: str, template_date: str):
+        datetime_obj = ciso8601.parse_datetime(date)
+        return datetime_obj.strftime(template_date)
 
     def decrypt(
         self, encrypted_location: Path, decrypted_location: Path, decryption_key: str

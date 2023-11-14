@@ -42,43 +42,43 @@ A Python script to download Apple Music songs/music videos/albums/playlists. Thi
 
 ## Configuration
 You can configure gamdl by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.
-| Command line argument / Config file key                         | Description                                                                                  | Default value                      |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `-f`, `--final-path` / `final_path`                             | Path where the downloaded files will be saved.                                               | `./Apple Music`                    |
-| `-t`, `--temp-path` / `temp_path`                               | Path where the temporary files will be saved.                                                | `./temp`                           |
-| `-c`, `--cookies-location` / `cookies_location`                 | Location of the cookies file.                                                                | `./cookies.txt`                    |
-| `-w`, `--wvd-location` / `wvd_location`                         | Location of the .wvd file.                                                                   | `./device.wvd`                     |
-| `--ffmpeg-location` / `ffmpeg_location`                         | Location of the FFmpeg binary.                                                               | `ffmpeg`                           |
-| `--mp4box-location` / `mp4box_location`                         | Location of the MP4Box binary.                                                               | `MP4Box`                           |
-| `--mp4decrypt-location` / `mp4decrypt_location`                 | Location of the mp4decrypt binary.                                                           | `mp4decrypt`                       |
-| `--nm3u8dlre-location` / `nm3u8dlre_location`                   | Location of the N_m3u8DL-RE binary.                                                          | `N_m3u8DL-RE`                      |
-| `--config-location` / -                                         | Location of the config file.                                                                 | `<home_folder>/.gamdl/config.json` |
-| `--template-folder-album` / `template_folder_album`             | Template of the album folders as a format string.                                            | `{album_artist}/{album}`           |
-| `--template-folder-compilation` / `template_folder_compilation` | Template of the compilation album folders as a format string.                                | `Compilations/{album}`             |
-| `--template-file-single-disc` / `template_file_single_disc`     | Template of the track files for single-disc albums as a format string.                       | `{track:02d} {title}`              |
-| `--template-file-multi-disc` / `template_file_multi_disc`       | Template of the track files for multi-disc albums as a format string.                        | `{disc}-{track:02d} {title}`       |
-| `--template-folder-music-video` / `template_folder_music_video` | Template of the music video folders as a format string.                                      | `{artist}/Unknown Album`           |
-| `--template-file-music-video` / `template_file_music_video`     | Template of the music video files as a format string.                                        | `{title}`                          |
-| `--cover-size` / `cover_size`                                   | Size of the cover.                                                                           | `1200`                             |
-| `--template-date` / `template_date`                             | Template of the tagged date as a string format codes (by default uses ISO 8601 date format). | ``                                 |
-| `--cover-format` / `cover_format`                               | Format of the cover.                                                                         | `jpg`                              |
-| `--remux-mode` / `remux_mode`                                   | Remux mode.                                                                                  | `ffmpeg`                           |
-| `--download-mode` / `download_mode`                             | Download mode.                                                                               | `ytdlp`                            |
-| `-e`, `--exclude-tags` / `exclude_tags`                         | List of tags to exclude from file tagging separated by commas.                               | `null`                             |
-| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                                                     | `40`                               |
-| `-l`, `--log-level` / `log_level`                               | Log level.                                                                                   | `INFO`                             |
-| `--prefer-original-language` / `prefer_original_language`       | Prefer the language associated with the account rather than English.                         | `false`                            |
-| `--prefer-hevc` / `prefer_hevc`                                 | Prefer HEVC over AVC when downloading music videos.                                          | `false`                            |
-| `--ask-video-format` / `ask_video_format`                       | Ask for the video format when downloading music videos.                                      | `false`                            |
-| `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                                     | `false`                            |
-| `-l`, `--lrc-only` / `lrc_only`                                 | Download only the synced lyrics.                                                             | `false`                            |
-| `-n`, `--no-lrc` / `no_lrc`                                     | Don't download the synced lyrics.                                                            | `false`                            |
-| `-s`, `--save-cover` / `save_cover`                             | Save cover as a separate file.                                                               | `false`                            |
-| `--songs-heaac` / `songs_heaac`                                 | Download songs in HE-AAC 64kbps.                                                             | `false`                            |
-| `-o`, `--overwrite` / `overwrite`                               | Overwrite existing files.                                                                    | `false`                            |
-| `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                                            | `false`                            |
-| `-u`, `--url-txt` / -                                           | Read URLs as location of text files containing URLs.                                         | `false`                            |
-| `-n`, `--no-config-file` / -                                    | Don't use the config file.                                                                   | `false`                            |
+| Command line argument / Config file key                         | Description                                                            | Default value                      |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| `-f`, `--final-path` / `final_path`                             | Path where the downloaded files will be saved.                         | `./Apple Music`                    |
+| `-t`, `--temp-path` / `temp_path`                               | Path where the temporary files will be saved.                          | `./temp`                           |
+| `-c`, `--cookies-location` / `cookies_location`                 | Location of the cookies file.                                          | `./cookies.txt`                    |
+| `-w`, `--wvd-location` / `wvd_location`                         | Location of the .wvd file.                                             | `./device.wvd`                     |
+| `--ffmpeg-location` / `ffmpeg_location`                         | Location of the FFmpeg binary.                                         | `ffmpeg`                           |
+| `--mp4box-location` / `mp4box_location`                         | Location of the MP4Box binary.                                         | `MP4Box`                           |
+| `--mp4decrypt-location` / `mp4decrypt_location`                 | Location of the mp4decrypt binary.                                     | `mp4decrypt`                       |
+| `--nm3u8dlre-location` / `nm3u8dlre_location`                   | Location of the N_m3u8DL-RE binary.                                    | `N_m3u8DL-RE`                      |
+| `--config-location` / -                                         | Location of the config file.                                           | `<home_folder>/.gamdl/config.json` |
+| `--template-folder-album` / `template_folder_album`             | Template of the album folders as a format string.                      | `{album_artist}/{album}`           |
+| `--template-folder-compilation` / `template_folder_compilation` | Template of the compilation album folders as a format string.          | `Compilations/{album}`             |
+| `--template-file-single-disc` / `template_file_single_disc`     | Template of the track files for single-disc albums as a format string. | `{track:02d} {title}`              |
+| `--template-file-multi-disc` / `template_file_multi_disc`       | Template of the track files for multi-disc albums as a format string.  | `{disc}-{track:02d} {title}`       |
+| `--template-folder-music-video` / `template_folder_music_video` | Template of the music video folders as a format string.                | `{artist}/Unknown Album`           |
+| `--template-file-music-video` / `template_file_music_video`     | Template of the music video files as a format string.                  | `{title}`                          |
+| `--cover-size` / `cover_size`                                   | Size of the cover.                                                     | `1200`                             |
+| `--template-date` / `template_date`                             | Template of the tagged date as a string with format codes.             | `%Y-%m-%dT%H:%M:%SZ`               |
+| `--cover-format` / `cover_format`                               | Format of the cover.                                                   | `jpg`                              |
+| `--remux-mode` / `remux_mode`                                   | Remux mode.                                                            | `ffmpeg`                           |
+| `--download-mode` / `download_mode`                             | Download mode.                                                         | `ytdlp`                            |
+| `-e`, `--exclude-tags` / `exclude_tags`                         | List of tags to exclude from file tagging separated by commas.         | `null`                             |
+| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                               | `40`                               |
+| `-l`, `--log-level` / `log_level`                               | Log level.                                                             | `INFO`                             |
+| `--prefer-original-language` / `prefer_original_language`       | Prefer the language associated with the account rather than English.   | `false`                            |
+| `--prefer-hevc` / `prefer_hevc`                                 | Prefer HEVC over AVC when downloading music videos.                    | `false`                            |
+| `--ask-video-format` / `ask_video_format`                       | Ask for the video format when downloading music videos.                | `false`                            |
+| `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.               | `false`                            |
+| `-l`, `--lrc-only` / `lrc_only`                                 | Download only the synced lyrics.                                       | `false`                            |
+| `-n`, `--no-lrc` / `no_lrc`                                     | Don't download the synced lyrics.                                      | `false`                            |
+| `-s`, `--save-cover` / `save_cover`                             | Save cover as a separate file.                                         | `false`                            |
+| `--songs-heaac` / `songs_heaac`                                 | Download songs in HE-AAC 64kbps.                                       | `false`                            |
+| `-o`, `--overwrite` / `overwrite`                               | Overwrite existing files.                                              | `false`                            |
+| `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                      | `false`                            |
+| `-u`, `--url-txt` / -                                           | Read URLs as location of text files containing URLs.                   | `false`                            |
+| `-n`, `--no-config-file` / -                                    | Don't use the config file.                                             | `false`                            |
 
 
 ### Tags variables

@@ -143,9 +143,10 @@ def no_config_callback(
     help="Template of the music video files as a format string.",
 )
 @click.option(
-    "--prefer-original-language",
-    is_flag=True,
-    help="Prefer the language associated with the account rather than English.",
+    "--template-date",
+    type=str,
+    default="",
+    help="Template of the tagged date as a string with format codes (by default uses ISO 8601 date format).",
 )
 @click.option(
     "--cover-size",
@@ -190,6 +191,11 @@ def no_config_callback(
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
     default="INFO",
     help="Log level.",
+)
+@click.option(
+    "--prefer-original-language",
+    is_flag=True,
+    help="Prefer the language associated with the account rather than English.",
 )
 @click.option(
     "--prefer-hevc",
@@ -272,6 +278,7 @@ def main(
     template_file_multi_disc: str,
     template_folder_music_video: str,
     template_file_music_video: str,
+    template_date: str,
     cover_size: int,
     cover_format: str,
     remux_mode: str,

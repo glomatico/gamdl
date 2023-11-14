@@ -423,7 +423,7 @@ class Downloader:
             else None,
             "composer_sort": metadata.get("sort-composer"),
             "copyright": metadata.get("copyright"),
-            "date": metadata.get("releaseDate"),
+            "date": str(metadata.get("releaseDate")).rsplit("T", 1)[0],
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],

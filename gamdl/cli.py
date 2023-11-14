@@ -145,8 +145,8 @@ def no_config_callback(
 @click.option(
     "--template-date",
     type=str,
-    default="",
-    help="Template of the tagged date as a string with format codes (by default uses ISO 8601 date format).",
+    default="%Y-%m-%dT%H:%M:%SZ",
+    help="Template of the tagged date as a string with format codes.",
 )
 @click.option(
     "--cover-size",

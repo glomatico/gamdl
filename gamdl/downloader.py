@@ -43,6 +43,7 @@ class Downloader:
         exclude_tags: str = None,
         truncate: int = None,
         prefer_hevc: bool = None,
+        prefer_account_language: bool = None,
         ask_video_format: bool = None,
         songs_heaac: bool = None,
         **kwargs,
@@ -79,6 +80,7 @@ class Downloader:
         )
         self.truncate = None if truncate is not None and truncate < 4 else truncate
         self.prefer_hevc = prefer_hevc
+        self.prefer_account_language = prefer_account_language
         self.ask_video_format = ask_video_format
         self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
 
@@ -179,12 +181,12 @@ class Downloader:
             raise Exception("Invalid URL")
         return catalog_resource_type, download_queue
 
-    def get_webplayback(self, track_id: str, use_original_language: bool = None) -> dict:
+    def get_webplayback(self, track_id: str) -> dict:
         webplayback_response = self.session.post(
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
             json={
                 "salableAdamId": track_id,
-                "language": "" if use_original_language else "en-US",
+                "language": "" if self.prefer_account_language else "en-US",
             },
         )
         if webplayback_response.status_code != 200:
@@ -362,10 +364,8 @@ class Downloader:
             ms = int(mins_secs_ms[-1])
         else:
             secs = float(f"{mins_secs_ms[-2]}.{mins_secs_ms[-1]}")
-            try:
+            if len(mins_secs_ms) > 2:
                 mins = int(mins_secs_ms[-3])
-            except IndexError:
-                pass
         timestamp_lrc = datetime.datetime.fromtimestamp(
             (mins * 60) + secs + (ms / 1000)
         )
@@ -452,7 +452,7 @@ class Downloader:
                 "id": track_id,
                 "entity": "album",
                 "country": self.country,
-                "lang": "en_US",
+                "lang": "" if self.prefer_account_language else "en_US"
             },
         )
         if metadata_response.status_code != 200:
@@ -509,10 +509,10 @@ class Downloader:
         return dirty_string.strip()
 
     def get_final_location(self, tags: dict) -> Path:
-        if "album" in tags:
+        if tags.get("album"):
             final_location_folder = (
                 self.template_folder_compilation.split("/")
-                if "compilation" in tags and tags["compilation"]
+                if tags.get("compilation")
                 else self.template_folder_album.split("/")
             )
             final_location_file = (
@@ -667,15 +667,15 @@ class Downloader:
                     else MP4Cover.FORMAT_PNG,
                 )
             ]
-        if "disc" not in self.exclude_tags and "disc" in tags:
+        if "disc" not in self.exclude_tags and tags.get("disc"):
             mp4_tags["disk"][0][0] = tags["disc"]
-        if "disc_total" not in self.exclude_tags and "disc_total" in tags:
+        if "disc_total" not in self.exclude_tags and tags.get("disc_total"):
             mp4_tags["disk"][0][1] = tags["disc_total"]
-        if "gapless" not in self.exclude_tags and "gapless" in tags:
+        if "gapless" not in self.exclude_tags and tags.get("gapless"):
             mp4_tags["pgap"] = tags["gapless"]
-        if "track" not in self.exclude_tags and "track" in tags:
+        if "track" not in self.exclude_tags and tags.get("track"):
             mp4_tags["trkn"][0][0] = tags["track"]
-        if "track_total" not in self.exclude_tags and "track_total" in tags:
+        if "track_total" not in self.exclude_tags and tags.get("track_total"):
             mp4_tags["trkn"][0][1] = tags["track_total"]
         mp4 = MP4(fixed_location)
         mp4.clear()

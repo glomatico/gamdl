@@ -193,14 +193,14 @@ def no_config_callback(
     help="Log level.",
 )
 @click.option(
-    "--prefer-original-language",
-    is_flag=True,
-    help="Prefer the language associated with the account rather than English.",
-)
-@click.option(
     "--prefer-hevc",
     is_flag=True,
     help="Prefer HEVC over AVC when downloading music videos.",
+)
+@click.option(
+    "--prefer-account-language",
+    is_flag=True,
+    help="Prefer the language associated with the account rather than English."
 )
 @click.option(
     "--ask-video-format",
@@ -287,6 +287,7 @@ def main(
     truncate: int,
     log_level: str,
     prefer_hevc: bool,
+    prefer_account_language: bool,
     ask_video_format: bool,
     disable_music_video_skip: bool,
     lrc_only: bool,
@@ -297,7 +298,6 @@ def main(
     print_exceptions: bool,
     url_txt: bool,
     no_config_file: bool,
-    prefer_original_language: bool
 ):
     logging.basicConfig(
         format="[%(levelname)-8s %(asctime)s] %(message)s",
@@ -380,7 +380,7 @@ def main(
                     continue
                 track_id = track["id"]
                 logger.debug("Getting webplayback")
-                webplayback = downloader.get_webplayback(track_id, prefer_original_language)
+                webplayback = downloader.get_webplayback(track_id)
                 cover_url = downloader.get_cover_url(webplayback)
                 if track["type"] == "songs":
                     if track["attributes"]["hasLyrics"]:
@@ -476,6 +476,7 @@ def main(
                             f"({current_track}) Music video is not downloadable with current settings, skipping"
                         )
                         continue
+                    logger.debug("Getting tags")
                     tags = downloader.get_tags_music_video(
                         track["attributes"]["url"].split("/")[-1].split("?")[0]
                     )

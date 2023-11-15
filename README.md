@@ -60,6 +60,7 @@ You can configure gamdl by using the command line arguments or the config file. 
 | `--template-folder-music-video` / `template_folder_music_video` | Template of the music video folders as a format string.                | `{artist}/Unknown Album`           |
 | `--template-file-music-video` / `template_file_music_video`     | Template of the music video files as a format string.                  | `{title}`                          |
 | `--cover-size` / `cover_size`                                   | Size of the cover.                                                     | `1200`                             |
+| `--template-date` / `template_date`                             | Template of the tagged date as a string with format codes.             | `%Y-%m-%dT%H:%M:%SZ`               |
 | `--cover-format` / `cover_format`                               | Format of the cover.                                                   | `jpg`                              |
 | `--remux-mode` / `remux_mode`                                   | Remux mode.                                                            | `ffmpeg`                           |
 | `--download-mode` / `download_mode`                             | Download mode.                                                         | `ytdlp`                            |
@@ -67,6 +68,7 @@ You can configure gamdl by using the command line arguments or the config file. 
 | `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                               | `40`                               |
 | `-l`, `--log-level` / `log_level`                               | Log level.                                                             | `INFO`                             |
 | `--prefer-hevc` / `prefer_hevc`                                 | Prefer HEVC over AVC when downloading music videos.                    | `false`                            |
+| `--prefer-account-language` / `prefer_account_language`         | Prefer the language associated with the account rather than English.   | `false`                            |
 | `--ask-video-format` / `ask_video_format`                       | Ask for the video format when downloading music videos.                | `false`                            |
 | `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.               | `false`                            |
 | `-l`, `--lrc-only` / `lrc_only`                                 | Download only the synced lyrics.                                       | `false`                            |
@@ -77,6 +79,7 @@ You can configure gamdl by using the command line arguments or the config file. 
 | `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                      | `false`                            |
 | `-u`, `--url-txt` / -                                           | Read URLs as location of text files containing URLs.                   | `false`                            |
 | `-n`, `--no-config-file` / -                                    | Don't use the config file.                                             | `false`                            |
+
 
 ### Tags variables
 The following variables can be used in the template folders/files and/or in the `exclude_tags` list:

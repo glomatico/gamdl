@@ -10,6 +10,7 @@ from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from xml.etree import ElementTree
 
+import ciso8601
 import m3u8
 import requests
 from mutagen.mp4 import MP4, MP4Cover
@@ -36,11 +37,13 @@ class Downloader:
         template_file_multi_disc: str = None,
         template_folder_music_video: str = None,
         template_file_music_video: str = None,
+        template_date: str = None,
         cover_size: int = None,
         cover_format: str = None,
         exclude_tags: str = None,
         truncate: int = None,
         prefer_hevc: bool = None,
+        prefer_account_language: bool = None,
         ask_video_format: bool = None,
         songs_heaac: bool = None,
         **kwargs,
@@ -67,6 +70,7 @@ class Downloader:
         self.template_file_multi_disc = template_file_multi_disc
         self.template_folder_music_video = template_folder_music_video
         self.template_file_music_video = template_file_music_video
+        self.template_date = template_date
         self.cover_size = cover_size
         self.cover_format = cover_format
         self.exclude_tags = (
@@ -76,6 +80,7 @@ class Downloader:
         )
         self.truncate = None if truncate is not None and truncate < 4 else truncate
         self.prefer_hevc = prefer_hevc
+        self.prefer_account_language = prefer_account_language
         self.ask_video_format = ask_video_format
         self.songs_flavor = "32:ctrp64" if songs_heaac else "28:ctrp256"
 
@@ -181,7 +186,7 @@ class Downloader:
             "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
             json={
                 "salableAdamId": track_id,
-                "language": "en-US",
+                "language": "" if self.prefer_account_language else "en-US",
             },
         )
         if webplayback_response.status_code != 200:
@@ -359,10 +364,8 @@ class Downloader:
             ms = int(mins_secs_ms[-1])
         else:
             secs = float(f"{mins_secs_ms[-2]}.{mins_secs_ms[-1]}")
-            try:
+            if len(mins_secs_ms) > 2:
                 mins = int(mins_secs_ms[-3])
-            except IndexError:
-                pass
         timestamp_lrc = datetime.datetime.fromtimestamp(
             (mins * 60) + secs + (ms / 1000)
         )
@@ -423,7 +426,7 @@ class Downloader:
             else None,
             "composer_sort": metadata.get("sort-composer"),
             "copyright": metadata.get("copyright"),
-            "date": metadata.get("releaseDate"),
+            "date": self.sanitize_date(metadata.get("releaseDate"), self.template_date),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],
@@ -449,7 +452,7 @@ class Downloader:
                 "id": track_id,
                 "entity": "album",
                 "country": self.country,
-                "lang": "en_US",
+                "lang": "" if self.prefer_account_language else "en_US"
             },
         )
         if metadata_response.status_code != 200:
@@ -470,7 +473,7 @@ class Downloader:
             "artist": metadata[0]["artistName"],
             "artist_id": metadata[0]["artistId"],
             "copyright": extra_metadata.get("copyright"),
-            "date": metadata[0]["releaseDate"],
+            "date": self.sanitize_date(metadata[0]["releaseDate"], self.template_date),
             "genre": metadata[0]["primaryGenreName"],
             "genre_id": int(extra_metadata["genres"][0]["genreId"]),
             "media_type": 6,
@@ -493,7 +496,7 @@ class Downloader:
             tags["track"] = metadata[0]["trackNumber"]
             tags["track_total"] = metadata[0]["trackCount"]
         return tags
-
+    
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(r'[\\/:*?"<>|;]', "_", dirty_string)
         if is_folder:
@@ -506,10 +509,10 @@ class Downloader:
         return dirty_string.strip()
 
     def get_final_location(self, tags: dict) -> Path:
-        if "album" in tags:
+        if tags.get("album"):
             final_location_folder = (
                 self.template_folder_compilation.split("/")
-                if "compilation" in tags and tags["compilation"]
+                if tags.get("compilation")
                 else self.template_folder_album.split("/")
             )
             final_location_file = (
@@ -535,6 +538,11 @@ class Downloader:
         return self.final_path.joinpath(*final_location_folder).joinpath(
             *final_location_file
         )
+        
+    @staticmethod
+    def sanitize_date(date: str, template_date: str):
+        datetime_obj = ciso8601.parse_datetime(date)
+        return datetime_obj.strftime(template_date)
 
     def decrypt(
         self, encrypted_location: Path, decrypted_location: Path, decryption_key: str
@@ -659,15 +667,15 @@ class Downloader:
                     else MP4Cover.FORMAT_PNG,
                 )
             ]
-        if "disc" not in self.exclude_tags and "disc" in tags:
+        if "disc" not in self.exclude_tags and tags.get("disc"):
             mp4_tags["disk"][0][0] = tags["disc"]
-        if "disc_total" not in self.exclude_tags and "disc_total" in tags:
+        if "disc_total" not in self.exclude_tags and tags.get("disc_total"):
             mp4_tags["disk"][0][1] = tags["disc_total"]
-        if "gapless" not in self.exclude_tags and "gapless" in tags:
+        if "gapless" not in self.exclude_tags and tags.get("gapless"):
             mp4_tags["pgap"] = tags["gapless"]
-        if "track" not in self.exclude_tags and "track" in tags:
+        if "track" not in self.exclude_tags and tags.get("track"):
             mp4_tags["trkn"][0][0] = tags["track"]
-        if "track_total" not in self.exclude_tags and "track_total" in tags:
+        if "track_total" not in self.exclude_tags and tags.get("track_total"):
             mp4_tags["trkn"][0][1] = tags["track_total"]
         mp4 = MP4(fixed_location)
         mp4.clear()

@@ -9,6 +9,7 @@ dependencies = [
     "pywidevine",
     "pyyaml",
     "yt-dlp"
+    "ciso8601"
 ]
 readme = "README.md"
 dynamic = ["version"]

@@ -143,6 +143,12 @@ def no_config_callback(
     help="Template of the music video files as a format string.",
 )
 @click.option(
+    "--template-date",
+    type=str,
+    default="%Y-%m-%dT%H:%M:%SZ",
+    help="Template of the tagged date as a string with format codes.",
+)
+@click.option(
     "--cover-size",
     type=int,
     default=1200,
@@ -190,6 +196,11 @@ def no_config_callback(
     "--prefer-hevc",
     is_flag=True,
     help="Prefer HEVC over AVC when downloading music videos.",
+)
+@click.option(
+    "--prefer-account-language",
+    is_flag=True,
+    help="Prefer the language associated with the account rather than English."
 )
 @click.option(
     "--ask-video-format",
@@ -267,6 +278,7 @@ def main(
     template_file_multi_disc: str,
     template_folder_music_video: str,
     template_file_music_video: str,
+    template_date: str,
     cover_size: int,
     cover_format: str,
     remux_mode: str,
@@ -275,6 +287,7 @@ def main(
     truncate: int,
     log_level: str,
     prefer_hevc: bool,
+    prefer_account_language: bool,
     ask_video_format: bool,
     disable_music_video_skip: bool,
     lrc_only: bool,
@@ -463,6 +476,7 @@ def main(
                             f"({current_track}) Music video is not downloadable with current settings, skipping"
                         )
                         continue
+                    logger.debug("Getting tags")
                     tags = downloader.get_tags_music_video(
                         track["attributes"]["url"].split("/")[-1].split("?")[0]
                     )

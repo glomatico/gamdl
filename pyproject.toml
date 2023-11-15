@@ -2,15 +2,8 @@
 name = "gamdl"
 description = "Download Apple Music songs/music videos/albums/playlists"
 requires-python = ">=3.7"
-authors = [{name = "glomatico"}]
-dependencies = [
-    "click",
-    "m3u8",
-    "pywidevine",
-    "pyyaml",
-    "yt-dlp"
-    "ciso8601"
-]
+authors = [{ name = "glomatico" }]
+dependencies = ["click", "m3u8", "pywidevine", "pyyaml", "yt-dlp", "ciso8601"]
 readme = "README.md"
 dynamic = ["version"]
 

@@ -452,7 +452,7 @@ class Downloader:
                 "id": track_id,
                 "entity": "album",
                 "country": self.country,
-                "lang": "" if self.prefer_account_language else "en_US"
+                "lang": "" if self.prefer_account_language else "en_US",
             },
         )
         if metadata_response.status_code != 200:
@@ -496,7 +496,7 @@ class Downloader:
             tags["track"] = metadata[0]["trackNumber"]
             tags["track_total"] = metadata[0]["trackCount"]
         return tags
-    
+
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(r'[\\/:*?"<>|;]', "_", dirty_string)
         if is_folder:
@@ -538,7 +538,7 @@ class Downloader:
         return self.final_path.joinpath(*final_location_folder).joinpath(
             *final_location_file
         )
-        
+
     @staticmethod
     def sanitize_date(date: str, template_date: str):
         datetime_obj = ciso8601.parse_datetime(date)
@@ -667,15 +667,15 @@ class Downloader:
                     else MP4Cover.FORMAT_PNG,
                 )
             ]
-        if "disc" not in self.exclude_tags and tags.get("disc"):
+        if "disc" not in self.exclude_tags and "disc" in tags:
             mp4_tags["disk"][0][0] = tags["disc"]
-        if "disc_total" not in self.exclude_tags and tags.get("disc_total"):
+        if "disc_total" not in self.exclude_tags and "disc_total" in tags:
             mp4_tags["disk"][0][1] = tags["disc_total"]
-        if "gapless" not in self.exclude_tags and tags.get("gapless"):
+        if "gapless" not in self.exclude_tags and "gapless" in tags:
             mp4_tags["pgap"] = tags["gapless"]
-        if "track" not in self.exclude_tags and tags.get("track"):
+        if "track" not in self.exclude_tags and "track" in tags:
             mp4_tags["trkn"][0][0] = tags["track"]
-        if "track_total" not in self.exclude_tags and tags.get("track_total"):
+        if "track_total" not in self.exclude_tags and "track_total" in tags:
             mp4_tags["trkn"][0][1] = tags["track_total"]
         mp4 = MP4(fixed_location)
         mp4.clear()

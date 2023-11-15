@@ -67,8 +67,8 @@ You can configure gamdl by using the command line arguments or the config file. 
 | `-e`, `--exclude-tags` / `exclude_tags`                         | List of tags to exclude from file tagging separated by commas.         | `null`                             |
 | `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                               | `40`                               |
 | `-l`, `--log-level` / `log_level`                               | Log level.                                                             | `INFO`                             |
-| `--prefer-original-language` / `prefer_original_language`       | Prefer the language associated with the account rather than English.   | `false`                            |
 | `--prefer-hevc` / `prefer_hevc`                                 | Prefer HEVC over AVC when downloading music videos.                    | `false`                            |
+| `--prefer-account-language` / `prefer_account_language`         | Prefer the language associated with the account rather than English.   | `false`                            |
 | `--ask-video-format` / `ask_video_format`                       | Ask for the video format when downloading music videos.                | `false`                            |
 | `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.               | `false`                            |
 | `-l`, `--lrc-only` / `lrc_only`                                 | Download only the synced lyrics.                                       | `false`                            |

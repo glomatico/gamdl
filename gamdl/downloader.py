@@ -14,7 +14,8 @@ import ciso8601
 import m3u8
 import requests
 from mutagen.mp4 import MP4, MP4Cover
-from pywidevine import PSSH, Cdm, Device, WidevinePsshData
+from pywidevine import PSSH, Cdm, Device
+from pywidevine.license_protocol_pb2 import WidevinePsshData
 from yt_dlp import YoutubeDL
 
 from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS

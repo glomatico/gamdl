@@ -161,7 +161,7 @@ class Downloader:
     def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []
         url_regex_result = re.search(
-            r"/([a-z]{2})/(album|playlist|song|music-video)/(.*)/([a-z]{2}.[0-9a-z]*|[0-9]*)(?:\?i=)?([0-9a-z]*)",
+            r"/([a-z]{2})/(album|playlist|song|music-video)/(.*)/([a-z]{2}\..*|[0-9]*)(?:\?i=)?([0-9a-z]*)",
             url,
         )
         catalog_resource_type = url_regex_result.group(2)

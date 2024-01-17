@@ -1,3 +1,13 @@
+URL_APPLE_MUSIC_HOMEPAGE = "https://beta.music.apple.com"
+URL_API_CATALOG = "https://amp-api.music.apple.com/v1/catalog"
+URL_API_WEBPLAYBACK = (
+    "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
+)
+URL_API_LICENSE = (
+    "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/acquireWebPlaybackLicense"
+)
+URL_API_LOOKUP = "https://itunes.apple.com/lookup"
+URL_API_ITUNES_PAGE = "https://music.apple.com/{resource_type}/{resource_id}"
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
     "AG": "143540-2,32",
@@ -155,7 +165,6 @@ STOREFRONT_IDS = {
     "ZA": "143472-2,32",
     "ZW": "143605-2,32",
 }
-
 MP4_TAGS_MAP = {
     "album": "\xa9alb",
     "album_artist": "aART",
@@ -181,7 +190,6 @@ MP4_TAGS_MAP = {
     "title_sort": "sonm",
     "xid": "xid ",
 }
-
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",
     "config_location",
@@ -190,5 +198,4 @@ EXCLUDED_CONFIG_FILE_PARAMS = (
     "version",
     "help",
 )
-
 X_NOT_FOUND_STRING = '{} not found at "{}"'

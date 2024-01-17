@@ -73,8 +73,12 @@ class AppleMusicApi:
             raise Exception(f"Failed to get resource:\n{response.text}")
         return response.json()["data"][0]
 
-    def get_song(self, song_id: str, extend: str = "extendedAssetUrls") -> dict:
-        return self._get_resource("songs", song_id, {"extend": extend})
+    def get_song(
+        self, song_id: str, extend: str = "extendedAssetUrls", include: str = "lyrics"
+    ) -> dict:
+        return self._get_resource(
+            "songs", song_id, {"extend": extend, "include": include}
+        )
 
     def get_music_video(self, music_video_id: str) -> dict:
         return self._get_resource("music-videos", music_video_id)
@@ -86,14 +90,6 @@ class AppleMusicApi:
         return self._get_resource(
             "playlists", playlist_id, {"limit[tracks]": limit_tracks}
         )
-
-    def get_lyrics(self, song_id: str) -> dict | None:
-        response = self.session.get(
-            f"{URL_API_CATALOG}/{self.storefront}/song/{song_id}/lyrics",
-        )
-        if response.status_code != 200 or not response.json().get("data"):
-            raise Exception(f"Failed to get lyrics:\n{response.text}")
-        return response.json()["data"][0].get("attributes")
 
     def get_webplayback(self, track_id: str) -> dict:
         response = self.session.post(
@@ -107,13 +103,13 @@ class AppleMusicApi:
             raise Exception(f"Failed to get webplayback:\n{response.text}")
         return response.json()["songList"][0]
 
-    def get_license(self, challenge: str, pssh: str, track_id: str) -> str:
+    def get_license(self, challenge: str, track_uri: str, track_id: str) -> str:
         response = self.session.post(
             URL_API_LICENSE,
             json={
                 "challenge": challenge,
                 "key-system": "com.widevine.alpha",
-                "uri": pssh,
+                "uri": track_uri,
                 "adamId": track_id,
                 "isLibrary": False,
                 "user-initiated": True,

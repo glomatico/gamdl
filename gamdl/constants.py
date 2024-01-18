@@ -7,7 +7,7 @@ URL_API_LICENSE = (
     "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/acquireWebPlaybackLicense"
 )
 URL_API_LOOKUP = "https://itunes.apple.com/lookup"
-URL_API_ITUNES_PAGE = "https://music.apple.com/{resource_type}/{resource_id}"
+URL_API_ITUNES_PAGE = "https://music.apple.com"
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
     "AG": "143540-2,32",

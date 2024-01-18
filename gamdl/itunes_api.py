@@ -32,9 +32,7 @@ class ItunesApi:
 
     def get_itunes_page(self, resource_type: str, resource_id: str) -> dict:
         response = self.session.get(
-            URL_API_ITUNES_PAGE.format(
-                resource_type=resource_type, resource_id=resource_id
-            ),
+            f"{URL_API_ITUNES_PAGE}/{resource_type}/{resource_id}"
         )
         if response.status_code != 200:
             raise Exception(f"Failed to get resource page:\n{response.text}")

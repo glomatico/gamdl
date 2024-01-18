@@ -93,7 +93,7 @@ class AppleMusicApi:
 
     def get_webplayback(self, track_id: str) -> dict:
         response = self.session.post(
-            "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
+            URL_API_WEBPLAYBACK,
             json={
                 "salableAdamId": track_id,
                 "language": self.language,

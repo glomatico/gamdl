@@ -30,10 +30,10 @@ class ItunesApi:
             raise Exception(f"Failed to get resource:\n{response.text}")
         return response.json()
 
-    def get_itunes_page(self, resource_type: str, resource_id: str) -> dict:
+    def get_resource_itunes_page(self, resource_type: str, resource_id: str) -> dict:
         response = self.session.get(
             f"{URL_API_ITUNES_PAGE}/{resource_type}/{resource_id}"
         )
         if response.status_code != 200:
-            raise Exception(f"Failed to get resource page:\n{response.text}")
+            raise Exception(f"Failed to get resource iTunes page:\n{response.text}")
         return response.json()

@@ -358,7 +358,10 @@ def main(
         current_url = f"URL {url_index}/{len(urls)}"
         try:
             logger.debug(f'({current_url}) Checking "{url}"')
-            download_queue.append(downloader.get_download_queue(url))
+            if url == "library":
+                download_queue.append(downloader.get_download_queue_library())
+            else:
+                download_queue.append(downloader.get_download_queue(url))
         except Exception:
             error_count += 1
             logger.error(

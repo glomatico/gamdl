@@ -9,6 +9,7 @@ import subprocess
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from xml.etree import ElementTree
+from time import sleep
 
 import ciso8601
 import m3u8
@@ -18,7 +19,7 @@ from pywidevine import PSSH, Cdm, Device
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 from yt_dlp import YoutubeDL
 
-from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS
+from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS, AMP_API_HOSTNAME
 
 
 class Downloader:
@@ -156,7 +157,34 @@ class Downloader:
         )
         if playlist_response.status_code != 200:
             raise Exception(f"Failed to get playlist: {playlist_response.text}")
-        return playlist_response.json()["data"][0]
+        
+        
+        first_response_data_object = playlist_response.json()["data"][0]
+        track_response = first_response_data_object["relationships"]["tracks"]
+        track_response_data = track_response["data"]
+
+        if "next" not in track_response:
+            return first_response_data_object
+        else:
+            extending = True
+            next_uri = track_response["next"]
+
+            while extending:
+                playlist_tracks_response = self.session.get(f"{AMP_API_HOSTNAME}{next_uri}")
+                playlist_tracks_response_json = playlist_tracks_response.json()
+                extending = "next" in playlist_tracks_response_json
+
+                playlist_tracks_response_json_data = playlist_tracks_response_json["data"]
+                # Doing a push to the array we are going to download the songs from
+                track_response_data.extend(playlist_tracks_response_json_data)
+
+                if extending:
+                    next_uri = playlist_tracks_response_json["next"]
+                    # I don't want to upset any kind of rate limits so lets give it a few seconds, if you have any clue on what the rate limits are adjust this to match them closely.
+                    # 3 Seconds to be safe, we can afford it since we only need to do it once
+                    sleep(3)
+
+        return first_response_data_object
 
     def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []

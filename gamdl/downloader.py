@@ -157,34 +157,29 @@ class Downloader:
         )
         if playlist_response.status_code != 200:
             raise Exception(f"Failed to get playlist: {playlist_response.text}")
+
+        return playlist_response.json()["data"][0]
+
+    def get_playlists_additional_tracks(self, next_uri) -> dict:
+        extending = True
+        additional_tracks = []
         
-        
-        first_response_data_object = playlist_response.json()["data"][0]
-        track_response = first_response_data_object["relationships"]["tracks"]
-        track_response_data = track_response["data"]
+        while extending:
+            playlist_tracks_response = self.session.get(f"{AMP_API_HOSTNAME}{next_uri}")
+            playlist_tracks_response_json = playlist_tracks_response.json()
+            extending = "next" in playlist_tracks_response_json
 
-        if "next" not in track_response:
-            return first_response_data_object
-        else:
-            extending = True
-            next_uri = track_response["next"]
+            playlist_tracks_response_json_data = playlist_tracks_response_json["data"]
+            # Doing a push to the array we are going to download the songs from
+            additional_tracks.extend(playlist_tracks_response_json_data)
 
-            while extending:
-                playlist_tracks_response = self.session.get(f"{AMP_API_HOSTNAME}{next_uri}")
-                playlist_tracks_response_json = playlist_tracks_response.json()
-                extending = "next" in playlist_tracks_response_json
+            if extending:
+                next_uri = playlist_tracks_response_json["next"]
+                # I don't want to upset any kind of rate limits so lets give it a few seconds, if you have any clue on what the rate limits are adjust this to match them closely.
+                # 3 Seconds to be safe, we can afford it since we only need to do it once
+                sleep(3)
 
-                playlist_tracks_response_json_data = playlist_tracks_response_json["data"]
-                # Doing a push to the array we are going to download the songs from
-                track_response_data.extend(playlist_tracks_response_json_data)
-
-                if extending:
-                    next_uri = playlist_tracks_response_json["next"]
-                    # I don't want to upset any kind of rate limits so lets give it a few seconds, if you have any clue on what the rate limits are adjust this to match them closely.
-                    # 3 Seconds to be safe, we can afford it since we only need to do it once
-                    sleep(3)
-
-        return first_response_data_object
+        return additional_tracks
 
     def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []
@@ -203,9 +198,20 @@ class Downloader:
                 self.get_album(catalog_id)["relationships"]["tracks"]["data"]
             )
         elif catalog_resource_type == "playlist":
+            playlist = self.get_playlist(catalog_id)
+            tracks_response = playlist["relationships"]["tracks"]
+
             download_queue.extend(
-                self.get_playlist(catalog_id)["relationships"]["tracks"]["data"]
+                tracks_response["data"]
             )
+
+            if "next" not in tracks_response:
+                return catalog_resource_type, download_queue
+            download_queue.extend(
+                self.get_playlists_additional_tracks(tracks_response["next"])
+            )
+
+            return catalog_resource_type, download_queue
         else:
             raise Exception("Invalid URL")
         return catalog_resource_type, download_queue

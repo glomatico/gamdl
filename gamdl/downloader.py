@@ -126,7 +126,7 @@ class Downloader:
 
     def get_song(self, song_id: str) -> dict:
         song_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{song_id}"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/songs/{song_id}"
         )
         if song_response.status_code != 200:
             raise Exception(f"Failed to get song: {song_response.text}")
@@ -134,7 +134,7 @@ class Downloader:
 
     def get_music_video(self, music_video_id: str) -> dict:
         music_video_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/music-videos/{music_video_id}"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/music-videos/{music_video_id}"
         )
         if music_video_response.status_code != 200:
             raise Exception(f"Failed to get music video: {music_video_response.text}")
@@ -142,7 +142,7 @@ class Downloader:
 
     def get_album(self, album_id: str) -> dict:
         album_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/albums/{album_id}"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/albums/{album_id}"
         )
         if album_response.status_code != 200:
             raise Exception(f"Failed to get album: {album_response.text}")
@@ -150,7 +150,7 @@ class Downloader:
 
     def get_playlist(self, playlist_id: str) -> dict:
         playlist_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/playlists/{playlist_id}",
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/playlists/{playlist_id}",
             params={
                 "limit[tracks]": 300,
             },
@@ -414,7 +414,7 @@ class Downloader:
 
     def get_lyrics(self, track_id: str) -> tuple[str, str]:
         lyrics = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/songs/{track_id}/lyrics"
         ).json()
         if lyrics["data"][0].get("attributes") is None:
             return None, None

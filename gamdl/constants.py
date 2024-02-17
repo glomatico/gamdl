@@ -1,5 +1,5 @@
 APPLE_MUSIC_HOMEPAGE_URL = "https://beta.music.apple.com"
-CATALOG_API_URL = "https://amp-api.music.apple.com/v1/catalog"
+AMP_API_URL = "https://amp-api.music.apple.com/v1/catalog"
 WEBPLAYBACK_API_URL = (
     "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
 )

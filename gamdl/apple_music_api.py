@@ -68,7 +68,7 @@ class AppleMusicApi:
         params: dict = None,
     ) -> dict:
         response = self.session.get(
-            f"{CATALOG_API_URL}/{self.storefront}/{resource_type}/{resource_id}",
+            f"{AMP_API_URL}/{self.storefront}/{resource_type}/{resource_id}",
             params=params,
         )
         if (

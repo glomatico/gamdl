@@ -9,6 +9,7 @@ import subprocess
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from xml.etree import ElementTree
+from time import sleep
 
 import ciso8601
 import m3u8
@@ -18,7 +19,7 @@ from pywidevine import PSSH, Cdm, Device
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 from yt_dlp import YoutubeDL
 
-from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS
+from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS, AMP_API_HOSTNAME
 
 
 class Downloader:
@@ -125,7 +126,7 @@ class Downloader:
 
     def get_song(self, song_id: str) -> dict:
         song_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{song_id}"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/songs/{song_id}"
         )
         if song_response.status_code != 200:
             raise Exception(f"Failed to get song: {song_response.text}")
@@ -133,7 +134,7 @@ class Downloader:
 
     def get_music_video(self, music_video_id: str) -> dict:
         music_video_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/music-videos/{music_video_id}"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/music-videos/{music_video_id}"
         )
         if music_video_response.status_code != 200:
             raise Exception(f"Failed to get music video: {music_video_response.text}")
@@ -141,7 +142,7 @@ class Downloader:
 
     def get_album(self, album_id: str) -> dict:
         album_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/albums/{album_id}"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/albums/{album_id}"
         )
         if album_response.status_code != 200:
             raise Exception(f"Failed to get album: {album_response.text}")
@@ -149,14 +150,36 @@ class Downloader:
 
     def get_playlist(self, playlist_id: str) -> dict:
         playlist_response = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/playlists/{playlist_id}",
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/playlists/{playlist_id}",
             params={
                 "limit[tracks]": 300,
             },
         )
         if playlist_response.status_code != 200:
             raise Exception(f"Failed to get playlist: {playlist_response.text}")
+
         return playlist_response.json()["data"][0]
+
+    def get_playlists_additional_tracks(self, next_uri) -> dict:
+        extending = True
+        additional_tracks = []
+        
+        while extending:
+            playlist_tracks_response = self.session.get(f"{AMP_API_HOSTNAME}{next_uri}")
+            playlist_tracks_response_json = playlist_tracks_response.json()
+            extending = "next" in playlist_tracks_response_json
+
+            playlist_tracks_response_json_data = playlist_tracks_response_json["data"]
+            # Doing a push to the array we are going to download the songs from
+            additional_tracks.extend(playlist_tracks_response_json_data)
+
+            if extending:
+                next_uri = playlist_tracks_response_json["next"]
+                # I don't want to upset any kind of rate limits so lets give it a few seconds, if you have any clue on what the rate limits are adjust this to match them closely.
+                # 3 Seconds to be safe, we can afford it since we only need to do it once
+                sleep(3)
+
+        return additional_tracks
 
     def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []
@@ -175,9 +198,20 @@ class Downloader:
                 self.get_album(catalog_id)["relationships"]["tracks"]["data"]
             )
         elif catalog_resource_type == "playlist":
+            playlist = self.get_playlist(catalog_id)
+            tracks_response = playlist["relationships"]["tracks"]
+
             download_queue.extend(
-                self.get_playlist(catalog_id)["relationships"]["tracks"]["data"]
+                tracks_response["data"]
             )
+
+            if "next" not in tracks_response:
+                return catalog_resource_type, download_queue
+            download_queue.extend(
+                self.get_playlists_additional_tracks(tracks_response["next"])
+            )
+
+            return catalog_resource_type, download_queue
         else:
             raise Exception("Invalid URL")
         return catalog_resource_type, download_queue
@@ -380,7 +414,7 @@ class Downloader:
 
     def get_lyrics(self, track_id: str) -> tuple[str, str]:
         lyrics = self.session.get(
-            f"https://amp-api.music.apple.com/v1/catalog/{self.country}/songs/{track_id}/lyrics"
+            f"{AMP_API_HOSTNAME}/v1/catalog/{self.country}/songs/{track_id}/lyrics"
         ).json()
         if lyrics["data"][0].get("attributes") is None:
             return None, None

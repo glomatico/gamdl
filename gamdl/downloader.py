@@ -158,6 +158,28 @@ class Downloader:
             raise Exception(f"Failed to get playlist: {playlist_response.text}")
         return playlist_response.json()["data"][0]
 
+    def get_library(self) -> dict:
+        tracks = []
+        base_url = "https://amp-api.music.apple.com"
+        next_url = "/v1/me/library/songs"
+        while next_url:
+            library_response = self.session.get(base_url + next_url, params={"limit":100})
+            js = library_response.json()
+            next_url = js.get("next", False)
+            tracks.extend(js["data"])
+        return tracks
+
+    def get_download_queue_library(self) -> tuple[str, list[dict]]:
+        download_queue = []
+        for song in self.get_library():
+            catalog_song_id = song["attributes"].get("playParams", {}).get("catalogId", None)
+            if catalog_song_id is not None: 
+                try:  # For songs that had been removed from the catalog
+                    download_queue.append(self.get_song(catalog_song_id))
+                except:
+                    pass
+        return "song", download_queue
+
     def get_download_queue(self, url: str) -> tuple[str, list[dict]]:
         download_queue = []
         url_regex_result = re.search(

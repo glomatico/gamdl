@@ -8,8 +8,8 @@ import shutil
 import subprocess
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
-from xml.etree import ElementTree
 from time import sleep
+from xml.etree import ElementTree
 
 import ciso8601
 import m3u8
@@ -19,7 +19,7 @@ from pywidevine import PSSH, Cdm, Device
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 from yt_dlp import YoutubeDL
 
-from gamdl.constants import MP4_TAGS_MAP, STOREFRONT_IDS, AMP_API_HOSTNAME
+from gamdl.constants import AMP_API_HOSTNAME, MP4_TAGS_MAP, STOREFRONT_IDS
 
 
 class Downloader:
@@ -163,7 +163,7 @@ class Downloader:
     def get_playlists_additional_tracks(self, next_uri) -> dict:
         extending = True
         additional_tracks = []
-        
+
         while extending:
             playlist_tracks_response = self.session.get(f"{AMP_API_HOSTNAME}{next_uri}")
             playlist_tracks_response_json = playlist_tracks_response.json()
@@ -201,9 +201,7 @@ class Downloader:
             playlist = self.get_playlist(catalog_id)
             tracks_response = playlist["relationships"]["tracks"]
 
-            download_queue.extend(
-                tracks_response["data"]
-            )
+            download_queue.extend(tracks_response["data"])
 
             if "next" not in tracks_response:
                 return catalog_resource_type, download_queue
@@ -456,12 +454,16 @@ class Downloader:
             "comments": metadata.get("comments"),
             "compilation": metadata["compilation"],
             "composer": metadata.get("composerName"),
-            "composer_id": int(metadata.get("composerId"))
-            if metadata.get("composerId")
-            else None,
+            "composer_id": (
+                int(metadata.get("composerId")) if metadata.get("composerId") else None
+            ),
             "composer_sort": metadata.get("sort-composer"),
             "copyright": metadata.get("copyright"),
-            "date": self.sanitize_date(metadata.get("releaseDate"), self.template_date),
+            "date": (
+                self.sanitize_date(metadata["releaseDate"], self.template_date)
+                if metadata.get("releaseDate")
+                else None
+            ),
             "disc": metadata["discNumber"],
             "disc_total": metadata["discCount"],
             "gapless": metadata["gapless"],
@@ -697,9 +699,11 @@ class Downloader:
             mp4_tags["covr"] = [
                 MP4Cover(
                     self.get_cover(cover_url),
-                    imageformat=MP4Cover.FORMAT_JPEG
-                    if self.cover_format == "jpg"
-                    else MP4Cover.FORMAT_PNG,
+                    imageformat=(
+                        MP4Cover.FORMAT_JPEG
+                        if self.cover_format == "jpg"
+                        else MP4Cover.FORMAT_PNG
+                    ),
                 )
             ]
         if "disc" not in self.exclude_tags and "disc" in tags:

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import os
 import json
 import logging
 from pathlib import Path
 
 import click
-
 from . import __version__
 from .constants import *
 from .downloader import Downloader
@@ -13,6 +13,9 @@ from .downloader import Downloader
 
 def write_default_config_file(ctx: click.Context) -> None:
     ctx.params["config_location"].parent.mkdir(parents=True, exist_ok=True)
+    for param in (param for param in ctx.command.params) :
+        if callable(param.default) and param.default.__name__ == '<lambda>':
+            param.default = param.default()
     config_file = {
         param.name: param.default
         for param in ctx.command.params
@@ -52,210 +55,222 @@ def no_config_callback(
     "--final-path",
     "-f",
     type=Path,
-    default="./Apple Music",
+    default=lambda: os.environ.get("GAMDL_FINAL_PATH", "./Apple Music"),
     help="Path where the downloaded files will be saved.",
 )
 @click.option(
     "--temp-path",
     "-t",
     type=Path,
-    default="./temp",
+    default=lambda: os.environ.get("GAMDL_TEMP_PATH", "./temp"),
     help="Path where the temporary files will be saved.",
 )
 @click.option(
     "--cookies-location",
     "-c",
     type=Path,
-    default="./cookies.txt",
+    default=lambda: os.environ.get("GAMDL_COOKIES_LOCATION", "./cookies.txt"),
     help="Location of the cookies file.",
 )
 @click.option(
     "--wvd-location",
     "-w",
     type=Path,
-    default="./device.wvd",
+    default=lambda: os.environ.get("GAMDL_WVD_LOCATION", "./device.wvd"),
     help="Location of the .wvd file.",
 )
 @click.option(
     "--ffmpeg-location",
     type=str,
-    default="ffmpeg",
+    default=lambda: os.environ.get("GAMDL_FFMPEG_LOCATION", "ffmpeg"),
     help="Location of the FFmpeg binary.",
 )
 @click.option(
     "--mp4box-location",
     type=str,
-    default="MP4Box",
+    default=lambda: os.environ.get("GAMDL_MP4BOX_LOCATION", "MP4Box"),
     help="Location of the MP4Box binary.",
 )
 @click.option(
     "--mp4decrypt-location",
     type=str,
-    default="mp4decrypt",
+    default=lambda: os.environ.get("GAMDL_MP4DECRYPT_LOCATION", "mp4decrypt"),
     help="Location of the mp4decrypt binary.",
 )
 @click.option(
     "--nm3u8dlre-location",
     type=str,
-    default="N_m3u8DL-RE",
+    default=lambda: os.environ.get("GAMDL_NM3U8DLRE_LOCATION", "N_m3u8DL-RE"),
     help="Location of the N_m3u8DL-RE binary.",
 )
 @click.option(
     "--config-location",
     type=Path,
-    default=Path.home() / ".gamdl" / "config.json",
+    default=lambda: os.environ.get("GAMDL_CONFIG_LOCATION", Path.home() / ".gamdl" / "config.json"),
     help="Location of the config file.",
 )
 @click.option(
     "--template-folder-album",
     type=str,
-    default="{album_artist}/{album}",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_FOLDER_ALBUM", "{album_artist}/{album}"),
     help="Template of the album folders as a format string.",
 )
 @click.option(
     "--template-folder-compilation",
     type=str,
-    default="Compilations/{album}",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_FOLDER_COMPILATION", "Compilations/{album}"),
     help="Template of the compilation album folders as a format string.",
 )
 @click.option(
     "--template-file-single-disc",
     type=str,
-    default="{track:02d} {title}",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_FILE_SINGLE_DISC", "{track:02d} {title}"),
     help="Template of the track files for single-disc albums as a format string.",
 )
 @click.option(
     "--template-file-multi-disc",
     type=str,
-    default="{disc}-{track:02d} {title}",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_FILE_MULTI_DISC", "{disc}-{track:02d} {title}"),
     help="Template of the track files for multi-disc albums as a format string.",
 )
 @click.option(
     "--template-folder-music-video",
     type=str,
-    default="{artist}/Unknown Album",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_FOLDER_MUSIC_VIDEO", "{artist}/Unknown Album"),
     help="Template of the music video folders as a format string.",
 )
 @click.option(
     "--template-file-music-video",
     type=str,
-    default="{title}",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_FILE_MUSIC_VIDEO", "{title}"),
     help="Template of the music video files as a format string.",
 )
 @click.option(
     "--template-date",
     type=str,
-    default="%Y-%m-%dT%H:%M:%SZ",
+    default=lambda: os.environ.get("GAMDL_TEMPLATE_DATE", "%Y-%m-%dT%H:%M:%SZ"),
     help="Template of the tagged date as a string with format codes.",
 )
 @click.option(
     "--cover-size",
     type=int,
-    default=1200,
+    default=lambda: os.environ.get("GAMDL_COVER_SIZE", 1200),
     help="Size of the cover.",
 )
 @click.option(
     "--cover-format",
     type=click.Choice(["jpg", "png"]),
-    default="jpg",
+    default=lambda: os.environ.get("GAMDL_COVER_FORMAT", "jpg"),
     help="Format of the cover.",
 )
 @click.option(
     "--remux-mode",
     type=click.Choice(["ffmpeg", "mp4box"]),
-    default="ffmpeg",
+    default=lambda: os.environ.get("GAMDL_REMUX_MODE", "ffmpeg"),
     help="Remux mode.",
 )
 @click.option(
     "--download-mode",
     type=click.Choice(["ytdlp", "nm3u8dlre"]),
-    default="ytdlp",
+    default=lambda: os.environ.get("GAMDL_DOWNLOAD_MODE", "ytdlp"),
     help="Download mode.",
 )
 @click.option(
     "--exclude-tags",
     "-e",
     type=str,
-    default=None,
+    default=lambda: os.environ.get("GAMDL_EXCLUDE_TAGS", None),
     help="List of tags to exclude from file tagging separated by commas.",
 )
 @click.option(
     "--truncate",
     type=int,
-    default=40,
+    default=lambda: os.environ.get("GAMDL_TRUNCATE", 40),
     help="Maximum length of the file/folder names.",
 )
 @click.option(
     "--log-level",
     "-l",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-    default="INFO",
+    default=lambda: os.environ.get("GAMDL_LOG_LEVEL", "INFO"),
     help="Log level.",
 )
 @click.option(
     "--prefer-hevc",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_PREFER_HEVC", "False").lower() in ('true', '1', 'yes') else False,
     help="Prefer HEVC over AVC when downloading music videos.",
 )
 @click.option(
     "--prefer-account-language",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_PREFER_ACCOUNT_LANGUAGE", "False").lower() in ('true', '1', 'yes') else False,
     help="Prefer the language associated with the account rather than English."
 )
 @click.option(
     "--ask-video-format",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_ASK_VIDEO_FORMAT", "False").lower() in ('true', '1', 'yes') else False,
     help="Ask for the video format when downloading music videos.",
 )
 @click.option(
     "--disable-music-video-skip",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_DISABLE_MUSIC_VIDEO_SKIP", "False").lower() in ('true', '1', 'yes') else False,
     help="Don't skip downloading music videos in albums/playlists.",
 )
 @click.option(
     "--lrc-only",
     "-l",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_LRC_ONLY", "False").lower() in ('true', '1', 'yes') else False,
     help="Download only the synced lyrics.",
 )
 @click.option(
     "--no-lrc",
     "-n",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_NO_LRC", "False").lower() in ('true', '1', 'yes') else False,
     help="Don't download the synced lyrics.",
 )
 @click.option(
     "--save-cover",
     "-s",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_SAVE_COVER", "False").lower() in ('true', '1', 'yes') else False,
     help="Save cover as a separate file.",
 )
 @click.option(
     "--songs-heaac",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_SONGS_HEAAC", "False").lower() in ('true', '1', 'yes') else False,
     help="Download songs in HE-AAC 64kbps.",
 )
 @click.option(
     "--overwrite",
     "-o",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_OVERWRITE", "False").lower() in ('true', '1', 'yes') else False,
     help="Overwrite existing files.",
 )
 @click.option(
     "--print-exceptions",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_PRINT_EXCEPTIONS", "False").lower() in ('true', '1', 'yes') else False,
     help="Print exceptions.",
 )
 @click.option(
     "--url-txt",
     "-u",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_URL_TXT", "False").lower() in ('true', '1', 'yes') else False,
     help="Read URLs as location of text files containing URLs.",
 )
 @click.option(
     "--no-config-file",
     "-n",
     is_flag=True,
+    default=lambda: True if os.environ.get("GAMDL_NO_CONFIG_FILE", "False").lower() in ('true', '1', 'yes') else False,
     callback=no_config_callback,
     help="Don't use the config file.",
 )

@@ -41,44 +41,44 @@ A Python script to download Apple Music songs/music videos/albums/playlists. Thi
     ```
 
 ## Configuration
-You can configure gamdl by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.
-| Command line argument / Config file key                         | Description                                                            | Default value                      |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
-| `-f`, `--final-path` / `final_path`                             | Path where the downloaded files will be saved.                         | `./Apple Music`                    |
-| `-t`, `--temp-path` / `temp_path`                               | Path where the temporary files will be saved.                          | `./temp`                           |
-| `-c`, `--cookies-location` / `cookies_location`                 | Location of the cookies file.                                          | `./cookies.txt`                    |
-| `-w`, `--wvd-location` / `wvd_location`                         | Location of the .wvd file.                                             | `./device.wvd`                     |
-| `--ffmpeg-location` / `ffmpeg_location`                         | Location of the FFmpeg binary.                                         | `ffmpeg`                           |
-| `--mp4box-location` / `mp4box_location`                         | Location of the MP4Box binary.                                         | `MP4Box`                           |
-| `--mp4decrypt-location` / `mp4decrypt_location`                 | Location of the mp4decrypt binary.                                     | `mp4decrypt`                       |
-| `--nm3u8dlre-location` / `nm3u8dlre_location`                   | Location of the N_m3u8DL-RE binary.                                    | `N_m3u8DL-RE`                      |
-| `--config-location` / -                                         | Location of the config file.                                           | `<home_folder>/.gamdl/config.json` |
-| `--template-folder-album` / `template_folder_album`             | Template of the album folders as a format string.                      | `{album_artist}/{album}`           |
-| `--template-folder-compilation` / `template_folder_compilation` | Template of the compilation album folders as a format string.          | `Compilations/{album}`             |
-| `--template-file-single-disc` / `template_file_single_disc`     | Template of the track files for single-disc albums as a format string. | `{track:02d} {title}`              |
-| `--template-file-multi-disc` / `template_file_multi_disc`       | Template of the track files for multi-disc albums as a format string.  | `{disc}-{track:02d} {title}`       |
-| `--template-folder-music-video` / `template_folder_music_video` | Template of the music video folders as a format string.                | `{artist}/Unknown Album`           |
-| `--template-file-music-video` / `template_file_music_video`     | Template of the music video files as a format string.                  | `{title}`                          |
-| `--cover-size` / `cover_size`                                   | Size of the cover.                                                     | `1200`                             |
-| `--template-date` / `template_date`                             | Template of the tagged date as a string with format codes.             | `%Y-%m-%dT%H:%M:%SZ`               |
-| `--cover-format` / `cover_format`                               | Format of the cover.                                                   | `jpg`                              |
-| `--remux-mode` / `remux_mode`                                   | Remux mode.                                                            | `ffmpeg`                           |
-| `--download-mode` / `download_mode`                             | Download mode.                                                         | `ytdlp`                            |
-| `-e`, `--exclude-tags` / `exclude_tags`                         | List of tags to exclude from file tagging separated by commas.         | `null`                             |
-| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                               | `40`                               |
-| `-l`, `--log-level` / `log_level`                               | Log level.                                                             | `INFO`                             |
-| `--prefer-hevc` / `prefer_hevc`                                 | Prefer HEVC over AVC when downloading music videos.                    | `false`                            |
-| `--prefer-account-language` / `prefer_account_language`         | Prefer the language associated with the account rather than English.   | `false`                            |
-| `--ask-video-format` / `ask_video_format`                       | Ask for the video format when downloading music videos.                | `false`                            |
-| `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.               | `false`                            |
-| `-l`, `--lrc-only` / `lrc_only`                                 | Download only the synced lyrics.                                       | `false`                            |
-| `-n`, `--no-lrc` / `no_lrc`                                     | Don't download the synced lyrics.                                      | `false`                            |
-| `-s`, `--save-cover` / `save_cover`                             | Save cover as a separate file.                                         | `false`                            |
-| `--songs-heaac` / `songs_heaac`                                 | Download songs in HE-AAC 64kbps.                                       | `false`                            |
-| `-o`, `--overwrite` / `overwrite`                               | Overwrite existing files.                                              | `false`                            |
-| `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                      | `false`                            |
-| `-u`, `--url-txt` / -                                           | Read URLs as location of text files containing URLs.                   | `false`                            |
-| `-n`, `--no-config-file` / -                                    | Don't use the config file.                                             | `false`                            |
+You can configure gamdl by using the command line arguments, environment variables, or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values and environment variables can be overridden using command line arguments.
+| Command line argument           | Config file key               | Environment Variable                | Description                                                            | Default value                      |
+| ------------------------------- | ----------------------------- | ----------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| `-f`, `--final-path`            | `final_path`                  | `GAMDL_FINAL_PATH`                  | Path where the downloaded files will be saved.                         | `./Apple Music`                    |
+| `-t`, `--temp-path`             | `temp_path`                   | `GAMDL_TEMP_PATH`                   | Path where the temporary files will be saved.                          | `./temp`                           |
+| `-c`, `--cookies-location`      | `cookies_location`            | `GAMDL_COOKIES_LOCATION`            | Location of the cookies file.                                          | `./cookies.txt`                    |
+| `-w`, `--wvd-location`          | `wvd_location`                | `GAMDL_WVD_LOCATION`                | Location of the .wvd file.                                             | `./device.wvd`                     |
+| `--ffmpeg-location`             | `ffmpeg_location`             | `GAMDL_FFMPEG_LOCATION`             | Location of the FFmpeg binary.                                         | `ffmpeg`                           |
+| `--mp4box-location`             | `mp4box_location`             | `GAMDL_MP4BOX_LOCATION`             | Location of the MP4Box binary.                                         | `MP4Box`                           |
+| `--mp4decrypt-location`         | `mp4decrypt_location`         | `GAMDL_MP4DECRYPT_LOCATION`         | Location of the mp4decrypt binary.                                     | `mp4decrypt`                       |
+| `--nm3u8dlre-location`          | `nm3u8dlre_location`          | `GAMDL_NM3U8DLRE_LOCATION`          | Location of the N_m3u8DL-RE binary.                                    | `N_m3u8DL-RE`                      |
+| `--config-location`             | -                             | `GAMDL_CONFIG_LOCATION`             | Location of the config file.                                           | `<home_folder>/.gamdl/config.json` |
+| `--template-folder-album`       | `template_folder_album`       | `GAMDL_TEMPLATE_FOLDER_ALBUM`       | Template of the album folders as a format string.                      | `{album_artist}/{album}`           |
+| `--template-folder-compilation` | `template_folder_compilation` | `GAMDL_TEMPLATE_FOLDER_COMPILATION` | Template of the compilation album folders as a format string.          | `Compilations/{album}`             |
+| `--template-file-single-disc`   | `template_file_single_disc`   | `GAMDL_TEMPLATE_FILE_SINGLE_DISC`   | Template of the track files for single-disc albums as a format string. | `{track:02d} {title}`              |
+| `--template-file-multi-disc`    | `template_file_multi_disc`    | `GAMDL_TEMPLATE_FILE_MULTI_DISC`    | Template of the track files for multi-disc albums as a format string.  | `{disc}-{track:02d} {title}`       |
+| `--template-folder-music-video` | `template_folder_music_video` | `GAMDL_TEMPLATE_FOLDER_MUSIC_VIDEO` | Template of the music video folders as a format string.                | `{artist}/Unknown Album`           |
+| `--template-file-music-video`   | `template_file_music_video`   | `GAMDL_TEMPLATE_FILE_MUSIC_VIDEO`   | Template of the music video files as a format string.                  | `{title}`                          |
+| `--cover-size`                  | `cover_size`                  | `GAMDL_COVER_SIZE`                  | Size of the cover.                                                     | `1200`                             |
+| `--template-date`               | `template_date`               | `GAMDL_TEMPLATE_DATE`               | Template of the tagged date as a string with format codes.             | `%Y-%m-%dT%H:%M:%SZ`               |
+| `--cover-format`                | `cover_format`                | `GAMDL_COVER_FORMAT`                | Format of the cover.                                                   | `jpg`                              |
+| `--remux-mode`                  | `remux_mode`                  | `GAMDL_REMUX_MODE`                  | Remux mode.                                                            | `ffmpeg`                           |
+| `--download-mode`               | `download_mode`               | `GAMDL_DOWNLOAD_MODE`               | Download mode.                                                         | `ytdlp`                            |
+| `-e`, `--exclude-tags`          | `exclude_tags`                | `GAMDL_EXCLUDE_TAGS`                | List of tags to exclude from file tagging separated by commas.         | `null`                             |
+| `--truncate`                    | `truncate`                    | `GAMDL_TRUNCATE`                    | Maximum length of the file/folder names.                               | `40`                               |
+| `-l`, `--log-level`             | `log_level`                   | `GAMDL_LOG_LEVEL`                   | Log level.                                                             | `INFO`                             |
+| `--prefer-hevc`                 | `prefer_hevc`                 | `GAMDL_PREFER_HEVC`                 | Prefer HEVC over AVC when downloading music videos.                    | `false`                            |
+| `--prefer-account-language`     | `prefer_account_language`     | `GAMDL_PREFER_ACCOUNT_LANGUAGE`     | Prefer the language associated with the account rather than English.   | `false`                            |
+| `--ask-video-format`            | `ask_video_format`            | `GAMDL_ASK_VIDEO_FORMAT`            | Ask for the video format when downloading music videos.                | `false`                            |
+| `--disable-music-video-skip`    | `disable_music_video_skip`    | `GAMDL_DISABLE_MUSIC_VIDEO_SKIP`    | Don't skip downloading music videos in albums/playlists.               | `false`                            |
+| `-l`, `--lrc-only`              | `lrc_only`                    | `GAMDL_LRC_ONLY`                    | Download only the synced lyrics.                                       | `false`                            |
+| `-n`, `--no-lrc`                | `no_lrc`                      | `GAMDL_NO_LRC`                      | Don't download the synced lyrics.                                      | `false`                            |
+| `-s`, `--save-cover`            | `save_cover`                  | `GAMDL_SAVE_COVER`                  | Save cover as a separate file.                                         | `false`                            |
+| `--songs-heaac`                 | `songs_heaac`                 | `GAMDL_SONGS_HEAAC`                 | Download songs in HE-AAC 64kbps.                                       | `false`                            |
+| `-o`, `--overwrite`             | `overwrite`                   | `GAMDL_OVERWRITE`                   | Overwrite existing files.                                              | `false`                            |
+| `--print-exceptions`            | `print_exceptions`            | `GAMDL_PRINT_EXCEPTIONS`            | Print exceptions.                                                      | `false`                            |
+| `-u`, `--url-txt`               | -                             | `GAMDL_URL_TXT`                     | Read URLs as location of text files containing URLs.                   | `false`                            |
+| `-n`, `--no-config-file`        | -                             | `GAMDL_NO_CONFIG_FILE`              | Don't use the config file.                                             | `false`                            |
 
 
 ### Tags variables

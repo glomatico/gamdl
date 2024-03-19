@@ -13,9 +13,6 @@ from .downloader import Downloader
 
 def write_default_config_file(ctx: click.Context) -> None:
     ctx.params["config_location"].parent.mkdir(parents=True, exist_ok=True)
-    for param in (param for param in ctx.command.params) :
-        if callable(param.default) and param.default.__name__ == '<lambda>':
-            param.default = param.default()
     config_file = {
         param.name: param.default
         for param in ctx.command.params

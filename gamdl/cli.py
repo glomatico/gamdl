@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import os
 import json
 import logging
 from pathlib import Path
 
 import click
-
 from . import __version__
 from .constants import *
 from .downloader import Downloader
@@ -26,18 +26,23 @@ def no_config_callback(
     ctx: click.Context, param: click.Parameter, no_config_file: bool
 ) -> click.Context:
     if no_config_file:
+        for param in ctx.command.params:
+            env_param = "GAMDL_" + param.name.upper().replace("-", "_")
+            if os.getenv(env_param) is not None:
+                 ctx.params[param.name] = param.type_cast_value(ctx, os.getenv(env_param))
         return ctx
     if not ctx.params["config_location"].exists():
         write_default_config_file(ctx)
     with open(ctx.params["config_location"], "r") as f:
         config_file = dict(json.load(f))
     for param in ctx.command.params:
-        if (
-            config_file.get(param.name) is not None
-            and not ctx.get_parameter_source(param.name)
-            == click.core.ParameterSource.COMMANDLINE
-        ):
-            ctx.params[param.name] = param.type_cast_value(ctx, config_file[param.name])
+        if (not ctx.get_parameter_source(param.name)
+            == click.core.ParameterSource.COMMANDLINE):
+            if config_file.get(param.name) is not None:
+                ctx.params[param.name] = param.type_cast_value(ctx, config_file[param.name])
+            env_param = "GAMDL_" + param.name.upper().replace("-", "_")
+            if os.getenv(env_param) is not None:
+                ctx.params[param.name] = param.type_cast_value(ctx, os.getenv(env_param))
     return ctx
 
 

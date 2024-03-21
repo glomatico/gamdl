@@ -41,7 +41,7 @@ A Python script to download Apple Music songs/music videos/albums/playlists. Thi
     ```
 
 ## Configuration
-You can configure gamdl by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.
+You can configure gamdl by using the command line arguments, environment variables, or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Environment variables are prefixed with `GAMDL_` and are the capitalized config file key for their respective option. Config file values and environment variables can be overridden using command line arguments.
 | Command line argument / Config file key                         | Description                                                            | Default value                      |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
 | `-f`, `--final-path` / `final_path`                             | Path where the downloaded files will be saved.                         | `./Apple Music`                    |

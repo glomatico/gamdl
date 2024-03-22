@@ -44,11 +44,11 @@ RUN rm $M3U8DL.tar.gz
 RUN mv /N_m3u8DL-RE*/N_m3u8DL-RE /bin/N_m3u8DL-RE
 RUN chmod +x /bin/N_m3u8DL-RE
 
-USER $USER_ID
-
 # Install gamdl
 ADD ./ /gamdl
 RUN pip3 install /gamdl/
+
+#USER $USER_UID
 
 # No Entrypoint, should be run with specific commands.
 CMD ["gamdl"]

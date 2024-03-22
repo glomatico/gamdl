@@ -5,3 +5,4 @@ __pycache__
 !pyproject.toml
 !README.md
 !requirements.txt
+!Dockerfile

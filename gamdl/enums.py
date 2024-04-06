@@ -1,12 +1,12 @@
-from enums import Enums
+from enum import Enum
 
 
-class DownloadMode(Enums):
+class DownloadMode(Enum):
     YTDLP = "ytdlp"
     NM3U8DLRE = "nm3u8dlre"
 
 
-class SongCodec(Enums):
+class SongCodec(Enum):
     AAC_LEGACY = "aac-legacy"
     AAC_HE_LEGACY = "aac-he-legacy"
     AAC = "aac"
@@ -19,6 +19,6 @@ class SongCodec(Enums):
     ATMOS = "atmos"
 
 
-class ArtworkFormat(Enums):
+class ArtworkFormat(Enum):
     JPG = "jpg"
     PNG = "png"

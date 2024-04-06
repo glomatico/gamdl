@@ -1,3 +1,5 @@
+from gamdl.enums import SongCodec
+
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
     "AG": "143540-2,32",
@@ -181,6 +183,18 @@ MP4_TAGS_MAP = {
     "title_sort": "sonm",
     "xid": "xid ",
 }
+
+SONG_CODEC_REGEX_MAP = {
+    SongCodec.AAC: r"audio-stereo-\d+",
+    SongCodec.AAC_HE: r"audio-HE-stereo-\d+",
+    SongCodec.AAC_BINAURAL: r"audio-stereo-\d+-binaural",
+    SongCodec.AAC_DOWNMIX: r"audio-stereo-\d+-downmix",
+    SongCodec.AAC_HE_BINAURAL: r"audio-HE-stereo-\d+-binaural",
+    SongCodec.AAC_HE_DOWNMIX: r"audio-HE-stereo-\d+-downmix",
+    SongCodec.ALAC: r"audio-alac-.*",
+    SongCodec.ATMOS: r"audio-atmos-.*",
+}
+
 
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",

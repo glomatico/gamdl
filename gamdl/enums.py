@@ -16,5 +16,5 @@ class SongCodec(Enums):
 
 
 class ArtworkFormat(Enums):
-    JPEG = "jpeg"
+    JPG = "jpg"
     PNG = "png"

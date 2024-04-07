@@ -27,7 +27,7 @@ class SongCodec(Enum):
 
 class MusicVideoCodec(Enum):
     AVC1 = "avc1"
-    HEVC = "hevc"
+    HVC1 = "hvc1"
     ASK = "ask"
 
 

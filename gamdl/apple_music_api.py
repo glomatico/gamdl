@@ -19,19 +19,19 @@ class AppleMusicApi:
 
     def __init__(
         self,
-        cookies_location: Path | None = Path("./cookies.txt"),
+        cookies_path: Path | None = Path("./cookies.txt"),
         storefront: None | str = None,
         language: str = "en-US",
     ):
-        self.cookies_location = cookies_location
+        self.cookies_path = cookies_path
         self.storefront = storefront
         self.language = language
         self._set_session()
 
     def _set_session(self):
         self.session = requests.Session()
-        if self.cookies_location:
-            cookies = MozillaCookieJar(self.cookies_location)
+        if self.cookies_path:
+            cookies = MozillaCookieJar(self.cookies_path)
             cookies.load(ignore_discard=True, ignore_expires=True)
             self.session.cookies.update(cookies)
             self.storefront = self.session.cookies.get_dict()["itua"]

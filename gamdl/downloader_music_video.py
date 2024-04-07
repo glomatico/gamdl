@@ -4,7 +4,6 @@ from pathlib import Path
 
 import click
 import m3u8
-import requests
 from tabulate import tabulate
 
 from .downloader import Downloader

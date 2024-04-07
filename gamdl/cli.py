@@ -264,7 +264,7 @@ def load_config_file(
 )
 # DownloaderMusicVideo specific options
 @click.option(
-    "--music-video-codec",
+    "--codec-music-video",
     type=MusicVideoCodec,
     default=downloader_music_video_sig.parameters["codec"].default,
     help="Music video codec.",
@@ -301,7 +301,7 @@ def main(
     artwork_size: int,
     truncate: int,
     codec_song: str,
-    music_video_codec: str,
+    codec_music_video: str,
     no_config_file: bool,
 ):
     logging.basicConfig(
@@ -350,7 +350,7 @@ def main(
     )
     downloader_music_video = DownloaderMusicVideo(
         downloader,
-        music_video_codec,
+        codec_music_video,
     )
     if not lrc_only:
         if wvd_path and not wvd_path.exists():
@@ -515,7 +515,7 @@ def main(
                     cover_url = downloader.get_cover_url(track)
                     if final_path.exists() and not overwrite:
                         logger.warning(
-                            f'({final_path}) Music video already exists at "{final_path}", skipping'
+                            f'({current_track}) Music video already exists at "{final_path}", skipping'
                         )
                     else:
                         logger.debug("Getting stream info")

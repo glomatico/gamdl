@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+
 import requests
 
 from .apple_music_api import AppleMusicApi
@@ -33,6 +35,7 @@ class ItunesApi:
             "X-Apple-Store-Front": f"{self.storefront_id} t:music31",
         }
 
+    @functools.lru_cache()
     def get_resource(
         self,
         resource_id: str,

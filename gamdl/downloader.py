@@ -15,6 +15,7 @@ from .apple_music_api import AppleMusicApi
 from .constants import MP4_TAGS_MAP
 from .enums import ArtworkFormat, DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
+from .itunes_api import ItunesApi
 from .models import DownloadQueueItem, UrlInfo
 
 
@@ -24,6 +25,7 @@ class Downloader:
     def __init__(
         self,
         apple_music_api: AppleMusicApi,
+        itunes_api: ItunesApi,
         output_path: Path = Path("./Apple Music"),
         temp_path: Path = Path("./temp"),
         wvd_path: Path = None,
@@ -47,6 +49,7 @@ class Downloader:
         no_progress: bool = False,
     ):
         self.apple_music_api = apple_music_api
+        self.itunes_api = itunes_api
         self.output_path = output_path
         self.temp_path = temp_path
         self.wvd_path = wvd_path

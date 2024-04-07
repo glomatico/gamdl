@@ -12,13 +12,16 @@ from . import __version__
 from .apple_music_api import AppleMusicApi
 from .constants import *
 from .downloader import Downloader
+from .downloader_music_video import DownloaderMusicVideo
 from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
-from .enums import ArtworkFormat, DownloadMode, RemuxMode
+from .enums import ArtworkFormat, DownloadMode, MusicVideoCodec, RemuxMode
+from .itunes_api import ItunesApi
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
 downloader_sig = inspect.signature(Downloader.__init__)
 downloader_song_sig = inspect.signature(DownloaderSong.__init__)
+downloader_music_video_sig = inspect.signature(DownloaderMusicVideo.__init__)
 
 
 def get_param_string(param: click.Parameter) -> str:
@@ -259,6 +262,13 @@ def load_config_file(
     default=downloader_song_sig.parameters["codec"].default,
     help="Song codec.",
 )
+# DownloaderMusicVideo specific options
+@click.option(
+    "--music-video-codec",
+    type=MusicVideoCodec,
+    default=downloader_music_video_sig.parameters["codec"].default,
+    help="Music video codec.",
+)
 def main(
     urls: list[str],
     save_cover: bool,
@@ -291,6 +301,7 @@ def main(
     artwork_size: int,
     truncate: int,
     codec_song: str,
+    music_video_codec: str,
     no_config_file: bool,
 ):
     logging.basicConfig(
@@ -301,8 +312,13 @@ def main(
     logger.setLevel(log_level)
     logger.debug("Starting downloader")
     apple_music_api = AppleMusicApi(cookies_path)
+    itunes_api = ItunesApi(
+        apple_music_api.storefront,
+        apple_music_api.language,
+    )
     downloader = Downloader(
         apple_music_api,
+        itunes_api,
         output_path,
         temp_path,
         wvd_path,
@@ -331,6 +347,10 @@ def main(
     downloader_song_legacy = DownloaderSongLegacy(
         downloader,
         codec_song,
+    )
+    downloader_music_video = DownloaderMusicVideo(
+        downloader,
+        music_video_codec,
     )
     if not lrc_only:
         if wvd_path and not wvd_path.exists():
@@ -462,6 +482,103 @@ def main(
                         logger.debug(f'Saving synced lyrics to "{lrc_path}"')
                         downloader_song.save_lrc(lrc_path, lyrics.synced)
                     if lrc_only or not save_cover:
+                        pass
+                    elif cover_path.exists() and not overwrite:
+                        logger.debug(
+                            f'Cover already exists at "{cover_path}", skipping'
+                        )
+                    else:
+                        logger.debug(f'Saving cover to "{cover_path}"')
+                        downloader.save_cover(cover_path, cover_url)
+                elif track["type"] == "music-videos":
+                    music_video_id_alt = downloader_music_video.get_music_video_id_alt(
+                        track
+                    )
+                    logger.debug("Getting iTunes page")
+                    itunes_page = itunes_api.get_itunes_page(
+                        "music-video", music_video_id_alt
+                    )
+                    stream_url_master = downloader_music_video.get_stream_url_master(
+                        itunes_page
+                    )
+                    logger.debug("Getting M3U8 data")
+                    m3u8_master_data = downloader_music_video.get_m3u8_master_data(
+                        stream_url_master
+                    )
+                    tags = downloader_music_video.get_tags(
+                        itunes_page,
+                        m3u8_master_data,
+                        track,
+                    )
+                    final_path = downloader.get_final_path(tags, ".m4v")
+                    cover_path = downloader_music_video.get_cover_path(final_path)
+                    cover_url = downloader.get_cover_url(track)
+                    if final_path.exists() and not overwrite:
+                        logger.warning(
+                            f'({final_path}) Music video already exists at "{final_path}", skipping'
+                        )
+                    else:
+                        logger.debug("Getting stream info")
+                        stream_info_video, stream_info_audio = (
+                            downloader_music_video.get_stream_info_video(
+                                m3u8_master_data
+                            ),
+                            downloader_music_video.get_stream_info_audio(
+                                m3u8_master_data
+                            ),
+                        )
+                        decryption_key_video = downloader.get_decryption_key(
+                            stream_info_video.pssh, track["id"]
+                        )
+                        decryption_key_audio = downloader.get_decryption_key(
+                            stream_info_audio.pssh, track["id"]
+                        )
+                        encrypted_path_video = (
+                            downloader_music_video.get_encrypted_path_video(track["id"])
+                        )
+                        encrypted_path_audio = (
+                            downloader_music_video.get_encrypted_path_audio(track["id"])
+                        )
+                        decrypted_path_video = (
+                            downloader_music_video.get_decrypted_path_video(track["id"])
+                        )
+                        decrypted_path_audio = (
+                            downloader_music_video.get_decrypted_path_audio(track["id"])
+                        )
+                        remuxed_path = downloader_music_video.get_remuxed_path(
+                            track["id"]
+                        )
+                        logger.debug(f"Downloading video to {encrypted_path_video}")
+                        downloader.download(
+                            encrypted_path_video, stream_info_video.stream_url
+                        )
+                        logger.debug(f"Downloading audio to {encrypted_path_audio}")
+                        downloader.download(
+                            encrypted_path_audio, stream_info_audio.stream_url
+                        )
+                        logger.debug(f"Decrypting video to {decrypted_path_video}")
+                        downloader_music_video.decrypt(
+                            encrypted_path_video,
+                            decryption_key_video,
+                            decrypted_path_video,
+                        )
+                        logger.debug(f"Decrypting audio to {decrypted_path_audio}")
+                        downloader_music_video.decrypt(
+                            encrypted_path_audio,
+                            decryption_key_audio,
+                            decrypted_path_audio,
+                        )
+                        logger.debug(f"Remuxing to {remuxed_path}")
+                        downloader_music_video.remux(
+                            decrypted_path_video,
+                            decrypted_path_audio,
+                            remuxed_path,
+                        )
+                        logger.debug("Applying tags")
+                        downloader.apply_tags(remuxed_path, tags, cover_url)
+                        logger.debug(f"Moving to {final_path}")
+                        downloader.move_to_output_path(remuxed_path, final_path)
+                    if not save_cover:
                         pass
                     elif cover_path.exists() and not overwrite:
                         logger.debug(

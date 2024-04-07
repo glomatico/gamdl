@@ -31,6 +31,11 @@ class MusicVideoCodec(Enum):
     ASK = "ask"
 
 
+class PostQuality(Enum):
+    BEST = "best"
+    ASK = "ask"
+
+
 class ArtworkFormat(Enum):
     JPG = "jpg"
     PNG = "png"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 import time
 from http.cookiejar import MozillaCookieJar
@@ -114,6 +115,7 @@ class AppleMusicApi:
         self._check_amp_api_response(response)
         return response.json()["data"][0]
 
+    @functools.lru_cache()
     def get_album(
         self,
         album_id: str,

@@ -115,6 +115,16 @@ class AppleMusicApi:
         self._check_amp_api_response(response)
         return response.json()["data"][0]
 
+    def get_post(
+        self,
+        post_id: str,
+    ) -> dict:
+        response = self.session.get(
+            f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/uploaded-videos/{post_id}"
+        )
+        self._check_amp_api_response(response)
+        return response.json()["data"][0]
+
     @functools.lru_cache()
     def get_album(
         self,

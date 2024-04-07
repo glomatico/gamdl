@@ -1,4 +1,5 @@
 import subprocess
+import urllib.parse
 from pathlib import Path
 
 import click
@@ -24,15 +25,13 @@ class DownloaderMusicVideo:
         return itunes_page["offers"][0]["assets"][0]["hlsUrl"]
 
     def get_m3u8_master_data(self, stream_url_master: str) -> dict:
-        return m3u8.loads(
-            requests.get(
-                stream_url_master,
-                params={
-                    "dsid": "1",
-                    "aec": "",
-                },
-            ).text
-        ).data
+        url_parts = urllib.parse.urlparse(stream_url_master)
+        query = urllib.parse.parse_qs(url_parts.query, keep_blank_values=True)
+        query.update({"aec": "HD", "dsid": "1"})
+        stream_url_master_new = url_parts._replace(
+            query=urllib.parse.urlencode(query, doseq=True)
+        ).geturl()
+        return m3u8.load(stream_url_master_new).data
 
     def get_stream_url_video(
         self,

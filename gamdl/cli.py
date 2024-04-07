@@ -1,52 +1,69 @@
 from __future__ import annotations
 
-import os
+import inspect
 import json
 import logging
+from enum import Enum
 from pathlib import Path
 
 import click
+
 from . import __version__
+from .apple_music_api import AppleMusicApi
 from .constants import *
 from .downloader import Downloader
+from .downloader_song import DownloaderSong
+from .downloader_song_legacy import DownloaderSongLegacy
+from .enums import ArtworkFormat, DownloadMode, RemuxMode
+
+apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
+downloader_sig = inspect.signature(Downloader.__init__)
+downloader_song_sig = inspect.signature(DownloaderSong.__init__)
+
+
+def get_param_string(param: click.Parameter) -> str:
+    if isinstance(param.default, Enum):
+        return param.default.value
+    elif isinstance(param.default, Path):
+        return str(param.default)
+    else:
+        return param.default
 
 
 def write_default_config_file(ctx: click.Context) -> None:
-    ctx.params["config_location"].parent.mkdir(parents=True, exist_ok=True)
+    ctx.params["config_path"].parent.mkdir(parents=True, exist_ok=True)
     config_file = {
-        param.name: param.default
+        param.name: get_param_string(param)
         for param in ctx.command.params
         if param.name not in EXCLUDED_CONFIG_FILE_PARAMS
     }
-    with open(ctx.params["config_location"], "w") as f:
-        f.write(json.dumps(config_file, indent=4))
+    ctx.params["config_path"].write_text(json.dumps(config_file, indent=4))
 
 
-def no_config_callback(
-    ctx: click.Context, param: click.Parameter, no_config_file: bool
+def load_config_file(
+    ctx: click.Context,
+    param: click.Parameter,
+    no_config_file: bool,
 ) -> click.Context:
     if no_config_file:
-        for param in ctx.command.params:
-            env_param = "GAMDL_" + param.name.upper().replace("-", "_")
-            if os.getenv(env_param) is not None:
-                 ctx.params[param.name] = param.type_cast_value(ctx, os.getenv(env_param))
         return ctx
-    if not ctx.params["config_location"].exists():
+    if not ctx.params["config_path"].exists():
         write_default_config_file(ctx)
-    with open(ctx.params["config_location"], "r") as f:
-        config_file = dict(json.load(f))
+    config_file = dict(json.loads(ctx.params["config_path"].read_text()))
     for param in ctx.command.params:
-        if (not ctx.get_parameter_source(param.name)
-            == click.core.ParameterSource.COMMANDLINE):
-            if config_file.get(param.name) is not None:
-                ctx.params[param.name] = param.type_cast_value(ctx, config_file[param.name])
-            env_param = "GAMDL_" + param.name.upper().replace("-", "_")
-            if os.getenv(env_param) is not None:
-                ctx.params[param.name] = param.type_cast_value(ctx, os.getenv(env_param))
+        if (
+            config_file.get(param.name) is not None
+            and not ctx.get_parameter_source(param.name)
+            == click.core.ParameterSource.COMMANDLINE
+        ):
+            ctx.params[param.name] = param.type_cast_value(ctx, config_file[param.name])
     return ctx
 
 
 @click.command()
+@click.help_option("-h", "--help")
+@click.version_option(__version__, "-v", "--version")
+# CLI specific options
 @click.argument(
     "urls",
     nargs=-1,
@@ -54,168 +71,21 @@ def no_config_callback(
     required=True,
 )
 @click.option(
-    "--final-path",
-    "-f",
-    type=Path,
-    default="./Apple Music",
-    help="Path where the downloaded files will be saved.",
-)
-@click.option(
-    "--temp-path",
-    "-t",
-    type=Path,
-    default="./temp",
-    help="Path where the temporary files will be saved.",
-)
-@click.option(
-    "--cookies-location",
-    "-c",
-    type=Path,
-    default="./cookies.txt",
-    help="Location of the cookies file.",
-)
-@click.option(
-    "--wvd-location",
-    "-w",
-    type=Path,
-    default="./device.wvd",
-    help="Location of the .wvd file.",
-)
-@click.option(
-    "--ffmpeg-location",
-    type=str,
-    default="ffmpeg",
-    help="Location of the FFmpeg binary.",
-)
-@click.option(
-    "--mp4box-location",
-    type=str,
-    default="MP4Box",
-    help="Location of the MP4Box binary.",
-)
-@click.option(
-    "--mp4decrypt-location",
-    type=str,
-    default="mp4decrypt",
-    help="Location of the mp4decrypt binary.",
-)
-@click.option(
-    "--nm3u8dlre-location",
-    type=str,
-    default="N_m3u8DL-RE",
-    help="Location of the N_m3u8DL-RE binary.",
-)
-@click.option(
-    "--config-location",
-    type=Path,
-    default=Path.home() / ".gamdl" / "config.json",
-    help="Location of the config file.",
-)
-@click.option(
-    "--template-folder-album",
-    type=str,
-    default="{album_artist}/{album}",
-    help="Template of the album folders as a format string.",
-)
-@click.option(
-    "--template-folder-compilation",
-    type=str,
-    default="Compilations/{album}",
-    help="Template of the compilation album folders as a format string.",
-)
-@click.option(
-    "--template-file-single-disc",
-    type=str,
-    default="{track:02d} {title}",
-    help="Template of the track files for single-disc albums as a format string.",
-)
-@click.option(
-    "--template-file-multi-disc",
-    type=str,
-    default="{disc}-{track:02d} {title}",
-    help="Template of the track files for multi-disc albums as a format string.",
-)
-@click.option(
-    "--template-folder-music-video",
-    type=str,
-    default="{artist}/Unknown Album",
-    help="Template of the music video folders as a format string.",
-)
-@click.option(
-    "--template-file-music-video",
-    type=str,
-    default="{title}",
-    help="Template of the music video files as a format string.",
-)
-@click.option(
-    "--template-date",
-    type=str,
-    default="%Y-%m-%dT%H:%M:%SZ",
-    help="Template of the tagged date as a string with format codes.",
-)
-@click.option(
-    "--cover-size",
-    type=int,
-    default=1200,
-    help="Size of the cover.",
-)
-@click.option(
-    "--cover-format",
-    type=click.Choice(["jpg", "png"]),
-    default="jpg",
-    help="Format of the cover.",
-)
-@click.option(
-    "--remux-mode",
-    type=click.Choice(["ffmpeg", "mp4box"]),
-    default="ffmpeg",
-    help="Remux mode.",
-)
-@click.option(
-    "--download-mode",
-    type=click.Choice(["ytdlp", "nm3u8dlre"]),
-    default="ytdlp",
-    help="Download mode.",
-)
-@click.option(
-    "--exclude-tags",
-    "-e",
-    type=str,
-    default=None,
-    help="List of tags to exclude from file tagging separated by commas.",
-)
-@click.option(
-    "--truncate",
-    type=int,
-    default=40,
-    help="Maximum length of the file/folder names.",
-)
-@click.option(
-    "--log-level",
-    "-l",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-    default="INFO",
-    help="Log level.",
-)
-@click.option(
-    "--prefer-hevc",
+    "--save-cover",
+    "-s",
     is_flag=True,
-    help="Prefer HEVC over AVC when downloading music videos.",
+    help="Save cover as a separate file.",
 )
 @click.option(
-    "--prefer-account-language",
+    "--overwrite",
     is_flag=True,
-    help="Prefer the language associated with the account rather than English."
+    help="Overwrite existing files.",
 )
 @click.option(
-    "--ask-video-format",
+    "--read-urls-as-txt",
+    "-r",
     is_flag=True,
-    help="Ask for the video format when downloading music videos.",
-)
-@click.option(
-    "--disable-music-video-skip",
-    is_flag=True,
-    help="Don't skip downloading music videos in albums/playlists.",
+    help="Interpret URLs as paths to text files containing URLs.",
 )
 @click.option(
     "--lrc-only",
@@ -225,83 +95,202 @@ def no_config_callback(
 )
 @click.option(
     "--no-lrc",
-    "-n",
     is_flag=True,
     help="Don't download the synced lyrics.",
 )
 @click.option(
-    "--save-cover",
-    "-s",
-    is_flag=True,
-    help="Save cover as a separate file.",
+    "--config-path",
+    type=Path,
+    default=Path.home() / ".gamdl" / "config.json",
+    help="Path to config file.",
 )
 @click.option(
-    "--songs-heaac",
-    is_flag=True,
-    help="Download songs in HE-AAC 64kbps.",
-)
-@click.option(
-    "--overwrite",
-    "-o",
-    is_flag=True,
-    help="Overwrite existing files.",
+    "--log-level",
+    type=str,
+    default="INFO",
+    help="Log level.",
 )
 @click.option(
     "--print-exceptions",
     is_flag=True,
     help="Print exceptions.",
 )
+# API specific options
 @click.option(
-    "--url-txt",
-    "-u",
-    is_flag=True,
-    help="Read URLs as location of text files containing URLs.",
+    "--cookies-path",
+    "-c",
+    type=Path,
+    default=apple_music_api_sig.parameters["cookies_path"].default,
+    help="Path to .txt cookies file.",
+)
+# Downloader specific options
+@click.option(
+    "--output-path",
+    "-o",
+    type=Path,
+    default=downloader_sig.parameters["output_path"].default,
+    help="Path to output directory.",
+)
+@click.option(
+    "--temp-path",
+    type=Path,
+    default=downloader_sig.parameters["temp_path"].default,
+    help="Path to temporary directory.",
+)
+@click.option(
+    "--wvd-path",
+    type=Path,
+    default=downloader_sig.parameters["wvd_path"].default,
+    help="Path to .wvd file.",
+)
+@click.option(
+    "--nm3u8dlre-path",
+    type=str,
+    default=downloader_sig.parameters["nm3u8dlre_path"].default,
+    help="Path to N_m3u8DL-RE binary.",
+)
+@click.option(
+    "--mp4decrypt-path",
+    type=str,
+    default=downloader_sig.parameters["mp4decrypt_path"].default,
+    help="Path to mp4decrypt binary.",
+)
+@click.option(
+    "--ffmpeg-path",
+    type=str,
+    default=downloader_sig.parameters["ffmpeg_path"].default,
+    help="Path to FFmpeg binary.",
+)
+@click.option(
+    "--mp4box-path",
+    type=str,
+    default=downloader_sig.parameters["mp4box_path"].default,
+    help="Path to MP4Box binary.",
+)
+@click.option(
+    "--download-mode",
+    type=DownloadMode,
+    default=downloader_sig.parameters["download_mode"].default,
+    help="Download mode.",
+)
+@click.option(
+    "--remux-mode",
+    type=RemuxMode,
+    default=downloader_sig.parameters["remux_mode"].default,
+    help="Remux mode.",
+)
+@click.option(
+    "--artwork-format",
+    type=ArtworkFormat,
+    default=downloader_sig.parameters["artwork_format"].default,
+    help="Artwork format.",
+)
+@click.option(
+    "--template-folder-album",
+    type=str,
+    default=downloader_sig.parameters["template_folder_album"].default,
+    help="Template folder for tracks that are part of an album.",
+)
+@click.option(
+    "--template-folder-compilation",
+    type=str,
+    default=downloader_sig.parameters["template_folder_compilation"].default,
+    help="Template folder for tracks that are part of a compilation album.",
+)
+@click.option(
+    "--template-file-single-disc",
+    type=str,
+    default=downloader_sig.parameters["template_file_single_disc"].default,
+    help="Template file for the tracks that are part of a single-disc album.",
+)
+@click.option(
+    "--template-file-multi-disc",
+    type=str,
+    default=downloader_sig.parameters["template_file_multi_disc"].default,
+    help="Template file for the tracks that are part of a multi-disc album.",
+)
+@click.option(
+    "--template-folder-no-album",
+    type=str,
+    default=downloader_sig.parameters["template_folder_no_album"].default,
+    help="Template folder for the tracks that are not part of an album.",
+)
+@click.option(
+    "--template-file-no-album",
+    type=str,
+    default=downloader_sig.parameters["template_file_no_album"].default,
+    help="Template file for the tracks that are not part of an album.",
+)
+@click.option(
+    "--template-date",
+    type=str,
+    default=downloader_sig.parameters["template_date"].default,
+    help="Date tag template.",
+)
+@click.option(
+    "--exclude-tags",
+    type=str,
+    default=downloader_sig.parameters["exclude_tags"].default,
+    help="Comma-separated tags to exclude.",
+)
+@click.option(
+    "--artwork-size",
+    type=int,
+    default=downloader_sig.parameters["artwork_size"].default,
+    help="Artwork size.",
+)
+@click.option(
+    "--truncate",
+    type=int,
+    default=downloader_sig.parameters["truncate"].default,
+    help="Maximum length of the file/folder names.",
 )
 @click.option(
     "--no-config-file",
     "-n",
     is_flag=True,
-    callback=no_config_callback,
-    help="Don't use the config file.",
+    callback=load_config_file,
+    help="Do not use a config file.",
 )
-@click.version_option(__version__, "-v", "--version")
-@click.help_option("-h", "--help")
+# DownloaderSong specific options
+@click.option(
+    "--codec-song",
+    type=SongCodec,
+    default=downloader_song_sig.parameters["codec"].default,
+    help="Song codec.",
+)
 def main(
-    urls: tuple[str],
-    final_path: Path,
+    urls: list[str],
+    save_cover: bool,
+    overwrite: bool,
+    read_urls_as_txt: bool,
+    lrc_only: bool,
+    no_lrc: bool,
+    config_path: Path,
+    log_level: str,
+    print_exceptions: bool,
+    cookies_path: Path,
+    output_path: Path,
     temp_path: Path,
-    cookies_location: Path,
-    wvd_location: Path,
-    ffmpeg_location: Path,
-    mp4box_location: Path,
-    mp4decrypt_location: Path,
-    nm3u8dlre_location: Path,
-    config_location: Path,
+    wvd_path: Path,
+    nm3u8dlre_path: str,
+    mp4decrypt_path: str,
+    ffmpeg_path: str,
+    mp4box_path: str,
+    download_mode: DownloadMode,
+    remux_mode: RemuxMode,
+    artwork_format: ArtworkFormat,
     template_folder_album: str,
     template_folder_compilation: str,
     template_file_single_disc: str,
     template_file_multi_disc: str,
-    template_folder_music_video: str,
-    template_file_music_video: str,
+    template_folder_no_album: str,
+    template_file_no_album: str,
     template_date: str,
-    cover_size: int,
-    cover_format: str,
-    remux_mode: str,
-    download_mode: str,
     exclude_tags: str,
+    artwork_size: int,
     truncate: int,
-    log_level: str,
-    prefer_hevc: bool,
-    prefer_account_language: bool,
-    ask_video_format: bool,
-    disable_music_video_skip: bool,
-    lrc_only: bool,
-    no_lrc: bool,
-    save_cover: bool,
-    songs_heaac: bool,
-    overwrite: bool,
-    print_exceptions: bool,
-    url_txt: bool,
+    codec_song: str,
     no_config_file: bool,
 ):
     logging.basicConfig(
@@ -311,289 +300,180 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     logger.debug("Starting downloader")
-    downloader = Downloader(**locals())
-    if not cookies_location.exists():
-        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_location))
-        return
-    if remux_mode == "ffmpeg" and not lrc_only:
-        if not downloader.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
-            return
-        if not downloader.mp4decrypt_location:
-            logger.warning(
-                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
-                + ", music videos videos will not be downloaded"
-            )
-    if remux_mode == "mp4box" and not lrc_only:
-        if not downloader.mp4box_location:
-            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_location))
-            return
-        if not downloader.mp4decrypt_location:
-            logger.critical(
-                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_location)
-            )
-            return
-    if download_mode == "nm3u8dlre" and not lrc_only:
-        if not downloader.nm3u8dlre_location:
-            logger.critical(
-                X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_location)
-            )
-            return
-        if not downloader.ffmpeg_location:
-            logger.critical(X_NOT_FOUND_STRING.format("FFmpeg", ffmpeg_location))
-            return
-    logger.debug("Setting up session")
-    downloader.setup_session()
+    apple_music_api = AppleMusicApi(cookies_path)
+    downloader = Downloader(
+        apple_music_api,
+        output_path,
+        temp_path,
+        wvd_path,
+        nm3u8dlre_path,
+        mp4decrypt_path,
+        ffmpeg_path,
+        mp4box_path,
+        download_mode,
+        remux_mode,
+        artwork_format,
+        template_folder_album,
+        template_folder_compilation,
+        template_file_single_disc,
+        template_file_multi_disc,
+        template_folder_no_album,
+        template_file_no_album,
+        template_date,
+        exclude_tags,
+        artwork_size,
+        truncate,
+    )
+    downloader_song = DownloaderSong(
+        downloader,
+        codec_song,
+    )
+    downloader_song_legacy = DownloaderSongLegacy(
+        downloader,
+        codec_song,
+    )
     if not lrc_only:
-        if not wvd_location.exists():
-            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_location))
+        if wvd_path and not wvd_path.exists():
+            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_path))
             return
         logger.debug("Setting up CDM")
-        downloader.setup_cdm()
+        downloader.set_cdm()
+        if not downloader.ffmpeg_path_full and (
+            remux_mode == RemuxMode.FFMPEG or download_mode == DownloadMode.NM3U8DLRE
+        ):
+            logger.critical(X_NOT_FOUND_STRING.format("ffmpeg", ffmpeg_path))
+            return
+        if not downloader.mp4box_path_full and remux_mode == RemuxMode.MP4BOX:
+            logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_path))
+            return
+        if (
+            not downloader.mp4decrypt_path_full
+            and codec_song
+            not in (
+                SongCodec.AAC_LEGACY,
+                SongCodec.AAC_HE_LEGACY,
+            )
+            or (remux_mode == RemuxMode.MP4BOX and not downloader.mp4decrypt_path_full)
+        ):
+            logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path))
+            return
     error_count = 0
-    download_queue = []
-    if url_txt:
-        logger.debug("Reading URLs from text files")
-        _urls = []
-        for url in urls:
-            with open(url, "r") as f:
-                _urls.extend(f.read().splitlines())
-        urls = tuple(_urls)
+    if read_urls_as_txt:
+        urls = [url.strip() for url in Path(urls[0]).read_text().splitlines()]
     for url_index, url in enumerate(urls, start=1):
-        current_url = f"URL {url_index}/{len(urls)}"
+        url_progress = f"URL {url_index}/{len(urls)}"
         try:
-            logger.debug(f'({current_url}) Checking "{url}"')
-            download_queue.append(downloader.get_download_queue(url))
-        except Exception:
+            url_info = downloader.get_url_info(url)
+            download_queue = downloader.get_download_queue(url_info)
+        except Exception as e:
             error_count += 1
             logger.error(
-                f'({current_url}) Failed to check "{url}"',
+                f'({url_progress}) Failed to check "{url}"',
                 exc_info=print_exceptions,
             )
-    for queue_item_index, queue_item in enumerate(download_queue, start=1):
-        download_type, tracks = queue_item
-        for track_index, track in enumerate(tracks, start=1):
-            current_track = f"Track {track_index}/{len(tracks)} from URL {queue_item_index}/{len(download_queue)}"
+            continue
+        for queue_index, queue_item in enumerate(download_queue, start=1):
+            queue_progress = f"Track {queue_index}/{len(download_queue)} from URL {url_index}/{len(urls)}"
+            track = queue_item.metadata
             try:
                 logger.info(
-                    f'({current_track}) Downloading "{track["attributes"]["name"]}"'
+                    f'({queue_progress}) Downloading "{track["attributes"]["name"]}"'
                 )
-                if not track["attributes"].get("playParams"):
-                    logger.warning(
-                        f"({current_track}) Track is not streamable, skipping"
-                    )
-                    continue
-                track_id = track["id"]
-                logger.debug("Getting webplayback")
-                webplayback = downloader.get_webplayback(track_id)
-                cover_url = downloader.get_cover_url(webplayback)
                 if track["type"] == "songs":
-                    if track["attributes"]["hasLyrics"]:
-                        logger.debug("Getting lyrics")
-                        lyrics_unsynced, lyrics_synced = downloader.get_lyrics(
-                            track_id,
-                        )
-                    else:
-                        lyrics_unsynced, lyrics_synced = None, None
-                    logger.debug("Getting tags")
-                    tags = downloader.get_tags_song(webplayback, lyrics_unsynced)
-                    final_location = downloader.get_final_location(tags)
-                    lrc_location = downloader.get_lrc_location(final_location)
-                    cover_location = downloader.get_cover_location_song(final_location)
-                    logger.debug(f'Final location is "{final_location}"')
+                    logger.debug("Getting lyrics")
+                    lyrics = downloader_song.get_lyrics(track)
+                    logger.debug("Getting webplayback")
+                    webplayback = apple_music_api.get_webplayback(track["id"])
+                    tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
+                    final_path = downloader.get_final_path(tags, ".m4a")
+                    lrc_path = downloader_song.get_lrc_path(final_path)
+                    cover_path = downloader_song.get_cover_path(final_path)
+                    cover_url = downloader.get_cover_url(track)
                     if lrc_only:
                         pass
-                    elif final_location.exists() and not overwrite:
+                    elif final_path.exists() and not overwrite:
                         logger.warning(
-                            f'({current_track}) Track already exists at "{final_location}", skipping'
+                            f'({queue_progress}) Song already exists at "{final_path}", skipping'
                         )
                     else:
-                        logger.debug("Getting stream URL")
-                        stream_url = downloader.get_stream_url_song(webplayback)
-                        logger.debug("Getting decryption key")
-                        decryption_key = downloader.get_decryption_key_song(
-                            stream_url, track_id
-                        )
-                        encrypted_location = downloader.get_encrypted_location_audio(
-                            track_id
-                        )
-                        logger.debug(f'Downloading to "{encrypted_location}"')
-                        if download_mode == "ytdlp":
-                            downloader.download_ytdlp(encrypted_location, stream_url)
-                        if download_mode == "nm3u8dlre":
-                            downloader.download_nm3u8dlre(
-                                encrypted_location, stream_url
+                        logger.debug("Getting stream info")
+                        if codec_song in (
+                            SongCodec.AAC_LEGACY,
+                            SongCodec.AAC_HE_LEGACY,
+                        ):
+                            logger.debug("Getting stream info")
+                            stream_info = downloader_song_legacy.get_stream_info(
+                                webplayback
                             )
-                        decrypted_location = downloader.get_decrypted_location_audio(
-                            track_id
-                        )
-                        fixed_location = downloader.get_fixed_location(track_id, ".m4a")
-                        if remux_mode == "ffmpeg":
-                            logger.debug(
-                                f'Decrypting and remuxing to "{fixed_location}"'
+                            logger.debug("Getting decryption key")
+                            decryption_key = downloader_song_legacy.get_decryption_key(
+                                stream_info.pssh, track["id"]
                             )
-                            downloader.fixup_song_ffmpeg(
-                                encrypted_location, decryption_key, fixed_location
+                        else:
+                            stream_info = downloader_song.get_stream_info(track)
+                            if not stream_info.pssh:
+                                logger.warning(
+                                    f"({queue_progress}) Song does not contain Widevine DRM, skipping"
+                                )
+                                continue
+                            elif not stream_info.stream_url:
+                                logger.warning(
+                                    f"({queue_progress}) Song is not available with the selected codec, skipping"
+                                )
+                                continue
+                            logger.debug("Getting decryption key")
+                            decryption_key = downloader.get_decryption_key(
+                                stream_info.pssh, track["id"]
                             )
-                        if remux_mode == "mp4box":
-                            logger.debug(f'Decrypting to "{decrypted_location}"')
-                            downloader.decrypt(
-                                encrypted_location,
-                                decrypted_location,
+                        encrypted_path = downloader_song.get_encrypted_path(track["id"])
+                        decrypted_path = downloader_song.get_decrypted_path(track["id"])
+                        remuxed_path = downloader_song.get_remuxed_path(track["id"])
+                        logger.debug(f"Downloading to {encrypted_path}")
+                        downloader.download(encrypted_path, stream_info.stream_url)
+                        if codec_song in (
+                            SongCodec.AAC_LEGACY,
+                            SongCodec.AAC_HE_LEGACY,
+                        ):
+                            logger.debug(f"Remuxing/Decrypting to {remuxed_path}")
+                            downloader_song_legacy.remux(
+                                encrypted_path,
+                                decrypted_path,
+                                remuxed_path,
                                 decryption_key,
                             )
-                            logger.debug(f'Remuxing to "{fixed_location}"')
-                            downloader.fixup_song_mp4box(
-                                decrypted_location, fixed_location
+                        else:
+                            logger.debug(f"Decrypting to {decrypted_path}")
+                            downloader_song.decrypt(
+                                encrypted_path, decrypted_path, decryption_key
                             )
+                            logger.debug(f"Remuxing to {final_path}")
+                            downloader_song.remux(decrypted_path, remuxed_path)
                         logger.debug("Applying tags")
-                        downloader.apply_tags(fixed_location, tags, cover_url)
-                        logger.debug("Moving to final location")
-                        downloader.move_to_final_location(
-                            fixed_location, final_location
-                        )
-                    if no_lrc or not lyrics_synced:
+                        downloader.apply_tags(remuxed_path, tags, cover_url)
+                        logger.debug(f"Moving to {final_path}")
+                        downloader.move_to_output_path(remuxed_path, final_path)
+                    if no_lrc or not lyrics.synced:
                         pass
-                    elif lrc_location.exists() and not overwrite:
+                    elif lrc_path.exists() and not overwrite:
                         logger.debug(
-                            f'Synced lyrics already exists at "{lrc_location}", skipping'
+                            f'Synced lyrics already exists at "{lrc_path}", skipping'
                         )
                     else:
-                        logger.debug(f'Saving synced lyrics to "{lrc_location}"')
-                        downloader.save_lrc(lrc_location, lyrics_synced)
-                    if not save_cover or lrc_only:
+                        logger.debug(f'Saving synced lyrics to "{lrc_path}"')
+                        downloader_song.save_lrc(lrc_path, lyrics.synced)
+                    if lrc_only or not save_cover:
                         pass
-                    elif cover_location.exists() and not overwrite:
+                    elif cover_path.exists() and not overwrite:
                         logger.debug(
-                            f'Cover already exists at "{cover_location}", skipping'
+                            f'Cover already exists at "{cover_path}", skipping'
                         )
                     else:
-                        logger.debug(f'Saving cover to "{cover_location}"')
-                        downloader.save_cover(cover_location, cover_url)
-                if track["type"] == "music-videos":
-                    if (
-                        not disable_music_video_skip
-                        and download_type in ("album", "playlist")
-                        or lrc_only
-                        or not downloader.mp4decrypt_location
-                    ):
-                        logger.warning(
-                            f"({current_track}) Music video is not downloadable with current settings, skipping"
-                        )
-                        continue
-                    logger.debug("Getting tags")
-                    tags = downloader.get_tags_music_video(
-                        track["attributes"]["url"].split("/")[-1].split("?")[0]
-                    )
-                    final_location = downloader.get_final_location(tags)
-                    cover_location = downloader.get_cover_location_music_video(
-                        final_location
-                    )
-                    logger.debug(f'Final location is "{final_location}"')
-                    if final_location.exists() and not overwrite:
-                        logger.warning(
-                            f'({current_track}) Music video already exists at "{final_location}", skipping'
-                        )
-                    else:
-                        logger.debug("Getting stream URLs")
-                        (
-                            stream_url_video,
-                            stream_url_audio,
-                        ) = downloader.get_stream_url_music_video(webplayback)
-                        logger.debug("Getting decryption keys")
-                        decryption_key_video = (
-                            downloader.get_decryption_key_music_video(
-                                stream_url_video, track_id
-                            )
-                        )
-                        decryption_key_audio = (
-                            downloader.get_decryption_key_music_video(
-                                stream_url_audio, track_id
-                            )
-                        )
-                        encrypted_location_video = (
-                            downloader.get_encrypted_location_video(track_id)
-                        )
-                        encrypted_location_audio = (
-                            downloader.get_encrypted_location_audio(track_id)
-                        )
-                        decrypted_location_video = (
-                            downloader.get_decrypted_location_video(track_id)
-                        )
-                        decrypted_location_audio = (
-                            downloader.get_decrypted_location_audio(track_id)
-                        )
-                        logger.debug(
-                            f'Downloading video to "{encrypted_location_video}"'
-                        )
-                        if download_mode == "ytdlp":
-                            downloader.download_ytdlp(
-                                encrypted_location_video, stream_url_video
-                            )
-                        if download_mode == "nm3u8dlre":
-                            downloader.download_nm3u8dlre(
-                                encrypted_location_video, stream_url_video
-                            )
-                        logger.debug(
-                            f'Downloading audio to "{encrypted_location_audio}"'
-                        )
-                        if download_mode == "ytdlp":
-                            downloader.download_ytdlp(
-                                encrypted_location_audio, stream_url_audio
-                            )
-                        if download_mode == "nm3u8dlre":
-                            downloader.download_nm3u8dlre(
-                                encrypted_location_audio, stream_url_audio
-                            )
-                        logger.debug(
-                            f'Decrypting video to "{decrypted_location_video}"'
-                        )
-                        downloader.decrypt(
-                            encrypted_location_audio,
-                            decrypted_location_audio,
-                            decryption_key_audio,
-                        )
-                        logger.debug(
-                            f'Decrypting audio to "{decrypted_location_audio}"'
-                        )
-                        downloader.decrypt(
-                            encrypted_location_video,
-                            decrypted_location_video,
-                            decryption_key_video,
-                        )
-                        fixed_location = downloader.get_fixed_location(track_id, ".m4v")
-                        logger.debug(f'Remuxing to "{fixed_location}"')
-                        if remux_mode == "ffmpeg":
-                            downloader.fixup_music_video_ffmpeg(
-                                decrypted_location_video,
-                                decrypted_location_audio,
-                                fixed_location,
-                            )
-                        if remux_mode == "mp4box":
-                            downloader.fixup_music_video_mp4box(
-                                decrypted_location_audio,
-                                decrypted_location_video,
-                                fixed_location,
-                            )
-                        logger.debug("Applying tags")
-                        downloader.apply_tags(fixed_location, tags, cover_url)
-                        logger.debug("Moving to final location")
-                        downloader.move_to_final_location(
-                            fixed_location, final_location
-                        )
-                    if not save_cover:
-                        pass
-                    elif cover_location.exists() and not overwrite:
-                        logger.debug(
-                            f'Cover already exists at "{cover_location}", skipping'
-                        )
-                    else:
-                        logger.debug(f'Saving cover to "{cover_location}"')
-                        downloader.save_cover(cover_location, cover_url)
-            except Exception:
+                        logger.debug(f'Saving cover to "{cover_path}"')
+                        downloader.save_cover(cover_path, cover_url)
+            except Exception as e:
                 error_count += 1
                 logger.error(
-                    f'({current_track}) Failed to download "{track["attributes"]["name"]}"',
+                    f'({queue_progress}) Failed to download "{track["attributes"]["name"]}"',
                     exc_info=print_exceptions,
                 )
             finally:

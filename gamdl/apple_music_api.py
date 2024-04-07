@@ -194,7 +194,7 @@ class AppleMusicApi:
             AssertionError,
         ):
             self._raise_response_exception(response)
-        return webplayback
+        return webplayback[0]
 
     def get_widevine_license(
         self,

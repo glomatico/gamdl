@@ -6,6 +6,11 @@ class DownloadMode(Enum):
     NM3U8DLRE = "nm3u8dlre"
 
 
+class RemuxMode(Enum):
+    FFMPEG = "ffmpeg"
+    MP4BOX = "mp4box"
+
+
 class SongCodec(Enum):
     AAC_LEGACY = "aac-legacy"
     AAC_HE_LEGACY = "aac-he-legacy"
@@ -17,6 +22,7 @@ class SongCodec(Enum):
     AAC_HE_DOWNMIX = "aac-he-downmix"
     ALAC = "alac"
     ATMOS = "atmos"
+    ASK = "ask"
 
 
 class ArtworkFormat(Enum):

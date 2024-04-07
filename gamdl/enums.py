@@ -25,6 +25,12 @@ class SongCodec(Enum):
     ASK = "ask"
 
 
+class MusicVideoCodec(Enum):
+    AVC1 = "avc1"
+    HEVC = "hevc"
+    ASK = "ask"
+
+
 class ArtworkFormat(Enum):
     JPG = "jpg"
     PNG = "png"

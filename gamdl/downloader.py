@@ -100,14 +100,18 @@ class Downloader:
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()
         url_regex_result = re.search(
-            r"/([a-z]{2})/(album|playlist|song|music-video)/(.*)/([a-z]{2}\..*|[0-9]*)(?:\?i=)?([0-9a-z]*)",
+            r"/([a-z]{2})/(album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?",
             url,
         )
         url_info.storefront = url_regex_result.group(1)
         url_info.type = (
             "song" if url_regex_result.group(5) else url_regex_result.group(2)
         )
-        url_info.id = url_regex_result.group(5) or url_regex_result.group(4)
+        url_info.id = (
+            url_regex_result.group(5)
+            or url_regex_result.group(4)
+            or url_regex_result.group(3)
+        )
         return url_info
 
     def get_download_queue(self, url_info: UrlInfo) -> list[DownloadQueueItem]:
@@ -132,6 +136,10 @@ class Downloader:
         elif url_info.type == "music-video":
             download_queue.append(
                 DownloadQueueItem(self.apple_music_api.get_music_video(url_info.id))
+            )
+        elif url_info.type == "post":
+            download_queue.append(
+                DownloadQueueItem(self.apple_music_api.get_post(url_info.id))
             )
         else:
             raise Exception(f"Invalid url type: {url_info.type}")

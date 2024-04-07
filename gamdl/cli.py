@@ -13,15 +13,17 @@ from .apple_music_api import AppleMusicApi
 from .constants import *
 from .downloader import Downloader
 from .downloader_music_video import DownloaderMusicVideo
+from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
-from .enums import ArtworkFormat, DownloadMode, MusicVideoCodec, RemuxMode
+from .enums import ArtworkFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
 from .itunes_api import ItunesApi
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
 downloader_sig = inspect.signature(Downloader.__init__)
 downloader_song_sig = inspect.signature(DownloaderSong.__init__)
 downloader_music_video_sig = inspect.signature(DownloaderMusicVideo.__init__)
+downloader_post_sig = inspect.signature(DownloaderPost.__init__)
 
 
 def get_param_string(param: click.Parameter) -> str:
@@ -269,6 +271,13 @@ def load_config_file(
     default=downloader_music_video_sig.parameters["codec"].default,
     help="Music video codec.",
 )
+# DownloaderPost specific options
+@click.option(
+    "--quality-post",
+    type=PostQuality,
+    default=downloader_post_sig.parameters["quality"].default,
+    help="Post video quality.",
+)
 def main(
     urls: list[str],
     save_cover: bool,
@@ -300,8 +309,9 @@ def main(
     exclude_tags: str,
     artwork_size: int,
     truncate: int,
-    codec_song: str,
-    codec_music_video: str,
+    codec_song: SongCodec,
+    codec_music_video: MusicVideoCodec,
+    quality_post: PostQuality,
     no_config_file: bool,
 ):
     logging.basicConfig(
@@ -351,6 +361,10 @@ def main(
     downloader_music_video = DownloaderMusicVideo(
         downloader,
         codec_music_video,
+    )
+    downloader_post = DownloaderPost(
+        downloader,
+        quality_post,
     )
     if not lrc_only:
         if wvd_path and not wvd_path.exists():
@@ -578,6 +592,33 @@ def main(
                         downloader.apply_tags(remuxed_path, tags, cover_url)
                         logger.debug(f"Moving to {final_path}")
                         downloader.move_to_output_path(remuxed_path, final_path)
+                    if not save_cover:
+                        pass
+                    elif cover_path.exists() and not overwrite:
+                        logger.debug(
+                            f'Cover already exists at "{cover_path}", skipping'
+                        )
+                    else:
+                        logger.debug(f'Saving cover to "{cover_path}"')
+                        downloader.save_cover(cover_path, cover_url)
+                elif track["type"] == "uploaded-videos":
+                    stream_url = downloader_post.get_stream_url(track)
+                    tags = downloader_post.get_tags(track)
+                    temp_path = downloader_post.get_temp_path(track["id"])
+                    final_path = downloader.get_final_path(tags, ".m4v")
+                    cover_path = downloader_music_video.get_cover_path(final_path)
+                    cover_url = downloader.get_cover_url(track)
+                    if final_path.exists() and not overwrite:
+                        logger.warning(
+                            f'({queue_progress}) Post video already exists at "{final_path}", skipping'
+                        )
+                    else:
+                        logger.debug(f"Downloading to {final_path}")
+                        downloader.download_ytdlp(temp_path, stream_url)
+                        logger.debug("Applying tags")
+                        downloader.apply_tags(temp_path, tags, cover_url)
+                        logger.debug(f"Moving to {final_path}")
+                        downloader.move_to_output_path(temp_path, final_path)
                     if not save_cover:
                         pass
                     elif cover_path.exists() and not overwrite:

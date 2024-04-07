@@ -515,7 +515,7 @@ def main(
                     cover_url = downloader.get_cover_url(track)
                     if final_path.exists() and not overwrite:
                         logger.warning(
-                            f'({current_track}) Music video already exists at "{final_path}", skipping'
+                            f'({queue_progress}) Music video already exists at "{final_path}", skipping'
                         )
                     else:
                         logger.debug("Getting stream info")

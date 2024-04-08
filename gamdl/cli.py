@@ -397,8 +397,14 @@ def main(
         ):
             logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path))
             return
+        if (
+            download_mode == DownloadMode.NM3U8DLRE
+            and not downloader.nm3u8dlre_path_full
+        ):
+            logger.critical(X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_path))
+            return
         if not downloader.mp4decrypt_path_full:
-            logger.critical(
+            logger.warn(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path)
                 + ", music videos will not be downloaded"
             )

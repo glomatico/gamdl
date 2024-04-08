@@ -25,6 +25,12 @@ class SongCodec(Enum):
     ASK = "ask"
 
 
+class SyncedLyricsFormat(Enum):
+    LRC = "lrc"
+    SRT = "srt"
+    TTML = "ttml"
+
+
 class MusicVideoCodec(Enum):
     H264_BEST = "h264-best"
     H265_BEST = "h265-best"

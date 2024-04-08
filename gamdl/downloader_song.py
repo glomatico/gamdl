@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import datetime
 import json
@@ -324,7 +326,8 @@ class DownloaderSong:
         codec: str,
     ):
         use_mp4_format = any(
-            codec.startswith(possible_codec) for possible_codec in self.MP4_FORMAT_CODECS
+            codec.startswith(possible_codec)
+            for possible_codec in self.MP4_FORMAT_CODECS
         )
         subprocess.run(
             [

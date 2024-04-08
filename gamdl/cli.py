@@ -254,13 +254,6 @@ def load_config_file(
     default=downloader_sig.parameters["truncate"].default,
     help="Maximum length of the file/folder names.",
 )
-@click.option(
-    "--no-config-file",
-    "-n",
-    is_flag=True,
-    callback=load_config_file,
-    help="Do not use a config file.",
-)
 # DownloaderSong specific options
 @click.option(
     "--codec-song",
@@ -287,6 +280,14 @@ def load_config_file(
     type=PostQuality,
     default=downloader_post_sig.parameters["quality"].default,
     help="Post video quality.",
+)
+# This option should always be last
+@click.option(
+    "--no-config-file",
+    "-n",
+    is_flag=True,
+    callback=load_config_file,
+    help="Do not use a config file.",
 )
 def main(
     urls: list[str],

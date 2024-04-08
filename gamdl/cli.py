@@ -527,7 +527,11 @@ def main(
                                 encrypted_path, decrypted_path, decryption_key
                             )
                             logger.debug(f"Remuxing to {final_path}")
-                            downloader_song.remux(decrypted_path, remuxed_path)
+                            downloader_song.remux(
+                                decrypted_path,
+                                remuxed_path,
+                                stream_info.codec,
+                            )
                         logger.debug("Applying tags")
                         downloader.apply_tags(remuxed_path, tags, cover_url)
                         logger.debug(f"Moving to {final_path}")

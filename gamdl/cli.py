@@ -464,7 +464,7 @@ def main(
                     webplayback = apple_music_api.get_webplayback(track["id"])
                     tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
                     final_path = downloader.get_final_path(tags, ".m4a")
-                    synced_lyrics_path = downloader_song.get_lyrics_synced_path(
+                    lyrics_synced_path = downloader_song.get_lyrics_synced_path(
                         final_path
                     )
                     cover_path = downloader_song.get_cover_path(final_path)
@@ -533,14 +533,14 @@ def main(
                         downloader.move_to_output_path(remuxed_path, final_path)
                     if no_synced_lyrics or not lyrics.synced:
                         pass
-                    elif synced_lyrics_path.exists() and not overwrite:
+                    elif lyrics_synced_path.exists() and not overwrite:
                         logger.debug(
-                            f'Synced lyrics already exists at "{synced_lyrics_path}", skipping'
+                            f'Synced lyrics already exists at "{lyrics_synced_path}", skipping'
                         )
                     else:
-                        logger.debug(f'Saving synced lyrics to "{synced_lyrics_path}"')
+                        logger.debug(f'Saving synced lyrics to "{lyrics_synced_path}"')
                         downloader_song.save_lyrics_synced(
-                            synced_lyrics_path, lyrics.synced
+                            lyrics_synced_path, lyrics.synced
                         )
                     if synced_lyrics_only or not save_cover:
                         pass

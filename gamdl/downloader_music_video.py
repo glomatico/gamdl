@@ -6,6 +6,7 @@ import click
 import m3u8
 from tabulate import tabulate
 
+from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
 from .enums import MusicVideoCodec, RemuxMode
 from .models import StreamInfo
@@ -15,7 +16,7 @@ class DownloaderMusicVideo:
     def __init__(
         self,
         downloader: Downloader,
-        codec: MusicVideoCodec = MusicVideoCodec.AVC1,
+        codec: MusicVideoCodec = MusicVideoCodec.H264_BEST,
     ):
         self.downloader = downloader
         self.codec = codec
@@ -39,14 +40,16 @@ class DownloaderMusicVideo:
         playlists_filtered = [
             playlist
             for playlist in playlists
-            if playlist["stream_info"]["codecs"].startswith(self.codec.value)
+            if playlist["stream_info"]["codecs"].startswith(
+                MUSIC_VIDEO_CODEC_MAP[self.codec]
+            )
         ]
         if not playlists_filtered:
             playlists_filtered = [
                 playlist
                 for playlist in playlists
                 if playlist["stream_info"]["codecs"].startswith(
-                    MusicVideoCodec.AVC1.value
+                    MUSIC_VIDEO_CODEC_MAP[MusicVideoCodec.H264_BEST]
                 )
             ]
         playlists_filtered.sort(key=lambda x: x["stream_info"]["bandwidth"])

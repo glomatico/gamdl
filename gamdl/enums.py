@@ -26,8 +26,8 @@ class SongCodec(Enum):
 
 
 class MusicVideoCodec(Enum):
-    AVC1 = "avc1"
-    HVC1 = "hvc1"
+    H264_BEST = "h264-best"
+    H265_BEST = "h265-best"
     ASK = "ask"
 
 

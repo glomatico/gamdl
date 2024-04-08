@@ -83,7 +83,6 @@ You can configure gamdl by using the command line arguments or the config file. 
 
 ### Tags variables
 The following variables can be used in the template folders/files and/or in the `exclude_tags` list:
-
 * `album`
 * `album_artist`
 * `album_id`
@@ -117,7 +116,6 @@ The following variables can be used in the template folders/files and/or in the 
 
 ### Remux mode
 The following remux modes are available:
-
 * `ffmpeg`
     * Can be used without mp4decrypt only for songs and when using legacy song codecs
 * `mp4box`
@@ -127,7 +125,6 @@ The following remux modes are available:
 
 ### Download mode
 The following download modes are available:
-
 * `ytdlp`
 * `nm3u8dlre`
     * Faster than `ytdlp`
@@ -137,7 +134,6 @@ The following download modes are available:
 
 ### Song codecs
 The following codecs are available:
-
 * `aac-legacy`
 * `aac-he-legacy`
 * `aac`
@@ -153,7 +149,6 @@ The following codecs are available:
 
 ### Music videos codecs
 The following codecs are available:
-
 * `h264-best` (with AAC 256kbps, up to 1080p)
 * `h265-best` (With AAC 256kpbs, up to 2160p)
 * `ask`
@@ -161,7 +156,6 @@ The following codecs are available:
   
 ### Post videos/extra videos quality
 The following qualities are available:
-
 * `best` (with AAC 256kbps, up to 1080p)
 * `ask`
     * When using this option, the script will ask you which video quality to use.
@@ -170,14 +164,12 @@ Post videos doesn't require remuxing and are limited to `ytdlp` download mode.
 
 ### Synced lyrics formats
 The following synced lyrics formats are available:
-
 * `lrc`
 * `srt`
 * `ttml`
   
 ### Cover formats
 The following cover formats are available:
-
 * `jpg`
 * `png`
 

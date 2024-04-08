@@ -1,4 +1,4 @@
-from gamdl.enums import SongCodec, MusicVideoCodec
+from gamdl.enums import MusicVideoCodec, SongCodec, SyncedLyricsFormat
 
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
@@ -198,6 +198,12 @@ SONG_CODEC_REGEX_MAP = {
 MUSIC_VIDEO_CODEC_MAP = {
     MusicVideoCodec.H264_BEST: "avc1",
     MusicVideoCodec.H265_BEST: "hvc1",
+}
+
+SYNCED_LYRICS_FILE_EXTENSION_MAP = {
+    SyncedLyricsFormat.LRC: ".lrc",
+    SyncedLyricsFormat.SRT: ".srt",
+    SyncedLyricsFormat.TTML: ".ttml",
 }
 
 

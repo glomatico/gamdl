@@ -391,6 +391,16 @@ def main(
         ):
             logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path))
             return
+        if not downloader.mp4decrypt_path_full:
+            logger.warning(
+                logger.critical(
+                    X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path)
+                )
+                + ", music videos will not be downloaded"
+            )
+            skip_mv = True
+        else:
+            skip_mv = False
     error_count = 0
     if read_urls_as_txt:
         urls = [url.strip() for url in Path(urls[0]).read_text().splitlines()]
@@ -504,6 +514,10 @@ def main(
                     else:
                         logger.debug(f'Saving cover to "{cover_path}"')
                         downloader.save_cover(cover_path, cover_url)
+                elif lrc_only or track["type"] == "music-videos" and skip_mv:
+                    logger.warning(
+                        f"({queue_progress}) Track is not downloadable with current configuration, skipping"
+                    )
                 elif track["type"] == "music-videos":
                     music_video_id_alt = downloader_music_video.get_music_video_id_alt(
                         track

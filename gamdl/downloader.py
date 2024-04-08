@@ -310,7 +310,11 @@ class Downloader:
             mp4_tags["covr"] = [
                 MP4Cover(
                     self.get_url_response_bytes(cover_url),
-                    imageformat=MP4Cover.FORMAT_JPEG,
+                    imageformat=(
+                        MP4Cover.FORMAT_JPEG
+                        if self.artwork_format == ArtworkFormat.JPG
+                        else MP4Cover.FORMAT_PNG
+                    ),
                 )
             ]
         mp4 = MP4(path)

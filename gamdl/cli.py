@@ -98,13 +98,12 @@ def load_config_file(
     help="Interpret URLs as paths to text files containing URLs.",
 )
 @click.option(
-    "--lrc-only",
-    "-l",
+    "--synced-lyrics-only",
     is_flag=True,
     help="Download only the synced lyrics.",
 )
 @click.option(
-    "--no-lrc",
+    "--no-synced-lyrics",
     is_flag=True,
     help="Don't download the synced lyrics.",
 )
@@ -269,6 +268,12 @@ def load_config_file(
     default=downloader_song_sig.parameters["codec"].default,
     help="Song codec.",
 )
+@click.option(
+    "--synced-lyrics-format",
+    type=SyncedLyricsFormat,
+    default=downloader_song_sig.parameters["synced_lyrics_format"].default,
+    help="Synced lyrics format.",
+)
 # DownloaderMusicVideo specific options
 @click.option(
     "--codec-music-video",
@@ -289,8 +294,8 @@ def main(
     save_cover: bool,
     overwrite: bool,
     read_urls_as_txt: bool,
-    lrc_only: bool,
-    no_lrc: bool,
+    synced_lyrics_only: bool,
+    no_synced_lyrics: bool,
     config_path: Path,
     log_level: str,
     print_exceptions: bool,
@@ -316,6 +321,7 @@ def main(
     cover_size: int,
     truncate: int,
     codec_song: SongCodec,
+    synced_lyrics_format: SyncedLyricsFormat,
     codec_music_video: MusicVideoCodec,
     quality_post: PostQuality,
     no_config_file: bool,
@@ -359,6 +365,7 @@ def main(
     downloader_song = DownloaderSong(
         downloader,
         codec_song,
+        synced_lyrics_format,
     )
     downloader_song_legacy = DownloaderSongLegacy(
         downloader,
@@ -372,7 +379,7 @@ def main(
         downloader,
         quality_post,
     )
-    if not lrc_only:
+    if not synced_lyrics_only:
         if wvd_path and not wvd_path.exists():
             logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_path))
             return
@@ -439,7 +446,7 @@ def main(
                     )
                     continue
                 if (
-                    (lrc_only and track["type"] != "songs")
+                    (synced_lyrics_only and track["type"] != "songs")
                     or (track["type"] == "music-videos" and skip_mv)
                     or (
                         track["type"] == "music-videos"
@@ -457,17 +464,18 @@ def main(
                     webplayback = apple_music_api.get_webplayback(track["id"])
                     tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
                     final_path = downloader.get_final_path(tags, ".m4a")
-                    lrc_path = downloader_song.get_lrc_path(final_path)
+                    synced_lyrics_path = downloader_song.get_lyrics_synced_path(
+                        final_path
+                    )
                     cover_path = downloader_song.get_cover_path(final_path)
                     cover_url = downloader.get_cover_url(track)
-                    if lrc_only:
+                    if synced_lyrics_only:
                         pass
                     elif final_path.exists() and not overwrite:
                         logger.warning(
                             f'({queue_progress}) Song already exists at "{final_path}", skipping'
                         )
                     else:
-                        logger.debug("Getting stream info")
                         if codec_song in (
                             SongCodec.AAC_LEGACY,
                             SongCodec.AAC_HE_LEGACY,
@@ -523,16 +531,18 @@ def main(
                         downloader.apply_tags(remuxed_path, tags, cover_url)
                         logger.debug(f"Moving to {final_path}")
                         downloader.move_to_output_path(remuxed_path, final_path)
-                    if no_lrc or not lyrics.synced:
+                    if no_synced_lyrics or not lyrics.synced:
                         pass
-                    elif lrc_path.exists() and not overwrite:
+                    elif synced_lyrics_path.exists() and not overwrite:
                         logger.debug(
-                            f'Synced lyrics already exists at "{lrc_path}", skipping'
+                            f'Synced lyrics already exists at "{synced_lyrics_path}", skipping'
                         )
                     else:
-                        logger.debug(f'Saving synced lyrics to "{lrc_path}"')
-                        downloader_song.save_lrc(lrc_path, lyrics.synced)
-                    if lrc_only or not save_cover:
+                        logger.debug(f'Saving synced lyrics to "{synced_lyrics_path}"')
+                        downloader_song.save_lyrics_synced(
+                            synced_lyrics_path, lyrics.synced
+                        )
+                    if synced_lyrics_only or not save_cover:
                         pass
                     elif cover_path.exists() and not overwrite:
                         logger.debug(

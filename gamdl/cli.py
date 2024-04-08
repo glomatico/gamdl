@@ -433,7 +433,7 @@ def main(
                     )
                     continue
                 if (
-                    lrc_only
+                    (lrc_only and track["type"] != "songs")
                     or (track["type"] == "music-videos" and skip_mv)
                     or (
                         track["type"] == "music-videos"

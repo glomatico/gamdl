@@ -209,7 +209,7 @@ SYNCED_LYRICS_FILE_EXTENSION_MAP = {
 
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",
-    "config_location",
+    "config_path",
     "read_urls_as_txt",
     "no_config_file",
     "version",

@@ -1,4 +1,4 @@
-from gamdl.enums import SongCodec
+from gamdl.enums import SongCodec, MusicVideoCodec
 
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
@@ -195,11 +195,16 @@ SONG_CODEC_REGEX_MAP = {
     SongCodec.ATMOS: r"audio-atmos-.*",
 }
 
+MUSIC_VIDEO_CODEC_MAP = {
+    MusicVideoCodec.H264_BEST: "avc1",
+    MusicVideoCodec.H265_BEST: "hvc1",
+}
+
 
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",
     "config_location",
-    "url_txt",
+    "read_urls_as_txt",
     "no_config_file",
     "version",
     "help",

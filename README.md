@@ -135,7 +135,7 @@ The following download modes are available:
     * Can be obtained from here: https://github.com/nilaoda/N_m3u8DL-RE/releases
 
 
-### Song Codecs
+### Song codecs
 The following codecs are available:
 
 * `aac-legacy`
@@ -168,14 +168,14 @@ The following qualities are available:
 
 Post videos doesn't require remuxing and are limited to `ytdlp` download mode.
 
-### Synced Lyrics Formats
+### Synced lyrics formats
 The following synced lyrics formats are available:
 
 * `lrc`
 * `srt`
 * `ttml`
   
-### Cover Formats
+### Cover formats
 The following cover formats are available:
 
 * `jpg`

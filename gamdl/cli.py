@@ -76,6 +76,11 @@ def load_config_file(
     required=True,
 )
 @click.option(
+    "--disable-music-video-skip",
+    is_flag=True,
+    help="Don't skip downloading music videos in albums/playlists.",
+)
+@click.option(
     "--save-cover",
     "-s",
     is_flag=True,
@@ -280,6 +285,7 @@ def load_config_file(
 )
 def main(
     urls: list[str],
+    disable_music_video_skip: bool,
     save_cover: bool,
     overwrite: bool,
     read_urls_as_txt: bool,
@@ -392,10 +398,8 @@ def main(
             logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path))
             return
         if not downloader.mp4decrypt_path_full:
-            logger.warning(
-                logger.critical(
-                    X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path)
-                )
+            logger.critical(
+                X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path)
                 + ", music videos will not be downloaded"
             )
             skip_mv = True
@@ -514,7 +518,15 @@ def main(
                     else:
                         logger.debug(f'Saving cover to "{cover_path}"')
                         downloader.save_cover(cover_path, cover_url)
-                elif lrc_only or track["type"] == "music-videos" and skip_mv:
+                elif (
+                    lrc_only
+                    or (track["type"] == "music-videos" and skip_mv)
+                    or (
+                        track["type"] == "music-videos"
+                        and url_info.type == "album"
+                        and not disable_music_video_skip
+                    )
+                ):
                     logger.warning(
                         f"({queue_progress}) Track is not downloadable with current configuration, skipping"
                     )

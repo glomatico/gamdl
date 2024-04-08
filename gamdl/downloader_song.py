@@ -19,7 +19,7 @@ from .models import Lyrics, StreamInfo
 
 class DownloaderSong:
     DEFAULT_DECRYPTION_KEY = "32b8ade1769e26b1ffb8986352793fc6"
-    MP4_FLAG_CODECS = ["ec-3"]
+    MP4_FORMAT_CODECS = ["ec-3"]
 
     def __init__(
         self,
@@ -323,8 +323,8 @@ class DownloaderSong:
         remuxed_path: Path,
         codec: str,
     ):
-        use_mp4_flag = any(
-            codec.startswith(possible_codec) for possible_codec in self.MP4_FLAG_CODECS
+        use_mp4_format = any(
+            codec.startswith(possible_codec) for possible_codec in self.MP4_FORMAT_CODECS
         )
         subprocess.run(
             [
@@ -337,7 +337,7 @@ class DownloaderSong:
                 "-c",
                 "copy",
                 "-f",
-                "mp4" if use_mp4_flag else "m4a",
+                "mp4" if use_mp4_format else "ipod",
                 "-movflags",
                 "+faststart",
                 remuxed_path,

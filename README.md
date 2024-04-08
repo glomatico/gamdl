@@ -2,7 +2,7 @@
 A Python script to download Apple Music songs/music videos/albums/playlists/posts.
 
 ## Features
-* Download songs in AAC/HE-AAC/Binaural AAC/Dolby Atmos/ALAC*
+* Download songs in AAC/Spatial AAC/Dolby Atmos/ALAC*
 * Download music videos up to 4K
 * Download synced lyrics
 * Choose between FFmpeg and MP4Box for remuxing

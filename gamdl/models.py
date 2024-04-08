@@ -23,3 +23,4 @@ class Lyrics:
 class StreamInfo:
     stream_url: str = None
     pssh: str = None
+    codec: str = None

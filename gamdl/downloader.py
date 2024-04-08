@@ -256,7 +256,7 @@ class Downloader:
         return self.output_path.joinpath(*final_path_folder).joinpath(*final_path_file)
 
     def get_cover_url(self, metadata: dict) -> str:
-        return self._get_cover_url(metadata["attributes"]["cover"]["url"])
+        return self._get_cover_url(metadata["attributes"]["artwork"]["url"])
 
     def _get_cover_url(self, cover_url_template: str) -> str:
         return re.sub(

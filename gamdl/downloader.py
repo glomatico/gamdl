@@ -115,34 +115,33 @@ class Downloader:
         return url_info
 
     def get_download_queue(self, url_info: UrlInfo) -> list[DownloadQueueItem]:
+        return self._get_download_queue(url_info.type, url_info.id)
+
+    def _get_download_queue(self, url_type: str, id: str) -> list[DownloadQueueItem]:
         download_queue = []
-        if url_info.type == "song":
-            download_queue.append(
-                DownloadQueueItem(self.apple_music_api.get_song(url_info.id))
-            )
-        elif url_info.type == "album":
-            album = self.apple_music_api.get_album(url_info.id)
+        if url_type == "song":
+            download_queue.append(DownloadQueueItem(self.apple_music_api.get_song(id)))
+        elif url_type == "album":
+            album = self.apple_music_api.get_album(id)
             download_queue.extend(
                 DownloadQueueItem(track)
                 for track in album["relationships"]["tracks"]["data"]
             )
-        elif url_info.type == "playlist":
+        elif url_type == "playlist":
             download_queue.extend(
                 DownloadQueueItem(track)
-                for track in self.apple_music_api.get_playlist(url_info.id)[
-                    "relationships"
-                ]["tracks"]["data"]
+                for track in self.apple_music_api.get_playlist(id)["relationships"][
+                    "tracks"
+                ]["data"]
             )
-        elif url_info.type == "music-video":
+        elif url_type == "music-video":
             download_queue.append(
-                DownloadQueueItem(self.apple_music_api.get_music_video(url_info.id))
+                DownloadQueueItem(self.apple_music_api.get_music_video(id))
             )
-        elif url_info.type == "post":
-            download_queue.append(
-                DownloadQueueItem(self.apple_music_api.get_post(url_info.id))
-            )
+        elif url_type == "post":
+            download_queue.append(DownloadQueueItem(self.apple_music_api.get_post(id)))
         else:
-            raise Exception(f"Invalid url type: {url_info.type}")
+            raise Exception(f"Invalid url type: {url_type}")
         return download_queue
 
     def sanitize_date(self, date: str):

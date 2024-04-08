@@ -272,7 +272,7 @@ class Downloader:
 
     def apply_tags(
         self,
-        remuxed_path: Path,
+        path: Path,
         tags: dict,
         cover_url: str,
     ):
@@ -313,7 +313,7 @@ class Downloader:
                     imageformat=MP4Cover.FORMAT_JPEG,
                 )
             ]
-        mp4 = MP4(remuxed_path)
+        mp4 = MP4(path)
         mp4.clear()
         mp4.update(mp4_tags)
         mp4.save()

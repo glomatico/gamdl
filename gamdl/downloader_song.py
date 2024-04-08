@@ -19,6 +19,9 @@ from .models import Lyrics, StreamInfo
 
 class DownloaderSong:
     DEFAULT_DECRYPTION_KEY = "32b8ade1769e26b1ffb8986352793fc6"
+    MP4_FLAG_CODECS = [
+        SongCodec.ATMOS,
+    ]
 
     def __init__(
         self,
@@ -326,6 +329,8 @@ class DownloaderSong:
                 decrypted_path,
                 "-c",
                 "copy",
+                "-f",
+                "mp4" if self.codec in self.MP4_FLAG_CODECS else "m4a",
                 "-movflags",
                 "+faststart",
                 remuxed_path,

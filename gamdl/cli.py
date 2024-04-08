@@ -427,7 +427,24 @@ def main(
                 logger.info(
                     f'({queue_progress}) Downloading "{track["attributes"]["name"]}"'
                 )
-                if track["type"] == "songs":
+                if not track["attributes"].get("playParams"):
+                    logger.warning(
+                        f"({queue_progress}) Track is not streamable, skipping"
+                    )
+                    continue
+                if (
+                    lrc_only
+                    or (track["type"] == "music-videos" and skip_mv)
+                    or (
+                        track["type"] == "music-videos"
+                        and url_info.type == "album"
+                        and not disable_music_video_skip
+                    )
+                ):
+                    logger.warning(
+                        f"({queue_progress}) Track is not downloadable with current configuration, skipping"
+                    )
+                elif track["type"] == "songs":
                     logger.debug("Getting lyrics")
                     lyrics = downloader_song.get_lyrics(track)
                     logger.debug("Getting webplayback")
@@ -518,18 +535,6 @@ def main(
                     else:
                         logger.debug(f'Saving cover to "{cover_path}"')
                         downloader.save_cover(cover_path, cover_url)
-                elif (
-                    lrc_only
-                    or (track["type"] == "music-videos" and skip_mv)
-                    or (
-                        track["type"] == "music-videos"
-                        and url_info.type == "album"
-                        and not disable_music_video_skip
-                    )
-                ):
-                    logger.warning(
-                        f"({queue_progress}) Track is not downloadable with current configuration, skipping"
-                    )
                 elif track["type"] == "music-videos":
                     music_video_id_alt = downloader_music_video.get_music_video_id_alt(
                         track

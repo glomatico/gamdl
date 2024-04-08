@@ -19,9 +19,7 @@ from .models import Lyrics, StreamInfo
 
 class DownloaderSong:
     DEFAULT_DECRYPTION_KEY = "32b8ade1769e26b1ffb8986352793fc6"
-    MP4_FLAG_CODECS = [
-        SongCodec.ATMOS,
-    ]
+    MP4_FLAG_CODECS = ["ec-3"]
 
     def __init__(
         self,
@@ -126,6 +124,7 @@ class DownloaderSong:
         drm_ids = asset_infos[variant_id]["AUDIO-SESSION-KEY-IDS"]
         pssh = self.get_pssh(drm_infos, drm_ids)
         stream_info.pssh = pssh
+        stream_info.codec = playlist["stream_info"]["codecs"]
         return stream_info
 
     @staticmethod
@@ -297,13 +296,13 @@ class DownloaderSong:
             check=True,
         )
 
-    def remux(self, decrypted_path: Path, remuxed_path: Path) -> None:
+    def remux(self, decrypted_path: Path, remuxed_path: Path, codec: str):
         if self.downloader.remux_mode == RemuxMode.MP4BOX:
             self.remux_mp4box(decrypted_path, remuxed_path)
         elif self.downloader.remux_mode == RemuxMode.FFMPEG:
-            self.remux_ffmpeg(decrypted_path, remuxed_path)
+            self.remux_ffmpeg(decrypted_path, remuxed_path, codec)
 
-    def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path) -> None:
+    def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path):
         subprocess.run(
             [
                 self.downloader.mp4box_path_full,
@@ -318,7 +317,15 @@ class DownloaderSong:
             check=True,
         )
 
-    def remux_ffmpeg(self, decrypted_path: Path, remuxed_path: Path) -> None:
+    def remux_ffmpeg(
+        self,
+        decrypted_path: Path,
+        remuxed_path: Path,
+        codec: str,
+    ):
+        use_mp4_flag = any(
+            codec.startswith(possible_codec) for possible_codec in self.MP4_FLAG_CODECS
+        )
         subprocess.run(
             [
                 self.downloader.ffmpeg_path_full,
@@ -330,7 +337,7 @@ class DownloaderSong:
                 "-c",
                 "copy",
                 "-f",
-                "mp4" if self.codec in self.MP4_FLAG_CODECS else "m4a",
+                "mp4" if use_mp4_flag else "m4a",
                 "-movflags",
                 "+faststart",
                 remuxed_path,

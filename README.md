@@ -1,36 +1,37 @@
 # gamdl - Glomatico's Apple Music Downloader
-A Python script to download Apple Music songs/music videos/albums/playlists. This is a rework of https://github.com/loveyoursupport/AppleMusic-Downloader/tree/661a274d62586b521feec5a7de6bee0e230fdb7d.
+A Python script to download Apple Music songs/music videos/albums/playlists/posts.
 
 ## Features
-* Download songs in 256kbps AAC or in 64kbps HE-AAC
+* Download songs in AAC/HE-AAC/Binaural AAC/Dolby Atmos/ALAC*
 * Download music videos up to 4K
 * Download synced lyrics
 * Choose between FFmpeg and MP4Box for remuxing
 * Choose between yt-dlp and N_m3u8DL-RE for downloading
 * Highly customizable
-  
+
+## Prerequisites
+* Python 3.8 or higher
+* The cookies file of your Apple Music account (requires an active subscription)
+    * You can get your cookies by using one of the following extensions on your browser of choice at the Apple Music website with your account signed in:
+        * Firefox: https://addons.mozilla.org/addon/export-cookies-txt
+        * Chromium based browsers: https://chrome.google.com/webstore/detail/gdocmgbfkjnnpapoeobnolbbkoibbcif
+* FFmpeg on your system PATH
+    * Older versions of FFmpeg may not work.
+    * Up to date binaries can be obtained from the links below:
+        * Windows: https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases
+        * Linux: https://johnvansickle.com/ffmpeg/
+* (Optional) mp4decrypt on your system PATH
+    * Required to download music videos and songs in non-legacy formats.
+    * Binaries can be obtained from here: https://www.bento4.com/downloads/.
+ 
 ## Installation
-1. Install Python 3.7 or higher
-2. Add [FFmpeg](https://ffmpeg.org/download.html) and [mp4decrypt](https://www.bento4.com/downloads/) to PATH
-    * mp4decrypt is only needed if you want to download music videos
-3. Place your cookies in the same folder that you will run gamdl as `cookies.txt`
-    * You can export your cookies by using this Google Chrome extension on Apple Music website: https://chrome.google.com/webstore/detail/open-cookiestxt/gdocmgbfkjnnpapoeobnolbbkoibbcif. Make sure to be logged in.
-4. Place your .wvd file in the same folder that you will run gamdl as `device.wvd`
-    * To get a .wvd file, you can use [dumper](https://github.com/wvdumper/dumper) to dump a L3 CDM from an Android device. Once you have the L3 CDM, use pywidevine to create the .wvd file from it.
-        1. Install pywidevine with pip
-            ```bash
-            pip install pywidevine pyyaml
-            ```
-        2. Create the .wvd file
-            ```bash
-            pywidevine create-device -t ANDROID -l 3 -k private_key.pem -c client_id.bin -o .
-            ```
-5. Install gamdl using pip
+1. Install the package `gamdl` using pip
     ```bash
     pip install gamdl
     ```
+2. Place your cookies in the same directory you will run the script from and name it as `cookies.txt`
 
-## Examples
+## Usage
 * Download a song
     ```bash
     gamdl "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1626265761?i=1626265765"

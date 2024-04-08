@@ -154,7 +154,7 @@ The following codecs are available:
 * `ask`
     * When using this option, the script will ask you which audio and video codec to use.
   
-### Post videos/extra videos quality
+### Post videos/extra videos qualities
 The following qualities are available:
 * `best` (with AAC 256kbps, up to 1080p)
 * `ask`

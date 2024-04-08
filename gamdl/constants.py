@@ -1,3 +1,5 @@
+from gamdl.enums import MusicVideoCodec, SongCodec, SyncedLyricsFormat
+
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
     "AG": "143540-2,32",
@@ -182,10 +184,33 @@ MP4_TAGS_MAP = {
     "xid": "xid ",
 }
 
+SONG_CODEC_REGEX_MAP = {
+    SongCodec.AAC: r"audio-stereo-\d+",
+    SongCodec.AAC_HE: r"audio-HE-stereo-\d+",
+    SongCodec.AAC_BINAURAL: r"audio-stereo-\d+-binaural",
+    SongCodec.AAC_DOWNMIX: r"audio-stereo-\d+-downmix",
+    SongCodec.AAC_HE_BINAURAL: r"audio-HE-stereo-\d+-binaural",
+    SongCodec.AAC_HE_DOWNMIX: r"audio-HE-stereo-\d+-downmix",
+    SongCodec.ALAC: r"audio-alac-.*",
+    SongCodec.ATMOS: r"audio-atmos-.*",
+}
+
+MUSIC_VIDEO_CODEC_MAP = {
+    MusicVideoCodec.H264_BEST: "avc1",
+    MusicVideoCodec.H265_BEST: "hvc1",
+}
+
+SYNCED_LYRICS_FILE_EXTENSION_MAP = {
+    SyncedLyricsFormat.LRC: ".lrc",
+    SyncedLyricsFormat.SRT: ".srt",
+    SyncedLyricsFormat.TTML: ".ttml",
+}
+
+
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",
-    "config_location",
-    "url_txt",
+    "config_path",
+    "read_urls_as_txt",
     "no_config_file",
     "version",
     "help",

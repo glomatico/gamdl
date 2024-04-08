@@ -36,6 +36,6 @@ class PostQuality(Enum):
     ASK = "ask"
 
 
-class ArtworkFormat(Enum):
+class CoverFormat(Enum):
     JPG = "jpg"
     PNG = "png"

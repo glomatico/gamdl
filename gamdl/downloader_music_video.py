@@ -299,4 +299,4 @@ class DownloaderMusicVideo:
             )
 
     def get_cover_path(self, final_path: Path) -> Path:
-        return final_path.with_suffix(f".{self.downloader.artwork_format.value}")
+        return final_path.with_suffix(f".{self.downloader.cover_format.value}")

@@ -300,7 +300,7 @@ class DownloaderSong:
         return final_path.with_suffix(".lrc")
 
     def get_cover_path(self, final_path: Path) -> Path:
-        return final_path.parent / f"Cover.{self.downloader.artwork_format.value}"
+        return final_path.parent / f"Cover.{self.downloader.cover_format.value}"
 
     def save_lrc(self, lrc_path: Path, lyrics_synced: str):
         lrc_path.parent.mkdir(parents=True, exist_ok=True)

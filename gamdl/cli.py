@@ -16,7 +16,7 @@ from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
-from .enums import ArtworkFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
+from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
 from .itunes_api import ItunesApi
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
@@ -190,10 +190,10 @@ def load_config_file(
     help="Remux mode.",
 )
 @click.option(
-    "--artwork-format",
-    type=ArtworkFormat,
-    default=downloader_sig.parameters["artwork_format"].default,
-    help="Artwork format.",
+    "--cover-format",
+    type=CoverFormat,
+    default=downloader_sig.parameters["cover_format"].default,
+    help="Cover format.",
 )
 @click.option(
     "--template-folder-album",
@@ -244,10 +244,10 @@ def load_config_file(
     help="Comma-separated tags to exclude.",
 )
 @click.option(
-    "--artwork-size",
+    "--cover-size",
     type=int,
-    default=downloader_sig.parameters["artwork_size"].default,
-    help="Artwork size.",
+    default=downloader_sig.parameters["cover_size"].default,
+    help="Cover size.",
 )
 @click.option(
     "--truncate",
@@ -304,7 +304,7 @@ def main(
     mp4box_path: str,
     download_mode: DownloadMode,
     remux_mode: RemuxMode,
-    artwork_format: ArtworkFormat,
+    cover_format: CoverFormat,
     template_folder_album: str,
     template_folder_compilation: str,
     template_file_single_disc: str,
@@ -313,7 +313,7 @@ def main(
     template_file_no_album: str,
     template_date: str,
     exclude_tags: str,
-    artwork_size: int,
+    cover_size: int,
     truncate: int,
     codec_song: SongCodec,
     codec_music_video: MusicVideoCodec,
@@ -344,7 +344,7 @@ def main(
         mp4box_path,
         download_mode,
         remux_mode,
-        artwork_format,
+        cover_format,
         template_folder_album,
         template_folder_compilation,
         template_file_single_disc,
@@ -353,7 +353,7 @@ def main(
         template_file_no_album,
         template_date,
         exclude_tags,
-        artwork_size,
+        cover_size,
         truncate,
     )
     downloader_song = DownloaderSong(

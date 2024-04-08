@@ -13,7 +13,7 @@ from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
 from .constants import MP4_TAGS_MAP
-from .enums import ArtworkFormat, DownloadMode, RemuxMode
+from .enums import CoverFormat, DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
 from .models import DownloadQueueItem, UrlInfo
@@ -35,7 +35,7 @@ class Downloader:
         mp4box_path: str = "MP4Box",
         download_mode: DownloadMode = DownloadMode.YTDLP,
         remux_mode: RemuxMode = RemuxMode.FFMPEG,
-        artwork_format: ArtworkFormat = ArtworkFormat.JPG,
+        cover_format: CoverFormat = CoverFormat.JPG,
         template_folder_album: str = "{album_artist}/{album}",
         template_folder_compilation: str = "Compilations/{album}",
         template_file_single_disc: str = "{track:02d} {title}",
@@ -44,7 +44,7 @@ class Downloader:
         template_file_no_album: str = "{title}",
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: str = None,
-        artwork_size: int = 1200,
+        cover_size: int = 1200,
         truncate: int = 40,
         no_progress: bool = False,
     ):
@@ -59,7 +59,7 @@ class Downloader:
         self.mp4box_path = mp4box_path
         self.download_mode = download_mode
         self.remux_mode = remux_mode
-        self.artwork_format = artwork_format
+        self.cover_format = cover_format
         self.template_folder_album = template_folder_album
         self.template_folder_compilation = template_folder_compilation
         self.template_file_single_disc = template_file_single_disc
@@ -68,7 +68,7 @@ class Downloader:
         self.template_file_no_album = template_file_no_album
         self.template_date = template_date
         self.exclude_tags = exclude_tags
-        self.artwork_size = artwork_size
+        self.cover_size = cover_size
         self.truncate = truncate
         self.no_progress = no_progress
         self._set_binaries_path_full()
@@ -256,12 +256,12 @@ class Downloader:
         return self.output_path.joinpath(*final_path_folder).joinpath(*final_path_file)
 
     def get_cover_url(self, metadata: dict) -> str:
-        return self._get_cover_url(metadata["attributes"]["artwork"]["url"])
+        return self._get_cover_url(metadata["attributes"]["cover"]["url"])
 
     def _get_cover_url(self, cover_url_template: str) -> str:
         return re.sub(
             r"\{w\}x\{h\}([a-z]{2})\.jpg",
-            f"{self.artwork_size}x{self.artwork_size}bb.{self.artwork_format.value}",
+            f"{self.cover_size}x{self.cover_size}bb.{self.cover_format.value}",
             cover_url_template,
         )
 
@@ -312,7 +312,7 @@ class Downloader:
                     self.get_url_response_bytes(cover_url),
                     imageformat=(
                         MP4Cover.FORMAT_JPEG
-                        if self.artwork_format == ArtworkFormat.JPG
+                        if self.cover_format == CoverFormat.JPG
                         else MP4Cover.FORMAT_PNG
                     ),
                 )

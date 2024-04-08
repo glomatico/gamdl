@@ -4,7 +4,7 @@ A Python script to download Apple Music songs/music videos/albums/playlists/post
 ## Features
 * Download songs in AAC/Spatial AAC/Dolby Atmos/ALAC*
 * Download music videos up to 4K
-* Download synced lyrics
+* Download synced lyrics in LRC, SRT or TTML
 * Choose between FFmpeg and MP4Box for remuxing
 * Choose between yt-dlp and N_m3u8DL-RE for downloading
 * Highly customizable
@@ -115,6 +115,26 @@ The following variables can be used in the template folders/files and/or in the 
 * `track_total`
 * `xid`
 
+### Remux mode
+The following remux modes are available:
+
+* `ffmpeg`
+    * Can be used without mp4decrypt only for songs and when using legacy song codecs
+* `mp4box`
+    * Requires mp4decrypt
+    * Doesn't convert closed captions in music videos that have them
+    * Can be obtained from here: https://gpac.wp.imt.fr/downloads
+
+### Download mode
+The following download modes are available:
+
+* `ytdlp`
+* `nm3u8dlre`
+    * Faster than `ytdlp`
+    * Requires FFmpeg
+    * Can be obtained from here: https://github.com/nilaoda/N_m3u8DL-RE/releases
+
+
 ### Song Codecs
 The following codecs are available:
 
@@ -128,39 +148,36 @@ The following codecs are available:
 * `aac-he-downmix`
 * `alac`
 * `atmos`
-  
+
 **Support for non-legacy codecs are not guaranteed, as most of the songs cannot be decrypted  when using non-legacy codecs.**
 
 ### Music videos codecs
 The following codecs are available:
+
 * `h264-best` (with AAC 256kbps, up to 1080p)
 * `h265-best` (With AAC 256kpbs, up to 2160p)
 * `ask`
     * When using this option, the script will ask you which audio and video codec to use.
   
 ### Post videos/extra videos quality
+The following qualities are available:
+
 * `best` (with AAC 256kbps, up to 1080p)
 * `ask`
     * When using this option, the script will ask you which video quality to use.
+
+Post videos doesn't require remuxing and are limited to `ytdlp` download mode.
+
+### Synced Lyrics Formats
+The following synced lyrics formats are available:
+
+* `lrc`
+* `srt`
+* `ttml`
   
-### Remux mode
-The following remux modes are available:
-* `ffmpeg`
-    * Can be used without mp4decrypt only for songs and when using legacy song codecs
-* `mp4box`
-    * Requires mp4decrypt
-    * Doesn't convert closed captions in music videos that have them
-    * Can be obtained from here: https://gpac.wp.imt.fr/downloads
+### Cover Formats
+The following cover formats are available:
 
-Post videos don't require remuxing.
-
-### Download mode
-The following download modes are available:
-* `ytdlp`
-    * Post videos are limited to this mode only.
-* `nm3u8dlre`
-    * Faster than `ytdlp`
-    * Requires FFmpeg
-    * Can be obtained from here: https://github.com/nilaoda/N_m3u8DL-RE/releases
-
+* `jpg`
+* `png`
 

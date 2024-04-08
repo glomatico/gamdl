@@ -1,3 +1,4 @@
+import re
 import subprocess
 import urllib.parse
 from pathlib import Path
@@ -13,6 +14,8 @@ from .models import StreamInfo
 
 
 class DownloaderMusicVideo:
+    MP4_FORMAT_CODECS = ["hvc1", "ec-3"]
+
     def __init__(
         self,
         downloader: Downloader,
@@ -33,10 +36,10 @@ class DownloaderMusicVideo:
         ).geturl()
         return m3u8.load(stream_url_master_new).data
 
-    def get_stream_url_video(
+    def get_playlist_video(
         self,
         playlists: list[dict],
-    ):
+    ) -> dict:
         playlists_filtered = [
             playlist
             for playlist in playlists
@@ -53,12 +56,12 @@ class DownloaderMusicVideo:
                 )
             ]
         playlists_filtered.sort(key=lambda x: x["stream_info"]["bandwidth"])
-        return playlists_filtered[-1]["uri"]
+        return playlists_filtered[-1]
 
-    def get_stream_url_video_from_user(
+    def get_playlist_video_from_user(
         self,
         playlists: list[dict],
-    ):
+    ) -> dict:
         table = [
             [
                 i,
@@ -76,12 +79,12 @@ class DownloaderMusicVideo:
             )
         except click.exceptions.Abort:
             raise KeyboardInterrupt()
-        return playlists[choice]["uri"]
+        return playlists[choice]
 
-    def get_stream_url_audio(
+    def get_playlist_audio(
         self,
         playlists: list[dict],
-    ) -> str:
+    ) -> dict:
         stream_url = next(
             (
                 playlist
@@ -89,13 +92,13 @@ class DownloaderMusicVideo:
                 if playlist["group_id"] == "audio-stereo-256"
             ),
             None,
-        )["uri"]
+        )
         return stream_url
 
-    def get_stream_url_audio_from_user(
+    def get_playlist_audio_from_user(
         self,
         playlists: list[dict],
-    ):
+    ) -> dict:
         table = [
             [
                 i,
@@ -113,7 +116,7 @@ class DownloaderMusicVideo:
             )
         except click.exceptions.Abort:
             raise KeyboardInterrupt()
-        return playlists[choice]["uri"]
+        return playlists[choice]
 
     def get_pssh(self, m3u8_data: dict):
         return next(
@@ -128,13 +131,11 @@ class DownloaderMusicVideo:
     def get_stream_info_video(self, m3u8_master_data: dict) -> StreamInfo:
         stream_info = StreamInfo()
         if self.codec != MusicVideoCodec.ASK:
-            stream_info.stream_url = self.get_stream_url_video(
-                m3u8_master_data["playlists"]
-            )
+            playlist = self.get_playlist_video(m3u8_master_data["playlists"])
         else:
-            stream_info.stream_url = self.get_stream_url_video_from_user(
-                m3u8_master_data["playlists"]
-            )
+            playlist = self.get_playlist_video_from_user(m3u8_master_data["playlists"])
+        stream_info.stream_url = playlist["uri"]
+        stream_info.codec = playlist["stream_info"]["codecs"]
         m3u8_data = m3u8.load(stream_info.stream_url).data
         stream_info.pssh = self.get_pssh(m3u8_data)
         return stream_info
@@ -142,13 +143,13 @@ class DownloaderMusicVideo:
     def get_stream_info_audio(self, m3u8_master_data: dict) -> StreamInfo:
         stream_info = StreamInfo()
         if self.codec != MusicVideoCodec.ASK:
-            stream_info.stream_url = self.get_stream_url_audio(
-                m3u8_master_data["media"]
-            )
+            playlist = self.get_playlist_audio(m3u8_master_data["media"])
         else:
-            stream_info.stream_url = self.get_stream_url_audio_from_user(
-                m3u8_master_data["media"]
-            )
+            playlist = self.get_playlist_audio_from_user(m3u8_master_data["media"])
+        stream_info.stream_url = playlist["uri"]
+        stream_info.codec = re.search(r"_([^_]+)\.m3u8", stream_info.stream_url).group(
+            1
+        )
         m3u8_data = m3u8.load(stream_info.stream_url).data
         stream_info.pssh = self.get_pssh(m3u8_data)
         return stream_info
@@ -255,7 +256,12 @@ class DownloaderMusicVideo:
         decrypted_path_video: Path,
         decrypte_path_audio: Path,
         fixed_path: Path,
+        codec_video: str,
+        codec_audio: str,
     ):
+        use_mp4_flag = any(
+            codec_video.startswith(codec) for codec in self.MP4_FORMAT_CODECS
+        ) or any(codec_audio.startswith(codec) for codec in self.MP4_FORMAT_CODECS)
         subprocess.run(
             [
                 self.downloader.ffmpeg_path_full,
@@ -269,7 +275,7 @@ class DownloaderMusicVideo:
                 "-movflags",
                 "+faststart",
                 "-f",
-                "mp4",
+                "mp4" if use_mp4_flag else "ipod",
                 "-c",
                 "copy",
                 "-c:s",
@@ -284,6 +290,8 @@ class DownloaderMusicVideo:
         decrypted_path_video: Path,
         decrypted_path_audio: Path,
         remuxed_path: Path,
+        codec_video: str,
+        codec_audio: str,
     ):
         if self.downloader.remux_mode == RemuxMode.MP4BOX:
             self.remux_mp4box(
@@ -296,6 +304,8 @@ class DownloaderMusicVideo:
                 decrypted_path_video,
                 decrypted_path_audio,
                 remuxed_path,
+                codec_video,
+                codec_audio,
             )
 
     def get_cover_path(self, final_path: Path) -> Path:

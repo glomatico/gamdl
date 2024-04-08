@@ -639,6 +639,8 @@ def main(
                             decrypted_path_video,
                             decrypted_path_audio,
                             remuxed_path,
+                            stream_info_video.codec,
+                            stream_info_audio.codec,
                         )
                         logger.debug("Applying tags")
                         downloader.apply_tags(remuxed_path, tags, cover_url)

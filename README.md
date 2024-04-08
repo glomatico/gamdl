@@ -114,7 +114,7 @@ The following variables can be used in the template folders/files and/or in the 
 * `track_total`
 * `xid`
 
-### Remux mode
+### Remux modes
 The following remux modes are available:
 * `ffmpeg`
     * Can be used without mp4decrypt only for songs and when using legacy song codecs
@@ -123,7 +123,7 @@ The following remux modes are available:
     * Doesn't convert closed captions in music videos that have them
     * Can be obtained from here: https://gpac.wp.imt.fr/downloads
 
-### Download mode
+### Download modes
 The following download modes are available:
 * `ytdlp`
 * `nm3u8dlre`

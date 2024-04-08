@@ -1,4 +1,4 @@
-# gamdl - Glomatico's Apple Music Downloader
+# Glomatico's Apple Music Downloader
 A Python script to download Apple Music songs/music videos/albums/playlists/posts.
 
 ## Features

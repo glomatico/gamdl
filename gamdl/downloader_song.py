@@ -4,15 +4,16 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from xml.dom import minidom
 from xml.etree import ElementTree
 
 import click
 import m3u8
 from tabulate import tabulate
 
-from .constants import SONG_CODEC_REGEX_MAP
+from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
 from .downloader import Downloader
-from .enums import RemuxMode, SongCodec
+from .enums import RemuxMode, SongCodec, SyncedLyricsFormat
 from .models import Lyrics, StreamInfo
 
 
@@ -23,9 +24,11 @@ class DownloaderSong:
         self,
         downloader: Downloader,
         codec: SongCodec = SongCodec.AAC_LEGACY,
+        synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
     ):
         self.downloader = downloader
         self.codec = codec
+        self.synced_lyrics_format = synced_lyrics_format
 
     def get_drm_infos(self, m3u8_data: dict) -> dict:
         drm_info_raw = next(
@@ -122,7 +125,10 @@ class DownloaderSong:
         stream_info.pssh = pssh
         return stream_info
 
-    def get_lyrics_synced_timestamp_lrc(self, timestamp_ttml: str) -> str:
+    @staticmethod
+    def parse_datetime_obj_from_timestamp_ttml(
+        timestamp_ttml: str,
+    ) -> datetime.datetime:
         mins_secs_ms = re.findall(r"\d+", timestamp_ttml)
         ms, secs, mins = 0, 0, 0
         if len(mins_secs_ms) == 2 and ":" in timestamp_ttml:
@@ -133,16 +139,35 @@ class DownloaderSong:
             secs = float(f"{mins_secs_ms[-2]}.{mins_secs_ms[-1]}")
             if len(mins_secs_ms) > 2:
                 mins = int(mins_secs_ms[-3])
-        timestamp_lrc = datetime.datetime.fromtimestamp(
-            (mins * 60) + secs + (ms / 1000)
-        )
-        ms_new = timestamp_lrc.strftime("%f")[:-3]
+        return datetime.datetime.fromtimestamp((mins * 60) + secs + (ms / 1000))
+
+    def get_lyrics_synced_timestamp_lrc(self, timestamp_ttml: str) -> str:
+        datetime_obj = self.parse_datetime_obj_from_timestamp_ttml(timestamp_ttml)
+        ms_new = datetime_obj.strftime("%f")[:-3]
         if int(ms_new[-1]) >= 5:
             ms = int(f"{int(ms_new[:2]) + 1}") * 10
-            timestamp_lrc += datetime.timedelta(milliseconds=ms) - datetime.timedelta(
-                microseconds=timestamp_lrc.microsecond
+            datetime_obj += datetime.timedelta(milliseconds=ms) - datetime.timedelta(
+                microseconds=datetime_obj.microsecond
             )
-        return timestamp_lrc.strftime("%M:%S.%f")[:-4]
+        return datetime_obj.strftime("%M:%S.%f")[:-4]
+
+    def get_lyrics_synced_timestamp_srt(self, timestamp_ttml: str) -> str:
+        datetime_obj = self.parse_datetime_obj_from_timestamp_ttml(timestamp_ttml)
+        return datetime_obj.strftime("00:%M:%S,%f")[:-3]
+
+    def get_lyrics_synced_line_lrc(self, timestamp_ttml: str, text: str) -> str:
+        return f"[{self.get_lyrics_synced_timestamp_lrc(timestamp_ttml)}]{text}"
+
+    def get_lyrics_synced_line_srt(
+        self,
+        index: int,
+        timestamp_ttml_start: str,
+        timestamp_ttml_end: str,
+        text: str,
+    ) -> str:
+        timestamp_srt_start = self.get_lyrics_synced_timestamp_srt(timestamp_ttml_start)
+        timestamp_srt_end = self.get_lyrics_synced_timestamp_srt(timestamp_ttml_end)
+        return f"{index}\n{timestamp_srt_start} --> {timestamp_srt_end}\n{text}\n"
 
     def get_lyrics(self, track_metadata: dict) -> Lyrics:
         if not track_metadata["attributes"]["hasLyrics"]:
@@ -163,12 +188,24 @@ class DownloaderSong:
     def _get_lyrics(self, lyrics_ttml: str) -> Lyrics:
         lyrics = Lyrics("", "")
         lyrics_ttml_et = ElementTree.fromstring(lyrics_ttml)
+        index = 1
         for div in lyrics_ttml_et.iter("{http://www.w3.org/ns/ttml}div"):
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
-                if p.attrib.get("begin"):
-                    lyrics.synced += f'[{self.get_lyrics_synced_timestamp_lrc(p.attrib.get("begin"))}]{p.text}\n'
                 if p.text is not None:
                     lyrics.unsynced += p.text + "\n"
+                if p.attrib.get("begin"):
+                    if self.synced_lyrics_format == SyncedLyricsFormat.LRC:
+                        lyrics.synced += f"{self.get_lyrics_synced_line_lrc(p.attrib.get('begin'), p.text)}\n"
+                    elif self.synced_lyrics_format == SyncedLyricsFormat.SRT:
+                        lyrics.synced += f"{self.get_lyrics_synced_line_srt(index, p.attrib.get('begin'), p.attrib.get('end'), p.text)}\n"
+                    elif self.synced_lyrics_format == SyncedLyricsFormat.TTML:
+                        if not lyrics.synced:
+                            lyrics.synced = minidom.parseString(
+                                lyrics_ttml
+                            ).toprettyxml()
+                        continue
+                    lyrics.synced += "\n"
+                    index += 1
             lyrics.unsynced += "\n"
         lyrics.unsynced = lyrics.unsynced[:-2]
         return lyrics
@@ -296,12 +333,14 @@ class DownloaderSong:
             check=True,
         )
 
-    def get_lrc_path(self, final_path: Path) -> Path:
-        return final_path.with_suffix(".lrc")
+    def get_lyrics_synced_path(self, final_path: Path) -> Path:
+        return final_path.with_suffix(
+            SYNCED_LYRICS_FILE_EXTENSION_MAP[self.synced_lyrics_format]
+        )
 
     def get_cover_path(self, final_path: Path) -> Path:
         return final_path.parent / f"Cover.{self.downloader.cover_format.value}"
 
-    def save_lrc(self, lrc_path: Path, lyrics_synced: str):
-        lrc_path.parent.mkdir(parents=True, exist_ok=True)
-        lrc_path.write_text(lyrics_synced, encoding="utf8")
+    def save_lyrics_synced(self, lyrics_synced_path: Path, lyrics_synced: str):
+        lyrics_synced_path.parent.mkdir(parents=True, exist_ok=True)
+        lyrics_synced_path.write_text(lyrics_synced, encoding="utf8")

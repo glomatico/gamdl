@@ -419,7 +419,7 @@ def main(
             skip_mv = True
         else:
             skip_mv = False
-        if codec_song in LEGACY_CODECS:
+        if codec_song not in LEGACY_CODECS:
             logger.warn(
                 "You have chosen a non-legacy codec. Support for non-legacy codecs are not guaranteed, "
                 "as most of the songs cannot be downloaded when using non-legacy codecs."

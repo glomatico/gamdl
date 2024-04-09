@@ -46,9 +46,12 @@ class DownloaderPost:
             )
         ]
         print(tabulate(table))
-        choice = (
-            click.prompt("Choose a quality", type=click.IntRange(1, len(table))) - 1
-        )
+        try:
+            choice = (
+                click.prompt("Choose a quality", type=click.IntRange(1, len(table))) - 1
+            )
+        except click.exceptions.Abort:
+            raise KeyboardInterrupt()
         return metadata["attributes"]["assetTokens"][qualities[choice]]
 
     def get_stream_url(self, metadata: dict) -> str:

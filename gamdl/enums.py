@@ -20,8 +20,9 @@ class SongCodec(Enum):
     AAC_DOWNMIX = "aac-downmix"
     AAC_HE_BINAURAL = "aac-he-binaural"
     AAC_HE_DOWNMIX = "aac-he-downmix"
-    ALAC = "alac"
     ATMOS = "atmos"
+    AC3 = "ac3"
+    ALAC = "alac"
     ASK = "ask"
 
 

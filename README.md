@@ -147,7 +147,7 @@ The following codecs are available:
 * `ask`
     * When using this option, the script will ask you which **non-legacy** codec to use.
 
-**Support for non-legacy codecs are not guaranteed, as most of the songs cannot be decrypted  when using non-legacy codecs.**
+**Support for non-legacy codecs are not guaranteed, as most of the songs cannot be downloaded when using non-legacy codecs.**
 
 ### Music videos codecs
 The following codecs are available:

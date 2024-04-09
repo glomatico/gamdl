@@ -144,6 +144,8 @@ The following codecs are available:
 * `aac-he-downmix`
 * `alac`
 * `atmos`
+* `ask`
+    * When using this option, the script will ask you which **non-legacy** codec to use.
 
 **Support for non-legacy codecs are not guaranteed, as most of the songs cannot be decrypted  when using non-legacy codecs.**
 

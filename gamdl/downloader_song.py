@@ -106,7 +106,9 @@ class DownloaderSong:
         return drm_info["urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"]["URI"]
 
     def get_stream_info(self, track_metadata: dict) -> StreamInfo:
-        m3u8_url = track_metadata["attributes"]["extendedAssetUrls"]["enhancedHls"]
+        m3u8_url = track_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
+        if not m3u8_url:
+            return StreamInfo()
         return self._get_stream_info(m3u8_url)
 
     def _get_stream_info(self, m3u8_url: str) -> StreamInfo:

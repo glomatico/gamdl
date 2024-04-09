@@ -419,6 +419,11 @@ def main(
             skip_mv = True
         else:
             skip_mv = False
+        if codec_song in LEGACY_CODECS:
+            logger.warn(
+                "You have chosen a non-legacy codec. Support for non-legacy codecs are not guaranteed, "
+                "as most of the songs cannot be decrypted when using non-legacy codecs."
+            )
     error_count = 0
     if read_urls_as_txt:
         urls = [url.strip() for url in Path(urls[0]).read_text().splitlines()]
@@ -477,10 +482,7 @@ def main(
                             f'({queue_progress}) Song already exists at "{final_path}", skipping'
                         )
                     else:
-                        if codec_song in (
-                            SongCodec.AAC_LEGACY,
-                            SongCodec.AAC_HE_LEGACY,
-                        ):
+                        if codec_song in LEGACY_CODECS:
                             logger.debug("Getting stream info")
                             stream_info = downloader_song_legacy.get_stream_info(
                                 webplayback
@@ -491,7 +493,7 @@ def main(
                             )
                         else:
                             stream_info = downloader_song.get_stream_info(track)
-                            if not stream_info.stream_url:
+                            if not stream_info.stream_url or not stream_info.codec:
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
                                     " available in the chosen codec, skipping"
@@ -506,10 +508,7 @@ def main(
                         remuxed_path = downloader_song.get_remuxed_path(track["id"])
                         logger.debug(f"Downloading to {encrypted_path}")
                         downloader.download(encrypted_path, stream_info.stream_url)
-                        if codec_song in (
-                            SongCodec.AAC_LEGACY,
-                            SongCodec.AAC_HE_LEGACY,
-                        ):
+                        if codec_song in LEGACY_CODECS:
                             logger.debug(f"Remuxing/Decrypting to {remuxed_path}")
                             downloader_song_legacy.remux(
                                 encrypted_path,

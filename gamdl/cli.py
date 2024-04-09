@@ -494,7 +494,7 @@ def main(
                             if not stream_info.stream_url:
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
-                                    " available in the selected quality, skipping"
+                                    " available in the selected codec, skipping"
                                 )
                                 continue
                             logger.debug("Getting decryption key")

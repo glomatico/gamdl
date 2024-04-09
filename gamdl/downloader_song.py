@@ -43,7 +43,7 @@ class DownloaderSong:
             None,
         )
         if not drm_info_raw:
-            raise Exception("DRM info not found")
+            return None
         return json.loads(base64.b64decode(drm_info_raw["value"]).decode("utf-8"))
 
     def get_asset_infos(self, m3u8_data: dict) -> dict:
@@ -114,6 +114,8 @@ class DownloaderSong:
         m3u8_obj = m3u8.load(m3u8_url)
         m3u8_data = m3u8_obj.data
         drm_infos = self.get_drm_infos(m3u8_data)
+        if not drm_infos:
+            return stream_info
         asset_infos = self.get_asset_infos(m3u8_data)
         if self.codec == SongCodec.ASK:
             playlist = self.get_playlist_from_user(m3u8_data)

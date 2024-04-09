@@ -491,14 +491,9 @@ def main(
                             )
                         else:
                             stream_info = downloader_song.get_stream_info(track)
-                            if not stream_info.pssh:
+                            if not stream_info.stream_url:
                                 logger.warning(
-                                    f"({queue_progress}) Song does not contain Widevine DRM, skipping"
-                                )
-                                continue
-                            elif not stream_info.stream_url:
-                                logger.warning(
-                                    f"({queue_progress}) Song is not available with the selected codec, skipping"
+                                    f"({queue_progress}) Song is not downloadable, skipping"
                                 )
                                 continue
                             logger.debug("Getting decryption key")

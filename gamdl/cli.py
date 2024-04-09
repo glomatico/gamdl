@@ -493,7 +493,8 @@ def main(
                             stream_info = downloader_song.get_stream_info(track)
                             if not stream_info.stream_url:
                                 logger.warning(
-                                    f"({queue_progress}) Song is not downloadable, skipping"
+                                    f"({queue_progress}) Song is not downloadable or is not"
+                                    " available in the selected quality, skipping"
                                 )
                                 continue
                             logger.debug("Getting decryption key")

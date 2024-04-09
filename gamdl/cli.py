@@ -493,7 +493,7 @@ def main(
                             )
                         else:
                             stream_info = downloader_song.get_stream_info(track)
-                            if not stream_info.stream_url or not stream_info.codec:
+                            if not stream_info.stream_url or not stream_info.pssh:
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
                                     " available in the chosen codec, skipping"

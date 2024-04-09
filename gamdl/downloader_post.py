@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import click
+from tabulate import tabulate
 
 from .downloader import Downloader
-from tabulate import tabulate
 from .enums import PostQuality
 
 
@@ -62,7 +62,7 @@ class DownloaderPost:
         attributes = metadata["attributes"]
         return {
             "artist": attributes["artistName"],
-            "date": attributes["uploadDate"],
+            "date": self.downloader.sanitize_date(attributes["uploadDate"]),
             "title": attributes["name"],
             "title_id": int(metadata["id"]),
         }

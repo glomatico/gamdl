@@ -422,7 +422,7 @@ def main(
         if codec_song in LEGACY_CODECS:
             logger.warn(
                 "You have chosen a non-legacy codec. Support for non-legacy codecs are not guaranteed, "
-                "as most of the songs cannot be decrypted when using non-legacy codecs."
+                "as most of the songs cannot be downloaded when using non-legacy codecs."
             )
     error_count = 0
     if read_urls_as_txt:

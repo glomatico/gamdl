@@ -137,7 +137,7 @@ def load_config_file(
     "-l",
     type=str,
     default=apple_music_api_sig.parameters["language"].default,
-    help="Metadata language as an ISO-2A language code.",
+    help="Metadata language as an ISO-2A language code (don't always work for videos).",
 )
 # Downloader specific options
 @click.option(

@@ -148,7 +148,7 @@ The following codecs are available:
 * `ac3`
 * `alac`
 * `ask`
-    * When using this option, the script will ask you which **non-legacy** codec to use.
+    * When using this option, the script will ask you which **non-legacy** codec to use that is available for the song.
 
 **Support for non-legacy codecs are not guaranteed, as most of the songs cannot be downloaded when using non-legacy codecs.**
 

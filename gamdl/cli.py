@@ -137,7 +137,7 @@ def load_config_file(
     "-l",
     type=str,
     default=apple_music_api_sig.parameters["language"].default,
-    help="Metadata language in IETF format.",
+    help="Metadata language as an ISO-2A language code.",
 )
 # Downloader specific options
 @click.option(

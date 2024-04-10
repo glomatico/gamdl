@@ -300,6 +300,7 @@ class DownloaderSong:
                 decrypted_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux(self, decrypted_path: Path, remuxed_path: Path, codec: str):
@@ -321,6 +322,7 @@ class DownloaderSong:
                 remuxed_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux_ffmpeg(
@@ -350,6 +352,7 @@ class DownloaderSong:
                 remuxed_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def get_lyrics_synced_path(self, final_path: Path) -> Path:

@@ -48,7 +48,7 @@ class Downloader:
         exclude_tags: str = None,
         cover_size: int = 1200,
         truncate: int = 40,
-        no_progress: bool = False,
+        silent: bool = False,
     ):
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
@@ -72,10 +72,11 @@ class Downloader:
         self.exclude_tags = exclude_tags
         self.cover_size = cover_size
         self.truncate = truncate
-        self.no_progress = no_progress
+        self.silent = silent
         self._set_binaries_path_full()
         self._set_exclude_tags_list()
         self._set_truncate()
+        self._set_subprocess_additional_args()
 
     def _set_binaries_path_full(self):
         self.nm3u8dlre_path_full = shutil.which(self.nm3u8dlre_path)
@@ -92,6 +93,15 @@ class Downloader:
 
     def _set_truncate(self):
         self.truncate = None if self.truncate < 4 else self.truncate
+
+    def _set_subprocess_additional_args(self):
+        if self.silent:
+            self.subprocess_additional_args = {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+            }
+        else:
+            self.subprocess_additional_args = {}
 
     def set_cdm(self):
         if self.wvd_path:
@@ -183,19 +193,12 @@ class Downloader:
                 "allow_unplayable_formats": True,
                 "fixup": "never",
                 "allowed_extractors": ["generic"],
-                "noprogress": self.no_progress,
+                "noprogress": self.silent,
             }
         ) as ydl:
             ydl.download(stream_url)
 
     def download_nm3u8dlre(self, path: Path, stream_url: str):
-        if self.no_progress:
-            subprocess_additional_args = {
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-            }
-        else:
-            subprocess_additional_args = {}
         path.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
@@ -215,7 +218,7 @@ class Downloader:
                 path.parent,
             ],
             check=True,
-            **subprocess_additional_args,
+            **self.subprocess_additional_args,
         )
 
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:

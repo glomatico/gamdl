@@ -62,6 +62,7 @@ class DownloaderSongLegacy(DownloaderSong):
                 decrypted_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path) -> None:
@@ -77,6 +78,7 @@ class DownloaderSongLegacy(DownloaderSong):
                 remuxed_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux_ffmpeg(
@@ -102,6 +104,7 @@ class DownloaderSongLegacy(DownloaderSong):
                 remuxed_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux(

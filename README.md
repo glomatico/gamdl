@@ -157,13 +157,13 @@ The following codecs are available:
 * `h264-best` (with AAC 256kbps, up to 1080p)
 * `h265-best` (With AAC 256kpbs, up to 2160p)
 * `ask`
-    * When using this option, the script will ask you which audio and video codec to use.
+    * When using this option, the script will ask you which audio and video codec to use that is available for the music video.
   
 ### Post videos/extra videos qualities
 The following qualities are available:
 * `best` (with AAC 256kbps, up to 1080p)
 * `ask`
-    * When using this option, the script will ask you which video quality to use.
+    * When using this option, the script will ask you which video quality to use that is available for the video.
 
 Post videos doesn't require remuxing and are limited to `ytdlp` download mode.
 

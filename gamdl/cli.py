@@ -132,6 +132,13 @@ def load_config_file(
     default=apple_music_api_sig.parameters["cookies_path"].default,
     help="Path to .txt cookies file.",
 )
+@click.option(
+    "--language",
+    "-l",
+    type=str,
+    default=apple_music_api_sig.parameters["language"].default,
+    help="Metadata language in IETF format.",
+)
 # Downloader specific options
 @click.option(
     "--output-path",
@@ -301,6 +308,7 @@ def main(
     log_level: str,
     print_exceptions: bool,
     cookies_path: Path,
+    language: str,
     output_path: Path,
     temp_path: Path,
     wvd_path: Path,
@@ -334,7 +342,10 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     logger.debug("Starting downloader")
-    apple_music_api = AppleMusicApi(cookies_path)
+    apple_music_api = AppleMusicApi(
+        cookies_path,
+        language=language,
+    )
     itunes_api = ItunesApi(
         apple_music_api.storefront,
         apple_music_api.language,

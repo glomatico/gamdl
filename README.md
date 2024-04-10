@@ -144,8 +144,9 @@ The following codecs are available:
 * `aac-downmix`
 * `aac-he-binaural`
 * `aac-he-downmix`
-* `alac`
 * `atmos`
+* `ac3`
+* `alac`
 * `ask`
     * When using this option, the script will ask you which **non-legacy** codec to use.
 

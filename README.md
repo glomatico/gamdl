@@ -34,11 +34,11 @@ A Python script to download Apple Music songs/music videos/albums/playlists/post
 ## Usage
 * Download a song
     ```bash
-    gamdl "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1626265761?i=1626265765"
+    gamdl "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
     ```
 * Download an album
     ```bash
-    gamdl "https://music.apple.com/us/album/whenever-you-need-somebody-2022-remaster/1626265761"
+    gamdl "https://music.apple.com/us/album/whenever-you-need-somebody-2022-remaster/1624945511"
     ```
 
 ## Configuration

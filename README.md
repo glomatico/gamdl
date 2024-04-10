@@ -43,44 +43,44 @@ A Python script to download Apple Music songs/music videos/albums/playlists/post
 
 ## Configuration
 You can configure gamdl by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.
-| Command line argument / Config file key                         | Description                                                        | Default value                                |
-| --------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------- |
-| `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.           | `false`                                      |
-| `--save-cover`, `-s` / `save_cover`                             | Save cover as a separate file.                                     | `false`                                      |
-| `--overwrite` / `overwrite`                                     | Overwrite existing files.                                          | `false`                                      |
-| `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs.             | `false`                                      |
-| `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                   | `false`                                      |
-| `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                  | `false`                                      |
-| `--config-path` / -                                             | Path to config file.                                               | `<home>/.spotify-web-downloader/config.json` |
-| `--log-level` / `log_level`                                     | Log level.                                                         | `INFO`                                       |
-| `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                  | `false`                                      |
-| `--cookies-path`, `-c` / `cookies_path`                         | Path to .txt cookies file.                                         | `./cookies.txt`                              |
-| `--language`, `-l` / `language`                                 | Metadata language as an ISO-2A language code.                      | `en-US`                                      |
-| `--output-path`, `-o` / `output_path`                           | Path to output directory.                                          | `./Apple Music`                              |
-| `--temp-path` / `temp_path`                                     | Path to temporary directory.                                       | `./temp`                                     |
-| `--wvd-path` / `wvd_path`                                       | Path to .wvd file.                                                 | `null`                                       |
-| `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                        | `N_m3u8dl-RE`                                |
-| `--mp4decrypt-path` / `mp4decrypt_path`                         | Path to mp4decrypt binary.                                         | `mp4decrypt`                                 |
-| `--ffmpeg-path` / `ffmpeg_path`                                 | Path to FFmpeg binary.                                             | `ffmpeg`                                     |
-| `--mp4box-path` / `mp4box_path`                                 | Path to MP4Box binary.                                             | `MP4Box`                                     |
-| `--download-mode` / `download_mode`                             | Download mode.                                                     | `ytdlp`                                      |
-| `--remux-mode` / `remux_mode`                                   | Remux mode.                                                        | `ffmpeg`                                     |
-| `--cover-format` / `cover_format`                               | Cover format.                                                      | `jpg`                                        |
-| `--template-folder-album` / `template_folder_album`             | Template folder for tracks that are part of an album.              | `{album_artist}/{album}`                     |
-| `--template-folder-compilation` / `template_folder_compilation` | Template folder for tracks that are part of a compilation album.   | `Compilations/{album}`                       |
-| `--template-file-single-disc` / `template_file_single_disc`     | Template file for the tracks that are part of a single-disc album. | `{track:02d} {title}`                        |
-| `--template-file-multi-disc` / `template_file_multi_disc`       | Template file for the tracks that are part of a multi-disc album.  | `{disc}-{track:02d} {title}`                 |
-| `--template-folder-no-album` / `template_folder_no_album`       | Template folder for the tracks that are not part of an album.      | `{artist}/Unknown Album`                     |
-| `--template-file-no-album` / `template_file_no_album`           | Template file for the tracks that are not part of an album.        | `{title}`                                    |
-| `--template-date` / `template_date`                             | Date tag template.                                                 | `%Y-%m-%dT%H:%M:%SZ`                         |
-| `--exclude-tags` / `exclude_tags`                               | Comma-separated tags to exclude.                                   | `null`                                       |
-| `--cover-size` / `cover_size`                                   | Cover size.                                                        | `1200`                                       |
-| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                           | `40`                                         |
-| `--codec-song` / `codec_song`                                   | Song codec.                                                        | `aac-legacy`                                 |
-| `--synced-lyrics-format` / `synced_lyrics_format`               | Synced lyrics format.                                              | `lrc`                                        |
-| `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                 | `h264-best`                                  |
-| `--quality-post` / `quality_post`                               | Post video quality.                                                | `best`                                       |
-| `--no-config-file`, `-n` / -                                    | Do not use a config file.                                          | `false`                                      |
+| Command line argument / Config file key                         | Description                                                                  | Default value                                |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------- |
+| `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                     | `false`                                      |
+| `--save-cover`, `-s` / `save_cover`                             | Save cover as a separate file.                                               | `false`                                      |
+| `--overwrite` / `overwrite`                                     | Overwrite existing files.                                                    | `false`                                      |
+| `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs.                       | `false`                                      |
+| `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                             | `false`                                      |
+| `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                                      |
+| `--config-path` / -                                             | Path to config file.                                                         | `<home>/.spotify-web-downloader/config.json` |
+| `--log-level` / `log_level`                                     | Log level.                                                                   | `INFO`                                       |
+| `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                            | `false`                                      |
+| `--cookies-path`, `-c` / `cookies_path`                         | Path to .txt cookies file.                                                   | `./cookies.txt`                              |
+| `--language`, `-l` / `language`                                 | Metadata language as an ISO-2A language code (don't always work for videos). | `en-US`                                      |
+| `--output-path`, `-o` / `output_path`                           | Path to output directory.                                                    | `./Apple Music`                              |
+| `--temp-path` / `temp_path`                                     | Path to temporary directory.                                                 | `./temp`                                     |
+| `--wvd-path` / `wvd_path`                                       | Path to .wvd file.                                                           | `null`                                       |
+| `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                                  | `N_m3u8dl-RE`                                |
+| `--mp4decrypt-path` / `mp4decrypt_path`                         | Path to mp4decrypt binary.                                                   | `mp4decrypt`                                 |
+| `--ffmpeg-path` / `ffmpeg_path`                                 | Path to FFmpeg binary.                                                       | `ffmpeg`                                     |
+| `--mp4box-path` / `mp4box_path`                                 | Path to MP4Box binary.                                                       | `MP4Box`                                     |
+| `--download-mode` / `download_mode`                             | Download mode.                                                               | `ytdlp`                                      |
+| `--remux-mode` / `remux_mode`                                   | Remux mode.                                                                  | `ffmpeg`                                     |
+| `--cover-format` / `cover_format`                               | Cover format.                                                                | `jpg`                                        |
+| `--template-folder-album` / `template_folder_album`             | Template folder for tracks that are part of an album.                        | `{album_artist}/{album}`                     |
+| `--template-folder-compilation` / `template_folder_compilation` | Template folder for tracks that are part of a compilation album.             | `Compilations/{album}`                       |
+| `--template-file-single-disc` / `template_file_single_disc`     | Template file for the tracks that are part of a single-disc album.           | `{track:02d} {title}`                        |
+| `--template-file-multi-disc` / `template_file_multi_disc`       | Template file for the tracks that are part of a multi-disc album.            | `{disc}-{track:02d} {title}`                 |
+| `--template-folder-no-album` / `template_folder_no_album`       | Template folder for the tracks that are not part of an album.                | `{artist}/Unknown Album`                     |
+| `--template-file-no-album` / `template_file_no_album`           | Template file for the tracks that are not part of an album.                  | `{title}`                                    |
+| `--template-date` / `template_date`                             | Date tag template.                                                           | `%Y-%m-%dT%H:%M:%SZ`                         |
+| `--exclude-tags` / `exclude_tags`                               | Comma-separated tags to exclude.                                             | `null`                                       |
+| `--cover-size` / `cover_size`                                   | Cover size.                                                                  | `1200`                                       |
+| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                                     | `40`                                         |
+| `--codec-song` / `codec_song`                                   | Song codec.                                                                  | `aac-legacy`                                 |
+| `--synced-lyrics-format` / `synced_lyrics_format`               | Synced lyrics format.                                                        | `lrc`                                        |
+| `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264-best`                                  |
+| `--quality-post` / `quality_post`                               | Post video quality.                                                          | `best`                                       |
+| `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | `false`                                      |
 
 
 ### Tags variables

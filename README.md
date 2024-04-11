@@ -32,6 +32,11 @@ A Python script to download Apple Music songs/music videos/albums/playlists/post
 2. Place your cookies in the same directory you will run gamdl from and name it as `cookies.txt`
 
 ## Usage
+```bash
+gamdl [OPTIONS] URLS...
+```
+
+### Examples
 * Download a song
     ```bash
     gamdl "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"

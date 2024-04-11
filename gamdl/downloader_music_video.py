@@ -229,6 +229,7 @@ class DownloaderMusicVideo:
                 decrypted_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux_mp4box(
@@ -251,6 +252,7 @@ class DownloaderMusicVideo:
                 fixed_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux_ffmpeg(
@@ -285,6 +287,7 @@ class DownloaderMusicVideo:
                 fixed_path,
             ],
             check=True,
+            **self.downloader.subprocess_additional_args,
         )
 
     def remux(

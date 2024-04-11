@@ -1,6 +1,6 @@
 [project]
 name = "gamdl"
-description = "Download Apple Music songs/music videos/albums/playlists"
+description = "A Python script to download Apple Music songs/music videos/albums/playlists/post videos."
 requires-python = ">=3.8"
 authors = [{ name = "glomatico" }]
 dependencies = [

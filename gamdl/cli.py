@@ -342,6 +342,9 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     logger.debug("Starting downloader")
+    if not cookies_path.exists():
+        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_path))
+        return
     apple_music_api = AppleMusicApi(
         cookies_path,
         language=language,

@@ -152,7 +152,6 @@ The following codecs are available:
 * `atmos`
 * `ac3`
 * `alac`
-    * Doesn't work with the built-in WVD.
 * `ask`
     * When using this option, gamdl will ask you which **non-legacy** codec to use that is available for the song.
 

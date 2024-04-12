@@ -160,7 +160,7 @@ The following codecs are available:
 ### Music videos codecs
 The following codecs are available:
 * `h264-best` (with AAC 256kbps, up to 1080p)
-* `h265-best` (With AAC 256kpbs, up to 2160p)
+* `h265-best` (with AAC 256kpbs, up to 2160p)
 * `ask`
     * When using this option, gamdl will ask you which audio and video codec to use that is available for the music video.
   

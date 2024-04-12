@@ -205,9 +205,9 @@ class DownloaderSong:
                     lyrics.unsynced += p.text + "\n"
                 if p.attrib.get("begin"):
                     if self.synced_lyrics_format == SyncedLyricsFormat.LRC:
-                        lyrics.synced += f"{self.get_lyrics_synced_line_lrc(p.attrib.get('begin'), p.text)}\n"
+                        lyrics.synced += f"{self.get_lyrics_synced_line_lrc(p.attrib.get('begin'), p.text)}"
                     elif self.synced_lyrics_format == SyncedLyricsFormat.SRT:
-                        lyrics.synced += f"{self.get_lyrics_synced_line_srt(index, p.attrib.get('begin'), p.attrib.get('end'), p.text)}\n"
+                        lyrics.synced += f"{self.get_lyrics_synced_line_srt(index, p.attrib.get('begin'), p.attrib.get('end'), p.text)}"
                     elif self.synced_lyrics_format == SyncedLyricsFormat.TTML:
                         if not lyrics.synced:
                             lyrics.synced = minidom.parseString(

@@ -184,7 +184,9 @@ class DownloaderSong:
             track_metadata = self.downloader.apple_music_api.get_song(
                 track_metadata["id"]
             )
-        if track_metadata["relationships"]["lyrics"]["data"]:
+        if track_metadata["relationships"]["lyrics"]["data"] and track_metadata[
+            "relationships"
+        ]["lyrics"]["data"][0].get("attributes"):
             return self._get_lyrics(
                 track_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
                     "ttml"

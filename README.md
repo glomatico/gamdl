@@ -152,6 +152,7 @@ The following codecs are available:
 * `atmos`
 * `ac3`
 * `alac`
+    * Doesn't work with the built-in WVD.
 * `ask`
     * When using this option, gamdl will ask you which **non-legacy** codec to use that is available for the song.
 
@@ -159,14 +160,14 @@ The following codecs are available:
 
 ### Music videos codecs
 The following codecs are available:
-* `h264-best` (with AAC 256kbps, up to 1080p)
-* `h265-best` (with AAC 256kpbs, up to 2160p)
+* `h264-best` (up to 1080p, with AAC 256kbps)
+* `h265-best` (up to 2160p, with AAC 256kpbs)
 * `ask`
     * When using this option, gamdl will ask you which audio and video codec to use that is available for the music video.
   
 ### Post videos/extra videos qualities
 The following qualities are available:
-* `best` (with AAC 256kbps, up to 1080p)
+* `best` (up to 1080p, with AAC 256kbps)
 * `ask`
     * When using this option, gamdl will ask you which video quality to use that is available for the video.
 

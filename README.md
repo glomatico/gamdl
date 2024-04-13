@@ -1,5 +1,5 @@
 # Glomatico's Apple Music Downloader
-A Python script to download Apple Music songs/music videos/albums/playlists/post videos.
+A Python CLI app to download Apple Music songs/music videos/albums/playlists/posts.
 
 ## Features
 * Download songs in AAC/Spatial AAC/Dolby Atmos/ALAC*

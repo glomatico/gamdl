@@ -1,6 +1,8 @@
 # Glomatico's Apple Music Downloader
 A Python CLI app to download Apple Music songs/music videos/albums/playlists/posts.
 
+**Discord Server:** https://discord.gg/aBjMEZ9tnq
+
 ## Features
 * Download songs in AAC/Spatial AAC/Dolby Atmos/ALAC*
 * Download music videos up to 4K

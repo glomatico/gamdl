@@ -178,22 +178,24 @@ class DownloaderSong:
         return f"{index}\n{timestamp_srt_start} --> {timestamp_srt_end}\n{text}\n"
 
     def get_lyrics(self, track_metadata: dict) -> Lyrics:
+        lyrics = Lyrics()
         if not track_metadata["attributes"]["hasLyrics"]:
-            return Lyrics()
+            return lyrics
         elif track_metadata.get("relationships") is None:
             track_metadata = self.downloader.apple_music_api.get_song(
                 track_metadata["id"]
             )
-        if track_metadata["relationships"]["lyrics"]["data"] and track_metadata[
-            "relationships"
-        ]["lyrics"]["data"][0].get("attributes"):
-            return self._get_lyrics(
+        if (
+            track_metadata["relationships"].get("lyrics")
+            and track_metadata["relationships"]["lyrics"]["data"]
+            and track_metadata["relationships"]["lyrics"]["data"][0].get("attributes")
+        ):
+            lyrics = self._get_lyrics(
                 track_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
                     "ttml"
                 ]
             )
-        else:
-            return Lyrics()
+        return lyrics
 
     def _get_lyrics(self, lyrics_ttml: str) -> Lyrics:
         lyrics = Lyrics("", "")

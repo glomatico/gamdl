@@ -322,6 +322,7 @@ class DownloaderSong:
                 decrypted_path,
                 "-itags",
                 "artist=placeholder",
+                "-keep-utc",
                 "-new",
                 remuxed_path,
             ],

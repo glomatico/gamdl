@@ -74,6 +74,8 @@ class DownloaderSongLegacy(DownloaderSong):
                 decrypted_path,
                 "-itags",
                 "artist=placeholder",
+                "-keep-utc",
+                "-isma",
                 "-new",
                 remuxed_path,
             ],

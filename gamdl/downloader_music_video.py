@@ -248,6 +248,7 @@ class DownloaderMusicVideo:
                 decrypted_path_video,
                 "-itags",
                 "artist=placeholder",
+                "-keep-utc",
                 "-new",
                 fixed_path,
             ],

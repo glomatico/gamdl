@@ -187,7 +187,7 @@ class DownloaderSong:
             )
         if (
             track_metadata["relationships"].get("lyrics")
-            and track_metadata["relationships"]["lyrics"]["data"]
+            and track_metadata["relationships"]["lyrics"].get("data")
             and track_metadata["relationships"]["lyrics"]["data"][0].get("attributes")
         ):
             lyrics = self._get_lyrics(

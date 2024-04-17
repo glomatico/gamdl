@@ -65,7 +65,7 @@ class DownloaderSongLegacy(DownloaderSong):
             **self.downloader.subprocess_additional_args,
         )
 
-    def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path) -> None:
+    def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path):
         subprocess.run(
             [
                 self.downloader.mp4box_path_full,

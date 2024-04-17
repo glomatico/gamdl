@@ -35,7 +35,7 @@ def get_param_string(param: click.Parameter) -> str:
         return param.default
 
 
-def write_default_config_file(ctx: click.Context) -> None:
+def write_default_config_file(ctx: click.Context):
     ctx.params["config_path"].parent.mkdir(parents=True, exist_ok=True)
     config_file = {
         param.name: get_param_string(param)

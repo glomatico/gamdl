@@ -237,7 +237,7 @@ class DownloaderMusicVideo:
         decrypted_path_audio: Path,
         decrypted_path_video: Path,
         fixed_path: Path,
-    ) -> None:
+    ):
         subprocess.run(
             [
                 self.downloader.mp4box_path_full,

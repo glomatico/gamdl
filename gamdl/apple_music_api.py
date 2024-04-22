@@ -86,6 +86,30 @@ class AppleMusicApi:
         ):
             self._raise_response_exception(response)
 
+    def get_artist(
+        self,
+        artist_id: str,
+        include: str = "albums,music-videos",
+        limit: int = 100,
+        get_all: bool = True,
+    ) -> dict:
+        response = self.session.get(
+            f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/artists/{artist_id}",
+            params={
+                "include": include,
+                **{f"limit[{_include}]": limit for _include in include.split(",")},
+            },
+        )
+        self._check_amp_api_response(response)
+        artist = response.json()["data"][0]
+        if get_all:
+            for _include in include.split(","):
+                for extended_response in self._extend_api_data(
+                    artist["relationships"][_include], limit
+                ):
+                    artist["relationships"][_include]["data"].extend(extended_response)
+        return artist
+
     def get_song(
         self,
         song_id: str,

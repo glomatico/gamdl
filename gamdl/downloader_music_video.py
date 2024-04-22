@@ -4,10 +4,9 @@ import re
 import subprocess
 import urllib.parse
 from pathlib import Path
-
-import click
 import m3u8
-from tabulate import tabulate
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 
 from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
@@ -64,24 +63,24 @@ class DownloaderMusicVideo:
         self,
         playlists: list[dict],
     ) -> dict:
-        table = [
-            [
-                i,
-                playlist["stream_info"]["codecs"],
-                playlist["stream_info"]["resolution"],
-                playlist["stream_info"]["bandwidth"],
-            ]
-            for i, playlist in enumerate(playlists, 1)
-        ]
-        print(tabulate(table))
-        try:
-            choice = (
-                click.prompt("Choose a video codec", type=click.IntRange(1, len(table)))
-                - 1
+        choices = [
+            Choice(
+                name=" | ".join(
+                    [
+                        playlist["stream_info"]["codecs"][:4],
+                        playlist["stream_info"]["resolution"],
+                        str(playlist["stream_info"]["bandwidth"]),
+                    ]
+                ),
+                value=playlist,
             )
-        except click.exceptions.Abort:
-            raise KeyboardInterrupt()
-        return playlists[choice]
+            for playlist in playlists
+        ]
+        selected = inquirer.select(
+            message=f"Select which video codec to download",
+            choices=choices,
+        ).execute()
+        return selected
 
     def get_playlist_audio(
         self,
@@ -101,24 +100,18 @@ class DownloaderMusicVideo:
         self,
         playlists: list[dict],
     ) -> dict:
-        table = [
-            [
-                i,
-                playlist["group_id"],
-            ]
-            for i, playlist in enumerate(playlists, 1)
-        ]
-        print(tabulate(table))
-        try:
-            choice = (
-                click.prompt(
-                    "Choose an audio codec", type=click.IntRange(1, len(table))
-                )
-                - 1
+        choices = [
+            Choice(
+                name=playlist["group_id"],
+                value=playlist,
             )
-        except click.exceptions.Abort:
-            raise KeyboardInterrupt()
-        return playlists[choice]
+            for playlist in playlists
+        ]
+        selected = inquirer.select(
+            message=f"Select which audio codec to download",
+            choices=choices,
+        ).execute()
+        return selected
 
     def get_pssh(self, m3u8_data: dict):
         return next(

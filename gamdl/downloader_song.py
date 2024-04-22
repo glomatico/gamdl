@@ -9,9 +9,9 @@ from pathlib import Path
 from xml.dom import minidom
 from xml.etree import ElementTree
 
-import click
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 import m3u8
-from tabulate import tabulate
 
 from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
 from .downloader import Downloader
@@ -72,18 +72,18 @@ class DownloaderSong:
 
     def get_playlist_from_user(self, m3u8_data: dict) -> dict | None:
         m3u8_master_playlists = [playlist for playlist in m3u8_data["playlists"]]
-        table = [
-            [i, playlist["stream_info"]["audio"]]
-            for i, playlist in enumerate(m3u8_master_playlists, 1)
-        ]
-        print(tabulate(table))
-        try:
-            choice = (
-                click.prompt("Choose a codec", type=click.IntRange(1, len(table))) - 1
+        choices = [
+            Choice(
+                name=playlist["stream_info"]["audio"],
+                value=playlist,
             )
-        except click.exceptions.Abort:
-            raise KeyboardInterrupt()
-        return m3u8_master_playlists[choice]
+            for playlist in m3u8_master_playlists
+        ]
+        selected = inquirer.select(
+            message=f"Select which codec to download",
+            choices=choices,
+        ).execute()
+        return selected
 
     def get_pssh(
         self,

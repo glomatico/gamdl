@@ -20,7 +20,7 @@ class DownloaderMusicVideo:
     def __init__(
         self,
         downloader: Downloader,
-        codec: MusicVideoCodec = MusicVideoCodec.H264_BEST,
+        codec: MusicVideoCodec = MusicVideoCodec.H264,
     ):
         self.downloader = downloader
         self.codec = codec
@@ -53,7 +53,7 @@ class DownloaderMusicVideo:
                 playlist
                 for playlist in playlists
                 if playlist["stream_info"]["codecs"].startswith(
-                    MUSIC_VIDEO_CODEC_MAP[MusicVideoCodec.H264_BEST]
+                    MUSIC_VIDEO_CODEC_MAP[MusicVideoCodec.H264]
                 )
             ]
         playlists_filtered.sort(key=lambda x: x["stream_info"]["bandwidth"])

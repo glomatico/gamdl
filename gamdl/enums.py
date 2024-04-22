@@ -33,8 +33,8 @@ class SyncedLyricsFormat(Enum):
 
 
 class MusicVideoCodec(Enum):
-    H264_BEST = "h264-best"
-    H265_BEST = "h265-best"
+    H264 = "h264"
+    H265 = "h265"
     ASK = "ask"
 
 

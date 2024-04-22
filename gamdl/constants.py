@@ -197,8 +197,8 @@ SONG_CODEC_REGEX_MAP = {
 }
 
 MUSIC_VIDEO_CODEC_MAP = {
-    MusicVideoCodec.H264_BEST: "avc1",
-    MusicVideoCodec.H265_BEST: "hvc1",
+    MusicVideoCodec.H264: "avc1",
+    MusicVideoCodec.H265: "hvc1",
 }
 
 SYNCED_LYRICS_FILE_EXTENSION_MAP = {

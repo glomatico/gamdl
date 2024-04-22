@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import re
 import time
+import typing
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 
@@ -158,27 +159,29 @@ class AppleMusicApi:
         self._check_amp_api_response(response)
         playlist = response.json()["data"][0]
         if full_playlist:
-            playlist = self._extend_playlists_tracks(playlist, limit_tracks)
+            for extended_response in self._extend_api_data(
+                playlist["relationships"]["tracks"], limit_tracks
+            ):
+                playlist["relationships"]["tracks"]["data"].extend(extended_response)
         return playlist
 
-    def _extend_playlists_tracks(
+    def _extend_api_data(
         self,
-        playlist: dict,
-        limit_tracks: int,
-    ) -> dict:
-        playlist_next_uri = playlist["relationships"]["tracks"].get("next")
-        while playlist_next_uri:
-            playlist_next = self._get_playlist_next(playlist_next_uri, limit_tracks)
-            playlist["relationships"]["tracks"]["data"].extend(playlist_next["data"])
-            playlist_next_uri = playlist_next.get("next")
+        api_response: dict,
+        limit: int,
+    ) -> typing.Generator[list[dict], None, None]:
+        next_uri = api_response.get("next")
+        while next_uri:
+            playlist_next = self._get_next_uri_response(next_uri, limit)
+            yield playlist_next["data"]
+            next_uri = playlist_next.get("next")
             time.sleep(self.WAIT_TIME)
-        return playlist
 
-    def _get_playlist_next(self, playlist_next_uri: str, limit_tracks: int) -> dict:
+    def _get_next_uri_response(self, next_uri: str, limit: int) -> dict:
         response = self.session.get(
-            self.AMP_API_URL + playlist_next_uri,
+            self.AMP_API_URL + next_uri,
             params={
-                "limit[tracks]": limit_tracks,
+                "limit": limit,
             },
         )
         self._check_amp_api_response(response)

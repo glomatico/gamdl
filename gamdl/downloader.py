@@ -9,6 +9,8 @@ from pathlib import Path
 
 import ciso8601
 import requests
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 from mutagen.mp4 import MP4, MP4Cover
 from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
@@ -112,7 +114,7 @@ class Downloader:
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()
         url_regex_result = re.search(
-            r"/([a-z]{2})/(album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?",
+            r"/([a-z]{2})/(artist|album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?",
             url,
         )
         url_info.storefront = url_regex_result.group(1)
@@ -131,7 +133,10 @@ class Downloader:
 
     def _get_download_queue(self, url_type: str, id: str) -> list[DownloadQueueItem]:
         download_queue = []
-        if url_type == "song":
+        if url_type == "artist":
+            artist = self.apple_music_api.get_artist(id)
+            download_queue.extend(self.get_download_queue_from_artist(artist))
+        elif url_type == "song":
             download_queue.append(DownloadQueueItem(self.apple_music_api.get_song(id)))
         elif url_type == "album":
             album = self.apple_music_api.get_album(id)
@@ -155,6 +160,85 @@ class Downloader:
         else:
             raise Exception(f"Invalid url type: {url_type}")
         return download_queue
+
+    def get_download_queue_from_artist(self, artist: dict) -> list[DownloadQueueItem]:
+        media_type = inquirer.select(
+            message=f'Select which type to download for artist "{artist["attributes"]["name"]}":',
+            choices=[
+                Choice(name="Albums", value="albums"),
+                Choice(name="Music Videos", value="music-videos"),
+            ],
+        ).execute()
+        if media_type == "albums":
+            return self.select_albums_from_artist(
+                artist["relationships"]["albums"]["data"]
+            )
+        elif media_type == "music-videos":
+            return self.select_music_videos_from_artist(
+                artist["relationships"]["music-videos"]["data"]
+            )
+
+    def select_albums_from_artist(
+        self,
+        albums: list[dict],
+    ) -> list[DownloadQueueItem]:
+        choices = [
+            Choice(
+                name=" | ".join(
+                    [
+                        f'{album["attributes"]["releaseDate"]:<10}',
+                        f'{album["attributes"]["trackCount"]:02d}',
+                        album["attributes"]["name"],
+                    ]
+                ),
+                value=album,
+            )
+            for album in albums
+        ]
+        selected = inquirer.select(
+            message=f"Select which albums to download:",
+            choices=choices,
+            multiselect=True,
+        ).execute()
+        download_queue = []
+        for album in selected:
+            download_queue.extend(
+                DownloadQueueItem(track)
+                for track in self.apple_music_api.get_album(album["id"])[
+                    "relationships"
+                ]["tracks"]["data"]
+            )
+        return download_queue
+
+    def select_music_videos_from_artist(
+        self,
+        music_videos: list[dict],
+    ) -> list[DownloadQueueItem]:
+        choices = [
+            Choice(
+                name=" | ".join(
+                    [
+                        self.millis_to_min_sec(
+                            music_video["attributes"]["durationInMillis"]
+                        ),
+                        music_video["attributes"]["name"],
+                    ],
+                ),
+                value=music_video,
+            )
+            for music_video in music_videos
+        ]
+        selected = inquirer.select(
+            message=f"Select which music videos to download:",
+            choices=choices,
+            multiselect=True,
+        ).execute()
+        return [DownloadQueueItem(music_video) for music_video in selected]
+
+    @staticmethod
+    def millis_to_min_sec(millis):
+        minutes, seconds = divmod(millis // 1000, 60)
+        return f"{minutes:02d}:{seconds:02d}"
 
     def sanitize_date(self, date: str):
         datetime_obj = ciso8601.parse_datetime(date)

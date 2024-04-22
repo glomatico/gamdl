@@ -497,8 +497,8 @@ def main(
                             f'({queue_progress}) Song already exists at "{final_path}", skipping'
                         )
                     else:
+                        logger.debug("Getting stream info")
                         if codec_song in LEGACY_CODECS:
-                            logger.debug("Getting stream info")
                             stream_info = downloader_song_legacy.get_stream_info(
                                 webplayback
                             )

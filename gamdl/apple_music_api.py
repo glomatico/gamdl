@@ -91,7 +91,7 @@ class AppleMusicApi:
         artist_id: str,
         include: str = "albums,music-videos",
         limit: int = 100,
-        get_all: bool = True,
+        fetch_all: bool = True,
     ) -> dict:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/artists/{artist_id}",
@@ -102,12 +102,13 @@ class AppleMusicApi:
         )
         self._check_amp_api_response(response)
         artist = response.json()["data"][0]
-        if get_all:
+        if fetch_all:
             for _include in include.split(","):
-                for extended_response in self._extend_api_data(
-                    artist["relationships"][_include], limit
+                for additional_data in self._extend_api_data(
+                    artist["relationships"][_include],
+                    limit,
                 ):
-                    artist["relationships"][_include]["data"].extend(extended_response)
+                    artist["relationships"][_include]["data"].extend(additional_data)
         return artist
 
     def get_song(
@@ -171,7 +172,7 @@ class AppleMusicApi:
         is_library: bool = False,
         limit_tracks: int = 300,
         extend: str = "extendedAssetUrls",
-        full_playlist: bool = True,
+        fetch_all: bool = True,
     ) -> dict:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/{'me' if is_library else 'catalog'}/{self.storefront}/playlists/{playlist_id}",
@@ -182,11 +183,12 @@ class AppleMusicApi:
         )
         self._check_amp_api_response(response)
         playlist = response.json()["data"][0]
-        if full_playlist:
-            for extended_response in self._extend_api_data(
-                playlist["relationships"]["tracks"], limit_tracks
+        if fetch_all:
+            for additional_data in self._extend_api_data(
+                playlist["relationships"]["tracks"],
+                limit_tracks,
             ):
-                playlist["relationships"]["tracks"]["data"].extend(extended_response)
+                playlist["relationships"]["tracks"]["data"].extend(additional_data)
         return playlist
 
     def _extend_api_data(

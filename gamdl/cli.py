@@ -440,7 +440,11 @@ def main(
             )
     error_count = 0
     if read_urls_as_txt:
-        urls = [url.strip() for url in Path(urls[0]).read_text().splitlines()]
+        _urls = []
+        for url in urls:
+            if Path(url).exists():
+                _urls.extend(Path(url).read_text().splitlines())
+        urls = _urls
     for url_index, url in enumerate(urls, start=1):
         url_progress = f"URL {url_index}/{len(urls)}"
         try:

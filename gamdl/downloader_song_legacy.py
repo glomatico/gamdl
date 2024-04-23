@@ -54,7 +54,6 @@ class DownloaderSongLegacy(DownloaderSong):
         decrypted_path: Path,
         decryption_key: str,
     ):
-        self.fix_key_id(encrypted_path)
         subprocess.run(
             [
                 self.downloader.mp4decrypt_path_full,

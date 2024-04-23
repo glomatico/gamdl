@@ -197,7 +197,7 @@ class Downloader:
             for album in albums
         ]
         selected = inquirer.select(
-            message=f"Select which albums to download:",
+            message=f"Select which albums to download\nTrack Count | Release Date | Rating | Title",
             choices=choices,
             multiselect=True,
         ).execute()
@@ -231,7 +231,7 @@ class Downloader:
             for music_video in music_videos
         ]
         selected = inquirer.select(
-            message="Select which music videos to download:",
+            message="Select which music videos to download:\nDuration | Rating | Title",
             choices=choices,
             multiselect=True,
         ).execute()

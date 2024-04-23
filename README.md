@@ -10,6 +10,7 @@ A Python CLI app for downloading Apple Music songs/music videos/albums/playlists
 * Choose between FFmpeg and MP4Box for remuxing
 * Choose between yt-dlp and N_m3u8DL-RE for downloading
 * Highly customizable
+* Use artist links to download all of their albums or music videos
 
 ## Prerequisites
 * Python 3.8 or higher
@@ -46,6 +47,10 @@ gamdl [OPTIONS] URLS...
 * Download an album
     ```bash
     gamdl "https://music.apple.com/us/album/whenever-you-need-somebody-2022-remaster/1624945511"
+    ```
+* Choose which albums or music videos to download from an artist
+    ```bash
+    gamdl "https://music.apple.com/us/artist/rick-astley/669771"
     ```
 
 ## Configuration
@@ -161,8 +166,8 @@ The following codecs are available:
 
 ### Music videos codecs
 The following codecs are available:
-* `h264-best` (up to 1080p, with AAC 256kbps)
-* `h265-best` (up to 2160p, with AAC 256kpbs)
+* `h264` (up to 1080p, with AAC 256kbps)
+* `h265` (up to 2160p, with AAC 256kpbs)
 * `ask`
     * When using this option, gamdl will ask you which audio and video codec to use that is available for the music video.
   

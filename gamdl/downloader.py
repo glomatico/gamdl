@@ -186,9 +186,10 @@ class Downloader:
             Choice(
                 name=" | ".join(
                     [
-                        f'{album["attributes"]["releaseDate"]:<10}',
                         f'{album["attributes"]["trackCount"]:02d}',
-                        album["attributes"]["name"],
+                        f'{album["attributes"]["releaseDate"]:<10}',
+                        f'{album["attributes"].get("contentRating", "None").title():<8}',
+                        f'{album["attributes"]["name"]}',
                     ]
                 ),
                 value=album,

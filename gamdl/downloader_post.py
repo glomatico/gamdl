@@ -48,7 +48,7 @@ class DownloaderPost:
             for quality in qualities
         ]
         selected = inquirer.select(
-            message="Select which quality to download",
+            message="Select which quality to download:",
             choices=choices,
         ).execute()
         return metadata["attributes"]["assetTokens"][selected]

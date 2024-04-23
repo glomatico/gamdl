@@ -77,7 +77,7 @@ class DownloaderMusicVideo:
             for playlist in playlists
         ]
         selected = inquirer.select(
-            message=f"Select which video codec to download",
+            message="Select which video codec to download: (Codec | Resolution | Bitrate)",
             choices=choices,
         ).execute()
         return selected
@@ -108,7 +108,7 @@ class DownloaderMusicVideo:
             for playlist in playlists
         ]
         selected = inquirer.select(
-            message="Select which audio codec to download",
+            message="Select which audio codec to download:",
             choices=choices,
         ).execute()
         return selected

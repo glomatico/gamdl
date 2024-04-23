@@ -80,7 +80,7 @@ class DownloaderSong:
             for playlist in m3u8_master_playlists
         ]
         selected = inquirer.select(
-            message="Select which codec to download",
+            message="Select which codec to download:",
             choices=choices,
         ).execute()
         return selected

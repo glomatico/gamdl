@@ -90,7 +90,7 @@ You can configure gamdl by using the command line arguments or the config file. 
 | `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                                     | `40`                                         |
 | `--codec-song` / `codec_song`                                   | Song codec.                                                                  | `aac-legacy`                                 |
 | `--synced-lyrics-format` / `synced_lyrics_format`               | Synced lyrics format.                                                        | `lrc`                                        |
-| `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264-best`                                  |
+| `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264`                                       |
 | `--quality-post` / `quality_post`                               | Post video quality.                                                          | `best`                                       |
 | `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | `false`                                      |
 

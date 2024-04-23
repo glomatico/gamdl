@@ -222,6 +222,7 @@ class Downloader:
                         self.millis_to_min_sec(
                             music_video["attributes"]["durationInMillis"]
                         ),
+                        f'{music_video["attributes"].get("contentRating", "None").title():<8}',
                         music_video["attributes"]["name"],
                     ],
                 ),
@@ -230,7 +231,7 @@ class Downloader:
             for music_video in music_videos
         ]
         selected = inquirer.select(
-            message=f"Select which music videos to download:",
+            message="Select which music videos to download:",
             choices=choices,
             multiselect=True,
         ).execute()

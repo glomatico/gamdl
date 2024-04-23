@@ -202,7 +202,7 @@ class Downloader:
             for album in albums
         ]
         selected = inquirer.select(
-            message=f"Select which albums to download\nTrack Count | Release Date | Rating | Title",
+            message="Select which albums to download\nTrack Count | Release Date | Rating | Title",
             choices=choices,
             multiselect=True,
         ).execute()

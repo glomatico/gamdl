@@ -166,8 +166,13 @@ class Downloader:
             message=f'Select which type to download for artist "{artist["attributes"]["name"]}":',
             choices=[
                 Choice(name="Albums", value="albums"),
-                Choice(name="Music Videos", value="music-videos"),
+                Choice(
+                    name="Music Videos",
+                    value="music-videos",
+                ),
             ],
+            validate=lambda result: artist["relationships"].get(result, {}).get("data"),
+            invalid_message="The artist doesn't have any items of this type",
         ).execute()
         if media_type == "albums":
             return self.select_albums_from_artist(

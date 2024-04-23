@@ -95,7 +95,7 @@ def load_config_file(
     "--read-urls-as-txt",
     "-r",
     is_flag=True,
-    help="Interpret URLs as paths to text files containing URLs.",
+    help="Interpret URLs as paths to text files containing URLs separated by newlines",
 )
 @click.option(
     "--synced-lyrics-only",

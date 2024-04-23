@@ -6,8 +6,8 @@ authors = [{ name = "glomatico" }]
 dependencies = [
     "ciso8601",
     "click",
+    "inquirerpy",
     "m3u8",
-    "tabulate",
     "pywidevine",
     "pyyaml",
     "yt-dlp",

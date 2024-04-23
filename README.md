@@ -60,7 +60,7 @@ You can configure gamdl by using the command line arguments or the config file. 
 | `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                     | `false`                                      |
 | `--save-cover`, `-s` / `save_cover`                             | Save cover as a separate file.                                               | `false`                                      |
 | `--overwrite` / `overwrite`                                     | Overwrite existing files.                                                    | `false`                                      |
-| `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs.                       | `false`                                      |
+| `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs separated by newlines. | `false`                                      |
 | `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                             | `false`                                      |
 | `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                                      |
 | `--config-path` / -                                             | Path to config file.                                                         | `<home>/.spotify-web-downloader/config.json` |

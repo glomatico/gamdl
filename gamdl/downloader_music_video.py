@@ -15,7 +15,7 @@ from .models import StreamInfo
 
 
 class DownloaderMusicVideo:
-    MP4_FORMAT_CODECS = ["hvc1", "ec-3"]
+    MP4_FORMAT_CODECS = ["hvc1", "audio-atmos", "audio-ec3"]
 
     def __init__(
         self,
@@ -142,9 +142,7 @@ class DownloaderMusicVideo:
         else:
             playlist = self.get_playlist_audio_from_user(m3u8_master_data["media"])
         stream_info.stream_url = playlist["uri"]
-        stream_info.codec = re.search(r"_([^_]+)\.m3u8", stream_info.stream_url).group(
-            1
-        )
+        stream_info.codec = playlist["group_id"]
         m3u8_data = m3u8.load(stream_info.stream_url).data
         stream_info.pssh = self.get_pssh(m3u8_data)
         return stream_info

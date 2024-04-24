@@ -106,6 +106,7 @@ class DownloaderMusicVideo:
                 value=playlist,
             )
             for playlist in playlists
+            if playlist.get("uri")
         ]
         selected = inquirer.select(
             message="Select which audio codec to download:",

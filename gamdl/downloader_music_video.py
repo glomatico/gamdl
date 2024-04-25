@@ -4,6 +4,7 @@ import re
 import subprocess
 import urllib.parse
 from pathlib import Path
+
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
@@ -153,41 +154,34 @@ class DownloaderMusicVideo:
 
     def get_tags(
         self,
+        id_alt: str,
         itunes_page: dict,
-        m3u8_master_data: dict,
         metadata: dict,
     ):
+        metadata_itunes = self.downloader.itunes_api.get_resource(id_alt)
         tags = {
-            "artist": metadata["attributes"]["artistName"],
-            "artist_id": int(itunes_page["artistId"]),
-            "copyright": itunes_page["copyright"],
-            "date": next(
-                (
-                    session_data
-                    for session_data in m3u8_master_data["session_data"]
-                    if session_data["data_id"] == "com.apple.hls.release-date"
-                ),
-                None,
-            )["value"],
-            "genre": metadata["attributes"]["genreNames"][0],
+            "artist": metadata_itunes[0]["artistName"],
+            "artist_id": int(metadata_itunes[0]["artistId"]),
+            "copyright": itunes_page.get("copyright"),
+            "date": self.downloader.sanitize_date(metadata_itunes[0]["releaseDate"]),
+            "genre": metadata_itunes[0]["primaryGenreName"],
             "genre_id": int(itunes_page["genres"][0]["genreId"]),
             "media_type": 6,
-            "title": metadata["attributes"]["name"],
+            "title": metadata_itunes[0]["trackCensoredName"],
             "title_id": int(metadata["id"]),
         }
-        if metadata["attributes"].get("contentRating") == "clean":
-            tags["rating"] = 2
-        elif metadata["attributes"].get("contentRating") == "explicit":
+        if metadata_itunes[0]["trackExplicitness"] == "notExplicit":
+            tags["rating"] = 0
+        elif metadata_itunes[0]["trackExplicitness"] == "explicit":
             tags["rating"] = 1
         else:
-            tags["rating"] = 0
-        if itunes_page.get("collectionId"):
-            metadata_itunes = self.downloader.itunes_api.get_resource(itunes_page["id"])
+            tags["rating"] = 2
+        if len(metadata_itunes) > 1:
             album = self.downloader.apple_music_api.get_album(
                 itunes_page["collectionId"]
             )
-            tags["album"] = album["attributes"]["name"]
-            tags["album_artist"] = album["attributes"]["artistName"]
+            tags["album"] = metadata_itunes[1]["collectionCensoredName"]
+            tags["album_artist"] = metadata_itunes[1]["artistName"]
             tags["album_id"] = int(itunes_page["collectionId"])
             tags["disc"] = metadata_itunes[0]["discNumber"]
             tags["disc_total"] = metadata_itunes[0]["discCount"]

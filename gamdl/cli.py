@@ -586,8 +586,8 @@ def main(
                         stream_url_master
                     )
                     tags = downloader_music_video.get_tags(
+                        music_video_id_alt,
                         itunes_page,
-                        m3u8_master_data,
                         track,
                     )
                     final_path = downloader.get_final_path(tags, ".m4v")

@@ -18,6 +18,17 @@ A Python CLI app for downloading Apple Music songs/music videos/albums/playlists
     * You can get your cookies by using one of the following extensions on your browser of choice at the Apple Music website with your account signed in:
         * Firefox: https://addons.mozilla.org/addon/export-cookies-txt
         * Chromium based browsers: https://chrome.google.com/webstore/detail/gdocmgbfkjnnpapoeobnolbbkoibbcif
+* A Widevine device file (.wvd)
+    * To get a .wvd file, you should first extract the Widevine L3 Keys from an Android device using KeyDive (Android Studio virtual device is recommended): https://github.com/hyugogirubato/KeyDive.
+    * Then, you can use `pywidevine` to create the .wvd file:
+        1. Install `pywidevine` using pip
+            ```bash
+            pip install pywidevine
+            ```
+        2. Create the .wvd file
+            ```bash
+            pywidevine create-device -t ANDROID -l 3 -k private_key.pem -c client_id.bin -o device.wvd
+            ```
 * FFmpeg on your system PATH
     * Older versions of FFmpeg may not work.
     * Up to date binaries can be obtained from the links below:
@@ -33,6 +44,7 @@ A Python CLI app for downloading Apple Music songs/music videos/albums/playlists
     pip install gamdl
     ```
 2. Place your cookies file in the directory from which you will be running gamdl and name it `cookies.txt`.
+3. Place your .wvd file in the directory from which you will be running gamdl and name it `device.wvd`.
 
 ## Usage
 ```bash

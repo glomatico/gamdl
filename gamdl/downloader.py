@@ -252,21 +252,23 @@ class Downloader:
         return datetime_obj.strftime(self.template_date)
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
-        pssh_obj = PSSH(pssh.split(",")[-1])
-        cdm_session = self.cdm.open()
-        challenge = base64.b64encode(
-            self.cdm.get_license_challenge(cdm_session, pssh_obj)
-        ).decode()
-        license = self.apple_music_api.get_widevine_license(
-            track_id,
-            pssh,
-            challenge,
-        )
-        self.cdm.parse_license(cdm_session, license)
-        decryption_key = next(
-            i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-        ).key.hex()
-        self.cdm.close(cdm_session)
+        try:
+            pssh_obj = PSSH(pssh.split(",")[-1])
+            cdm_session = self.cdm.open()
+            challenge = base64.b64encode(
+                self.cdm.get_license_challenge(cdm_session, pssh_obj)
+            ).decode()
+            license = self.apple_music_api.get_widevine_license(
+                track_id,
+                pssh,
+                challenge,
+            )
+            self.cdm.parse_license(cdm_session, license)
+            decryption_key = next(
+                i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
+            ).key.hex()
+        finally:
+            self.cdm.close(cdm_session)
         return decryption_key
 
     def download(self, path: Path, stream_url: str):

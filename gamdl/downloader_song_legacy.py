@@ -28,24 +28,28 @@ class DownloaderSongLegacy(DownloaderSong):
         return stream_info
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
-        widevine_pssh_data = WidevinePsshData()
-        widevine_pssh_data.algorithm = 1
-        widevine_pssh_data.key_ids.append(base64.b64decode(pssh.split(",")[1]))
-        pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
-        cdm_session = self.downloader.cdm.open()
-        challenge = base64.b64encode(
-            self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
-        ).decode()
-        license = self.downloader.apple_music_api.get_widevine_license(
-            track_id,
-            pssh,
-            challenge,
-        )
-        self.downloader.cdm.parse_license(cdm_session, license)
-        decryption_key = next(
-            i for i in self.downloader.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-        ).key.hex()
-        self.downloader.cdm.close(cdm_session)
+        try:
+            widevine_pssh_data = WidevinePsshData()
+            widevine_pssh_data.algorithm = 1
+            widevine_pssh_data.key_ids.append(base64.b64decode(pssh.split(",")[1]))
+            pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
+            cdm_session = self.downloader.cdm.open()
+            challenge = base64.b64encode(
+                self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
+            ).decode()
+            license = self.downloader.apple_music_api.get_widevine_license(
+                track_id,
+                pssh,
+                challenge,
+            )
+            self.downloader.cdm.parse_license(cdm_session, license)
+            decryption_key = next(
+                i
+                for i in self.downloader.cdm.get_keys(cdm_session)
+                if i.type == "CONTENT"
+            ).key.hex()
+        finally:
+            self.downloader.cdm.close(cdm_session)
         return decryption_key
 
     def decrypt(

@@ -33,7 +33,7 @@ class Downloader:
         output_path: Path = Path("./Apple Music"),
         temp_path: Path = Path("./temp"),
         wvd_path: Path = None,
-        nm3u8dlre_path: str = "N_m3u8dl-RE",
+        nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
         mp4box_path: str = "MP4Box",

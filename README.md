@@ -1,4 +1,7 @@
 # Glomatico's Apple Music Downloader
+
+[简体中文](./README.zh.md)
+
 A Python CLI app for downloading Apple Music songs/music videos/albums/playlists/posts.
 
 **Discord Server:** https://discord.gg/aBjMEZ9tnq

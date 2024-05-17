@@ -52,7 +52,13 @@ gamdl [OPTIONS] URLS...
     ```bash
     gamdl "https://music.apple.com/us/artist/rick-astley/669771"
     ```
-    * Press Space to select or deselect and Ctrl + A to select all.
+
+### Interactive prompts
+The following keys can be used in the interactive prompts:
+* Enter - Confirm selection
+* Space - Toggle selection
+* Arrow keys - Move selection
+* Ctrl + A - Select all
 
 ## Configuration
 gamdl can be configured by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.

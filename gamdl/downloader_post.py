@@ -69,5 +69,5 @@ class DownloaderPost:
             "title_id": int(metadata["id"]),
         }
 
-    def get_temp_path(self, track_id: str) -> Path:
+    def get_post_temp_path(self, track_id: str) -> Path:
         return self.downloader.temp_path / f"{track_id}_temp.m4v"

@@ -672,7 +672,7 @@ def main(
                 elif track["type"] == "uploaded-videos":
                     stream_url = downloader_post.get_stream_url(track)
                     tags = downloader_post.get_tags(track)
-                    temp_path = downloader_post.get_temp_path(track["id"])
+                    post_temp_path = downloader_post.get_post_temp_path(track["id"])
                     final_path = downloader.get_final_path(tags, ".m4v")
                     cover_path = downloader_music_video.get_cover_path(final_path)
                     cover_url = downloader.get_cover_url(track)
@@ -681,12 +681,12 @@ def main(
                             f'({queue_progress}) Post video already exists at "{final_path}", skipping'
                         )
                     else:
-                        logger.debug(f"Downloading to {final_path}")
-                        downloader.download_ytdlp(temp_path, stream_url)
+                        logger.debug(f"Downloading to {post_temp_path}")
+                        downloader.download_ytdlp(post_temp_path, stream_url)
                         logger.debug("Applying tags")
-                        downloader.apply_tags(temp_path, tags, cover_url)
+                        downloader.apply_tags(post_temp_path, tags, cover_url)
                         logger.debug(f"Moving to {final_path}")
-                        downloader.move_to_output_path(temp_path, final_path)
+                        downloader.move_to_output_path(post_temp_path, final_path)
                     if not save_cover:
                         pass
                     elif cover_path.exists() and not overwrite:

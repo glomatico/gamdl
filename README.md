@@ -69,7 +69,7 @@ gamdl can be configured by using the command line arguments or the config file. 
 | `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs separated by newlines. | `false`                                      |
 | `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                             | `false`                                      |
 | `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                                      |
-| `--config-path` / -                                             | Path to config file.                                                         | `<home>/.spotify-web-downloader/config.json` |
+| `--config-path` / -                                             | Path to config file.                                                         | `<home>/.gamdl/config.json` |
 | `--log-level` / `log_level`                                     | Log level.                                                                   | `INFO`                                       |
 | `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                            | `false`                                      |
 | `--cookies-path`, `-c` / `cookies_path`                         | Path to .txt cookies file.                                                   | `./cookies.txt`                              |

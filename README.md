@@ -191,7 +191,7 @@ The following synced lyrics formats are available:
 * `srt`
 * `ttml`
     * Native format for Apple Music synced lyrics.
-    * Highly unsupported by media players.
+    * Highly unsupported by most media players.
   
 ### Cover formats
 The following cover formats are available:

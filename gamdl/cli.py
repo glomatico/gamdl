@@ -658,7 +658,7 @@ def main(
                         )
                         logger.debug("Applying tags")
                         downloader.apply_tags(remuxed_path, tags, cover_url)
-                        logger.debug(f"Moving to {final_path}")
+                        logger.debug(f'Moving to "{final_path}"')
                         downloader.move_to_output_path(remuxed_path, final_path)
                     if not save_cover:
                         pass

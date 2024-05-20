@@ -14,7 +14,7 @@ A Python CLI app for downloading Apple Music songs/music videos/albums/playlists
 
 ## Prerequisites
 * Python 3.8 or higher
-* The cookies file of your Apple Music account (requires an active subscription)
+* The cookies file of your Apple Music browser session (requires an active subscription)
     * You can get your cookies by using one of the following extensions on your browser of choice at the Apple Music website with your account signed in:
         * Firefox: https://addons.mozilla.org/addon/export-cookies-txt
         * Chromium based browsers: https://chrome.google.com/webstore/detail/gdocmgbfkjnnpapoeobnolbbkoibbcif
@@ -53,12 +53,11 @@ gamdl [OPTIONS] URLS...
     gamdl "https://music.apple.com/us/artist/rick-astley/669771"
     ```
 
-### Interactive prompts
-The following keys can be used in the interactive prompts:
-* Enter - Confirm selection
-* Space - Toggle selection
+### Interactive prompt controls
 * Arrow keys - Move selection
+* Space - Toggle selection
 * Ctrl + A - Select all
+* Enter - Confirm selection
 
 ## Configuration
 gamdl can be configured by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.
@@ -78,7 +77,7 @@ gamdl can be configured by using the command line arguments or the config file. 
 | `--output-path`, `-o` / `output_path`                           | Path to output directory.                                                    | `./Apple Music`                              |
 | `--temp-path` / `temp_path`                                     | Path to temporary directory.                                                 | `./temp`                                     |
 | `--wvd-path` / `wvd_path`                                       | Path to .wvd file.                                                           | `null`                                       |
-| `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                                  | `N_m3u8dl-RE`                                |
+| `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                                  | `N_m3u8DL-RE`                                |
 | `--mp4decrypt-path` / `mp4decrypt_path`                         | Path to mp4decrypt binary.                                                   | `mp4decrypt`                                 |
 | `--ffmpeg-path` / `ffmpeg_path`                                 | Path to FFmpeg binary.                                                       | `ffmpeg`                                     |
 | `--mp4box-path` / `mp4box_path`                                 | Path to MP4Box binary.                                                       | `MP4Box`                                     |

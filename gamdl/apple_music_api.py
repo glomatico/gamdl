@@ -169,13 +169,12 @@ class AppleMusicApi:
     def get_playlist(
         self,
         playlist_id: str,
-        is_library: bool = False,
         limit_tracks: int = 300,
         extend: str = "extendedAssetUrls",
         fetch_all: bool = True,
     ) -> dict:
         response = self.session.get(
-            f"{self.AMP_API_URL}/v1/{'me' if is_library else 'catalog'}/{self.storefront}/playlists/{playlist_id}",
+            f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/playlists/{playlist_id}",
             params={
                 "extend": extend,
                 "limit[tracks]": limit_tracks,

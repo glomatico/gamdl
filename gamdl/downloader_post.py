@@ -67,6 +67,7 @@ class DownloaderPost:
             "date": self.downloader.sanitize_date(attributes["uploadDate"]),
             "title": attributes["name"],
             "title_id": int(metadata["id"]),
+            "storefront": int(self.downloader.itunes_api.storefront_id.split("-")[0]),
         }
 
     def get_post_temp_path(self, track_id: str) -> Path:

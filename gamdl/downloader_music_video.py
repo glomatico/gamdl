@@ -167,6 +167,7 @@ class DownloaderMusicVideo:
             "genre": metadata_itunes[0]["primaryGenreName"],
             "genre_id": int(itunes_page["genres"][0]["genreId"]),
             "media_type": 6,
+            "storefront": int(self.downloader.itunes_api.storefront_id.split("-")[0]),
             "title": metadata_itunes[0]["trackCensoredName"],
             "title_id": int(metadata["id"]),
         }

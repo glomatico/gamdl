@@ -528,7 +528,7 @@ def main(
                         logger.debug(f'Downloading to "{encrypted_path}"')
                         downloader.download(encrypted_path, stream_info.stream_url)
                         if codec_song in LEGACY_CODECS:
-                            logger.debug(f'Remuxing/Decrypting to "{remuxed_path}"')
+                            logger.debug(f'Decrypting and Remuxing to "{remuxed_path}"')
                             downloader_song_legacy.remux(
                                 encrypted_path,
                                 decrypted_path,

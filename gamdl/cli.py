@@ -525,10 +525,10 @@ def main(
                         encrypted_path = downloader_song.get_encrypted_path(track["id"])
                         decrypted_path = downloader_song.get_decrypted_path(track["id"])
                         remuxed_path = downloader_song.get_remuxed_path(track["id"])
-                        logger.debug(f"Downloading to {encrypted_path}")
+                        logger.debug(f'Downloading to "{encrypted_path}"')
                         downloader.download(encrypted_path, stream_info.stream_url)
                         if codec_song in LEGACY_CODECS:
-                            logger.debug(f"Remuxing/Decrypting to {remuxed_path}")
+                            logger.debug(f'Remuxing/Decrypting to "{remuxed_path}"')
                             downloader_song_legacy.remux(
                                 encrypted_path,
                                 decrypted_path,
@@ -536,11 +536,11 @@ def main(
                                 decryption_key,
                             )
                         else:
-                            logger.debug(f"Decrypting to {decrypted_path}")
+                            logger.debug(f'Decrypting to "{decrypted_path}"')
                             downloader_song.decrypt(
                                 encrypted_path, decrypted_path, decryption_key
                             )
-                            logger.debug(f"Remuxing to {final_path}")
+                            logger.debug(f'Remuxing to "{final_path}"')
                             downloader_song.remux(
                                 decrypted_path,
                                 remuxed_path,
@@ -548,7 +548,7 @@ def main(
                             )
                         logger.debug("Applying tags")
                         downloader.apply_tags(remuxed_path, tags, cover_url)
-                        logger.debug(f"Moving to {final_path}")
+                        logger.debug(f'Moving to "{final_path}"')
                         downloader.move_to_output_path(remuxed_path, final_path)
                     if no_synced_lyrics or not lyrics.synced:
                         pass
@@ -628,27 +628,27 @@ def main(
                         remuxed_path = downloader_music_video.get_remuxed_path(
                             track["id"]
                         )
-                        logger.debug(f"Downloading video to {encrypted_path_video}")
+                        logger.debug(f'Downloading video to "{encrypted_path_video}"')
                         downloader.download(
                             encrypted_path_video, stream_info_video.stream_url
                         )
-                        logger.debug(f"Downloading audio to {encrypted_path_audio}")
+                        logger.debug(f'Downloading audio to "{encrypted_path_audio}"')
                         downloader.download(
                             encrypted_path_audio, stream_info_audio.stream_url
                         )
-                        logger.debug(f"Decrypting video to {decrypted_path_video}")
+                        logger.debug(f'Decrypting video to "{decrypted_path_video}"')
                         downloader_music_video.decrypt(
                             encrypted_path_video,
                             decryption_key_video,
                             decrypted_path_video,
                         )
-                        logger.debug(f"Decrypting audio to {decrypted_path_audio}")
+                        logger.debug(f'Decrypting audio to "{decrypted_path_audio}"')
                         downloader_music_video.decrypt(
                             encrypted_path_audio,
                             decryption_key_audio,
                             decrypted_path_audio,
                         )
-                        logger.debug(f"Remuxing to {remuxed_path}")
+                        logger.debug(f'Remuxing to "{remuxed_path}"')
                         downloader_music_video.remux(
                             decrypted_path_video,
                             decrypted_path_audio,
@@ -681,11 +681,11 @@ def main(
                             f'({queue_progress}) Post video already exists at "{final_path}", skipping'
                         )
                     else:
-                        logger.debug(f"Downloading to {post_temp_path}")
+                        logger.debug(f'Downloading to "{post_temp_path}"')
                         downloader.download_ytdlp(post_temp_path, stream_url)
                         logger.debug("Applying tags")
                         downloader.apply_tags(post_temp_path, tags, cover_url)
-                        logger.debug(f"Moving to {final_path}")
+                        logger.debug(f'Moving to "{final_path}"')
                         downloader.move_to_output_path(post_temp_path, final_path)
                     if not save_cover:
                         pass

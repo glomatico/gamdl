@@ -4,7 +4,7 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
 **Discord Server:** https://discord.gg/aBjMEZ9tnq
 
 ## Features
-* Download songs in AAC and other codecs
+* Download songs in AAC 256kbps and other codecs
 * Download music videos up to 4K
 * Download synced lyrics in LRC, SRT or TTML
 * Choose between FFmpeg and MP4Box for remuxing

@@ -4,7 +4,7 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
 **Discord Server:** https://discord.gg/aBjMEZ9tnq
 
 ## Features
-* Download songs in AAC/Spatial AAC/Dolby Atmos/ALAC*
+* Download songs in AAC and other codecs
 * Download music videos up to 4K
 * Download synced lyrics in LRC, SRT or TTML
 * Choose between FFmpeg and MP4Box for remuxing
@@ -156,6 +156,8 @@ The following download modes are available:
 The following codecs are available:
 * `aac-legacy`
 * `aac-he-legacy`
+
+The following codecs are also available, **but are not guaranteed to work**, as most (or all) of the songs fails to be downloaded when using them currently:
 * `aac`
 * `aac-he`
 * `aac-binaural`
@@ -166,9 +168,7 @@ The following codecs are available:
 * `ac3`
 * `alac`
 * `ask`
-    * When using this option, gamdl will ask you which **non-legacy** codec to use that is available for the song.
-
-**Support for non-legacy codecs are not guaranteed, as most of the songs cannot be downloaded when using non-legacy codecs.**
+    * When using this option, gamdl will ask you which codec from this list to use that is available for the song.
 
 ### Music videos codecs
 The following codecs are available:

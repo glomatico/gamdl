@@ -157,7 +157,7 @@ The following codecs are available:
 * `aac-legacy`
 * `aac-he-legacy`
 
-The following codecs are also available, **but are not guaranteed to work**, as most (or all) of the songs fails to be downloaded when using them currently:
+The following codecs are also available, **but are not guaranteed to work**, as currently most (or all) of the songs fails to be downloaded when using them:
 * `aac`
 * `aac-he`
 * `aac-binaural`

@@ -428,13 +428,16 @@ class Downloader:
                 and tags.get(tag_name) is not None
             ):
                 mp4_tags[MP4_TAGS_MAP[tag_name]] = [tags[tag_name]]
-        if "cover" not in self.exclude_tags_list:
+        if (
+            "cover" not in self.exclude_tags_list
+            and self.cover_format != CoverFormat.RAW
+        ):
             mp4_tags["covr"] = [
                 MP4Cover(
                     self.get_url_response_bytes(cover_url),
                     imageformat=(
                         MP4Cover.FORMAT_JPEG
-                        if self.cover_format in (CoverFormat.JPG, CoverFormat.RAW)
+                        if self.cover_format == CoverFormat.JPG
                         else MP4Cover.FORMAT_PNG
                     ),
                 )

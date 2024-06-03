@@ -2,6 +2,7 @@ ciso8601
 click
 inquirerpy
 m3u8
+pillow
 pywidevine
 pyyaml
 yt-dlp

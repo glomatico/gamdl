@@ -199,4 +199,4 @@ The following cover formats are available:
 * `png`
 * `raw`
     * This format gets the raw cover without any processing.
-    * Note that when you use this format, the cover image will not be embedded within the files. To address this, you can enable `save_cover` option to save the cover as a separate file.
+    * Note that when using this format, the cover image will not be embedded within the files. To address this, you can enable `save_cover` option to save the cover as a separate file.

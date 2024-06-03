@@ -197,3 +197,5 @@ The following synced lyrics formats are available:
 The following cover formats are available:
 * `jpg`
 * `png`
+* `raw`
+    * Gets the raw cover without any processing in JPEG format.

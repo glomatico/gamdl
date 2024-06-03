@@ -353,7 +353,24 @@ class Downloader:
         return self.output_path.joinpath(*final_path_folder).joinpath(*final_path_file)
 
     def get_cover_url(self, metadata: dict) -> str:
+        if self.cover_format == CoverFormat.RAW:
+            return self._get_raw_cover_url(metadata["attributes"]["artwork"]["url"])
         return self._get_cover_url(metadata["attributes"]["artwork"]["url"])
+
+    def _get_raw_cover_url(self, cover_url_template: str) -> str:
+        return re.sub(
+            r"image/thumb/",
+            "",
+            re.sub(
+                r"is1-ssl",
+                "a1",
+                re.sub(
+                    r"/\{w\}x\{h\}([a-z]{2})\.jpg",
+                    "",
+                    cover_url_template,
+                ),
+            ),
+        )
 
     def _get_cover_url(self, cover_url_template: str) -> str:
         return re.sub(
@@ -409,7 +426,7 @@ class Downloader:
                     self.get_url_response_bytes(cover_url),
                     imageformat=(
                         MP4Cover.FORMAT_JPEG
-                        if self.cover_format == CoverFormat.JPG
+                        if self.cover_format in (CoverFormat.JPG, CoverFormat.RAW)
                         else MP4Cover.FORMAT_PNG
                     ),
                 )

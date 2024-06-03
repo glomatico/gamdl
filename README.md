@@ -198,4 +198,4 @@ The following cover formats are available:
 * `jpg`
 * `png`
 * `raw`
-    * Gets the raw cover without any processing in JPEG format.
+    * This format gets the raw cover without any processing in JPEG format.

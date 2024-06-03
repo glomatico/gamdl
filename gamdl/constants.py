@@ -208,6 +208,12 @@ SYNCED_LYRICS_FILE_EXTENSION_MAP = {
 }
 
 
+IMAGE_FILE_EXTENSION_MAP = {
+    "jpeg": ".jpg",
+    "tiff": ".tif",
+}
+
+
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",
     "config_path",

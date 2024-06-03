@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import functools
+import io
 import re
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ import requests
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from mutagen.mp4 import MP4, MP4Cover
+from PIL import Image
 from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
@@ -351,6 +353,10 @@ class Downloader:
             + file_extension
         ]
         return self.output_path.joinpath(*final_path_folder).joinpath(*final_path_file)
+
+    def get_cover_file_extension(self, cover_url: str) -> str:
+        image_obj = Image.open(io.BytesIO(self.get_url_response_bytes(cover_url)))
+        return f".{image_obj.format.lower()}"
 
     def get_cover_url(self, metadata: dict) -> str:
         if self.cover_format == CoverFormat.RAW:

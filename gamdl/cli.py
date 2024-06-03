@@ -492,8 +492,12 @@ def main(
                     lyrics_synced_path = downloader_song.get_lyrics_synced_path(
                         final_path
                     )
-                    cover_path = downloader_song.get_cover_path(final_path)
                     cover_url = downloader.get_cover_url(track)
+                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    cover_path = downloader_song.get_cover_path(
+                        final_path,
+                        cover_file_extesion,
+                    )
                     if synced_lyrics_only:
                         pass
                     elif final_path.exists() and not overwrite:
@@ -593,8 +597,12 @@ def main(
                         track,
                     )
                     final_path = downloader.get_final_path(tags, ".m4v")
-                    cover_path = downloader_music_video.get_cover_path(final_path)
                     cover_url = downloader.get_cover_url(track)
+                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    cover_path = downloader_music_video.get_cover_path(
+                        final_path,
+                        cover_file_extesion,
+                    )
                     if final_path.exists() and not overwrite:
                         logger.warning(
                             f'({queue_progress}) Music video already exists at "{final_path}", skipping'
@@ -676,8 +684,12 @@ def main(
                     tags = downloader_post.get_tags(track)
                     post_temp_path = downloader_post.get_post_temp_path(track["id"])
                     final_path = downloader.get_final_path(tags, ".m4v")
-                    cover_path = downloader_music_video.get_cover_path(final_path)
                     cover_url = downloader.get_cover_url(track)
+                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    cover_path = downloader_music_video.get_cover_path(
+                        final_path,
+                        cover_file_extesion,
+                    )
                     if final_path.exists() and not overwrite:
                         logger.warning(
                             f'({queue_progress}) Post video already exists at "{final_path}", skipping'

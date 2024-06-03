@@ -9,9 +9,9 @@ from pathlib import Path
 from xml.dom import minidom
 from xml.etree import ElementTree
 
+import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
-import m3u8
 
 from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
 from .downloader import Downloader
@@ -365,8 +365,8 @@ class DownloaderSong:
             SYNCED_LYRICS_FILE_EXTENSION_MAP[self.synced_lyrics_format]
         )
 
-    def get_cover_path(self, final_path: Path) -> Path:
-        return final_path.parent / f"Cover.{self.downloader.cover_format.value}"
+    def get_cover_path(self, final_path: Path, file_extension: str) -> Path:
+        return final_path.parent / ("Cover" + file_extension)
 
     def save_lyrics_synced(self, lyrics_synced_path: Path, lyrics_synced: str):
         lyrics_synced_path.parent.mkdir(parents=True, exist_ok=True)

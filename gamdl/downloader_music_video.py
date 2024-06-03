@@ -300,5 +300,5 @@ class DownloaderMusicVideo:
                 codec_audio,
             )
 
-    def get_cover_path(self, final_path: Path) -> Path:
-        return final_path.with_suffix(f".{self.downloader.cover_format.value}")
+    def get_cover_path(self, final_path: Path, file_extension: str) -> Path:
+        return final_path.with_suffix(file_extension)

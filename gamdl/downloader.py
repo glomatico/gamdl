@@ -18,7 +18,7 @@ from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
-from .constants import MP4_TAGS_MAP
+from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
 from .enums import CoverFormat, DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
@@ -356,7 +356,8 @@ class Downloader:
 
     def get_cover_file_extension(self, cover_url: str) -> str:
         image_obj = Image.open(io.BytesIO(self.get_url_response_bytes(cover_url)))
-        return f".{image_obj.format.lower()}"
+        image_format = image_obj.format.lower()
+        return IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
 
     def get_cover_url(self, metadata: dict) -> str:
         if self.cover_format == CoverFormat.RAW:

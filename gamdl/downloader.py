@@ -382,7 +382,9 @@ class Downloader:
     @staticmethod
     @functools.lru_cache()
     def get_url_response_bytes(url: str) -> bytes:
-        return requests.get(url).content
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.content
 
     def apply_tags(
         self,

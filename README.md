@@ -60,7 +60,11 @@ gamdl [OPTIONS] URLS...
 * Enter - Confirm selection
 
 ## Configuration
-gamdl can be configured by using the command line arguments or the config file. The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows. Config file values can be overridden using command line arguments.
+gamdl can be configured by using the command line arguments or the config file.
+
+The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows.
+
+Config file values can be overridden using command line arguments.
 | Command line argument / Config file key                         | Description                                                                  | Default value                |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------- |
 | `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                     | `false`                      |

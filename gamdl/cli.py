@@ -443,7 +443,7 @@ def main(
         _urls = []
         for url in urls:
             if Path(url).exists():
-                _urls.extend(Path(url).read_text().splitlines())
+                _urls.extend(Path(url).read_text(encoding="utf-8").splitlines())
         urls = _urls
     for url_index, url in enumerate(urls, start=1):
         url_progress = f"URL {url_index}/{len(urls)}"

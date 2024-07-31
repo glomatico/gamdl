@@ -78,7 +78,7 @@ class AppleMusicApi:
         try:
             response.raise_for_status()
             response_dict = response.json()
-            assert response_dict.get("data") or response_dict.get("results")
+            assert response_dict.get("data") or response_dict.get("results") is not None
         except (
             requests.HTTPError,
             requests.exceptions.JSONDecodeError,

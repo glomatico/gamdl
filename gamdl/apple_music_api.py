@@ -78,7 +78,7 @@ class AppleMusicApi:
         try:
             response.raise_for_status()
             response_dict = response.json()
-            assert response_dict.get("data")
+            assert response_dict.get("data") or response_dict.get("results")
         except (
             requests.HTTPError,
             requests.exceptions.JSONDecodeError,
@@ -189,6 +189,26 @@ class AppleMusicApi:
             ):
                 playlist["relationships"]["tracks"]["data"].extend(additional_data)
         return playlist
+
+    def search(
+        self,
+        term: str,
+        types: str = "songs,albums,artists,playlists",
+        limit: int = 25,
+        offset: int = 0,
+    ) -> dict:
+
+        response = self.session.get(
+            f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/search",
+            params={
+                "term": term,
+                "types": types,
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+        self._check_amp_api_response(response)
+        return response.json()["results"]
 
     def _extend_api_data(
         self,

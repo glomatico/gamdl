@@ -71,6 +71,7 @@ Config file values can be overridden using command line arguments.
 | `--save-cover`, `-s` / `save_cover`                             | Save cover as a separate file.                                               | `false`                      |
 | `--overwrite` / `overwrite`                                     | Overwrite existing files.                                                    | `false`                      |
 | `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs separated by newlines. | `false`                      |
+| `--save-playlist` / `save_playlist`                             | Save a M3U8 playlist file when downloading a playlist.                       | `false`                      |
 | `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                             | `false`                      |
 | `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                      |
 | `--config-path` / -                                             | Path to config file.                                                         | `<home>/.gamdl/config.json`  |
@@ -94,6 +95,7 @@ Config file values can be overridden using command line arguments.
 | `--template-file-multi-disc` / `template_file_multi_disc`       | Template file for the tracks that are part of a multi-disc album.            | `{disc}-{track:02d} {title}` |
 | `--template-folder-no-album` / `template_folder_no_album`       | Template folder for the tracks that are not part of an album.                | `{artist}/Unknown Album`     |
 | `--template-file-no-album` / `template_file_no_album`           | Template file for the tracks that are not part of an album.                  | `{title}`                    |
+| `--template-file-playlist` / `template_file_playlist`           | Template file for the M3U8 playlist.                                         | `Playlists/{playlist_title}` |
 | `--template-date` / `template_date`                             | Date tag template.                                                           | `%Y-%m-%dT%H:%M:%SZ`         |
 | `--exclude-tags` / `exclude_tags`                               | Comma-separated tags to exclude.                                             | `null`                       |
 | `--cover-size` / `cover_size`                                   | Cover size.                                                                  | `1200`                       |

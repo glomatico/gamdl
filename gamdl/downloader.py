@@ -512,6 +512,7 @@ class Downloader:
 
     @functools.lru_cache()
     def save_cover(self, cover_path: Path, cover_url: str):
+        cover_path.parent.mkdir(parents=True, exist_ok=True)
         cover_path.write_bytes(self.get_url_response_bytes(cover_url))
 
     def cleanup_temp_path(self):

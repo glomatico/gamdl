@@ -27,8 +27,9 @@ from .models import DownloadQueue, UrlInfo
 
 
 class Downloader:
-    ILLEGAL_CHARACTERS_REGEX = r'[\\/:*?"<>|;]'
-    VALID_URL_REGEX = r"/([a-z]{2})/(artist|album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?"
+    ILLEGAL_CHARS_RE = r'[\\/:*?"<>|;]'
+    ILLEGAL_CHAR_REPLACEMENT = "_"
+    VALID_URL_RE = r"/([a-z]{2})/(artist|album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?"
 
     def __init__(
         self,
@@ -120,7 +121,7 @@ class Downloader:
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()
         url_regex_result = re.search(
-            self.VALID_URL_REGEX,
+            self.VALID_URL_RE,
             url,
         )
         url_info.storefront = url_regex_result.group(1)
@@ -284,7 +285,10 @@ class Downloader:
         playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
         with playlist_file_path.open("a", encoding="utf8") as playlist_file:
             playlist_file.write(
-                final_path.relative_to(playlist_file_path.parent, walk_up=True).as_posix() + "\n"
+                final_path.relative_to(
+                    playlist_file_path.parent, walk_up=True
+                ).as_posix()
+                + "\n"
             )
 
     @staticmethod
@@ -360,11 +364,15 @@ class Downloader:
         )
 
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
-        dirty_string = re.sub(self.ILLEGAL_CHARACTERS_REGEX, "_", dirty_string)
+        dirty_string = re.sub(
+            self.ILLEGAL_CHARS_RE,
+            self.ILLEGAL_CHAR_REPLACEMENT,
+            dirty_string,
+        )
         if is_folder:
             dirty_string = dirty_string[: self.truncate]
             if dirty_string.endswith("."):
-                dirty_string = dirty_string[:-1] + "_"
+                dirty_string = dirty_string[:-1] + self.ILLEGAL_CHAR_REPLACEMENT
         else:
             if self.truncate is not None:
                 dirty_string = dirty_string[: self.truncate - 4]

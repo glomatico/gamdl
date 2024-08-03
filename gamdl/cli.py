@@ -98,6 +98,11 @@ def load_config_file(
     help="Interpret URLs as paths to text files containing URLs separated by newlines",
 )
 @click.option(
+    "--save-playlist-file",
+    is_flag=True,
+    help="Save a M3U8 playlist file when downloading a playlist.",
+)
+@click.option(
     "--synced-lyrics-only",
     is_flag=True,
     help="Download only the synced lyrics.",
@@ -238,6 +243,12 @@ def load_config_file(
     help="Template file for the tracks that are not part of an album.",
 )
 @click.option(
+    "--template-file-playlist",
+    type=str,
+    default=downloader_sig.parameters["template_file_playlist"].default,
+    help="Template file for the M3U8 playlist.",
+)
+@click.option(
     "--template-date",
     type=str,
     default=downloader_sig.parameters["template_date"].default,
@@ -302,6 +313,7 @@ def main(
     save_cover: bool,
     overwrite: bool,
     read_urls_as_txt: bool,
+    save_playlist_file: bool,
     synced_lyrics_only: bool,
     no_synced_lyrics: bool,
     config_path: Path,
@@ -325,6 +337,7 @@ def main(
     template_file_multi_disc: str,
     template_folder_no_album: str,
     template_file_no_album: str,
+    template_file_playlist: str,
     template_date: str,
     exclude_tags: str,
     cover_size: int,
@@ -372,6 +385,7 @@ def main(
         template_file_multi_disc,
         template_folder_no_album,
         template_file_no_album,
+        template_file_playlist,
         template_date,
         exclude_tags,
         cover_size,
@@ -731,6 +745,10 @@ def main(
                 downloader.apply_tags(remuxed_path, tags, cover_url)
                 logger.debug(f'Moving to "{final_path}"')
                 downloader.move_to_output_path(remuxed_path, final_path)
+                if save_playlist_file and download_queue.playlist_attributes:
+                    playlist_file_path = downloader.get_playlist_file_path(tags)
+                    logger.debug("Saving M3U8 playlist")
+                    downloader.update_playlist_file(playlist_file_path, final_path)
             except Exception as e:
                 error_count += 1
                 logger.error(

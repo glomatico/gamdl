@@ -50,6 +50,7 @@ class Downloader:
         template_file_multi_disc: str = "{disc}-{track:02d} {title}",
         template_folder_no_album: str = "{artist}/Unknown Album",
         template_file_no_album: str = "{title}",
+        template_file_playlist: str = "{playlist_title}",
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: str = None,
         cover_size: int = 1200,
@@ -74,6 +75,7 @@ class Downloader:
         self.template_file_multi_disc = template_file_multi_disc
         self.template_folder_no_album = template_folder_no_album
         self.template_file_no_album = template_file_no_album
+        self.template_file_playlist = template_file_playlist
         self.template_date = template_date
         self.exclude_tags = exclude_tags
         self.cover_size = cover_size
@@ -259,6 +261,29 @@ class Downloader:
         }
         return tags
 
+    def get_playlist_file_path(
+        self,
+        tags: dict,
+    ):
+        template_folder = self.template_file_playlist.split("/")[0:-1]
+        template_file = self.template_file_playlist.split("/")[-1]
+        return self.output_path.joinpath(
+            *[
+                self.get_sanitized_string(i.format(**tags), True)
+                for i in template_folder
+            ]
+        ).joinpath(
+            *[self.get_sanitized_string(template_file.format(**tags), False) + ".m3u8"]
+        )
+
+    def update_playlist_file(
+        self,
+        playlist_file_path: Path,
+        final_path: Path,
+    ):
+        with playlist_file_path.open("a") as playlist_file:
+            playlist_file.write(final_path.relative_to(self.output_path).as_posix() + "\n")
+
     @staticmethod
     def millis_to_min_sec(millis):
         minutes, seconds = divmod(millis // 1000, 60)
@@ -344,30 +369,28 @@ class Downloader:
 
     def get_final_path(self, tags: dict, file_extension: str) -> Path:
         if tags.get("album"):
-            final_path_folder = (
+            template_folder = (
                 self.template_folder_compilation.split("/")
                 if tags.get("compilation")
                 else self.template_folder_album.split("/")
-            )
-            final_path_file = (
+            )[0:-1]
+            template_file = (
                 self.template_file_multi_disc.split("/")
                 if tags["disc_total"] > 1
                 else self.template_file_single_disc.split("/")
-            )
+            )[-1]
         else:
-            final_path_folder = self.template_folder_no_album.split("/")
-            final_path_file = self.template_file_no_album.split("/")
-        final_path_folder = [
-            self.get_sanitized_string(i.format(**tags), True) for i in final_path_folder
-        ]
-        final_path_file = [
-            self.get_sanitized_string(i.format(**tags), True)
-            for i in final_path_file[:-1]
-        ] + [
-            self.get_sanitized_string(final_path_file[-1].format(**tags), False)
+            template_folder = self.template_folder_no_album.split("/")[0:-1]
+            template_file = self.template_file_no_album.split("/")[-1]
+        return self.output_path.joinpath(
+            *[
+                self.get_sanitized_string(i.format(**tags), True)
+                for i in template_folder
+            ]
+        ).joinpath(
+            self.get_sanitized_string(template_file.format(**tags), False)
             + file_extension
-        ]
-        return self.output_path.joinpath(*final_path_folder).joinpath(*final_path_file)
+        )
 
     def get_cover_file_extension(self, cover_url: str) -> str:
         image_obj = Image.open(io.BytesIO(self.get_url_response_bytes(cover_url)))

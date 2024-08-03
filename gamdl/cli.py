@@ -98,7 +98,7 @@ def load_config_file(
     help="Interpret URLs as paths to text files containing URLs separated by newlines",
 )
 @click.option(
-    "--save-playlist-file",
+    "--save-playlist",
     is_flag=True,
     help="Save a M3U8 playlist file when downloading a playlist.",
 )
@@ -313,7 +313,7 @@ def main(
     save_cover: bool,
     overwrite: bool,
     read_urls_as_txt: bool,
-    save_playlist_file: bool,
+    save_playlist: bool,
     synced_lyrics_only: bool,
     no_synced_lyrics: bool,
     config_path: Path,
@@ -745,7 +745,7 @@ def main(
                 downloader.apply_tags(remuxed_path, tags, cover_url)
                 logger.debug(f'Moving to "{final_path}"')
                 downloader.move_to_output_path(remuxed_path, final_path)
-                if save_playlist_file and download_queue.playlist_attributes:
+                if save_playlist and download_queue.playlist_attributes:
                     playlist_file_path = downloader.get_playlist_file_path(tags)
                     logger.debug("Saving M3U8 playlist")
                     downloader.update_playlist_file(playlist_file_path, final_path)

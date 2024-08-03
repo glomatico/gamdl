@@ -282,7 +282,7 @@ class Downloader:
         final_path: Path,
     ):
         playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
-        with playlist_file_path.open("a") as playlist_file:
+        with playlist_file_path.open("a", encoding="utf8") as playlist_file:
             playlist_file.write(
                 final_path.relative_to(playlist_file_path.parent, walk_up=True).as_posix() + "\n"
             )

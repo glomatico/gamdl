@@ -718,9 +718,6 @@ def main(
                 elif track_metadata["type"] == "uploaded-videos":
                     stream_url = downloader_post.get_stream_url(track_metadata)
                     tags = downloader_post.get_tags(track_metadata)
-                    remuxed_path = downloader_post.get_post_temp_path(
-                        track_metadata["id"]
-                    )
                     final_path = downloader.get_final_path(tags, ".m4v")
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
@@ -733,6 +730,9 @@ def main(
                             f'({queue_progress}) Post video already exists at "{final_path}", skipping'
                         )
                     else:
+                        remuxed_path = downloader_post.get_post_temp_path(
+                            track_metadata["id"]
+                        )
                         logger.debug(f'Downloading to "{remuxed_path}"')
                         downloader.download_ytdlp(remuxed_path, stream_url)
                 if not save_cover:

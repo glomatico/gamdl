@@ -14,7 +14,7 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
 
 ## Prerequisites
 * Python 3.8 or higher
-* The cookies file of your Apple Music browser session (requires an active subscription)
+* The cookies file of your Apple Music browser session in Netscape format (requires an active subscription)
     * You can get your cookies by using one of the following extensions on your browser of choice at the Apple Music website with your account signed in:
         * Firefox: https://addons.mozilla.org/addon/export-cookies-txt
         * Chromium based browsers: https://chrome.google.com/webstore/detail/gdocmgbfkjnnpapoeobnolbbkoibbcif

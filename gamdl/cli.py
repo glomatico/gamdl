@@ -749,7 +749,9 @@ def main(
                     downloader.move_to_output_path(remuxed_path, final_path)
                     if save_playlist and download_queue.playlist_attributes:
                         playlist_file_path = downloader.get_playlist_file_path(tags)
-                        logger.debug("Updating M3U8 playlist")
+                        logger.debug(
+                            f'Updating M3U8 playlist from "{playlist_file_path}"'
+                        )
                         downloader.update_playlist_file(playlist_file_path, final_path)
             except Exception as e:
                 error_count += 1

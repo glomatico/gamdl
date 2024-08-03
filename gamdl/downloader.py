@@ -27,6 +27,7 @@ from .models import DownloadQueueItem, UrlInfo
 
 class Downloader:
     ILLEGAL_CHARACTERS_REGEX = r'[\\/:*?"<>|;]'
+    VALID_URL_REGEX = r"/([a-z]{2})/(artist|album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?"
 
     def __init__(
         self,
@@ -116,7 +117,7 @@ class Downloader:
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()
         url_regex_result = re.search(
-            r"/([a-z]{2})/(artist|album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?",
+            self.VALID_URL_REGEX,
             url,
         )
         url_info.storefront = url_regex_result.group(1)

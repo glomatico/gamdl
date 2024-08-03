@@ -129,6 +129,10 @@ The following variables can be used in the template folders/files and/or in the 
 * `genre_id`
 * `lyrics`
 * `media_type`
+* `playlist_artist`
+* `playlist_id`
+* `playlist_title`
+* `playlist_track`
 * `rating`
 * `storefront`
 * `title`

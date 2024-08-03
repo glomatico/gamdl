@@ -478,6 +478,7 @@ def main(
         ):
             queue_progress = f"Track {download_index}/{len(download_queue_tracks_metadata)} from URL {url_index}/{len(urls)}"
             try:
+                remuxed_path = None
                 if download_queue.playlist_attributes:
                     playlist_track = download_index
                 else:
@@ -741,13 +742,14 @@ def main(
                 else:
                     logger.debug(f'Saving cover to "{cover_path}"')
                     downloader.save_cover(cover_path, cover_url)
-                logger.debug("Applying tags")
-                downloader.apply_tags(remuxed_path, tags, cover_url)
-                logger.debug(f'Moving to "{final_path}"')
-                downloader.move_to_output_path(remuxed_path, final_path)
+                if remuxed_path:
+                    logger.debug("Applying tags")
+                    downloader.apply_tags(remuxed_path, tags, cover_url)
+                    logger.debug(f'Moving to "{final_path}"')
+                    downloader.move_to_output_path(remuxed_path, final_path)
                 if save_playlist and download_queue.playlist_attributes:
                     playlist_file_path = downloader.get_playlist_file_path(tags)
-                    logger.debug("Saving M3U8 playlist")
+                    logger.debug("Updating M3U8 playlist")
                     downloader.update_playlist_file(playlist_file_path, final_path)
             except Exception as e:
                 error_count += 1

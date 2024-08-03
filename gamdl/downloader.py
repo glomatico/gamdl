@@ -6,6 +6,7 @@ import io
 import re
 import shutil
 import subprocess
+import typing
 from pathlib import Path
 
 import ciso8601
@@ -22,7 +23,7 @@ from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
 from .enums import CoverFormat, DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
-from .models import DownloadQueueItem, UrlInfo
+from .models import DownloadQueue, UrlInfo
 
 
 class Downloader:
@@ -131,40 +132,42 @@ class Downloader:
         )
         return url_info
 
-    def get_download_queue(self, url_info: UrlInfo) -> list[DownloadQueueItem]:
+    def get_download_queue(self, url_info: UrlInfo) -> DownloadQueue:
         return self._get_download_queue(url_info.type, url_info.id)
 
-    def _get_download_queue(self, url_type: str, id: str) -> list[DownloadQueueItem]:
-        download_queue = []
+    def _get_download_queue(self, url_type: str, id: str) -> DownloadQueue:
+        download_queue = DownloadQueue()
         if url_type == "artist":
             artist = self.apple_music_api.get_artist(id)
-            download_queue.extend(self.get_download_queue_from_artist(artist))
+            download_queue.tracks_metadata = list(
+                self.get_download_queue_from_artist(artist)
+            )
         elif url_type == "song":
-            download_queue.append(DownloadQueueItem(self.apple_music_api.get_song(id)))
+            download_queue.tracks_metadata = [self.apple_music_api.get_song(id)]
         elif url_type == "album":
             album = self.apple_music_api.get_album(id)
-            download_queue.extend(
-                DownloadQueueItem(track)
-                for track in album["relationships"]["tracks"]["data"]
-            )
+            download_queue.tracks_metadata = [
+                track for track in album["relationships"]["tracks"]["data"]
+            ]
         elif url_type == "playlist":
-            download_queue.extend(
-                DownloadQueueItem(track)
+            playlist = self.apple_music_api.get_playlist(id)
+            download_queue.playlist_attributes = playlist["attributes"]
+            download_queue.tracks_metadata = [
+                track
                 for track in self.apple_music_api.get_playlist(id)["relationships"][
                     "tracks"
                 ]["data"]
-            )
+            ]
         elif url_type == "music-video":
-            download_queue.append(
-                DownloadQueueItem(self.apple_music_api.get_music_video(id))
-            )
+            download_queue.tracks_metadata = [self.apple_music_api.get_music_video(id)]
         elif url_type == "post":
-            download_queue.append(DownloadQueueItem(self.apple_music_api.get_post(id)))
-        else:
-            raise Exception(f"Invalid url type: {url_type}")
+            download_queue.tracks_metadata = [self.apple_music_api.get_post(id)]
         return download_queue
 
-    def get_download_queue_from_artist(self, artist: dict) -> list[DownloadQueueItem]:
+    def get_download_queue_from_artist(
+        self,
+        artist: dict,
+    ) -> typing.Generator[dict, None, None]:
         media_type = inquirer.select(
             message=f'Select which type to download for artist "{artist["attributes"]["name"]}":',
             choices=[
@@ -178,18 +181,18 @@ class Downloader:
             invalid_message="The artist doesn't have any items of this type",
         ).execute()
         if media_type == "albums":
-            return self.select_albums_from_artist(
+            yield from self.select_albums_from_artist(
                 artist["relationships"]["albums"]["data"]
             )
         elif media_type == "music-videos":
-            return self.select_music_videos_from_artist(
+            yield from self.select_music_videos_from_artist(
                 artist["relationships"]["music-videos"]["data"]
             )
 
     def select_albums_from_artist(
         self,
         albums: list[dict],
-    ) -> list[DownloadQueueItem]:
+    ) -> typing.Generator[dict, None, None]:
         choices = [
             Choice(
                 name=" | ".join(
@@ -209,20 +212,18 @@ class Downloader:
             choices=choices,
             multiselect=True,
         ).execute()
-        download_queue = []
         for album in selected:
-            download_queue.extend(
-                DownloadQueueItem(track)
+            yield (
+                track
                 for track in self.apple_music_api.get_album(album["id"])[
                     "relationships"
                 ]["tracks"]["data"]
             )
-        return download_queue
 
     def select_music_videos_from_artist(
         self,
         music_videos: list[dict],
-    ) -> list[DownloadQueueItem]:
+    ) -> typing.Generator[dict, None, None]:
         choices = [
             Choice(
                 name=" | ".join(
@@ -243,7 +244,20 @@ class Downloader:
             choices=choices,
             multiselect=True,
         ).execute()
-        return [DownloadQueueItem(music_video) for music_video in selected]
+        yield (music_video for music_video in selected)
+
+    def get_playlist_tags(
+        self,
+        playlist_attributes: dict,
+        playlist_track: int,
+    ) -> dict:
+        tags = {
+            "playlist_artist": playlist_attributes["curatorName"],
+            "playlist_id": playlist_attributes["playParams"]["id"],
+            "playlist_title": playlist_attributes["name"],
+            "playlist_track": playlist_track,
+        }
+        return tags
 
     @staticmethod
     def millis_to_min_sec(millis):

@@ -460,7 +460,7 @@ def main(
             continue
         for queue_index, queue_item in enumerate(download_queue, start=1):
             queue_progress = f"Track {queue_index}/{len(download_queue)} from URL {url_index}/{len(urls)}"
-            track = queue_item.metadata
+            track = queue_item.track_metadata
             try:
                 logger.info(
                     f'({queue_progress}) Downloading "{track["attributes"]["name"]}"'

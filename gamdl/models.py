@@ -10,7 +10,7 @@ class UrlInfo:
 
 @dataclass
 class DownloadQueueItem:
-    metadata: dict = None
+    track_metadata: dict = None
 
 
 @dataclass

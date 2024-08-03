@@ -50,7 +50,7 @@ class Downloader:
         template_file_multi_disc: str = "{disc}-{track:02d} {title}",
         template_folder_no_album: str = "{artist}/Unknown Album",
         template_file_no_album: str = "{title}",
-        template_file_playlist: str = "{playlist_title}",
+        template_file_playlist: str = "Playlists/{playlist_title}",
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: str = None,
         cover_size: int = 1200,
@@ -281,8 +281,11 @@ class Downloader:
         playlist_file_path: Path,
         final_path: Path,
     ):
+        playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
         with playlist_file_path.open("a") as playlist_file:
-            playlist_file.write(final_path.relative_to(self.output_path).as_posix() + "\n")
+            playlist_file.write(
+                final_path.relative_to(playlist_file_path.parent, walk_up=True).as_posix() + "\n"
+            )
 
     @staticmethod
     def millis_to_min_sec(millis):

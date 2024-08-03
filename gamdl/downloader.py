@@ -51,7 +51,7 @@ class Downloader:
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: str = None,
         cover_size: int = 1200,
-        truncate: int = 40,
+        truncate: int = 0,
         silent: bool = False,
     ):
         self.apple_music_api = apple_music_api

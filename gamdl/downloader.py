@@ -55,7 +55,7 @@ class Downloader:
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: str = None,
         cover_size: int = 1200,
-        truncate: int = 0,
+        truncate: int = None,
         silent: bool = False,
     ):
         self.apple_music_api = apple_music_api
@@ -101,7 +101,8 @@ class Downloader:
         )
 
     def _set_truncate(self):
-        self.truncate = None if self.truncate < 4 else self.truncate
+        if self.truncate is not None:
+            self.truncate = None if self.truncate < 4 else self.truncate
 
     def _set_subprocess_additional_args(self):
         if self.silent:

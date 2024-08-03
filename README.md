@@ -99,7 +99,7 @@ Config file values can be overridden using command line arguments.
 | `--template-date` / `template_date`                             | Date tag template.                                                           | `%Y-%m-%dT%H:%M:%SZ`         |
 | `--exclude-tags` / `exclude_tags`                               | Comma-separated tags to exclude.                                             | `null`                       |
 | `--cover-size` / `cover_size`                                   | Cover size.                                                                  | `1200`                       |
-| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                                     | `0`                          |
+| `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                                     | `null`                       |
 | `--codec-song` / `codec_song`                                   | Song codec.                                                                  | `aac-legacy`                 |
 | `--synced-lyrics-format` / `synced_lyrics_format`               | Synced lyrics format.                                                        | `lrc`                        |
 | `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264`                       |

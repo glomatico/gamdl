@@ -216,12 +216,10 @@ class Downloader:
             multiselect=True,
         ).execute()
         for album in selected:
-            yield (
-                track
-                for track in self.apple_music_api.get_album(album["id"])[
-                    "relationships"
-                ]["tracks"]["data"]
-            )
+            for track in self.apple_music_api.get_album(album["id"])["relationships"][
+                "tracks"
+            ]["data"]:
+                yield track
 
     def select_music_videos_from_artist(
         self,
@@ -247,7 +245,8 @@ class Downloader:
             choices=choices,
             multiselect=True,
         ).execute()
-        yield (music_video for music_video in selected)
+        for music_video in selected:
+            yield music_video
 
     def get_playlist_tags(
         self,

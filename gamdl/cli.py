@@ -706,15 +706,6 @@ def main(
                             stream_info_video.codec,
                             stream_info_audio.codec,
                         )
-                    if not save_cover:
-                        pass
-                    elif cover_path.exists() and not overwrite:
-                        logger.debug(
-                            f'Cover already exists at "{cover_path}", skipping'
-                        )
-                    else:
-                        logger.debug(f'Saving cover to "{cover_path}"')
-                        downloader.save_cover(cover_path, cover_url)
                 elif track_metadata["type"] == "uploaded-videos":
                     stream_url = downloader_post.get_stream_url(track_metadata)
                     tags = downloader_post.get_tags(track_metadata)

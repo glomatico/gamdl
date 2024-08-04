@@ -503,6 +503,7 @@ def main(
                     logger.warning(
                         f"({queue_progress}) Track is not downloadable with current configuration, skipping"
                     )
+                    continue
                 elif track_metadata["type"] == "songs":
                     logger.debug("Getting lyrics")
                     lyrics = downloader_song.get_lyrics(track_metadata)

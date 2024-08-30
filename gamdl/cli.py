@@ -609,9 +609,9 @@ def main(
                     itunes_page = itunes_api.get_itunes_page(
                         "music-video", music_video_id_alt
                     )
-                    stream_url_master = downloader_music_video.get_stream_url_master(
-                        itunes_page
-                    )
+                    logger.debug("Getting webplayback")
+                    webplayback = apple_music_api.get_webplayback(track_metadata["id"])
+                    stream_url_master = webplayback["hls-playlist-url"]
                     logger.debug("Getting M3U8 data")
                     m3u8_master_data = downloader_music_video.get_m3u8_master_data(
                         stream_url_master

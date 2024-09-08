@@ -287,13 +287,14 @@ class Downloader:
         final_path: Path,
     ):
         playlist_file_path.parent.mkdir(parents=True, exist_ok=True)
+        playlist_file_path_parent_parts_len = len(playlist_file_path.parent.parts)
+        output_path_parts_len = len(self.output_path.parts)
+        final_path_relative = Path(
+            ("../" * (playlist_file_path_parent_parts_len - output_path_parts_len)),
+            *final_path.parts[output_path_parts_len:],
+        )
         with playlist_file_path.open("a", encoding="utf8") as playlist_file:
-            playlist_file.write(
-                final_path.relative_to(
-                    playlist_file_path.parent, walk_up=True
-                ).as_posix()
-                + "\n"
-            )
+            playlist_file.write(final_path_relative.as_posix() + "\n")
 
     @staticmethod
     def millis_to_min_sec(millis):

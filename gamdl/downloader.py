@@ -398,14 +398,16 @@ class Downloader:
             template_folder = self.template_folder_no_album.split("/")
             template_file = self.template_file_no_album.split("/")
         template_final = template_folder + template_file
-        return self.output_path.joinpath(
+        return Path(
+            self.output_path,
             *[
                 self.get_sanitized_string(i.format(**tags), True)
                 for i in template_final[0:-1]
-            ]
-        ).joinpath(
-            self.get_sanitized_string(template_final[-1].format(**tags), False)
-            + file_extension
+            ],
+            (
+                self.get_sanitized_string(template_final[-1].format(**tags), False)
+                + file_extension
+            ),
         )
 
     def get_cover_file_extension(self, cover_url: str) -> str:

@@ -734,7 +734,7 @@ def main(
                         )
                         logger.debug(f'Downloading to "{remuxed_path}"')
                         downloader.download_ytdlp(remuxed_path, stream_url)
-                if not save_cover:
+                if synced_lyrics_only or not save_cover:
                     pass
                 elif cover_path.exists() and not overwrite:
                     logger.debug(f'Cover already exists at "{cover_path}", skipping')

@@ -51,7 +51,7 @@ class Downloader:
         template_file_multi_disc: str = "{disc}-{track:02d} {title}",
         template_folder_no_album: str = "{artist}/Unknown Album",
         template_file_no_album: str = "{title}",
-        template_file_playlist: str = "Playlists/{playlist_title}",
+        template_file_playlist: str = "Playlists/{playlist_artist}/{playlist_title}",
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: str = None,
         cover_size: int = 1200,

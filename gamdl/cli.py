@@ -609,13 +609,24 @@ def main(
                     itunes_page = itunes_api.get_itunes_page(
                         "music-video", music_video_id_alt
                     )
-                    logger.debug("Getting webplayback")
-                    webplayback = apple_music_api.get_webplayback(track_metadata["id"])
-                    stream_url_master = webplayback["hls-playlist-url"]
+                    if music_video_id_alt == track_metadata["id"]:
+                        stream_url = (
+                            downloader_music_video.get_stream_url_from_itunes_page(
+                                itunes_page
+                            )
+                        )
+                    else:
+                        logger.debug("Getting webplayback")
+                        webplayback = apple_music_api.get_webplayback(
+                            track_metadata["id"]
+                        )
+                        stream_url = (
+                            downloader_music_video.get_stream_url_from_webplayback(
+                                webplayback
+                            )
+                        )
                     logger.debug("Getting M3U8 data")
-                    m3u8_master_data = downloader_music_video.get_m3u8_master_data(
-                        stream_url_master
-                    )
+                    m3u8_data = downloader_music_video.get_m3u8_master_data(stream_url)
                     tags = downloader_music_video.get_tags(
                         music_video_id_alt,
                         itunes_page,
@@ -643,12 +654,8 @@ def main(
                     else:
                         logger.debug("Getting stream info")
                         stream_info_video, stream_info_audio = (
-                            downloader_music_video.get_stream_info_video(
-                                m3u8_master_data
-                            ),
-                            downloader_music_video.get_stream_info_audio(
-                                m3u8_master_data
-                            ),
+                            downloader_music_video.get_stream_info_video(m3u8_data),
+                            downloader_music_video.get_stream_info_audio(m3u8_data),
                         )
                         decryption_key_video = downloader.get_decryption_key(
                             stream_info_video.pssh, track_metadata["id"]

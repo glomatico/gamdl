@@ -266,19 +266,17 @@ class Downloader:
         self,
         tags: dict,
     ):
-        template_folder = self.template_file_playlist.split("/")
         template_file = self.template_file_playlist.split("/")
-        template_final = template_folder + template_file
-        return self.output_path.joinpath(
+        return Path(
+            self.output_path,
             *[
                 self.get_sanitized_string(i.format(**tags), True)
-                for i in template_final[0:-1]
-            ]
-        ).joinpath(
+                for i in template_file[0:-1]
+            ],
             *[
-                self.get_sanitized_string(template_final[-1].format(**tags), False)
+                self.get_sanitized_string(template_file[-1].format(**tags), False)
                 + ".m3u8"
-            ]
+            ],
         )
 
     def update_playlist_file(

@@ -26,7 +26,14 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
 * (Optional) mp4decrypt on your system PATH
     * Required to download music videos and songs in non-legacy formats.
     * Binaries can be obtained from here: https://www.bento4.com/downloads/.
- 
+
+## Preinstallation (required only on Python 3.13)
+
+1. Download the ciso8601 source code from pypl
+2. Extract it
+3. `cd` into the folder and build it with `pip wheel . --no-deps`
+4. Afterwards, install the .whl file.
+
 ## Installation
 1. Install the package `gamdl` using pip
     ```bash

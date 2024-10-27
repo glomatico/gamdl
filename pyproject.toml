@@ -4,7 +4,6 @@ description = "A Python CLI app for downloading Apple Music songs/music videos/p
 requires-python = ">=3.8"
 authors = [{ name = "glomatico" }]
 dependencies = [
-    "ciso8601",
     "click",
     "inquirerpy",
     "m3u8",

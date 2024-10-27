@@ -311,7 +311,7 @@ class Downloader:
         return f"{minutes:02d}:{seconds:02d}"
 
     def sanitize_date(self, date: str) -> datetime.datetime:
-        return datetime.datetime.fromisoformat(date).strftime(self.template_date)
+        return datetime.datetime.fromisoformat(date[:-1]).strftime(self.template_date)
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
         try:

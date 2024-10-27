@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import datetime
 import functools
 import io
 import re
@@ -9,7 +10,6 @@ import subprocess
 import typing
 from pathlib import Path
 
-import ciso8601
 import requests
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
@@ -306,13 +306,12 @@ class Downloader:
             playlist_file.writelines(playlist_file_lines)
 
     @staticmethod
-    def millis_to_min_sec(millis):
+    def millis_to_min_sec(millis) -> str:
         minutes, seconds = divmod(millis // 1000, 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    def sanitize_date(self, date: str):
-        datetime_obj = ciso8601.parse_datetime(date)
-        return datetime_obj.strftime(self.template_date)
+    def sanitize_date(self, date: str) -> datetime.datetime:
+        return datetime.datetime.fromisoformat(date).strftime(self.template_date)
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
         try:

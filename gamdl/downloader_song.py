@@ -248,7 +248,7 @@ class DownloaderSong:
             "disc": tags_raw["discNumber"],
             "disc_total": tags_raw["discCount"],
             "gapless": tags_raw["gapless"],
-            "genre": tags_raw["genre"],
+            "genre": tags_raw.get("genre"),
             "genre_id": tags_raw["genreId"],
             "lyrics": lyrics_unsynced if lyrics_unsynced else None,
             "media_type": 1,

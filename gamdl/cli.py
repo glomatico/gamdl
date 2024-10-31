@@ -125,9 +125,9 @@ def load_config_file(
     help="Log level.",
 )
 @click.option(
-    "--print-exceptions",
+    "--no-exceptions",
     is_flag=True,
-    help="Print exceptions.",
+    help="Don't print exceptions.",
 )
 # API specific options
 @click.option(
@@ -318,7 +318,7 @@ def main(
     no_synced_lyrics: bool,
     config_path: Path,
     log_level: str,
-    print_exceptions: bool,
+    no_exceptions: bool,
     cookies_path: Path,
     language: str,
     output_path: Path,
@@ -354,7 +354,7 @@ def main(
     )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
-    logger.debug("Starting downloader")
+    logger.info("Starting Gamdl")
     if not cookies_path.exists():
         logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_path))
         return
@@ -470,7 +470,7 @@ def main(
             error_count += 1
             logger.error(
                 f'({url_progress}) Failed to check "{url}"',
-                exc_info=print_exceptions,
+                exc_info=not no_exceptions,
             )
             continue
         for download_index, track_metadata in enumerate(
@@ -762,7 +762,7 @@ def main(
                 error_count += 1
                 logger.error(
                     f'({queue_progress}) Failed to download "{track_metadata["attributes"]["name"]}"',
-                    exc_info=print_exceptions,
+                    exc_info=not no_exceptions,
                 )
             finally:
                 if temp_path.exists():

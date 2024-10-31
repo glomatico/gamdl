@@ -15,7 +15,7 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
 ## Prerequisites
 * Python 3.8 or higher
 * The cookies file of your Apple Music browser session in Netscape format (requires an active subscription)
-    * You can get your cookies by using one of the following extensions on your browser of choice at the Apple Music website with your account signed in:
+    * To export your cookies, use one of the following browser extensions while signed in to Apple Music:
         * Firefox: https://addons.mozilla.org/addon/export-cookies-txt
         * Chromium based browsers: https://chrome.google.com/webstore/detail/gdocmgbfkjnnpapoeobnolbbkoibbcif
 * FFmpeg on your system PATH
@@ -23,21 +23,37 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
     * Up to date binaries can be obtained from the links below:
         * Windows: https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases
         * Linux: https://johnvansickle.com/ffmpeg/
-* (Optional) mp4decrypt on your system PATH
-    * Required to download music videos and songs in non-legacy formats.
-    * Binaries can be obtained from here: https://www.bento4.com/downloads/.
+
+### Optional dependencies
+The following tools are optional but required for specific features. Add them to your system’s PATH or specify their paths using command-line arguments or the config file.
+* [MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)
+    * Required when setting `mp4box` as remux mode.
+* [mp4decrypt](https://www.bento4.com/downloads/)
+    * Required when setting `mp4box` as remux mode, for downloading songs in non-legacy formats and for downloading music videos.
+* [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)
+    * Required when setting `nm3u8dlre` as download mode.
  
 ## Installation
 1. Install the package `gamdl` using pip
     ```bash
     pip install gamdl
     ```
-2. Place your cookies file in the directory from which you will be running gamdl and name it `cookies.txt`.
+2. Set up the cookies file.
+    * You can either move to the current directory from which you will be running Gamdl as `cookies.txt` or specify its path using the command-line arguments/config file.
 
 ## Usage
 ```bash
 gamdl [OPTIONS] URLS...
 ```
+
+### Supported URL types
+Gamdl supports the following types of URLs:
+* Song
+* Album
+* Playlist
+* Music video
+* Artist
+* Post video/extra video
 
 ### Examples
 * Download a song
@@ -60,9 +76,9 @@ gamdl [OPTIONS] URLS...
 * Enter - Confirm selection
 
 ## Configuration
-gamdl can be configured by using the command line arguments or the config file.
+Gamdl can be configured by using the command line arguments or the config file.
 
-The config file is created automatically when you run gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows.
+The config file is created automatically when you run Gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows.
 
 Config file values can be overridden using command line arguments.
 | Command line argument / Config file key                         | Description                                                                  | Default value                |
@@ -178,20 +194,20 @@ The following codecs are also available, **but are not guaranteed to work**, as 
 * `ac3`
 * `alac`
 * `ask`
-    * When using this option, gamdl will ask you which codec from this list to use that is available for the song.
+    * When using this option, Gamdl will ask you which codec from this list to use that is available for the song.
 
 ### Music videos codecs
 The following codecs are available:
 * `h264` (up to 1080p, with AAC 256kbps)
 * `h265` (up to 2160p, with AAC 256kpbs)
 * `ask`
-    * When using this option, gamdl will ask you which audio and video codec to use that is available for the music video.
+    * When using this option, Gamdl will ask you which audio and video codec to use that is available for the music video.
   
 ### Post videos/extra videos qualities
 The following qualities are available:
 * `best` (up to 1080p, with AAC 256kbps)
 * `ask`
-    * When using this option, gamdl will ask you which video quality to use that is available for the video.
+    * When using this option, Gamdl will ask you which video quality to use that is available for the video.
 
 Post videos doesn't require remuxing and are limited to `ytdlp` download mode.
 

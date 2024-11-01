@@ -163,19 +163,14 @@ The following variables can be used in the template folders/files and/or in the 
 ### Remux modes
 The following remux modes are available:
 * `ffmpeg`
-    * Can be used without mp4decrypt only for songs and when using legacy song codecs
 * `mp4box`
-    * Requires mp4decrypt
     * Doesn't convert closed captions in music videos that have them
-    * Can be obtained from here: https://gpac.wp.imt.fr/downloads
 
 ### Download modes
 The following download modes are available:
 * `ytdlp`
 * `nm3u8dlre`
     * Faster than `ytdlp`
-    * Requires FFmpeg
-    * Can be obtained from here: https://github.com/nilaoda/N_m3u8DL-RE/releases
 
 
 ### Song codecs

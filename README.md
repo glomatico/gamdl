@@ -26,10 +26,10 @@ A Python CLI app for downloading Apple Music songs/music videos/posts.
 
 ### Optional dependencies
 The following tools are optional but required for specific features. Add them to your system’s PATH or specify their paths using command-line arguments or the config file.
+* [mp4decrypt](https://www.bento4.com/downloads/)
+    * Required when setting `mp4box` as remux mode, for downloading music videos and for downloading songs in non-legacy formats.
 * [MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)
     * Required when setting `mp4box` as remux mode.
-* [mp4decrypt](https://www.bento4.com/downloads/)
-    * Required when setting `mp4box` as remux mode, for downloading songs in non-legacy formats and for downloading music videos.
 * [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)
     * Required when setting `nm3u8dlre` as download mode.
  

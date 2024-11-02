@@ -92,7 +92,7 @@ Config file values can be overridden using command line arguments.
 | `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                      |
 | `--config-path` / -                                             | Path to config file.                                                         | `<home>/.gamdl/config.json`  |
 | `--log-level` / `log_level`                                     | Log level.                                                                   | `INFO`                       |
-| `--print-exceptions` / `print_exceptions`                       | Print exceptions.                                                            | `false`                      |
+| `--no-exceptions` / `no_exceptions`                             | Don't print exceptions.                                                      | `false`                      |
 | `--cookies-path`, `-c` / `cookies_path`                         | Path to .txt cookies file.                                                   | `./cookies.txt`              |
 | `--language`, `-l` / `language`                                 | Metadata language as an ISO-2A language code (don't always work for videos). | `en-US`                      |
 | `--output-path`, `-o` / `output_path`                           | Path to output directory.                                                    | `./Apple Music`              |

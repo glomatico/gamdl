@@ -165,6 +165,11 @@ def load_config_file(
     help="Path to .wvd or .prd file.",
 )
 @click.option(
+    "--playready",
+    is_flag=True,
+    help="Use PlayReady DRM.",
+)
+@click.option(
     "--nm3u8dlre-path",
     type=str,
     default=downloader_sig.parameters["nm3u8dlre_path"].default,
@@ -324,6 +329,7 @@ def main(
     output_path: Path,
     temp_path: Path,
     device_path: Path,
+    playready: bool,
     nm3u8dlre_path: str,
     mp4decrypt_path: str,
     ffmpeg_path: str,
@@ -390,6 +396,7 @@ def main(
         exclude_tags,
         cover_size,
         truncate,
+        DRM.Playready if playready else DRM.Widevine
     )
     downloader_song = DownloaderSong(
         downloader,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
+from enum import Enum
 
 @dataclass
 class UrlInfo:
@@ -27,3 +27,4 @@ class StreamInfo:
     stream_url: str = None
     pssh: str = None
     codec: str = None
+

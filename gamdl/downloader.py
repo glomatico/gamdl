@@ -20,7 +20,7 @@ from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
 from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
-from .enums import CoverFormat, DownloadMode, RemuxMode
+from .enums import CoverFormat, DownloadMode, RemuxMode, DRM
 from .hardcoded_wvd import HARDCODED_WVD, HARDCODED_PRD
 from .itunes_api import ItunesApi
 from .models import DownloadQueue, UrlInfo
@@ -56,8 +56,8 @@ class Downloader:
         exclude_tags: str = None,
         cover_size: int = 1200,
         truncate: int = None,
-        silent: bool = False,
-        drm: str = "wv"
+        drm: DRM = DRM.Widevine,
+        silent: bool = False
     ):
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
@@ -116,14 +116,14 @@ class Downloader:
             self.subprocess_additional_args = {}
 
     def set_cdm(self):
-        if self.drm == "wv":
+        if self.drm == DRM.Widevine:
             from pywidevine import PSSH, Cdm, Device
-        elif self.drm == "pr": 
+        elif self.drm == DRM.Playready: 
             from pyplayready import PSSH, Cdm, Device
         if self.device_path:
             self.cdm = Cdm.from_device(Device.load(self.device_path))
         else:
-            self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD if self.drm == "wv" else HARDCODED_PRD))
+            self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD if self.drm == DRM.Widevine else HARDCODED_PRD))
 
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()
@@ -326,10 +326,11 @@ class Downloader:
             challenge = base64.b64encode(
                 self.cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
-            license = self.apple_music_api.get_widevine_license(
+            license = self.apple_music_api.get_license(
                 track_id,
                 pssh,
                 challenge,
+                self.drm,
             )
             self.cdm.parse_license(cdm_session, license)
             decryption_key = next(

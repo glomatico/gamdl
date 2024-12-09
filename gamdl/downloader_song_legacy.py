@@ -37,7 +37,7 @@ class DownloaderSongLegacy(DownloaderSong):
             challenge = base64.b64encode(
                 self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
-            license = self.downloader.apple_music_api.get_widevine_license(
+            license = self.downloader.apple_music_api.get_license(
                 track_id,
                 pssh,
                 challenge,

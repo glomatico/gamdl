@@ -39,7 +39,7 @@ class AppleMusicApi:
             self.storefront = self.session.cookies.get_dict()["itua"]
         self.session.headers.update(
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.86", #"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
@@ -256,17 +256,18 @@ class AppleMusicApi:
             self._raise_response_exception(response)
         return webplayback[0]
 
-    def get_widevine_license(
+    def get_license(
         self,
         track_id: str,
         track_uri: str,
         challenge: str,
+        drm: DRM
     ) -> str:
         response = self.session.post(
             self.LICENSE_API_URL,
             json={
                 "challenge": challenge,
-                "key-system": "com.widevine.alpha",
+                "key-system": "com.widevine.alpha" if drm == DRM.Widevine else "com.microsoft.playready",
                 "uri": track_uri,
                 "adamId": track_id,
                 "isLibrary": False,
@@ -276,43 +277,15 @@ class AppleMusicApi:
         try:
             response.raise_for_status()
             response_dict = response.json()
-            widevine_license = response_dict.get("license")
-            assert widevine_license
+            license = response_dict.get("license")
+            assert license
         except (
             requests.HTTPError,
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
             self._raise_response_exception(response)
-        return widevine_license
+        return license
     
-    def get_playready_license(
-        self,
-        track_id: str,
-        track_uri: str,
-        challenge: str,
-    ) -> str:
-        response = self.session.post(
-            self.LICENSE_API_URL,
-            json={
-                "challenge": challenge,
-                "key-system": "com.microsoft.playready",
-                "uri": track_uri,
-                "adamId": track_id,
-                "isLibrary": False,
-                "user-initiated": True,
-            },
-        )
-        try:
-            response.raise_for_status()
-            response_dict = response.json()
-            playready_license = response_dict.get("license")
-            assert playready_license
-        except (
-            requests.HTTPError,
-            requests.exceptions.JSONDecodeError,
-            AssertionError,
-        ):
-            self._raise_response_exception(response)
-        return playready_license
+    
 

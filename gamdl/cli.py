@@ -516,6 +516,7 @@ def main(
                     lyrics = downloader_song.get_lyrics(track_metadata)
                     logger.debug("Getting webplayback")
                     webplayback = apple_music_api.get_webplayback(track_metadata["id"])
+                    logger.debug(webplayback)
                     tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
                     if playlist_track:
                         tags = {
@@ -555,6 +556,7 @@ def main(
                             stream_info = downloader_song.get_stream_info(
                                 track_metadata
                             )
+                            logger.debug(track_metadata)
                             if not stream_info.stream_url or not stream_info.pssh:
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"

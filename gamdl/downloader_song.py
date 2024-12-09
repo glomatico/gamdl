@@ -90,20 +90,36 @@ class DownloaderSong:
         drm_infos: dict,
         drm_ids: list,
     ) -> str | None:
-        drm_info = next(
-            (
-                drm_infos[drm_id]
-                for drm_id in drm_ids
-                if drm_infos[drm_id].get(
-                    "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
-                )
-                and drm_id != "1"
-            ),
-            None,
-        )
-        if not drm_info:
-            return None
-        return drm_info["urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"]["URI"]
+        if self.downloader.drm == DRM.Widevine:
+            drm_info = next(
+                (
+                    drm_infos[drm_id]
+                    for drm_id in drm_ids
+                    if drm_infos[drm_id].get(
+                        "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
+                    )
+                    and drm_id != "1"
+                ),
+                None,
+            )
+            if not drm_info:
+                return None
+            return drm_info["urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"]["URI"]
+        else:
+            drm_info = next(
+                (
+                    drm_infos[drm_id]
+                    for drm_id in drm_ids
+                    if drm_infos[drm_id].get(
+                         "urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"
+                    )
+                    and drm_id != "1"
+                ),
+                None,
+            )
+            if not drm_info:
+                return None
+            return drm_info["urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"]["URI"]
 
     def get_stream_info(self, track_metadata: dict) -> StreamInfo:
         m3u8_url = track_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")

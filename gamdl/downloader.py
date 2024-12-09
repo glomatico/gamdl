@@ -117,9 +117,9 @@ class Downloader:
 
     def set_cdm(self):
         if self.drm == DRM.Widevine:
-            from pywidevine import PSSH, Cdm, Device
+            from pywidevine import Cdm, Device
         elif self.drm == DRM.Playready: 
-            from pyplayready import PSSH, Cdm, Device
+            from pyplayready import Cdm, Device
         if self.device_path:
             self.cdm = Cdm.from_device(Device.load(self.device_path))
         else:
@@ -320,24 +320,46 @@ class Downloader:
         return datetime.datetime.fromisoformat(date[:-1]).strftime(self.template_date)
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
-        try:
-            pssh_obj = PSSH(pssh.split(",")[-1])
-            cdm_session = self.cdm.open()
-            challenge = base64.b64encode(
-                self.cdm.get_license_challenge(cdm_session, pssh_obj)
-            ).decode()
-            license = self.apple_music_api.get_license(
-                track_id,
-                pssh,
-                challenge,
-                self.drm,
-            )
-            self.cdm.parse_license(cdm_session, license)
-            decryption_key = next(
-                i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-            ).key.hex()
-        finally:
-            self.cdm.close(cdm_session)
+        if self.drm == DRM.Widevine:
+            from pywidevine import PSSH
+            try:
+                pssh_obj = PSSH(pssh.split(",")[-1])
+                cdm_session = self.cdm.open()
+                challenge = base64.b64encode(
+                    self.cdm.get_license_challenge(cdm_session, pssh_obj)
+                ).decode()
+                license = self.apple_music_api.get_license(
+                    track_id,
+                    pssh,
+                    challenge,
+                    self.drm,
+                )
+                self.cdm.parse_license(cdm_session, license)
+                decryption_key = next(
+                    i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
+                ).key.hex()
+            finally:
+                self.cdm.close(cdm_session)
+        elif self.drm == DRM.Playready: 
+            from pyplayready import PSSH
+            try:
+                pssh_obj = PSSH(pssh).get_wrm_headers(downgrade_to_v4=False)[0]
+                cdm_session = self.cdm.open()
+                challenge = base64.b64encode(
+                    self.cdm.get_license_challenge(cdm_session, pssh_obj)
+                ).decode()
+                license = self.apple_music_api.get_license(
+                    track_id,
+                    pssh,
+                    challenge,
+                    self.drm,
+                )
+                self.cdm.parse_license(cdm_session, license)
+                decryption_key = next(
+                    i for i in self.cdm.get_keys(cdm_session) if i.key_type == "AES_128_CBC"
+                ).key.hex()
+            finally:
+                self.cdm.close(cdm_session)
         return decryption_key
 
     def download(self, path: Path, stream_url: str):

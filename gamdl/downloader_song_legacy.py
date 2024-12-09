@@ -34,8 +34,9 @@ class DownloaderSongLegacy(DownloaderSong):
             widevine_pssh_data.key_ids.append(base64.b64decode(pssh.split(",")[1]))
             pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
             cdm_session = self.downloader.cdm.open()
+            challenge = self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
             challenge = base64.b64encode(
-                self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
+                bytes(challenge, "utf-8") if isinstance(challenge, str)  else challenge
             ).decode()
             license = self.downloader.apple_music_api.get_license(
                 track_id,

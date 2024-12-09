@@ -15,7 +15,7 @@ from InquirerPy.base.control import Choice
 
 from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
 from .downloader import Downloader
-from .enums import RemuxMode, SongCodec, SyncedLyricsFormat
+from .enums import RemuxMode, SongCodec, SyncedLyricsFormat, DRM
 from .models import Lyrics, StreamInfo
 
 

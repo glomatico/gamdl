@@ -16,7 +16,7 @@ from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
-from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
+from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode, DRM
 from .itunes_api import ItunesApi
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)

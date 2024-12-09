@@ -343,10 +343,10 @@ class Downloader:
         elif self.drm == DRM.Playready: 
             from pyplayready import PSSH
             try:
-                pssh_obj = PSSH(pssh).get_wrm_headers(downgrade_to_v4=False)[0]
+                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers(downgrade_to_v4=False)[0]
                 cdm_session = self.cdm.open()
                 challenge = base64.b64encode(
-                    self.cdm.get_license_challenge(cdm_session, pssh_obj)
+                    self.cdm.get_license_challenge(cdm_session, pssh_obj).encode("utf-8")
                 ).decode()
                 license = self.apple_music_api.get_license(
                     track_id,

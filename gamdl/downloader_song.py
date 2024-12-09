@@ -111,7 +111,7 @@ class DownloaderSong:
                     drm_infos[drm_id]
                     for drm_id in drm_ids
                     if drm_infos[drm_id].get(
-                         "urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"
+                         "com.microsoft.playready"
                     )
                     and drm_id != "1"
                 ),
@@ -119,7 +119,7 @@ class DownloaderSong:
             )
             if not drm_info:
                 return None
-            return drm_info["urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"]["URI"]
+            return drm_info["com.microsoft.playready"]["URI"]
 
     def get_stream_info(self, track_metadata: dict) -> StreamInfo:
         m3u8_url = track_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")

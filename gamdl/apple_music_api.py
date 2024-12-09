@@ -6,6 +6,8 @@ import time
 import typing
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
+from .enums import DRM
+
 
 import requests
 

@@ -159,10 +159,10 @@ def load_config_file(
     help="Path to temporary directory.",
 )
 @click.option(
-    "--wvd-path",
+    "--device-path",
     type=Path,
-    default=downloader_sig.parameters["wvd_path"].default,
-    help="Path to .wvd file.",
+    default=downloader_sig.parameters["device_path"].default,
+    help="Path to .wvd or .prd file.",
 )
 @click.option(
     "--nm3u8dlre-path",
@@ -323,7 +323,7 @@ def main(
     language: str,
     output_path: Path,
     temp_path: Path,
-    wvd_path: Path,
+    device_path: Path,
     nm3u8dlre_path: str,
     mp4decrypt_path: str,
     ffmpeg_path: str,
@@ -371,7 +371,7 @@ def main(
         itunes_api,
         output_path,
         temp_path,
-        wvd_path,
+        device_path,
         nm3u8dlre_path,
         mp4decrypt_path,
         ffmpeg_path,
@@ -409,8 +409,8 @@ def main(
         quality_post,
     )
     if not synced_lyrics_only:
-        if wvd_path and not wvd_path.exists():
-            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_path))
+        if device_path and not device_path.exists():
+            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", device_path))
             return
         logger.debug("Setting up CDM")
         downloader.set_cdm()

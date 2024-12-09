@@ -285,3 +285,34 @@ class AppleMusicApi:
         ):
             self._raise_response_exception(response)
         return widevine_license
+    
+    def get_playready_license(
+        self,
+        track_id: str,
+        track_uri: str,
+        challenge: str,
+    ) -> str:
+        response = self.session.post(
+            self.LICENSE_API_URL,
+            json={
+                "challenge": challenge,
+                "key-system": "com.microsoft.playready",
+                "uri": track_uri,
+                "adamId": track_id,
+                "isLibrary": False,
+                "user-initiated": True,
+            },
+        )
+        try:
+            response.raise_for_status()
+            response_dict = response.json()
+            playready_license = response_dict.get("license")
+            assert playready_license
+        except (
+            requests.HTTPError,
+            requests.exceptions.JSONDecodeError,
+            AssertionError,
+        ):
+            self._raise_response_exception(response)
+        return playready_license
+

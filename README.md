@@ -97,7 +97,7 @@ Config file values can be overridden using command line arguments.
 | `--language`, `-l` / `language`                                 | Metadata language as an ISO-2A language code (don't always work for videos). | `en-US`                      |
 | `--output-path`, `-o` / `output_path`                           | Path to output directory.                                                    | `./Apple Music`              |
 | `--temp-path` / `temp_path`                                     | Path to temporary directory.                                                 | `./temp`                     |
-| `--wvd-path` / `wvd_path`                                       | Path to .wvd file.                                                           | `null`                       |
+| `--device-path` / `device_path`                                 | Path to .wvd or .prd file.                                                   | `null`                       |
 | `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                                  | `N_m3u8DL-RE`                |
 | `--mp4decrypt-path` / `mp4decrypt_path`                         | Path to mp4decrypt binary.                                                   | `mp4decrypt`                 |
 | `--ffmpeg-path` / `ffmpeg_path`                                 | Path to FFmpeg binary.                                                       | `ffmpeg`                     |

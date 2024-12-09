@@ -15,13 +15,13 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from mutagen.mp4 import MP4, MP4Cover
 from PIL import Image
-from pywidevine import PSSH, Cdm, Device
+
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
 from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
 from .enums import CoverFormat, DownloadMode, RemuxMode
-from .hardcoded_wvd import HARDCODED_WVD
+from .hardcoded_wvd import HARDCODED_WVD, HARDCODED_PRD
 from .itunes_api import ItunesApi
 from .models import DownloadQueue, UrlInfo
 
@@ -37,7 +37,7 @@ class Downloader:
         itunes_api: ItunesApi,
         output_path: Path = Path("./Apple Music"),
         temp_path: Path = Path("./temp"),
-        wvd_path: Path = None,
+        device_path: Path = None,
         nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
@@ -57,12 +57,13 @@ class Downloader:
         cover_size: int = 1200,
         truncate: int = None,
         silent: bool = False,
+        drm: str = "wv"
     ):
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
         self.output_path = output_path
         self.temp_path = temp_path
-        self.wvd_path = wvd_path
+        self.device_path = device_path
         self.nm3u8dlre_path = nm3u8dlre_path
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
@@ -82,6 +83,7 @@ class Downloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self.drm = drm
         self._set_binaries_path_full()
         self._set_exclude_tags_list()
         self._set_truncate()
@@ -114,10 +116,14 @@ class Downloader:
             self.subprocess_additional_args = {}
 
     def set_cdm(self):
-        if self.wvd_path:
-            self.cdm = Cdm.from_device(Device.load(self.wvd_path))
+        if self.drm == "wv":
+            from pywidevine import PSSH, Cdm, Device
+        elif self.drm == "pr": 
+            from pyplayready import PSSH, Cdm, Device
+        if self.device_path:
+            self.cdm = Cdm.from_device(Device.load(self.device_path))
         else:
-            self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
+            self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD if self.drm == "wv" else HARDCODED_PRD))
 
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()

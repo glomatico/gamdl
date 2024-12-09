@@ -21,7 +21,7 @@ from yt_dlp import YoutubeDL
 from .apple_music_api import AppleMusicApi
 from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
 from .enums import CoverFormat, DownloadMode, RemuxMode, DRM
-from .hardcoded_wvd import HARDCODED_WVD, HARDCODED_PRD
+from .hardcoded import HARDCODED_WVD, HARDCODED_PRD
 from .itunes_api import ItunesApi
 from .models import DownloadQueue, UrlInfo
 

@@ -343,7 +343,7 @@ class Downloader:
         elif self.drm == DRM.Playready: 
             from pyplayready import PSSH
             try:
-                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers(downgrade_to_v4=False)[0]
+                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers(downgrade_to_v4=True)[0] # Downgrade to v4 has to be set to True
                 cdm_session = self.cdm.open()
                 challenge = base64.b64encode(
                     self.cdm.get_license_challenge(cdm_session, pssh_obj).encode("utf-8")
@@ -354,13 +354,15 @@ class Downloader:
                     challenge,
                     self.drm,
                 )
-                self.cdm.parse_license(cdm_session, license)
-                decryption_key = next(
-                    i for i in self.cdm.get_keys(cdm_session) if i.key_type == "AES_128_CBC"
-                ).key.hex()
+                self.cdm.parse_license(cdm_session, base64.b64decode(license.encode("utf-8")).decode("utf-8"))
+                decryption_keys = [i.key.hex() for i in self.cdm.get_keys(cdm_session)]
+                if len(decryption_keys) != 1:
+                    raise ValueError(f"Expecting only one key to be returned, but {len(decryption_keys)} keys were returned")
+                elif len(decryption_keys) == 1 and "32b8ade1769e26b1ffb8986352793fc6" in decryption_keys:
+                    raise ValueError("Only default key returned for track.")
             finally:
                 self.cdm.close(cdm_session)
-        return decryption_key
+        return decryption_keys[0]
 
     def download(self, path: Path, stream_url: str):
         if self.download_mode == DownloadMode.YTDLP:

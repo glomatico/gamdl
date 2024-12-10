@@ -121,7 +121,7 @@ Config file values can be overridden using command line arguments.
 | `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264`                       |
 | `--quality-post` / `quality_post`                               | Post video quality.                                                          | `best`                       |
 | `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | `false`                      |
-
+| `--playready`, `playready` / -                                  | Use Playready DRM                                                            | `false`                      |
 
 ### Tags variables
 The following variables can be used in the template folders/files and/or in the `exclude_tags` list:
@@ -178,6 +178,7 @@ The following codecs are available:
 * `aac-legacy`
 * `aac-he-legacy`
 
+
 The following codecs are also available, **but are not guaranteed to work**, as currently most (or all) of the songs fails to be downloaded when using them:
 * `aac`
 * `aac-he`
@@ -190,6 +191,7 @@ The following codecs are also available, **but are not guaranteed to work**, as 
 * `alac`
 * `ask`
     * When using this option, Gamdl will ask you which codec from this list to use that is available for the song.
+With PlayReady and the right CDM, binaural, atmos and aac should download.
 
 ### Music videos codecs
 The following codecs are available:

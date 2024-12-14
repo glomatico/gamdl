@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import functools
+import json
 import re
 import time
 import typing
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
+from .enums import DRM
+
 
 import requests
 
@@ -39,7 +42,7 @@ class AppleMusicApi:
             self.storefront = self.session.cookies.get_dict()["itua"]
         self.session.headers.update(
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
+                "User-Agent": "iTunes/12.11.3 (Windows; Microsoft Windows 10 x64 Professional Edition (Build 19041); x64) AppleWebKit/7611.1022.4001.1 (dt:2)", #"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.86", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
@@ -256,32 +259,41 @@ class AppleMusicApi:
             self._raise_response_exception(response)
         return webplayback[0]
 
-    def get_widevine_license(
+    def get_license(
         self,
         track_id: str,
         track_uri: str,
         challenge: str,
+        drm: DRM
     ) -> str:
         response = self.session.post(
             self.LICENSE_API_URL,
             json={
                 "challenge": challenge,
-                "key-system": "com.widevine.alpha",
+                "key-system": "com.widevine.alpha" if drm == DRM.Widevine else "com.microsoft.playready",
                 "uri": track_uri,
                 "adamId": track_id,
                 "isLibrary": False,
-                "user-initiated": True,
+                "user-initiated": False,
             },
         )
         try:
             response.raise_for_status()
             response_dict = response.json()
-            widevine_license = response_dict.get("license")
-            assert widevine_license
+            license = response_dict.get("license")
+            assert license
         except (
             requests.HTTPError,
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
+            if response_dict.get("status") == -1002:
+                raise Exception("-1002: You do not own the title in the requested quality.")
+            elif response_dict.get("status") == -1021:
+                raise Exception("-1021: Device has insufficient security level or is blacklisted/revoked.")
             self._raise_response_exception(response)
-        return widevine_license
+
+        return license
+    
+    
+

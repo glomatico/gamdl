@@ -97,7 +97,7 @@ Config file values can be overridden using command line arguments.
 | `--language`, `-l` / `language`                                 | Metadata language as an ISO-2A language code (don't always work for videos). | `en-US`                      |
 | `--output-path`, `-o` / `output_path`                           | Path to output directory.                                                    | `./Apple Music`              |
 | `--temp-path` / `temp_path`                                     | Path to temporary directory.                                                 | `./temp`                     |
-| `--wvd-path` / `wvd_path`                                       | Path to .wvd file.                                                           | `null`                       |
+| `--device-path` / `device_path`                                 | Path to .wvd or .prd file.                                                   | `null`                       |
 | `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                                  | `N_m3u8DL-RE`                |
 | `--mp4decrypt-path` / `mp4decrypt_path`                         | Path to mp4decrypt binary.                                                   | `mp4decrypt`                 |
 | `--ffmpeg-path` / `ffmpeg_path`                                 | Path to FFmpeg binary.                                                       | `ffmpeg`                     |
@@ -121,7 +121,7 @@ Config file values can be overridden using command line arguments.
 | `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264`                       |
 | `--quality-post` / `quality_post`                               | Post video quality.                                                          | `best`                       |
 | `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | `false`                      |
-
+| `--playready`, `playready` / -                                  | Use Playready DRM                                                            | `false`                      |
 
 ### Tags variables
 The following variables can be used in the template folders/files and/or in the `exclude_tags` list:
@@ -178,6 +178,7 @@ The following codecs are available:
 * `aac-legacy`
 * `aac-he-legacy`
 
+
 The following codecs are also available, **but are not guaranteed to work**, as currently most (or all) of the songs fails to be downloaded when using them:
 * `aac`
 * `aac-he`
@@ -190,6 +191,7 @@ The following codecs are also available, **but are not guaranteed to work**, as 
 * `alac`
 * `ask`
     * When using this option, Gamdl will ask you which codec from this list to use that is available for the song.
+With PlayReady and the right CDM, binaural, atmos and aac should download.
 
 ### Music videos codecs
 The following codecs are available:

@@ -255,7 +255,7 @@ class Downloader:
         playlist_track: int,
     ) -> dict:
         tags = {
-            "playlist_artist": playlist_attributes["curatorName"],
+            "playlist_artist": playlist_attributes.get("curatorName", "Apple Music"),
             "playlist_id": playlist_attributes["playParams"]["id"],
             "playlist_title": playlist_attributes["name"],
             "playlist_track": playlist_track,

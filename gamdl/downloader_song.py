@@ -113,7 +113,7 @@ class DownloaderSong:
                     if drm_infos[drm_id].get(
                          "com.microsoft.playready"
                     )
-                    and drm_id != "1"
+                    #and drm_id != "1"
                 ),
                 None,
             )

@@ -16,7 +16,7 @@ from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
-from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
+from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode, DRM
 from .itunes_api import ItunesApi
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
@@ -159,10 +159,15 @@ def load_config_file(
     help="Path to temporary directory.",
 )
 @click.option(
-    "--wvd-path",
+    "--device-path",
     type=Path,
-    default=downloader_sig.parameters["wvd_path"].default,
-    help="Path to .wvd file.",
+    default=downloader_sig.parameters["device_path"].default,
+    help="Path to .wvd or .prd file.",
+)
+@click.option(
+    "--playready",
+    is_flag=True,
+    help="Use PlayReady DRM.",
 )
 @click.option(
     "--nm3u8dlre-path",
@@ -323,7 +328,8 @@ def main(
     language: str,
     output_path: Path,
     temp_path: Path,
-    wvd_path: Path,
+    device_path: Path,
+    playready: bool,
     nm3u8dlre_path: str,
     mp4decrypt_path: str,
     ffmpeg_path: str,
@@ -371,7 +377,7 @@ def main(
         itunes_api,
         output_path,
         temp_path,
-        wvd_path,
+        device_path,
         nm3u8dlre_path,
         mp4decrypt_path,
         ffmpeg_path,
@@ -390,6 +396,7 @@ def main(
         exclude_tags,
         cover_size,
         truncate,
+        DRM.Playready if playready else DRM.Widevine
     )
     downloader_song = DownloaderSong(
         downloader,
@@ -409,8 +416,8 @@ def main(
         quality_post,
     )
     if not synced_lyrics_only:
-        if wvd_path and not wvd_path.exists():
-            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_path))
+        if device_path and not device_path.exists():
+            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", device_path))
             return
         logger.debug("Setting up CDM")
         downloader.set_cdm()
@@ -509,6 +516,7 @@ def main(
                     lyrics = downloader_song.get_lyrics(track_metadata)
                     logger.debug("Getting webplayback")
                     webplayback = apple_music_api.get_webplayback(track_metadata["id"])
+                    logger.debug(webplayback)
                     tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
                     if playlist_track:
                         tags = {
@@ -548,12 +556,20 @@ def main(
                             stream_info = downloader_song.get_stream_info(
                                 track_metadata
                             )
-                            if not stream_info.stream_url or not stream_info.pssh:
+                            logger.debug(track_metadata)
+                            logger.debug(f"PSSH - {stream_info.pssh}, Manifest - {stream_info.stream_url}")
+                            if not stream_info.pssh:
                                 logger.warning(
-                                    f"({queue_progress}) Song is not downloadable or is not"
-                                    " available in the chosen codec, skipping"
+                                    f"({queue_progress}) Song is encrypted using FairPlay"
+                                    " (Currently unsupported DRM type), skipping"
                                 )
                                 continue
+                            if not stream_info.stream_url:
+                                logger.warning(
+                                    f"({queue_progress}) Song is not downloadable, skipping"
+                                )
+                                continue
+
                             logger.debug("Getting decryption key")
                             decryption_key = downloader.get_decryption_key(
                                 stream_info.pssh, track_metadata["id"]

@@ -15,13 +15,13 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from mutagen.mp4 import MP4, MP4Cover
 from PIL import Image
-from pywidevine import PSSH, Cdm, Device
+
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
 from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
-from .enums import CoverFormat, DownloadMode, RemuxMode
-from .hardcoded_wvd import HARDCODED_WVD
+from .enums import CoverFormat, DownloadMode, RemuxMode, DRM
+from .hardcoded import HARDCODED_WVD, HARDCODED_PRD
 from .itunes_api import ItunesApi
 from .models import DownloadQueue, UrlInfo
 
@@ -37,7 +37,7 @@ class Downloader:
         itunes_api: ItunesApi,
         output_path: Path = Path("./Apple Music"),
         temp_path: Path = Path("./temp"),
-        wvd_path: Path = None,
+        device_path: Path = None,
         nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
@@ -56,13 +56,14 @@ class Downloader:
         exclude_tags: str = None,
         cover_size: int = 1200,
         truncate: int = None,
-        silent: bool = False,
+        drm: DRM = DRM.Widevine,
+        silent: bool = False
     ):
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
         self.output_path = output_path
         self.temp_path = temp_path
-        self.wvd_path = wvd_path
+        self.device_path = device_path
         self.nm3u8dlre_path = nm3u8dlre_path
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
@@ -82,6 +83,7 @@ class Downloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self.drm = drm
         self._set_binaries_path_full()
         self._set_exclude_tags_list()
         self._set_truncate()
@@ -114,10 +116,14 @@ class Downloader:
             self.subprocess_additional_args = {}
 
     def set_cdm(self):
-        if self.wvd_path:
-            self.cdm = Cdm.from_device(Device.load(self.wvd_path))
+        if self.drm == DRM.Widevine:
+            from pywidevine import Cdm, Device
+        elif self.drm == DRM.Playready: 
+            from pyplayready import Cdm, Device
+        if self.device_path:
+            self.cdm = Cdm.from_device(Device.load(self.device_path))
         else:
-            self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
+            self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD if self.drm == DRM.Widevine else HARDCODED_PRD))
 
     def get_url_info(self, url: str) -> UrlInfo:
         url_info = UrlInfo()
@@ -314,24 +320,49 @@ class Downloader:
         return datetime.datetime.fromisoformat(date[:-1]).strftime(self.template_date)
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
-        try:
-            pssh_obj = PSSH(pssh.split(",")[-1])
-            cdm_session = self.cdm.open()
-            challenge = base64.b64encode(
-                self.cdm.get_license_challenge(cdm_session, pssh_obj)
-            ).decode()
-            license = self.apple_music_api.get_widevine_license(
-                track_id,
-                pssh,
-                challenge,
-            )
-            self.cdm.parse_license(cdm_session, license)
-            decryption_key = next(
-                i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-            ).key.hex()
-        finally:
-            self.cdm.close(cdm_session)
-        return decryption_key
+        if self.drm == DRM.Widevine:
+            from pywidevine import PSSH
+            try:
+                pssh_obj = PSSH(pssh.split(",")[-1])
+                cdm_session = self.cdm.open()
+                challenge = base64.b64encode(
+                    self.cdm.get_license_challenge(cdm_session, pssh_obj)
+                ).decode()
+                license = self.apple_music_api.get_license(
+                    track_id,
+                    pssh,
+                    challenge,
+                    self.drm,
+                )
+                self.cdm.parse_license(cdm_session, license)
+                decryption_key = next(
+                    i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
+                ).key.hex()
+            finally:
+                self.cdm.close(cdm_session)
+        elif self.drm == DRM.Playready: 
+            from pyplayready import PSSH
+            try:
+                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers()[0]
+                cdm_session = self.cdm.open()
+                challenge = base64.b64encode(
+                    self.cdm.get_license_challenge(cdm_session, pssh_obj).encode("utf-8")
+                ).decode()
+                license = self.apple_music_api.get_license(
+                    track_id,
+                    pssh,
+                    challenge,
+                    self.drm,
+                )
+                self.cdm.parse_license(cdm_session, base64.b64decode(license.encode("utf-8")).decode("utf-8"))
+                decryption_keys = [i.key.hex() for i in self.cdm.get_keys(cdm_session)]
+                if len(decryption_keys) != 1:
+                    raise ValueError(f"Expecting only one key to be returned, but {len(decryption_keys)} keys were returned")
+                elif len(decryption_keys) == 1 and "32b8ade1769e26b1ffb8986352793fc6" in decryption_keys:
+                    raise ValueError("Only default key returned for track.")
+            finally:
+                self.cdm.close(cdm_session)
+        return decryption_keys[0]
 
     def download(self, path: Path, stream_url: str):
         if self.download_mode == DownloadMode.YTDLP:

@@ -47,3 +47,7 @@ class CoverFormat(Enum):
     JPG = "jpg"
     PNG = "png"
     RAW = "raw"
+
+class DRM(Enum):
+    Widevine: str = "WIDEVINE"
+    Playready: str = "PLAYREADY"

@@ -557,13 +557,19 @@ def main(
                                 track_metadata
                             )
                             logger.debug(track_metadata)
-                            if not stream_info.stream_url or not stream_info.pssh:
+                            logger.debug(f"PSSH - {stream_info.pssh}, Manifest - {stream_info.stream_url}")
+                            if not stream_info.pssh:
                                 logger.warning(
-                                    f"({queue_progress}) Song is not downloadable or is not"
-                                    " available in the chosen codec, skipping"
+                                    f"({queue_progress}) Song is encrypted using FairPlay"
+                                    " (Currently unsupported DRM type), skipping"
                                 )
-                                logger.debug(f"PSSH - {stream_info.pssh}, Manifest - {stream_info.stream_url}")
                                 continue
+                            if not stream_info.stream_url:
+                                logger.warning(
+                                    f"({queue_progress}) Song is not downloadable, skipping"
+                                )
+                                continue
+
                             logger.debug("Getting decryption key")
                             decryption_key = downloader.get_decryption_key(
                                 stream_info.pssh, track_metadata["id"]

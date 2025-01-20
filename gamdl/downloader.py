@@ -343,7 +343,7 @@ class Downloader:
         elif self.drm == DRM.Playready: 
             from pyplayready import PSSH
             try:
-                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers(downgrade_to_v4=True)[0] # Downgrade to v4 has to be set to True
+                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers()[0]
                 cdm_session = self.cdm.open()
                 challenge = base64.b64encode(
                     self.cdm.get_license_challenge(cdm_session, pssh_obj).encode("utf-8")

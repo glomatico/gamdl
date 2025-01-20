@@ -561,9 +561,8 @@ def main(
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
                                     " available in the chosen codec, skipping"
-                                    f"\n{stream_info.pssh}, {stream_info.stream_url}"
-
                                 )
+                                logger.debug(f"PSSH - {stream_info.pssh}, Manifest - {stream_info.stream_url}")
                                 continue
                             logger.debug("Getting decryption key")
                             decryption_key = downloader.get_decryption_key(

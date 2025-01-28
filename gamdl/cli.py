@@ -542,13 +542,13 @@ def main(
                             )
                             logger.debug("Getting decryption key")
                             decryption_key = downloader_song_legacy.get_decryption_key(
-                                stream_info.pssh, track_metadata["id"]
+                                stream_info.widevine_pssh, track_metadata["id"]
                             )
                         else:
                             stream_info = downloader_song.get_stream_info(
                                 track_metadata
                             )
-                            if not stream_info.stream_url or not stream_info.pssh:
+                            if not stream_info.stream_url or not stream_info.widevine_pssh:
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
                                     " available in the chosen codec, skipping"
@@ -556,7 +556,7 @@ def main(
                                 continue
                             logger.debug("Getting decryption key")
                             decryption_key = downloader.get_decryption_key(
-                                stream_info.pssh, track_metadata["id"]
+                                stream_info.widevine_pssh, track_metadata["id"]
                             )
                         encrypted_path = downloader_song.get_encrypted_path(
                             track_metadata["id"]
@@ -658,10 +658,10 @@ def main(
                             downloader_music_video.get_stream_info_audio(m3u8_data),
                         )
                         decryption_key_video = downloader.get_decryption_key(
-                            stream_info_video.pssh, track_metadata["id"]
+                            stream_info_video.widevine_pssh, track_metadata["id"]
                         )
                         decryption_key_audio = downloader.get_decryption_key(
-                            stream_info_audio.pssh, track_metadata["id"]
+                            stream_info_audio.widevine_pssh, track_metadata["id"]
                         )
                         encrypted_path_video = (
                             downloader_music_video.get_encrypted_path_video(

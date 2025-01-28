@@ -136,7 +136,7 @@ class DownloaderMusicVideo:
         stream_info.stream_url = playlist["uri"]
         stream_info.codec = playlist["stream_info"]["codecs"]
         m3u8_data = m3u8.load(stream_info.stream_url).data
-        stream_info.pssh = self.get_pssh(m3u8_data)
+        stream_info.widevine_pssh = self.get_pssh(m3u8_data)
         return stream_info
 
     def get_stream_info_audio(self, m3u8_master_data: dict) -> StreamInfo:
@@ -148,7 +148,7 @@ class DownloaderMusicVideo:
         stream_info.stream_url = playlist["uri"]
         stream_info.codec = playlist["group_id"]
         m3u8_data = m3u8.load(stream_info.stream_url).data
-        stream_info.pssh = self.get_pssh(m3u8_data)
+        stream_info.widevine_pssh = self.get_pssh(m3u8_data)
         return stream_info
 
     def get_music_video_id_alt(self, metadata: dict) -> str:

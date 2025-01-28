@@ -24,7 +24,7 @@ class DownloaderSongLegacy(DownloaderSong):
             i for i in webplayback["assets"] if i["flavor"] == flavor
         )["URL"]
         m3u8_obj = m3u8.load(stream_info.stream_url)
-        stream_info.pssh = m3u8_obj.keys[0].uri
+        stream_info.widevine_pssh = m3u8_obj.keys[0].uri
         return stream_info
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:

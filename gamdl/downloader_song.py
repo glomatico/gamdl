@@ -160,8 +160,6 @@ class DownloaderSong:
         stream_info.playready_pssh = playready_pssh
         stream_info.fairplay_key = fairplay_key
         stream_info.codec = playlist["stream_info"]["codecs"]
-        print(stream_info)
-        input()
         return stream_info
 
     @staticmethod

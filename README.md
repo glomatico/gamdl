@@ -188,7 +188,7 @@ The following variables can be used in the template folders/files and/or in the 
 
 ### Synced lyrics formats
 * `lrc`: Lightweight and widely supported.
-* `srt`: SubRip format (more accurate timestamps).
+* `srt`: SubRip format (has more accurate timestamps).
 * `ttml`: Native Apple Music format (unsupported by most media players).
   
 ### Cover formats

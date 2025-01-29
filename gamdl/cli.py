@@ -440,7 +440,7 @@ def main(
             logger.critical(X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_path))
             return
         if not downloader.mp4decrypt_path_full:
-            logger.warn(
+            logger.warning(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path)
                 + ", music videos will not be downloaded"
             )
@@ -448,9 +448,9 @@ def main(
         else:
             skip_mv = False
         if codec_song not in LEGACY_CODECS:
-            logger.warn(
-                "You have chosen a non-legacy codec. Support for non-legacy codecs are not guaranteed, "
-                "as most of the songs cannot be downloaded when using non-legacy codecs."
+            logger.warning(
+                "You have chosen an experimental codec. "
+                "They're not guaranteed to work due to API limitations."
             )
     error_count = 0
     if read_urls_as_txt:
@@ -548,7 +548,10 @@ def main(
                             stream_info = downloader_song.get_stream_info(
                                 track_metadata
                             )
-                            if not stream_info.stream_url or not stream_info.widevine_pssh:
+                            if (
+                                not stream_info.stream_url
+                                or not stream_info.widevine_pssh
+                            ):
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
                                     " available in the chosen codec, skipping"

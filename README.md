@@ -159,7 +159,7 @@ The following variables can be used in the template folders/files and/or in the 
 
 ### Download modes
 * `ytdlp`: Default download mode.
-* `nm3u8dlre`: Faster than ytdlp.
+* `nm3u8dlre`: Faster than `ytdlp`.
 
 ### Song Codecs
 * Supported Codecs:

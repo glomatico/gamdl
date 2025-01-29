@@ -1,37 +1,29 @@
-# Glomatico's Apple Music Downloader
-A Python CLI app for downloading Apple Music songs/music videos/posts.
+# Glomatico’s Apple Music Downloader
+A Python CLI app for downloading Apple Music songs, music videos and post videos.
 
-**Discord Server:** https://discord.gg/aBjMEZ9tnq
+**Join our Discord Server:** https://discord.gg/aBjMEZ9tnq
 
 ## Features
-* Download songs in AAC 256kbps and other codecs
-* Download music videos up to 4K
-* Download synced lyrics in LRC, SRT or TTML
-* Choose between FFmpeg and MP4Box for remuxing
-* Choose between yt-dlp and N_m3u8DL-RE for downloading
-* Highly customizable
-* Use artist links to download all of their albums or music videos
+* **High-Quality Songs**: Download songs in AAC 256kbps and other codecs.
+* **High-Quality Music Videos**: Download music videos in resolutions up to 4K.
+* **Synced Lyrics**: Download synced lyrics in LRC, SRT, or TTML formats.
+* **Artist Support**: Download all albums or music videos from an artist using their link.
+* **Highly Customizable**: Extensive configuration options for advanced users.
 
 ## Prerequisites
-* Python 3.8 or higher
-* The cookies file of your Apple Music browser session in Netscape format (requires an active subscription)
-    * To export your cookies, use one of the following browser extensions while signed in to Apple Music:
-        * Firefox: https://addons.mozilla.org/addon/export-cookies-txt
-        * Chromium based browsers: https://chrome.google.com/webstore/detail/gdocmgbfkjnnpapoeobnolbbkoibbcif
-* FFmpeg on your system PATH
-    * Older versions of FFmpeg may not work.
-    * Up to date binaries can be obtained from the links below:
-        * Windows: https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases
-        * Linux: https://johnvansickle.com/ffmpeg/
+* **Python 3.8 or higher** installed on your system.
+* The **cookies file** of your Apple Music browser session in Netscape format (requires an active subscription).
+    * **Firefox**: Use the [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt) extension.
+    * **Chromium-based Browsers**: Use the [Open Cookies.txt](https://chromewebstore.google.com/detail/open-cookiestxt/gdocmgbfkjnnpapoeobnolbbkoibbcif) extension.
+* **FFmpeg** on your system PATH.
+    * **Windows**: Download from [AnimMouse’s FFmpeg Builds](https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases).
+    * **Linux**: Download from [John Van Sickle’s FFmpeg Builds](https://johnvansickle.com/ffmpeg/).
 
 ### Optional dependencies
 The following tools are optional but required for specific features. Add them to your system’s PATH or specify their paths using command-line arguments or the config file.
-* [mp4decrypt](https://www.bento4.com/downloads/)
-    * Required when setting `mp4box` as remux mode, for downloading music videos and for downloading songs in non-legacy formats.
-* [MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)
-    * Required when setting `mp4box` as remux mode.
-* [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)
-    * Required when setting `nm3u8dlre` as download mode.
+* [mp4decrypt](https://www.bento4.com/downloads/): Required for `mp4box` remux mode, music video downloads, and experimental song codecs.
+* [MP4Box](https://gpac.io/downloads/gpac-nightly-builds/): Required for `mp4box` remux mode.
+* [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest): Required for `nm3u8dlre` download mode.
  
 ## Installation
 1. Install the package `gamdl` using pip
@@ -39,49 +31,50 @@ The following tools are optional but required for specific features. Add them to
     pip install gamdl
     ```
 2. Set up the cookies file.
-    * You can either move to the current directory from which you will be running Gamdl as `cookies.txt` or specify its path using the command-line arguments/config file.
+    * Move the cookies file to the directory where you’ll run Gamdl and rename it to `cookies.txt`.
+    * Alternatively, specify the path to the cookies file using command-line arguments or the config file.
 
 ## Usage
+Run Gamdl with the following command:
 ```bash
 gamdl [OPTIONS] URLS...
 ```
 
 ### Supported URL types
-Gamdl supports the following types of URLs:
 * Song
 * Album
 * Playlist
 * Music video
 * Artist
-* Post video/extra video
+* Post video
 
 ### Examples
-* Download a song
+* Download a Song:
     ```bash
     gamdl "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
     ```
-* Download an album
+* Download an Album:
     ```bash
     gamdl "https://music.apple.com/us/album/whenever-you-need-somebody-2022-remaster/1624945511"
     ```
-* Choose which albums or music videos to download from an artist
+* Download from an Artist:
     ```bash
     gamdl "https://music.apple.com/us/artist/rick-astley/669771"
     ```
 
 ### Interactive prompt controls
-* Arrow keys - Move selection
-* Space - Toggle selection
-* Ctrl + A - Select all
-* Enter - Confirm selection
+* **Arrow keys**: Move selection
+* **Space**: Toggle selection
+* **Ctrl + A**: Select all
+* **Enter**: Confirm selection
 
 ## Configuration
-Gamdl can be configured by using the command line arguments or the config file.
+Gamdl can be configured by using the command-line arguments or the config file.
 
 The config file is created automatically when you run Gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows.
 
-Config file values can be overridden using command line arguments.
-| Command line argument / Config file key                         | Description                                                                  | Default value                |
+Config file values can be overridden using command-line  arguments.
+| Command-line argument / Config file key                         | Description                                                                  | Default value                |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------- |
 | `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                     | `false`                      |
 | `--save-cover`, `-s` / `save_cover`                             | Save cover as a separate file.                                               | `false`                      |
@@ -160,64 +153,45 @@ The following variables can be used in the template folders/files and/or in the 
 * `track_total`
 * `xid`
 
-### Remux modes
-The following remux modes are available:
-* `ffmpeg`
-* `mp4box`
-    * Doesn't convert closed captions in music videos that have them
+### Remux Modes
+* `ffmpeg`: Default remuxing mode.
+* `mp4box`: Alternative remuxing mode (doesn’t convert closed captions in music videos).
 
 ### Download modes
-The following download modes are available:
-* `ytdlp`
-* `nm3u8dlre`
-    * Faster than `ytdlp`
+* `ytdlp`: Default download mode.
+* `nm3u8dlre`: Faster than ytdlp.
 
+### Song Codecs
+* Supported Codecs:
+    * `aac-legacy`: AAC 256kbps 44.1kHz.
+    * `aac-he-legacy`: AAC-HE 64kbps 44.1kHz.
+* Experimental Codecs (not guaranteed to work due to API limitations):
+    * `aac`: AAC 256kbps up to 48kHz.
+    * `aac-he`: AAC-HE 64kbps up to 48kHz.
+    * `aac-binaural`: AAC 256kbps binaural.
+    * `aac-downmix`: AAC 256kbps downmix.
+    * `aac-he-binaural`: AAC-HE 64kbps binaural.
+    * `aac-he-downmix`: AAC-HE 64kbps downmix.
+    * `atmos`: Dolby Atmos 768kbps.
+    * `ac3`: AC3 640kbps.
+    * `alac`: ALAC up to 24-bit/192 kHz.
+    * `ask`: Prompt to choose available audio codec.
 
-### Song codecs
-The following codecs are available:
-* `aac-legacy`
-* `aac-he-legacy`
-
-The following codecs are also available, **but are not guaranteed to work**, as currently most (or all) of the songs fails to be downloaded when using them:
-* `aac`
-* `aac-he`
-* `aac-binaural`
-* `aac-downmix`
-* `aac-he-binaural`
-* `aac-he-downmix`
-* `atmos`
-* `ac3`
-* `alac`
-* `ask`
-    * When using this option, Gamdl will ask you which codec from this list to use that is available for the song.
-
-### Music videos codecs
-The following codecs are available:
-* `h264` (up to 1080p, with AAC 256kbps)
-* `h265` (up to 2160p, with AAC 256kpbs)
-* `ask`
-    * When using this option, Gamdl will ask you which audio and video codec to use that is available for the music video.
+### Music Videos Codecs
+* `h264`: Up to 1080p with AAC 256kbps.
+* `h265`: Up to 2160p with AAC 256kpbs.
+* `ask`: Prompt to choose available video and audio codecs.
   
 ### Post videos/extra videos qualities
-The following qualities are available:
-* `best` (up to 1080p, with AAC 256kbps)
-* `ask`
-    * When using this option, Gamdl will ask you which video quality to use that is available for the video.
-
-Post videos doesn't require remuxing and are limited to `ytdlp` download mode.
+* `best`: Up to 1080p with AAC 256kbps.
+* `ask`: Prompt to choose available video quality.
 
 ### Synced lyrics formats
-The following synced lyrics formats are available:
-* `lrc`
-* `srt`
-* `ttml`
-    * Native format for Apple Music synced lyrics.
-    * Highly unsupported by most media players.
+* `lrc`: Lightweight and widely supported.
+* `srt`: SubRip format (more accurate timestamps).
+* `ttml`: Native Apple Music format (unsupported by most media players).
   
 ### Cover formats
-The following cover formats are available:
-* `jpg`
-* `png`
-* `raw`
-    * This format gets the raw cover without any processing.
-    * Note that when using this format, the cover image will not be embedded within the files. To address this, you can enable `save_cover` option to save the cover as a separate file.
+* `jpg`: Default format.
+* `png`: Lossless format.
+* `raw`: Raw cover without processing (requires `save_cover` to save separately).

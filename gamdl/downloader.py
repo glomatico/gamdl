@@ -343,7 +343,7 @@ class Downloader:
         elif self.drm == DRM.Playready: 
             from pyplayready import PSSH
             try:
-                pssh_obj = PSSH(pssh.split(",")[-1]).get_wrm_headers()[0]
+                pssh_obj = PSSH(pssh.split(",")[-1]).wrm_headers[0]
                 cdm_session = self.cdm.open()
                 challenge = base64.b64encode(
                     self.cdm.get_license_challenge(cdm_session, pssh_obj).encode("utf-8")
@@ -358,7 +358,7 @@ class Downloader:
                 decryption_keys = [i.key.hex() for i in self.cdm.get_keys(cdm_session)]
                 if len(decryption_keys) != 1:
                     raise ValueError(f"Expecting only one key to be returned, but {len(decryption_keys)} keys were returned")
-                elif len(decryption_keys) == 1 and "32b8ade1769e26b1ffb8986352793fc6" in decryption_keys:
+                elif decryption_keys == ["32b8ade1769e26b1ffb8986352793fc6"]:
                     raise ValueError("Only default key returned for track.")
             finally:
                 self.cdm.close(cdm_session)

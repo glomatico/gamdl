@@ -143,7 +143,7 @@ class DownloaderSong:
             return stream_info
         stream_info.stream_url = m3u8_obj.base_uri + playlist["uri"]
         variant_id = playlist["stream_info"]["stable_variant_id"]
-        drm_ids = asset_infos[variant_id]["AUDIO-SESSION-KEY-IDS"]
+        drm_ids = asset_infos[variant_id[1:-1]]["AUDIO-SESSION-KEY-IDS"]
         pssh = self.get_pssh(drm_infos, drm_ids)
         stream_info.pssh = pssh
         stream_info.codec = playlist["stream_info"]["codecs"]

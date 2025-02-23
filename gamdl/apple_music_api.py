@@ -9,6 +9,8 @@ from pathlib import Path
 
 import requests
 
+from .utils import raise_response_exception
+
 
 class AppleMusicApi:
     APPLE_MUSIC_HOMEPAGE_URL = "https://beta.music.apple.com"
@@ -69,12 +71,6 @@ class AppleMusicApi:
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.session.params = {"l": self.language}
 
-    @staticmethod
-    def _raise_response_exception(response: requests.Response):
-        raise Exception(
-            f"Request failed with status code {response.status_code}: {response.text}"
-        )
-
     def _check_amp_api_response(self, response: requests.Response):
         try:
             response.raise_for_status()
@@ -85,7 +81,7 @@ class AppleMusicApi:
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
-            self._raise_response_exception(response)
+            raise_response_exception(response)
 
     def get_artist(
         self,
@@ -254,7 +250,7 @@ class AppleMusicApi:
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
-            self._raise_response_exception(response)
+            raise_response_exception(response)
         return webplayback[0]
 
     def get_widevine_license(
@@ -284,5 +280,5 @@ class AppleMusicApi:
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
-            self._raise_response_exception(response)
+            raise_response_exception(response)
         return widevine_license

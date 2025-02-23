@@ -4,8 +4,8 @@ import functools
 
 import requests
 
-from .apple_music_api import AppleMusicApi
 from .constants import STOREFRONT_IDS
+from .utils import raise_response_exception
 
 
 class ItunesApi:
@@ -58,7 +58,7 @@ class ItunesApi:
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
-            AppleMusicApi._raise_response_exception(response)
+            raise_response_exception(response)
         return resource
 
     def get_itunes_page(
@@ -81,5 +81,5 @@ class ItunesApi:
             requests.exceptions.JSONDecodeError,
             AssertionError,
         ):
-            AppleMusicApi._raise_response_exception(response)
+            raise_response_exception(response)
         return itunes_page

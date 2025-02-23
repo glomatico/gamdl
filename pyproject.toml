@@ -5,13 +5,12 @@ requires-python = ">=3.9"
 authors = [{ name = "glomatico" }]
 dependencies = [
     "click",
+    "colorama",
     "inquirerpy",
     "m3u8",
     "mutagen",
     "pillow",
     "pywidevine",
-    "pyyaml",
-    "termcolor",
     "yt-dlp",
 ]
 readme = "README.md"

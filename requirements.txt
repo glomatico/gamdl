@@ -1,4 +1,5 @@
 click
+colorama
 inquirerpy
 m3u8
 mutagen

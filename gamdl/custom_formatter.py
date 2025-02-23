@@ -1,15 +1,18 @@
 import logging
-from termcolor import colored
+
+import colorama
+
+from .utils import color_text
 
 
 class CustomFormatter(logging.Formatter):
     basic_format = "[%(levelname)-8s %(asctime)s]"
     formats = {
-        logging.DEBUG: colored(basic_format, "grey"),
-        logging.INFO: colored(basic_format, "green"),
-        logging.WARNING: colored(basic_format, "yellow"),
-        logging.ERROR: colored(basic_format, "red"),
-        logging.CRITICAL: colored(basic_format, "red"),
+        logging.DEBUG: color_text(basic_format, colorama.Style.DIM),
+        logging.INFO: color_text(basic_format, colorama.Fore.GREEN),
+        logging.WARNING: color_text(basic_format, colorama.Fore.YELLOW),
+        logging.ERROR: color_text(basic_format, colorama.Fore.RED),
+        logging.CRITICAL: color_text(basic_format, colorama.Fore.RED),
     }
     date_format = "%H:%M:%S"
 

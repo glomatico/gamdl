@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 
 import click
-from termcolor import colored
+import colorama
 
 from . import __version__
 from .apple_music_api import AppleMusicApi
@@ -20,6 +20,7 @@ from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
 from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
 from .itunes_api import ItunesApi
+from .utils import color_text
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
 downloader_sig = inspect.signature(Downloader.__init__)
@@ -350,6 +351,7 @@ def main(
     quality_post: PostQuality,
     no_config_file: bool,
 ):
+    colorama.just_fix_windows_console()
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     stream_handler = logging.StreamHandler()
@@ -466,7 +468,7 @@ def main(
                 _urls.extend(Path(url).read_text(encoding="utf-8").splitlines())
         urls = _urls
     for url_index, url in enumerate(urls, start=1):
-        url_progress = colored(f"URL {url_index}/{len(urls)}", "grey")
+        url_progress = color_text(f"URL {url_index}/{len(urls)}", colorama.Style.DIM)
         try:
             logger.info(f'({url_progress}) Checking "{url}"')
             url_info = downloader.get_url_info(url)
@@ -482,9 +484,9 @@ def main(
         for download_index, track_metadata in enumerate(
             download_queue_tracks_metadata, start=1
         ):
-            queue_progress = colored(
+            queue_progress = color_text(
                 f"Track {download_index}/{len(download_queue_tracks_metadata)} from URL {url_index}/{len(urls)}",
-                "grey",
+                colorama.Style.DIM,
             )
             try:
                 remuxed_path = None

@@ -5,4 +5,5 @@ mutagen
 pillow
 pywidevine
 pyyaml
+termcolor
 yt-dlp

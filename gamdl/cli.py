@@ -7,10 +7,12 @@ from enum import Enum
 from pathlib import Path
 
 import click
+from termcolor import colored
 
 from . import __version__
 from .apple_music_api import AppleMusicApi
 from .constants import *
+from .custom_formatter import CustomFormatter
 from .downloader import Downloader
 from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
@@ -348,12 +350,11 @@ def main(
     quality_post: PostQuality,
     no_config_file: bool,
 ):
-    logging.basicConfig(
-        format="[%(levelname)-8s %(asctime)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(CustomFormatter())
+    logger.addHandler(stream_handler)
     logger.info("Starting Gamdl")
     while not cookies_path.exists():
         cookies_path_str = click.prompt(
@@ -466,7 +467,7 @@ def main(
                 _urls.extend(Path(url).read_text(encoding="utf-8").splitlines())
         urls = _urls
     for url_index, url in enumerate(urls, start=1):
-        url_progress = f"URL {url_index}/{len(urls)}"
+        url_progress = colored(f"URL {url_index}/{len(urls)}", "grey")
         try:
             logger.info(f'({url_progress}) Checking "{url}"')
             url_info = downloader.get_url_info(url)
@@ -482,7 +483,10 @@ def main(
         for download_index, track_metadata in enumerate(
             download_queue_tracks_metadata, start=1
         ):
-            queue_progress = f"Track {download_index}/{len(download_queue_tracks_metadata)} from URL {url_index}/{len(urls)}"
+            queue_progress = colored(
+                f"Track {download_index}/{len(download_queue_tracks_metadata)} from URL {url_index}/{len(urls)}",
+                "grey",
+            )
             try:
                 remuxed_path = None
                 if download_queue.playlist_attributes:

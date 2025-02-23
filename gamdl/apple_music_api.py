@@ -37,6 +37,9 @@ class AppleMusicApi:
             cookies.load(ignore_discard=True, ignore_expires=True)
             self.session.cookies.update(cookies)
             self.storefront = self.session.cookies.get_dict()["itua"]
+            media_user_token = self.session.cookies.get_dict()["media-user-token"]
+        else:
+            media_user_token = ""
         self.session.headers.update(
             {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
@@ -44,9 +47,7 @@ class AppleMusicApi:
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
                 "content-type": "application/json",
-                "Media-User-Token": self.session.cookies.get_dict().get(
-                    "media-user-token", ""
-                ),
+                "Media-User-Token": media_user_token,
                 "x-apple-renewal": "true",
                 "DNT": "1",
                 "Connection": "keep-alive",

@@ -363,8 +363,7 @@ def main(
             default=str(cookies_path),
             show_default=False,
         )
-        cookies_path_str = cookies_path_str.strip('"')
-        cookies_path = Path(cookies_path_str)
+        cookies_path = Path(cookies_path_str.strip('"'))
     apple_music_api = AppleMusicApi(
         cookies_path,
         language=language,

@@ -176,7 +176,10 @@ class DownloaderSong:
             secs = float(f"{mins_secs_ms[-2]}.{mins_secs_ms[-1]}")
             if len(mins_secs_ms) > 2:
                 mins = int(mins_secs_ms[-3])
-        return datetime.datetime.fromtimestamp((mins * 60) + secs + (ms / 1000))
+        return datetime.datetime.fromtimestamp(
+            (mins * 60) + secs + (ms / 1000),
+            tz=datetime.timezone.utc,
+        )
 
     def get_lyrics_synced_timestamp_lrc(self, timestamp_ttml: str) -> str:
         datetime_obj = self.parse_datetime_obj_from_timestamp_ttml(timestamp_ttml)

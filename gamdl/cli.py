@@ -773,7 +773,7 @@ def main(
             except Exception as e:
                 error_count += 1
                 logger.error(
-                    f'({queue_progress}) Failed to download "{track_metadata["attributes"]["name"]}"',
+                    f'({queue_progress}) Failed to download "{track_metadata.get("attributes", {}).get("name", "Unknown Track")}"',
                     exc_info=not no_exceptions,
                 )
             finally:

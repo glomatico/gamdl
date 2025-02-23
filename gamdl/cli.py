@@ -355,9 +355,15 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     logger.info("Starting Gamdl")
-    if not cookies_path.exists():
-        logger.critical(X_NOT_FOUND_STRING.format("Cookies file", cookies_path))
-        return
+    while not cookies_path.exists():
+        cookies_path_str = click.prompt(
+            X_NOT_FOUND_STRING.format("Cookies file", cookies_path.absolute())
+            + ". Move it to that location or drag and drop it here. Then, press enter to continue",
+            default=str(cookies_path),
+            show_default=False,
+        )
+        cookies_path_str = cookies_path_str.strip('"')
+        cookies_path = Path(cookies_path_str)
     apple_music_api = AppleMusicApi(
         cookies_path,
         language=language,

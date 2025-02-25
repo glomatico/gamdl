@@ -535,6 +535,13 @@ def main(
                     )
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    if cover_file_extesion:
+                        cover_path = downloader_music_video.get_cover_path(
+                            final_path,
+                            cover_file_extesion,
+                        )
+                    else:
+                        cover_path = None
                     cover_path = downloader_song.get_cover_path(
                         final_path,
                         cover_file_extesion,
@@ -657,10 +664,13 @@ def main(
                     final_path = downloader.get_final_path(tags, ".m4v")
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
-                    cover_path = downloader_music_video.get_cover_path(
-                        final_path,
-                        cover_file_extesion,
-                    )
+                    if cover_file_extesion:
+                        cover_path = downloader_music_video.get_cover_path(
+                            final_path,
+                            cover_file_extesion,
+                        )
+                    else:
+                        cover_path = None
                     if final_path.exists() and not overwrite:
                         logger.warning(
                             f'({queue_progress}) Music video already exists at "{final_path}", skipping'
@@ -734,6 +744,13 @@ def main(
                     final_path = downloader.get_final_path(tags, ".m4v")
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    if cover_file_extesion:
+                        cover_path = downloader_music_video.get_cover_path(
+                            final_path,
+                            cover_file_extesion,
+                        )
+                    else:
+                        cover_path = None
                     cover_path = downloader_music_video.get_cover_path(
                         final_path,
                         cover_file_extesion,
@@ -748,7 +765,7 @@ def main(
                         )
                         logger.debug(f'Downloading to "{remuxed_path}"')
                         downloader.download_ytdlp(remuxed_path, stream_url)
-                if synced_lyrics_only or not save_cover:
+                if synced_lyrics_only or not save_cover or cover_path is None:
                     pass
                 elif cover_path.exists() and not overwrite:
                     logger.debug(f'Cover already exists at "{cover_path}", skipping')

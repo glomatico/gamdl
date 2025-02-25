@@ -24,6 +24,7 @@ from .enums import CoverFormat, DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
 from .models import DownloadQueue, UrlInfo
+from .utils import raise_response_exception
 
 
 class Downloader:
@@ -419,7 +420,10 @@ class Downloader:
             ),
         )
 
-    def get_cover_file_extension(self, cover_url: str) -> str:
+    def get_cover_file_extension(self, cover_url: str) -> str | None:
+        cover_bytes = self.get_url_response_bytes(cover_url)
+        if cover_bytes is None:
+            return None
         image_obj = Image.open(io.BytesIO(self.get_url_response_bytes(cover_url)))
         image_format = image_obj.format.lower()
         return IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
@@ -455,7 +459,12 @@ class Downloader:
     @functools.lru_cache()
     def get_url_response_bytes(url: str) -> bytes:
         response = requests.get(url)
-        response.raise_for_status()
+        if response.status_code == 200:
+            return response.content
+        elif response.status_code == 404:
+            return None
+        else:
+            raise_response_exception(response)
         return response.content
 
     def apply_tags(
@@ -498,16 +507,18 @@ class Downloader:
             "cover" not in self.exclude_tags_list
             and self.cover_format != CoverFormat.RAW
         ):
-            mp4_tags["covr"] = [
-                MP4Cover(
-                    self.get_url_response_bytes(cover_url),
-                    imageformat=(
-                        MP4Cover.FORMAT_JPEG
-                        if self.cover_format == CoverFormat.JPG
-                        else MP4Cover.FORMAT_PNG
-                    ),
-                )
-            ]
+            cover_bytes = self.get_url_response_bytes(cover_url)
+            if cover_bytes is not None:
+                mp4_tags["covr"] = [
+                    MP4Cover(
+                        self.get_url_response_bytes(cover_url),
+                        imageformat=(
+                            MP4Cover.FORMAT_JPEG
+                            if self.cover_format == CoverFormat.JPG
+                            else MP4Cover.FORMAT_PNG
+                        ),
+                    )
+                ]
         mp4 = MP4(path)
         mp4.clear()
         mp4.update(mp4_tags)

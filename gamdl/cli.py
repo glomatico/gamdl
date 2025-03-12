@@ -28,6 +28,8 @@ downloader_song_sig = inspect.signature(DownloaderSong.__init__)
 downloader_music_video_sig = inspect.signature(DownloaderMusicVideo.__init__)
 downloader_post_sig = inspect.signature(DownloaderPost.__init__)
 
+fallback_cover_url = "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/35/81/b9/3581b906-7322-ebbb-d021-8c21965394c1/198937117592_cover.jpg/1200x1200bb.jpg"
+
 
 def get_param_string(param: click.Parameter) -> str:
     if isinstance(param.default, Enum):
@@ -534,14 +536,10 @@ def main(
                         final_path
                     )
                     cover_url = downloader.get_cover_url(track_metadata)
-                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
-                    if cover_file_extesion:
-                        cover_path = downloader_music_video.get_cover_path(
-                            final_path,
-                            cover_file_extesion,
-                        )
-                    else:
-                        cover_path = None
+                    try:
+                        cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    except Exception:
+                        cover_file_extesion = downloader.get_cover_file_extension(fallback_cover_url)
                     cover_path = downloader_song.get_cover_path(
                         final_path,
                         cover_file_extesion,
@@ -664,13 +662,10 @@ def main(
                     final_path = downloader.get_final_path(tags, ".m4v")
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
-                    if cover_file_extesion:
-                        cover_path = downloader_music_video.get_cover_path(
-                            final_path,
-                            cover_file_extesion,
-                        )
-                    else:
-                        cover_path = None
+                    cover_path = downloader_music_video.get_cover_path(
+                        final_path,
+                        cover_file_extesion,
+                    )
                     if final_path.exists() and not overwrite:
                         logger.warning(
                             f'({queue_progress}) Music video already exists at "{final_path}", skipping'
@@ -744,13 +739,6 @@ def main(
                     final_path = downloader.get_final_path(tags, ".m4v")
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
-                    if cover_file_extesion:
-                        cover_path = downloader_music_video.get_cover_path(
-                            final_path,
-                            cover_file_extesion,
-                        )
-                    else:
-                        cover_path = None
                     cover_path = downloader_music_video.get_cover_path(
                         final_path,
                         cover_file_extesion,
@@ -765,7 +753,7 @@ def main(
                         )
                         logger.debug(f'Downloading to "{remuxed_path}"')
                         downloader.download_ytdlp(remuxed_path, stream_url)
-                if synced_lyrics_only or not save_cover or cover_path is None:
+                if synced_lyrics_only or not save_cover:
                     pass
                 elif cover_path.exists() and not overwrite:
                     logger.debug(f'Cover already exists at "{cover_path}", skipping')
@@ -774,7 +762,10 @@ def main(
                     downloader.save_cover(cover_path, cover_url)
                 if remuxed_path:
                     logger.debug("Applying tags")
-                    downloader.apply_tags(remuxed_path, tags, cover_url)
+                    try:
+                        downloader.apply_tags(remuxed_path, tags, cover_url)
+                    except Exception:
+                        downloader.apply_tags(remuxed_path, tags, fallback_cover_url)
                     logger.debug(f'Moving to "{final_path}"')
                     downloader.move_to_output_path(remuxed_path, final_path)
                 if (

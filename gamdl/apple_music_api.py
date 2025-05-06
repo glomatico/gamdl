@@ -38,7 +38,6 @@ class AppleMusicApi:
             cookies = MozillaCookieJar(self.cookies_path)
             cookies.load(ignore_discard=True, ignore_expires=True)
             self.session.cookies.update(cookies)
-            self.storefront = self.session.cookies.get_dict()["itua"]
             media_user_token = self.session.cookies.get_dict()["media-user-token"]
         else:
             media_user_token = ""
@@ -70,6 +69,7 @@ class AppleMusicApi:
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.session.params = {"l": self.language}
+        self._set_storefront()
 
     def _check_amp_api_response(self, response: requests.Response):
         try:
@@ -82,6 +82,22 @@ class AppleMusicApi:
             AssertionError,
         ):
             raise_response_exception(response)
+
+    def _set_storefront(self):
+        if self.cookies_path:
+            self.storefront = (
+                self.session.cookies.get_dict().get("itua")
+                or self.get_user_storefront()["id"]
+            )
+        else:
+            self.storefront = self.storefront or "us"
+
+    def get_user_storefront(
+        self,
+    ) -> dict:
+        response = self.session.get(f"{self.AMP_API_URL}/v1/me/storefront")
+        self._check_amp_api_response(response)
+        return response.json()["data"][0]
 
     def get_artist(
         self,

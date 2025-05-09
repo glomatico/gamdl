@@ -12,7 +12,7 @@ import colorama
 from . import __version__
 from .apple_music_api import AppleMusicApi
 from .constants import *
-from .custom_formatter import CustomFormatter
+from .custom_logger_formatter import CustomLoggerFormatter
 from .downloader import Downloader
 from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
@@ -355,7 +355,7 @@ def main(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(CustomFormatter())
+    stream_handler.setFormatter(CustomLoggerFormatter())
     logger.addHandler(stream_handler)
     logger.info("Starting Gamdl")
     while not cookies_path.exists():

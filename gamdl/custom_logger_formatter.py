@@ -5,7 +5,7 @@ import colorama
 from .utils import color_text
 
 
-class CustomFormatter(logging.Formatter):
+class CustomLoggerFormatter(logging.Formatter):
     base_format = "[%(levelname)-8s %(asctime)s]"
     format_colors = {
         logging.DEBUG: colorama.Style.DIM,

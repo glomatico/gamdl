@@ -38,7 +38,13 @@ class AppleMusicApi:
             cookies = MozillaCookieJar(self.cookies_path)
             cookies.load(ignore_discard=True, ignore_expires=True)
             self.session.cookies.update(cookies)
-            media_user_token = self.session.cookies.get_dict()["media-user-token"]
+            media_user_token = self.session.cookies.get_dict().get("media-user-token")
+            if not media_user_token:
+                raise ValueError(
+                    "media-user-token not found in cookies. "
+                    "Make sure you're logged in to Apple Music, have an active subscription, and "
+                    "exported the cookies from the Apple Music homepage."
+                )
         else:
             media_user_token = ""
         self.session.headers.update(

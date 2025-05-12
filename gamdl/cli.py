@@ -20,7 +20,7 @@ from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
 from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
 from .itunes_api import ItunesApi
-from .utils import color_text
+from .utils import color_text, prompt_path
 
 apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
 downloader_sig = inspect.signature(Downloader.__init__)
@@ -358,14 +358,7 @@ def main(
     stream_handler.setFormatter(CustomLoggerFormatter())
     logger.addHandler(stream_handler)
     logger.info("Starting Gamdl")
-    while not cookies_path.exists():
-        cookies_path_str = click.prompt(
-            X_NOT_FOUND_STRING.format("Cookies file", cookies_path.absolute())
-            + ". Move it to that location or drag and drop it here. Then, press enter to continue",
-            default=str(cookies_path),
-            show_default=False,
-        )
-        cookies_path = Path(cookies_path_str.strip('"'))
+    prompt_path("Cookies file", cookies_path)
     apple_music_api = AppleMusicApi(
         cookies_path,
         language=language,
@@ -417,9 +410,8 @@ def main(
         quality_post,
     )
     if not synced_lyrics_only:
-        if wvd_path and not wvd_path.exists():
-            logger.critical(X_NOT_FOUND_STRING.format(".wvd file", wvd_path))
-            return
+        if wvd_path:
+            prompt_path(".wvd file", wvd_path)
         logger.debug("Setting up CDM")
         downloader.set_cdm()
         if not downloader.ffmpeg_path_full and (

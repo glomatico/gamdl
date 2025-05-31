@@ -112,6 +112,7 @@ Config file values can be overridden using command-line  arguments.
 | `--codec-song` / `codec_song`                                   | Song codec.                                                                  | `aac-legacy`                 |
 | `--synced-lyrics-format` / `synced_lyrics_format`               | Synced lyrics format.                                                        | `lrc`                        |
 | `--codec-music-video` / `codec_music_video`                     | Music video codec.                                                           | `h264`                       |
+| `--remux-format-music-video` / `remux_format_music_video`       | Music video remux format.                                                    | `m4v`                        |
 | `--quality-post` / `quality_post`                               | Post video quality.                                                          | `best`                       |
 | `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | `false`                      |
 
@@ -181,6 +182,10 @@ The following variables can be used in the template folders/files and/or in the 
 * `h264`: Up to 1080p with AAC 256kbps.
 * `h265`: Up to 2160p with AAC 256kpbs.
 * `ask`: Prompt to choose available video and audio codecs.
+
+### Music Videos Remux Formats
+* `m4v`: Default remux format.
+* `mp4`
   
 ### Post videos/extra videos qualities
 * `best`: Up to 1080p with AAC 256kbps.

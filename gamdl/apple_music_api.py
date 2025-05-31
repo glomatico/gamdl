@@ -6,6 +6,7 @@ import time
 import typing
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -13,7 +14,7 @@ from .utils import raise_response_exception
 
 
 class AppleMusicApi:
-    APPLE_MUSIC_HOMEPAGE_URL = "https://beta.music.apple.com"
+    APPLE_MUSIC_HOMEPAGE_URL = "https://music.apple.com"
     AMP_API_URL = "https://amp-api.music.apple.com"
     WEBPLAYBACK_API_URL = (
         "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
@@ -23,47 +24,72 @@ class AppleMusicApi:
 
     def __init__(
         self,
-        cookies_path: Path | None = Path("./cookies.txt"),
-        storefront: None | str = None,
+        storefront: str,
+        media_user_token: str | None = None,
         language: str = "en-US",
     ):
-        self.cookies_path = cookies_path
+        self.media_user_token = media_user_token
         self.storefront = storefront
         self.language = language
         self._set_session()
 
+    @classmethod
+    def from_netscape_cookies(
+        cls,
+        cookies_path: Path = Path("./cookies.txt"),
+        language: str = "en-US",
+    ) -> AppleMusicApi:
+        parse_cookie = lambda name: next(
+            (
+                cookie.value
+                for cookie in cookies
+                if cookie.name == name
+                and cookie.domain.endswith(
+                    urlparse(cls.APPLE_MUSIC_HOMEPAGE_URL).netloc
+                )
+            ),
+            None,
+        )
+        cookies = MozillaCookieJar(cookies_path)
+        cookies.load(ignore_discard=True, ignore_expires=True)
+        media_user_token = parse_cookie("media-user-token")
+        if not media_user_token:
+            raise ValueError(
+                '"media-user-token" cookie not found in cookies. '
+                "Make sure you have exported the cookies from Apple Music webpage and are logged in "
+                "with an active subscription."
+            )
+        storefront = parse_cookie("itua")
+        return cls(
+            storefront=storefront,
+            media_user_token=media_user_token,
+            language=language,
+        )
+
     def _set_session(self):
         self.session = requests.Session()
-        if self.cookies_path:
-            cookies = MozillaCookieJar(self.cookies_path)
-            cookies.load(ignore_discard=True, ignore_expires=True)
-            self.session.cookies.update(cookies)
-            media_user_token = self.session.cookies.get_dict().get("media-user-token")
-            if not media_user_token:
-                raise ValueError(
-                    "media-user-token not found in cookies. "
-                    "Make sure you're logged in to Apple Music, have an active subscription, and "
-                    "exported the cookies from the Apple Music homepage."
-                )
-        else:
-            media_user_token = ""
         self.session.headers.update(
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
-                "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.5",
-                "Accept-Encoding": "gzip, deflate, br",
-                "content-type": "application/json",
-                "Media-User-Token": media_user_token,
-                "x-apple-renewal": "true",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Sec-Fetch-Dest": "empty",
-                "Sec-Fetch-Mode": "cors",
-                "Sec-Fetch-Site": "same-site",
+                "accept": "*/*",
+                "accept-language": "en-US",
                 "origin": self.APPLE_MUSIC_HOMEPAGE_URL,
+                "priority": "u=1, i",
+                "referer": self.APPLE_MUSIC_HOMEPAGE_URL,
+                "sec-ch-ua": '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
             }
         )
+        if self.media_user_token:
+            self.session.cookies.update(
+                {
+                    "media-user-token": self.media_user_token,
+                }
+            )
         home_page = self.session.get(self.APPLE_MUSIC_HOMEPAGE_URL).text
         index_js_uri = re.search(
             r"/(assets/index-legacy-[^/]+\.js)",
@@ -75,7 +101,8 @@ class AppleMusicApi:
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.session.params = {"l": self.language}
-        self._set_storefront()
+        if not self.storefront:
+            self._fetch_storefront()
 
     def _check_amp_api_response(self, response: requests.Response):
         try:
@@ -89,14 +116,8 @@ class AppleMusicApi:
         ):
             raise_response_exception(response)
 
-    def _set_storefront(self):
-        if self.cookies_path:
-            self.storefront = (
-                self.session.cookies.get_dict().get("itua")
-                or self.get_user_storefront()["id"]
-            )
-        else:
-            self.storefront = self.storefront or "us"
+    def _fetch_storefront(self):
+        self.storefront = self.get_user_storefront()["id"]
 
     def get_user_storefront(
         self,

@@ -22,7 +22,9 @@ from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, Remu
 from .itunes_api import ItunesApi
 from .utils import color_text, prompt_path
 
-apple_music_api_sig = inspect.signature(AppleMusicApi.__init__)
+apple_music_api_from_netscape_cookies_sig = inspect.signature(
+    AppleMusicApi.from_netscape_cookies
+)
 downloader_sig = inspect.signature(Downloader.__init__)
 downloader_song_sig = inspect.signature(DownloaderSong.__init__)
 downloader_music_video_sig = inspect.signature(DownloaderMusicVideo.__init__)
@@ -137,14 +139,16 @@ def load_config_file(
     "--cookies-path",
     "-c",
     type=Path,
-    default=apple_music_api_sig.parameters["cookies_path"].default,
+    default=apple_music_api_from_netscape_cookies_sig.parameters[
+        "cookies_path"
+    ].default,
     help="Path to .txt cookies file.",
 )
 @click.option(
     "--language",
     "-l",
     type=str,
-    default=apple_music_api_sig.parameters["language"].default,
+    default=apple_music_api_from_netscape_cookies_sig.parameters["language"].default,
     help="Metadata language as an ISO-2A language code (don't always work for videos).",
 )
 # Downloader specific options
@@ -359,9 +363,8 @@ def main(
     logger.addHandler(stream_handler)
     logger.info("Starting Gamdl")
     prompt_path("Cookies file", cookies_path)
-    apple_music_api = AppleMusicApi(
+    apple_music_api = AppleMusicApi.from_netscape_cookies(
         cookies_path,
-        language=language,
     )
     itunes_api = ItunesApi(
         apple_music_api.storefront,

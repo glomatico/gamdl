@@ -362,7 +362,7 @@ def main(
     stream_handler.setFormatter(CustomLoggerFormatter())
     logger.addHandler(stream_handler)
     logger.info("Starting Gamdl")
-    prompt_path("Cookies file", cookies_path)
+    cookies_path = prompt_path("Cookies file", cookies_path)
     apple_music_api = AppleMusicApi.from_netscape_cookies(
         cookies_path,
     )

@@ -412,6 +412,7 @@ def main(
         downloader,
         quality_post,
     )
+    skip_mv = False
     if not synced_lyrics_only:
         if wvd_path:
             prompt_path(".wvd file", wvd_path)
@@ -448,8 +449,6 @@ def main(
                 + ", music videos will not be downloaded"
             )
             skip_mv = True
-        else:
-            skip_mv = False
         if codec_song not in LEGACY_CODECS:
             logger.warning(
                 "You have chosen an experimental codec. "

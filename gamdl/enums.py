@@ -38,6 +38,11 @@ class MusicVideoCodec(Enum):
     ASK = "ask"
 
 
+class RemuxFormatMusicVideo(Enum):
+    M4V = "m4v"
+    MP4 = "mp4"
+
+
 class PostQuality(Enum):
     BEST = "best"
     ASK = "ask"

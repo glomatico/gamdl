@@ -18,7 +18,14 @@ from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
 from .downloader_song_legacy import DownloaderSongLegacy
-from .enums import CoverFormat, DownloadMode, MusicVideoCodec, PostQuality, RemuxMode
+from .enums import (
+    CoverFormat,
+    DownloadMode,
+    RemuxFormatMusicVideo,
+    MusicVideoCodec,
+    PostQuality,
+    RemuxMode,
+)
 from .itunes_api import ItunesApi
 from .utils import color_text, prompt_path
 
@@ -299,6 +306,12 @@ def load_config_file(
     default=downloader_music_video_sig.parameters["codec"].default,
     help="Music video codec.",
 )
+@click.option(
+    "--remux-format-music-video",
+    type=RemuxFormatMusicVideo,
+    default=downloader_music_video_sig.parameters["remux_format"].default,
+    help="Music video remux format.",
+)
 # DownloaderPost specific options
 @click.option(
     "--quality-post",
@@ -352,6 +365,7 @@ def main(
     codec_song: SongCodec,
     synced_lyrics_format: SyncedLyricsFormat,
     codec_music_video: MusicVideoCodec,
+    remux_format_music_video: RemuxFormatMusicVideo,
     quality_post: PostQuality,
     no_config_file: bool,
 ):
@@ -698,7 +712,9 @@ def main(
                             )
                         )
                         remuxed_path = downloader_music_video.get_remuxed_path(
-                            track_metadata["id"]
+                            track_metadata["id"],
+                            stream_info_video.codec,
+                            stream_info_audio.codec,
                         )
                         logger.debug(f'Downloading video to "{encrypted_path_video}"')
                         downloader.download(
@@ -725,8 +741,6 @@ def main(
                             decrypted_path_video,
                             decrypted_path_audio,
                             remuxed_path,
-                            stream_info_video.codec,
-                            stream_info_audio.codec,
                         )
                 elif track_metadata["type"] == "uploaded-videos":
                     stream_url = downloader_post.get_stream_url(track_metadata)

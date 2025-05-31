@@ -10,7 +10,7 @@ from InquirerPy.base.control import Choice
 
 from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
-from .enums import MusicVideoCodec, RemuxMode
+from .enums import MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
 from .models import StreamInfo
 
 
@@ -21,9 +21,11 @@ class DownloaderMusicVideo:
         self,
         downloader: Downloader,
         codec: MusicVideoCodec = MusicVideoCodec.H264,
+        remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
     ):
         self.downloader = downloader
         self.codec = codec
+        self.remux_format = remux_format
 
     def get_stream_url_from_webplayback(self, webplayback: dict) -> str:
         return webplayback["hls-playlist-url"]
@@ -205,8 +207,22 @@ class DownloaderMusicVideo:
     def get_decrypted_path_audio(self, track_id: str) -> str:
         return self.downloader.temp_path / f"decrypted_{track_id}.m4a"
 
-    def get_remuxed_path(self, track_id: str) -> str:
-        return self.downloader.temp_path / f"remuxed_{track_id}.m4v"
+    def get_remuxed_path(
+        self,
+        track_id: str,
+        codec_video: str,
+        codec_audio: str,
+    ) -> str:
+        use_mp4 = (
+            any(codec_video.startswith(codec) for codec in self.MP4_FORMAT_CODECS)
+            or any(codec_audio.startswith(codec) for codec in self.MP4_FORMAT_CODECS)
+            or self.remux_format == RemuxFormatMusicVideo.MP4
+        )
+        if use_mp4:
+            file_extension = ".mp4"
+        else:
+            file_extension = ".m4v"
+        return self.downloader.temp_path / (f"remuxed_{track_id}" + file_extension)
 
     def decrypt(self, encrypted_path: Path, decryption_key: str, decrypted_path: Path):
         subprocess.run(
@@ -250,12 +266,7 @@ class DownloaderMusicVideo:
         decrypted_path_video: Path,
         decrypte_path_audio: Path,
         fixed_path: Path,
-        codec_video: str,
-        codec_audio: str,
     ):
-        use_mp4_flag = any(
-            codec_video.startswith(codec) for codec in self.MP4_FORMAT_CODECS
-        ) or any(codec_audio.startswith(codec) for codec in self.MP4_FORMAT_CODECS)
         subprocess.run(
             [
                 self.downloader.ffmpeg_path_full,
@@ -268,8 +279,6 @@ class DownloaderMusicVideo:
                 decrypte_path_audio,
                 "-movflags",
                 "+faststart",
-                "-f",
-                "mp4" if use_mp4_flag else "ipod",
                 "-c",
                 "copy",
                 "-c:s",
@@ -285,8 +294,6 @@ class DownloaderMusicVideo:
         decrypted_path_video: Path,
         decrypted_path_audio: Path,
         remuxed_path: Path,
-        codec_video: str,
-        codec_audio: str,
     ):
         if self.downloader.remux_mode == RemuxMode.MP4BOX:
             self.remux_mp4box(
@@ -299,8 +306,6 @@ class DownloaderMusicVideo:
                 decrypted_path_video,
                 decrypted_path_audio,
                 remuxed_path,
-                codec_video,
-                codec_audio,
             )
 
     def get_cover_path(self, final_path: Path, file_extension: str) -> Path:

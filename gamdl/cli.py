@@ -421,6 +421,7 @@ def main(
     downloader_music_video = DownloaderMusicVideo(
         downloader,
         codec_music_video,
+        remux_format_music_video,
     )
     downloader_post = DownloaderPost(
         downloader,
@@ -564,15 +565,16 @@ def main(
                             )
                             logger.debug("Getting decryption key")
                             decryption_key = downloader_song_legacy.get_decryption_key(
-                                stream_info.widevine_pssh, track_metadata["id"]
+                                stream_info.audio_track.widevine_pssh,
+                                track_metadata["id"],
                             )
                         else:
                             stream_info = downloader_song.get_stream_info(
                                 track_metadata
                             )
                             if (
-                                not stream_info.stream_url
-                                or not stream_info.widevine_pssh
+                                not stream_info.audio_track.stream_url
+                                or not stream_info.audio_track.widevine_pssh
                             ):
                                 logger.warning(
                                     f"({queue_progress}) Song is not downloadable or is not"
@@ -581,7 +583,8 @@ def main(
                                 continue
                             logger.debug("Getting decryption key")
                             decryption_key = downloader.get_decryption_key(
-                                stream_info.widevine_pssh, track_metadata["id"]
+                                stream_info.audio_track.widevine_pssh,
+                                track_metadata["id"],
                             )
                         encrypted_path = downloader_song.get_encrypted_path(
                             track_metadata["id"]
@@ -590,10 +593,14 @@ def main(
                             track_metadata["id"]
                         )
                         remuxed_path = downloader_song.get_remuxed_path(
-                            track_metadata["id"]
+                            track_metadata["id"],
+                            stream_info.file_format,
                         )
                         logger.debug(f'Downloading to "{encrypted_path}"')
-                        downloader.download(encrypted_path, stream_info.stream_url)
+                        downloader.download(
+                            encrypted_path,
+                            stream_info.audio_track.stream_url,
+                        )
                         if codec_song in LEGACY_CODECS:
                             logger.debug(
                                 f'Decrypting/Remuxing to "{decrypted_path}"/"{remuxed_path}"'
@@ -607,13 +614,14 @@ def main(
                         else:
                             logger.debug(f'Decrypting to "{decrypted_path}"')
                             downloader_song.decrypt(
-                                encrypted_path, decrypted_path, decryption_key
+                                encrypted_path,
+                                decrypted_path,
+                                decryption_key,
                             )
                             logger.debug(f'Remuxing to "{final_path}"')
                             downloader_song.remux(
                                 decrypted_path,
                                 remuxed_path,
-                                stream_info.codec,
                             )
                     if no_synced_lyrics or not lyrics.synced:
                         pass
@@ -650,8 +658,7 @@ def main(
                                 webplayback
                             )
                         )
-                    logger.debug("Getting M3U8 data")
-                    m3u8_data = downloader_music_video.get_m3u8_master_data(stream_url)
+                    logger.debug("Getting tags")
                     tags = downloader_music_video.get_tags(
                         music_video_id_alt,
                         itunes_page,
@@ -665,7 +672,18 @@ def main(
                                 playlist_track,
                             ),
                         }
-                    final_path = downloader.get_final_path(tags, ".m4v")
+                    logger.debug("Getting M3U8 data")
+                    m3u8_data = downloader_music_video.get_m3u8_master_data(stream_url)
+                    stream_info_av = downloader_music_video.get_stream_info(
+                        m3u8_data,
+                    )
+                    final_file_extesion = downloader.get_final_file_extension(
+                        stream_info_av.file_format,
+                    )
+                    final_path = downloader.get_final_path(
+                        tags,
+                        final_file_extesion,
+                    )
                     cover_url = downloader.get_cover_url(track_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
                     if cover_file_extesion:
@@ -680,16 +698,13 @@ def main(
                             f'({queue_progress}) Music video already exists at "{final_path}", skipping'
                         )
                     else:
-                        logger.debug("Getting stream info")
-                        stream_info_video, stream_info_audio = (
-                            downloader_music_video.get_stream_info_video(m3u8_data),
-                            downloader_music_video.get_stream_info_audio(m3u8_data),
-                        )
                         decryption_key_video = downloader.get_decryption_key(
-                            stream_info_video.widevine_pssh, track_metadata["id"]
+                            stream_info_av.video_track.widevine_pssh,
+                            track_metadata["id"],
                         )
                         decryption_key_audio = downloader.get_decryption_key(
-                            stream_info_audio.widevine_pssh, track_metadata["id"]
+                            stream_info_av.audio_track.widevine_pssh,
+                            track_metadata["id"],
                         )
                         encrypted_path_video = (
                             downloader_music_video.get_encrypted_path_video(
@@ -713,16 +728,17 @@ def main(
                         )
                         remuxed_path = downloader_music_video.get_remuxed_path(
                             track_metadata["id"],
-                            stream_info_video.codec,
-                            stream_info_audio.codec,
+                            final_file_extesion,
                         )
                         logger.debug(f'Downloading video to "{encrypted_path_video}"')
                         downloader.download(
-                            encrypted_path_video, stream_info_video.stream_url
+                            encrypted_path_video,
+                            stream_info_av.video_track.stream_url,
                         )
                         logger.debug(f'Downloading audio to "{encrypted_path_audio}"')
                         downloader.download(
-                            encrypted_path_audio, stream_info_audio.stream_url
+                            encrypted_path_audio,
+                            stream_info_av.audio_track.stream_url,
                         )
                         logger.debug(f'Decrypting video to "{decrypted_path_video}"')
                         downloader_music_video.decrypt(

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .enums import MediaFileFormat
+
 
 @dataclass
 class UrlInfo:
@@ -29,3 +31,10 @@ class StreamInfo:
     playready_pssh: str = None
     fairplay_key: str = None
     codec: str = None
+
+
+@dataclass
+class StreamInfoAv:
+    video_track: StreamInfo = None
+    audio_track: StreamInfo = None
+    file_format: MediaFileFormat = None

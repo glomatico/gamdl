@@ -430,7 +430,7 @@ def main(
     skip_mv = False
     if not synced_lyrics_only:
         if wvd_path:
-            prompt_path(".wvd file", wvd_path)
+            wvd_path = prompt_path(".wvd file", wvd_path)
         logger.debug("Setting up CDM")
         downloader.set_cdm()
         if not downloader.ffmpeg_path_full and (

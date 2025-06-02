@@ -43,6 +43,12 @@ class RemuxFormatMusicVideo(Enum):
     MP4 = "mp4"
 
 
+class MediaFileFormat(Enum):
+    M4A = "m4a"
+    MP4 = "mp4"
+    M4V = "m4v"
+
+
 class PostQuality(Enum):
     BEST = "best"
     ASK = "ask"

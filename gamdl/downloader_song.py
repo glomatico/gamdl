@@ -15,8 +15,8 @@ from InquirerPy.base.control import Choice
 
 from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
 from .downloader import Downloader
-from .enums import RemuxMode, SongCodec, SyncedLyricsFormat
-from .models import Lyrics, StreamInfo
+from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
+from .models import Lyrics, StreamInfo, StreamInfoAv
 
 
 class DownloaderSong:
@@ -128,13 +128,13 @@ class DownloaderSong:
             "com.apple.streamingkeydelivery",
         )
 
-    def get_stream_info(self, track_metadata: dict) -> StreamInfo:
+    def get_stream_info(self, track_metadata: dict) -> StreamInfoAv:
         m3u8_url = track_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
         if not m3u8_url:
             return StreamInfo()
         return self._get_stream_info(m3u8_url)
 
-    def _get_stream_info(self, m3u8_url: str) -> StreamInfo:
+    def _get_stream_info(self, m3u8_url: str) -> StreamInfoAv:
         stream_info = StreamInfo()
         m3u8_obj = m3u8.load(m3u8_url)
         m3u8_data = m3u8_obj.data
@@ -160,7 +160,14 @@ class DownloaderSong:
         stream_info.playready_pssh = playready_pssh
         stream_info.fairplay_key = fairplay_key
         stream_info.codec = playlist["stream_info"]["codecs"]
-        return stream_info
+        is_mp4 = any(
+            stream_info.codec.startswith(possible_codec)
+            for possible_codec in self.MP4_FORMAT_CODECS
+        )
+        return StreamInfoAv(
+            audio_track=stream_info,
+            file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
+        )
 
     @staticmethod
     def parse_datetime_obj_from_timestamp_ttml(
@@ -301,8 +308,11 @@ class DownloaderSong:
     def get_decrypted_path(self, track_id: str) -> Path:
         return self.downloader.temp_path / f"{track_id}_decrypted.m4a"
 
-    def get_remuxed_path(self, track_id: str) -> Path:
-        return self.downloader.temp_path / f"{track_id}_remuxed.m4a"
+    def get_remuxed_path(self, track_id: str, file_format: MediaFileFormat) -> Path:
+        return (
+            self.downloader.temp_path
+            / f"{track_id}_remuxed.{"m4a" if file_format == MediaFileFormat.M4A else "mp4"}"
+        )
 
     def fix_key_id(self, encrypted_path: Path):
         count = 0
@@ -339,11 +349,11 @@ class DownloaderSong:
             **self.downloader.subprocess_additional_args,
         )
 
-    def remux(self, decrypted_path: Path, remuxed_path: Path, codec: str):
+    def remux(self, decrypted_path: Path, remuxed_path: Path):
         if self.downloader.remux_mode == RemuxMode.MP4BOX:
             self.remux_mp4box(decrypted_path, remuxed_path)
         elif self.downloader.remux_mode == RemuxMode.FFMPEG:
-            self.remux_ffmpeg(decrypted_path, remuxed_path, codec)
+            self.remux_ffmpeg(decrypted_path, remuxed_path)
 
     def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path):
         subprocess.run(
@@ -366,12 +376,7 @@ class DownloaderSong:
         self,
         decrypted_path: Path,
         remuxed_path: Path,
-        codec: str,
     ):
-        use_mp4_format = any(
-            codec.startswith(possible_codec)
-            for possible_codec in self.MP4_FORMAT_CODECS
-        )
         subprocess.run(
             [
                 self.downloader.ffmpeg_path_full,
@@ -382,8 +387,6 @@ class DownloaderSong:
                 decrypted_path,
                 "-c",
                 "copy",
-                "-f",
-                "mp4" if use_mp4_format else "ipod",
                 "-movflags",
                 "+faststart",
                 remuxed_path,

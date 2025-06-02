@@ -10,8 +10,8 @@ from InquirerPy.base.control import Choice
 
 from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
-from .enums import MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
-from .models import StreamInfo
+from .enums import MediaFileFormat, MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
+from .models import StreamInfo, StreamInfoAv
 
 
 class DownloaderMusicVideo:
@@ -153,6 +153,33 @@ class DownloaderMusicVideo:
         stream_info.widevine_pssh = self.get_pssh(m3u8_data)
         return stream_info
 
+    def get_stream_info(
+        self,
+        m3u8_master_data: dict,
+    ) -> StreamInfoAv:
+        stream_info_video = self.get_stream_info_video(m3u8_master_data)
+        stream_info_audio = self.get_stream_info_audio(m3u8_master_data)
+        use_mp4 = (
+            any(
+                stream_info_video.codec.startswith(codec)
+                for codec in self.MP4_FORMAT_CODECS
+            )
+            or any(
+                stream_info_audio.codec.startswith(codec)
+                for codec in self.MP4_FORMAT_CODECS
+            )
+            or self.remux_format == RemuxFormatMusicVideo.MP4
+        )
+        if use_mp4:
+            file_format = MediaFileFormat.MP4
+        else:
+            file_format = MediaFileFormat.M4V
+        return StreamInfoAv(
+            video_track=stream_info_video,
+            audio_track=stream_info_audio,
+            file_format=file_format,
+        )
+
     def get_music_video_id_alt(self, metadata: dict) -> str:
         return metadata["attributes"]["url"].split("/")[-1].split("?")[0]
 
@@ -210,18 +237,8 @@ class DownloaderMusicVideo:
     def get_remuxed_path(
         self,
         track_id: str,
-        codec_video: str,
-        codec_audio: str,
+        file_extension: str,
     ) -> str:
-        use_mp4 = (
-            any(codec_video.startswith(codec) for codec in self.MP4_FORMAT_CODECS)
-            or any(codec_audio.startswith(codec) for codec in self.MP4_FORMAT_CODECS)
-            or self.remux_format == RemuxFormatMusicVideo.MP4
-        )
-        if use_mp4:
-            file_extension = ".mp4"
-        else:
-            file_extension = ".m4v"
         return self.downloader.temp_path / (f"remuxed_{track_id}" + file_extension)
 
     def decrypt(self, encrypted_path: Path, decryption_key: str, decrypted_path: Path):

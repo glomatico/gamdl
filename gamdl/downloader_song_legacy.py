@@ -9,15 +9,15 @@ from pywidevine import PSSH
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 
 from .downloader_song import DownloaderSong
-from .enums import RemuxMode, SongCodec
-from .models import StreamInfo
+from .enums import MediaFileFormat, RemuxMode, SongCodec
+from .models import StreamInfo, StreamInfoAv
 
 
 class DownloaderSongLegacy(DownloaderSong):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def get_stream_info(self, webplayback: dict) -> StreamInfo:
+    def get_stream_info(self, webplayback: dict) -> StreamInfoAv:
         flavor = "32:ctrp64" if self.codec == SongCodec.AAC_HE_LEGACY else "28:ctrp256"
         stream_info = StreamInfo()
         stream_info.stream_url = next(
@@ -25,7 +25,10 @@ class DownloaderSongLegacy(DownloaderSong):
         )["URL"]
         m3u8_obj = m3u8.load(stream_info.stream_url)
         stream_info.widevine_pssh = m3u8_obj.keys[0].uri
-        return stream_info
+        return StreamInfoAv(
+            audio_track=stream_info,
+            file_format=MediaFileFormat.M4A,
+        )
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
         try:

@@ -20,7 +20,7 @@ from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
 from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
-from .enums import CoverFormat, DownloadMode, RemuxMode
+from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
 from .models import DownloadQueue, UrlInfo
@@ -316,8 +316,8 @@ class Downloader:
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
         try:
-            pssh_obj = PSSH(pssh.split(",")[-1])
             cdm_session = self.cdm.open()
+            pssh_obj = PSSH(pssh.split(",")[-1])
             challenge = base64.b64encode(
                 self.cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
@@ -391,6 +391,12 @@ class Downloader:
             if self.truncate is not None:
                 dirty_string = dirty_string[: self.truncate - 4]
         return dirty_string.strip()
+
+    def get_final_file_extension(
+        self,
+        file_format: MediaFileFormat,
+    ) -> str:
+        return "." + file_format.value
 
     def get_final_path(self, tags: dict, file_extension: str) -> Path:
         if tags.get("album"):

@@ -1,7 +1,7 @@
 [project]
 name = "gamdl"
 description = "A Python CLI app for downloading Apple Music songs, music videos and post videos."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{ name = "glomatico" }]
 dependencies = [
     "click",

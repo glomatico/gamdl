@@ -21,9 +21,9 @@ from .downloader_song_legacy import DownloaderSongLegacy
 from .enums import (
     CoverFormat,
     DownloadMode,
-    RemuxFormatMusicVideo,
     MusicVideoCodec,
     PostQuality,
+    RemuxFormatMusicVideo,
     RemuxMode,
 )
 from .itunes_api import ItunesApi
@@ -376,7 +376,7 @@ def main(
     stream_handler.setFormatter(CustomLoggerFormatter())
     logger.addHandler(stream_handler)
     logger.info("Starting Gamdl")
-    cookies_path = prompt_path("Cookies file", cookies_path)
+    cookies_path = prompt_path(True, cookies_path, "Cookies file")
     apple_music_api = AppleMusicApi.from_netscape_cookies(
         cookies_path,
     )
@@ -430,7 +430,7 @@ def main(
     skip_mv = False
     if not synced_lyrics_only:
         if wvd_path:
-            wvd_path = prompt_path(".wvd file", wvd_path)
+            wvd_path = prompt_path(True, wvd_path, ".wvd file")
         logger.debug("Setting up CDM")
         downloader.set_cdm()
         if not downloader.ffmpeg_path_full and (

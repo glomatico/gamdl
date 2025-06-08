@@ -37,6 +37,8 @@ downloader_song_sig = inspect.signature(DownloaderSong.__init__)
 downloader_music_video_sig = inspect.signature(DownloaderMusicVideo.__init__)
 downloader_post_sig = inspect.signature(DownloaderPost.__init__)
 
+logger = logging.getLogger("gamdl")
+
 
 def get_param_string(param: click.Parameter) -> str:
     if isinstance(param.default, Enum):
@@ -370,7 +372,6 @@ def main(
     no_config_file: bool,
 ):
     colorama.just_fix_windows_console()
-    logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(CustomLoggerFormatter())

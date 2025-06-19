@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import sys
 from enum import Enum
 from pathlib import Path
 
@@ -373,9 +374,15 @@ def main(
 ):
     colorama.just_fix_windows_console()
     logger.setLevel(log_level)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(CustomLoggerFormatter())
-    logger.addHandler(stream_handler)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(logging.DEBUG)
+    stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
+    stdout_handler.setFormatter(CustomLoggerFormatter())
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.WARNING)
+    stderr_handler.setFormatter(CustomLoggerFormatter())
+    logger.addHandler(stdout_handler)
+    logger.addHandler(stderr_handler)
     logger.info("Starting Gamdl")
     cookies_path = prompt_path(True, cookies_path, "Cookies file")
     apple_music_api = AppleMusicApi.from_netscape_cookies(

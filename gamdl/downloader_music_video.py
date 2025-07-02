@@ -7,6 +7,7 @@ from pathlib import Path
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
+from urllib.parse import urlparse
 
 from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
@@ -180,8 +181,11 @@ class DownloaderMusicVideo:
             file_format=file_format,
         )
 
-    def get_music_video_id_alt(self, metadata: dict) -> str:
-        return metadata["attributes"]["url"].split("/")[-1].split("?")[0]
+    def get_music_video_id_alt(self, metadata: dict) -> str | None:
+        music_video_url = metadata["attributes"].get("url")
+        if music_video_url is None:
+            return None
+        return music_video_url.split("/")[-1].split("?")[0]
 
     def get_tags(
         self,
@@ -200,7 +204,7 @@ class DownloaderMusicVideo:
             "media_type": 6,
             "storefront": int(self.downloader.itunes_api.storefront_id.split("-")[0]),
             "title": metadata_itunes[0]["trackCensoredName"],
-            "title_id": int(metadata["id"]),
+            "title_id": int(self.downloader.get_media_id(metadata)),
         }
         if metadata_itunes[0]["trackExplicitness"] == "notExplicit":
             tags["rating"] = 0

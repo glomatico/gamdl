@@ -456,10 +456,10 @@ class Downloader:
         )
 
     def get_cover_file_extension(self, cover_url: str) -> str | None:
-        cover_bytes = self.get_url_response_bytes(cover_url)
+        cover_bytes = self.get_cover_url_response_bytes(cover_url)
         if cover_bytes is None:
             return None
-        image_obj = Image.open(io.BytesIO(self.get_url_response_bytes(cover_url)))
+        image_obj = Image.open(io.BytesIO(self.get_cover_url_response_bytes(cover_url)))
         image_format = image_obj.format.lower()
         return IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
 
@@ -492,7 +492,7 @@ class Downloader:
 
     @staticmethod
     @functools.lru_cache()
-    def get_url_response_bytes(url: str) -> bytes:
+    def get_cover_url_response_bytes(url: str) -> bytes | None:
         response = requests.get(url)
         if response.status_code == 200:
             return response.content
@@ -542,11 +542,11 @@ class Downloader:
             "cover" not in self.exclude_tags_list
             and self.cover_format != CoverFormat.RAW
         ):
-            cover_bytes = self.get_url_response_bytes(cover_url)
+            cover_bytes = self.get_cover_url_response_bytes(cover_url)
             if cover_bytes is not None:
                 mp4_tags["covr"] = [
                     MP4Cover(
-                        self.get_url_response_bytes(cover_url),
+                        self.get_cover_url_response_bytes(cover_url),
                         imageformat=(
                             MP4Cover.FORMAT_JPEG
                             if self.cover_format == CoverFormat.JPG
@@ -570,7 +570,7 @@ class Downloader:
     @functools.lru_cache()
     def save_cover(self, cover_path: Path, cover_url: str):
         cover_path.parent.mkdir(parents=True, exist_ok=True)
-        cover_path.write_bytes(self.get_url_response_bytes(cover_url))
+        cover_path.write_bytes(self.get_cover_url_response_bytes(cover_url))
 
     def cleanup_temp_path(self):
         shutil.rmtree(self.temp_path)

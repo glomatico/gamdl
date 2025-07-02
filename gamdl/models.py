@@ -16,7 +16,7 @@ class UrlInfo:
 @dataclass
 class DownloadQueue:
     playlist_attributes: dict = None
-    tracks_metadata: list[dict] = None
+    medias_metadata: list[dict] = None
 
 
 @dataclass

@@ -499,7 +499,7 @@ def main(
                 colorama.Style.DIM,
             )
             try:
-                media_id = media_metadata["attributes"]["playParams"].get("catalogId")
+                media_id = downloader.get_media_id(media_metadata)
                 remuxed_path = None
                 if download_queue.playlist_attributes:
                     playlist_track = download_index
@@ -508,10 +508,7 @@ def main(
                 logger.info(
                     f'({queue_progress}) Downloading "{media_metadata["attributes"]["name"]}"'
                 )
-                if (
-                    not media_metadata["attributes"].get("playParams")
-                    or media_id is None
-                ):
+                if media_id is None:
                     logger.warning(
                         f"({queue_progress}) Track is not streamable or downloadable, skipping"
                     )

@@ -128,26 +128,26 @@ class DownloaderSong:
             "com.apple.streamingkeydelivery",
         )
 
-    def get_stream_info(self, track_metadata: dict) -> StreamInfoAv:
+    def get_stream_info(self, track_metadata: dict) -> StreamInfoAv | None:
         m3u8_url = track_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
         if not m3u8_url:
-            return StreamInfo()
+            return None
         return self._get_stream_info(m3u8_url)
 
-    def _get_stream_info(self, m3u8_url: str) -> StreamInfoAv:
+    def _get_stream_info(self, m3u8_url: str) -> StreamInfoAv | None:
         stream_info = StreamInfo()
         m3u8_obj = m3u8.load(m3u8_url)
         m3u8_data = m3u8_obj.data
         drm_infos = self.get_drm_infos(m3u8_data)
         if not drm_infos:
-            return stream_info
+            return None
         asset_infos = self.get_asset_infos(m3u8_data)
         if self.codec == SongCodec.ASK:
             playlist = self.get_playlist_from_user(m3u8_data)
         else:
             playlist = self.get_playlist_from_codec(m3u8_data)
         if playlist is None:
-            return stream_info
+            return None
         stream_info.stream_url = m3u8_obj.base_uri + playlist["uri"]
         variant_id = playlist["stream_info"]["stable_variant_id"]
         drm_ids = asset_infos[variant_id]["AUDIO-SESSION-KEY-IDS"]

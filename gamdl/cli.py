@@ -578,7 +578,7 @@ def main(
                                 media_metadata
                             )
                             if (
-                                not stream_info.audio_track.stream_url
+                                stream_info is None
                                 or not stream_info.audio_track.widevine_pssh
                             ):
                                 logger.warning(

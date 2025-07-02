@@ -635,9 +635,10 @@ def main(
                         downloader_song.save_lyrics_synced(
                             lyrics_synced_path, lyrics.synced
                         )
-                elif media_metadata["type"] == "music-videos":
-                    music_video_id_alt = downloader_music_video.get_music_video_id_alt(
-                        media_metadata
+                elif media_metadata["type"] in ("music-videos", "library-music-videos"):
+                    music_video_id_alt = (
+                        downloader_music_video.get_music_video_id_alt(media_metadata)
+                        or media_id
                     )
                     logger.debug("Getting iTunes page")
                     itunes_page = itunes_api.get_itunes_page(

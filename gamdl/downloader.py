@@ -165,7 +165,7 @@ class Downloader:
             )
         elif url_type == "song":
             download_queue.medias_metadata = [self.apple_music_api.get_song(id)]
-        elif url_type == "album":
+        elif url_type in ("album", "albums"):
             if is_library:
                 album = self.apple_music_api.get_library_album(id)
             else:

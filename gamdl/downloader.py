@@ -496,7 +496,7 @@ class Downloader:
         response = requests.get(url)
         if response.status_code == 200:
             return response.content
-        elif response.status_code == 404:
+        elif response.status_code in (404, 400):
             return None
         else:
             raise_response_exception(response)

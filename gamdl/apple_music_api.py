@@ -250,6 +250,42 @@ class AppleMusicApi:
         self._check_amp_api_response(response)
         return response.json()["results"]
 
+    def get_library_album(self, album_id: str, extend: str = "extendedAssetUrls"):
+        response = self.session.get(
+            f"{self.AMP_API_URL}/v1/me/library/albums/{album_id}",
+            params={
+                "extend": extend,
+            },
+        )
+        self._check_amp_api_response(response)
+        return response.json()["data"][0]
+
+    def get_library_playlist(
+        self,
+        playlist_id: str,
+        include: str = "tracks",
+        limit: int = 100,
+        extend: str = "extendedAssetUrls",
+        fetch_all: bool = True,
+    ) -> dict:
+        response = self.session.get(
+            f"{self.AMP_API_URL}/v1/me/library/playlists/{playlist_id}",
+            params={
+                "include": include,
+                **{f"limit[{_include}]": limit for _include in include.split(",")},
+                "extend": extend,
+            },
+        )
+        self._check_amp_api_response(response)
+        playlist = response.json()["data"][0]
+        if fetch_all:
+            for additional_data in self._extend_api_data(
+                playlist["relationships"]["tracks"],
+                limit,
+            ):
+                playlist["relationships"]["tracks"]["data"].extend(additional_data)
+        return playlist
+
     def _extend_api_data(
         self,
         api_response: dict,

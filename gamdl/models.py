@@ -10,6 +10,7 @@ class UrlInfo:
     storefront: str = None
     type: str = None
     id: str = None
+    is_library: bool = None
 
 
 @dataclass

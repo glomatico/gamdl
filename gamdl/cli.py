@@ -409,6 +409,7 @@ def main(
         exclude_tags,
         cover_size,
         truncate,
+        log_level in ("WARNING", "ERROR"),
     )
     downloader_song = DownloaderSong(
         downloader,

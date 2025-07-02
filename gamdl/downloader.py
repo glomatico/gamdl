@@ -30,7 +30,10 @@ from .utils import raise_response_exception
 class Downloader:
     ILLEGAL_CHARS_RE = r'[\\/:*?"<>|;]'
     ILLEGAL_CHAR_REPLACEMENT = "_"
-    VALID_URL_RE = r"/([a-z]{2})/(artist|album|playlist|song|music-video|post)/([^/]*)(?:/([^/?]*))?(?:\?i=)?([0-9a-z]*)?"
+    VALID_URL_RE = (
+        r"(/(?P<storefront>[a-z]{2})/(?P<type>artist|album|playlist|song|music-video|post)/(?P<slug>[^/]*)(?:/(?P<id>[^/?]*))?(?:\?i=)?(?P<sub_id>[0-9a-z]*)?)|"
+        r"(/library/(?P<library_type>|playlist|albums)/(?P<library_id>[a-z]\.[0-9a-zA-Z]*))"
+    )
 
     def __init__(
         self,
@@ -126,21 +129,34 @@ class Downloader:
             self.VALID_URL_RE,
             url,
         )
-        url_info.storefront = url_regex_result.group(1)
-        url_info.type = (
-            "song" if url_regex_result.group(5) else url_regex_result.group(2)
-        )
-        url_info.id = (
-            url_regex_result.group(5)
-            or url_regex_result.group(4)
-            or url_regex_result.group(3)
-        )
+        is_library = url_regex_result.group("library_type") is not None
+        if is_library:
+            url_info.type = url_regex_result.group("library_type")
+            url_info.id = url_regex_result.group("library_id")
+        else:
+            url_info.storefront = url_regex_result.group("storefront")
+            url_info.type = (
+                "song"
+                if url_regex_result.group("sub_id")
+                else url_regex_result.group("type")
+            )
+            url_info.id = (
+                url_regex_result.group("sub_id")
+                or url_regex_result.group("id")
+                or url_regex_result.group("sub_id")
+            )
+        url_info.is_library = is_library
         return url_info
 
     def get_download_queue(self, url_info: UrlInfo) -> DownloadQueue:
-        return self._get_download_queue(url_info.type, url_info.id)
+        return self._get_download_queue(url_info.type, url_info.id, url_info.is_library)
 
-    def _get_download_queue(self, url_type: str, id: str) -> DownloadQueue:
+    def _get_download_queue(
+        self,
+        url_type: str,
+        id: str,
+        is_library: bool,
+    ) -> DownloadQueue:
         download_queue = DownloadQueue()
         if url_type == "artist":
             artist = self.apple_music_api.get_artist(id)
@@ -150,19 +166,25 @@ class Downloader:
         elif url_type == "song":
             download_queue.tracks_metadata = [self.apple_music_api.get_song(id)]
         elif url_type == "album":
-            album = self.apple_music_api.get_album(id)
+            if is_library:
+                album = self.apple_music_api.get_library_album(id)
+            else:
+                album = self.apple_music_api.get_album(id)
             download_queue.tracks_metadata = [
                 track for track in album["relationships"]["tracks"]["data"]
             ]
         elif url_type == "playlist":
-            playlist = self.apple_music_api.get_playlist(id)
+            if is_library:
+                playlist = self.apple_music_api.get_library_playlist(id)
+                download_queue.tracks_metadata = [
+                    track for track in playlist["relationships"]["tracks"]["data"]
+                ]
+            else:
+                playlist = self.apple_music_api.get_playlist(id)
+                download_queue.tracks_metadata = [
+                    track for track in playlist["relationships"]["tracks"]["data"]
+                ]
             download_queue.playlist_attributes = playlist["attributes"]
-            download_queue.tracks_metadata = [
-                track
-                for track in self.apple_music_api.get_playlist(id)["relationships"][
-                    "tracks"
-                ]["data"]
-            ]
         elif url_type == "music-video":
             download_queue.tracks_metadata = [self.apple_music_api.get_music_video(id)]
         elif url_type == "post":

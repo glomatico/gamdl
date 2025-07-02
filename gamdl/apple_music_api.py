@@ -147,6 +147,7 @@ class AppleMusicApi:
                 for additional_data in self._extend_api_data(
                     artist["relationships"][_include],
                     limit,
+                    "",
                 ):
                     artist["relationships"][_include]["data"].extend(additional_data)
         return artist
@@ -226,6 +227,7 @@ class AppleMusicApi:
             for additional_data in self._extend_api_data(
                 playlist["relationships"]["tracks"],
                 limit_tracks,
+                extend,
             ):
                 playlist["relationships"]["tracks"]["data"].extend(additional_data)
         return playlist
@@ -282,6 +284,7 @@ class AppleMusicApi:
             for additional_data in self._extend_api_data(
                 playlist["relationships"]["tracks"],
                 limit,
+                extend,
             ):
                 playlist["relationships"]["tracks"]["data"].extend(additional_data)
         return playlist
@@ -290,19 +293,26 @@ class AppleMusicApi:
         self,
         api_response: dict,
         limit: int,
+        extend: str,
     ) -> typing.Generator[list[dict], None, None]:
         next_uri = api_response.get("next")
         while next_uri:
-            playlist_next = self._get_next_uri_response(next_uri, limit)
+            playlist_next = self._get_next_uri_response(next_uri, limit, extend)
             yield playlist_next["data"]
             next_uri = playlist_next.get("next")
             time.sleep(self.WAIT_TIME)
 
-    def _get_next_uri_response(self, next_uri: str, limit: int) -> dict:
+    def _get_next_uri_response(
+        self,
+        next_uri: str,
+        limit: int,
+        extend: str,
+    ) -> dict:
         response = self.session.get(
             self.AMP_API_URL + next_uri,
             params={
                 "limit": limit,
+                "extend": extend,
             },
         )
         self._check_amp_api_response(response)

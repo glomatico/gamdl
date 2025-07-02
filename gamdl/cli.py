@@ -380,6 +380,7 @@ def main(
     cookies_path = prompt_path(True, cookies_path, "Cookies file")
     apple_music_api = AppleMusicApi.from_netscape_cookies(
         cookies_path,
+        language,
     )
     itunes_api = ItunesApi(
         apple_music_api.storefront,

@@ -272,6 +272,13 @@ class Downloader:
         for music_video in selected:
             yield music_video
 
+    def get_media_id(
+        self,
+        media_metadata: dict,
+    ) -> str | None:
+        play_params = media_metadata["attributes"].get("playParams", {})
+        return play_params.get("catalogId") or play_params.get("id")
+
     def get_playlist_tags(
         self,
         playlist_attributes: dict,

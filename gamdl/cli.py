@@ -531,7 +531,10 @@ def main(
                     lyrics = downloader_song.get_lyrics(media_metadata)
                     logger.debug("Getting webplayback")
                     webplayback = apple_music_api.get_webplayback(media_id)
-                    tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
+                    tags = downloader_song.get_tags(
+                        webplayback,
+                        lyrics.unsynced if lyrics else None,
+                    )
                     if playlist_track:
                         tags = {
                             **tags,
@@ -621,7 +624,7 @@ def main(
                                 decrypted_path,
                                 remuxed_path,
                             )
-                    if no_synced_lyrics or not lyrics.synced:
+                    if no_synced_lyrics or not lyrics or not lyrics.synced:
                         pass
                     elif lyrics_synced_path.exists() and not overwrite:
                         logger.debug(

@@ -222,7 +222,7 @@ class DownloaderSong:
             return lyrics
         elif track_metadata.get("relationships") is None:
             track_metadata = self.downloader.apple_music_api.get_song(
-                track_metadata["id"]
+                self.downloader.get_media_id(track_metadata)
             )
         if (
             track_metadata["relationships"].get("lyrics")

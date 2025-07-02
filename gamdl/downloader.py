@@ -160,35 +160,35 @@ class Downloader:
         download_queue = DownloadQueue()
         if url_type == "artist":
             artist = self.apple_music_api.get_artist(id)
-            download_queue.tracks_metadata = list(
+            download_queue.medias_metadata = list(
                 self.get_download_queue_from_artist(artist)
             )
         elif url_type == "song":
-            download_queue.tracks_metadata = [self.apple_music_api.get_song(id)]
+            download_queue.medias_metadata = [self.apple_music_api.get_song(id)]
         elif url_type == "album":
             if is_library:
                 album = self.apple_music_api.get_library_album(id)
             else:
                 album = self.apple_music_api.get_album(id)
-            download_queue.tracks_metadata = [
+            download_queue.medias_metadata = [
                 track for track in album["relationships"]["tracks"]["data"]
             ]
         elif url_type == "playlist":
             if is_library:
                 playlist = self.apple_music_api.get_library_playlist(id)
-                download_queue.tracks_metadata = [
+                download_queue.medias_metadata = [
                     track for track in playlist["relationships"]["tracks"]["data"]
                 ]
             else:
                 playlist = self.apple_music_api.get_playlist(id)
-                download_queue.tracks_metadata = [
+                download_queue.medias_metadata = [
                     track for track in playlist["relationships"]["tracks"]["data"]
                 ]
             download_queue.playlist_attributes = playlist["attributes"]
         elif url_type == "music-video":
-            download_queue.tracks_metadata = [self.apple_music_api.get_music_video(id)]
+            download_queue.medias_metadata = [self.apple_music_api.get_music_video(id)]
         elif url_type == "post":
-            download_queue.tracks_metadata = [self.apple_music_api.get_post(id)]
+            download_queue.medias_metadata = [self.apple_music_api.get_post(id)]
         return download_queue
 
     def get_download_queue_from_artist(

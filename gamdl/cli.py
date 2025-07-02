@@ -134,7 +134,7 @@ def load_config_file(
 )
 @click.option(
     "--log-level",
-    type=str,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
     default="INFO",
     help="Log level.",
 )

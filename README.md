@@ -51,8 +51,8 @@ gamdl [OPTIONS] URLS...
 ### Supported URL types
 
 - Song
-- Album
-- Public/Private Playlists
+- Public/Library Album
+- Public/Library Playlist
 - Music video
 - Artist
 - Post video

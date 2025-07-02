@@ -483,7 +483,7 @@ def main(
             logger.info(f'({url_progress}) Checking "{url}"')
             url_info = downloader.get_url_info(url)
             download_queue = downloader.get_download_queue(url_info)
-            download_queue_tracks_metadata = download_queue.tracks_metadata
+            download_queue_medias_metadata = download_queue.medias_metadata
         except Exception as e:
             error_count += 1
             logger.error(
@@ -491,32 +491,36 @@ def main(
                 exc_info=not no_exceptions,
             )
             continue
-        for download_index, track_metadata in enumerate(
-            download_queue_tracks_metadata, start=1
+        for download_index, media_metadata in enumerate(
+            download_queue_medias_metadata, start=1
         ):
             queue_progress = color_text(
-                f"Track {download_index}/{len(download_queue_tracks_metadata)} from URL {url_index}/{len(urls)}",
+                f"Track {download_index}/{len(download_queue_medias_metadata)} from URL {url_index}/{len(urls)}",
                 colorama.Style.DIM,
             )
             try:
+                media_id = media_metadata["attributes"]["playParams"].get("catalogId")
                 remuxed_path = None
                 if download_queue.playlist_attributes:
                     playlist_track = download_index
                 else:
                     playlist_track = None
                 logger.info(
-                    f'({queue_progress}) Downloading "{track_metadata["attributes"]["name"]}"'
+                    f'({queue_progress}) Downloading "{media_metadata["attributes"]["name"]}"'
                 )
-                if not track_metadata["attributes"].get("playParams"):
+                if (
+                    not media_metadata["attributes"].get("playParams")
+                    or media_id is None
+                ):
                     logger.warning(
-                        f"({queue_progress}) Track is not streamable, skipping"
+                        f"({queue_progress}) Track is not streamable or downloadable, skipping"
                     )
                     continue
                 if (
-                    (synced_lyrics_only and track_metadata["type"] != "songs")
-                    or (track_metadata["type"] == "music-videos" and skip_mv)
+                    (synced_lyrics_only and media_metadata["type"] != "songs")
+                    or (media_metadata["type"] == "music-videos" and skip_mv)
                     or (
-                        track_metadata["type"] == "music-videos"
+                        media_metadata["type"] == "music-videos"
                         and url_info.type == "album"
                         and not disable_music_video_skip
                     )
@@ -525,11 +529,11 @@ def main(
                         f"({queue_progress}) Track is not downloadable with current configuration, skipping"
                     )
                     continue
-                elif track_metadata["type"] == "songs":
+                elif media_metadata["type"] in ("songs", "library-songs"):
                     logger.debug("Getting lyrics")
-                    lyrics = downloader_song.get_lyrics(track_metadata)
+                    lyrics = downloader_song.get_lyrics(media_metadata)
                     logger.debug("Getting webplayback")
-                    webplayback = apple_music_api.get_webplayback(track_metadata["id"])
+                    webplayback = apple_music_api.get_webplayback(media_id)
                     tags = downloader_song.get_tags(webplayback, lyrics.unsynced)
                     if playlist_track:
                         tags = {
@@ -543,7 +547,7 @@ def main(
                     lyrics_synced_path = downloader_song.get_lyrics_synced_path(
                         final_path
                     )
-                    cover_url = downloader.get_cover_url(track_metadata)
+                    cover_url = downloader.get_cover_url(media_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
                     if cover_file_extesion:
                         cover_path = downloader_song.get_cover_path(
@@ -567,11 +571,11 @@ def main(
                             logger.debug("Getting decryption key")
                             decryption_key = downloader_song_legacy.get_decryption_key(
                                 stream_info.audio_track.widevine_pssh,
-                                track_metadata["id"],
+                                media_id,
                             )
                         else:
                             stream_info = downloader_song.get_stream_info(
-                                track_metadata
+                                media_metadata
                             )
                             if (
                                 not stream_info.audio_track.stream_url
@@ -585,16 +589,12 @@ def main(
                             logger.debug("Getting decryption key")
                             decryption_key = downloader.get_decryption_key(
                                 stream_info.audio_track.widevine_pssh,
-                                track_metadata["id"],
+                                media_id,
                             )
-                        encrypted_path = downloader_song.get_encrypted_path(
-                            track_metadata["id"]
-                        )
-                        decrypted_path = downloader_song.get_decrypted_path(
-                            track_metadata["id"]
-                        )
+                        encrypted_path = downloader_song.get_encrypted_path(media_id)
+                        decrypted_path = downloader_song.get_decrypted_path(media_id)
                         remuxed_path = downloader_song.get_remuxed_path(
-                            track_metadata["id"],
+                            media_id,
                             stream_info.file_format,
                         )
                         logger.debug(f'Downloading to "{encrypted_path}"')
@@ -635,15 +635,15 @@ def main(
                         downloader_song.save_lyrics_synced(
                             lyrics_synced_path, lyrics.synced
                         )
-                elif track_metadata["type"] == "music-videos":
+                elif media_metadata["type"] == "music-videos":
                     music_video_id_alt = downloader_music_video.get_music_video_id_alt(
-                        track_metadata
+                        media_metadata
                     )
                     logger.debug("Getting iTunes page")
                     itunes_page = itunes_api.get_itunes_page(
                         "music-video", music_video_id_alt
                     )
-                    if music_video_id_alt == track_metadata["id"]:
+                    if music_video_id_alt == media_id:
                         stream_url = (
                             downloader_music_video.get_stream_url_from_itunes_page(
                                 itunes_page
@@ -651,9 +651,7 @@ def main(
                         )
                     else:
                         logger.debug("Getting webplayback")
-                        webplayback = apple_music_api.get_webplayback(
-                            track_metadata["id"]
-                        )
+                        webplayback = apple_music_api.get_webplayback(media_id)
                         stream_url = (
                             downloader_music_video.get_stream_url_from_webplayback(
                                 webplayback
@@ -663,7 +661,7 @@ def main(
                     tags = downloader_music_video.get_tags(
                         music_video_id_alt,
                         itunes_page,
-                        track_metadata,
+                        media_metadata,
                     )
                     if playlist_track:
                         tags = {
@@ -685,7 +683,7 @@ def main(
                         tags,
                         final_file_extesion,
                     )
-                    cover_url = downloader.get_cover_url(track_metadata)
+                    cover_url = downloader.get_cover_url(media_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
                     if cover_file_extesion:
                         cover_path = downloader_music_video.get_cover_path(
@@ -701,34 +699,26 @@ def main(
                     else:
                         decryption_key_video = downloader.get_decryption_key(
                             stream_info_av.video_track.widevine_pssh,
-                            track_metadata["id"],
+                            media_id,
                         )
                         decryption_key_audio = downloader.get_decryption_key(
                             stream_info_av.audio_track.widevine_pssh,
-                            track_metadata["id"],
+                            media_id,
                         )
                         encrypted_path_video = (
-                            downloader_music_video.get_encrypted_path_video(
-                                track_metadata["id"]
-                            )
+                            downloader_music_video.get_encrypted_path_video(media_id)
                         )
                         encrypted_path_audio = (
-                            downloader_music_video.get_encrypted_path_audio(
-                                track_metadata["id"]
-                            )
+                            downloader_music_video.get_encrypted_path_audio(media_id)
                         )
                         decrypted_path_video = (
-                            downloader_music_video.get_decrypted_path_video(
-                                track_metadata["id"]
-                            )
+                            downloader_music_video.get_decrypted_path_video(media_id)
                         )
                         decrypted_path_audio = (
-                            downloader_music_video.get_decrypted_path_audio(
-                                track_metadata["id"]
-                            )
+                            downloader_music_video.get_decrypted_path_audio(media_id)
                         )
                         remuxed_path = downloader_music_video.get_remuxed_path(
-                            track_metadata["id"],
+                            media_id,
                             final_file_extesion,
                         )
                         logger.debug(f'Downloading video to "{encrypted_path_video}"')
@@ -759,11 +749,11 @@ def main(
                             decrypted_path_audio,
                             remuxed_path,
                         )
-                elif track_metadata["type"] == "uploaded-videos":
-                    stream_url = downloader_post.get_stream_url(track_metadata)
-                    tags = downloader_post.get_tags(track_metadata)
+                elif media_metadata["type"] == "uploaded-videos":
+                    stream_url = downloader_post.get_stream_url(media_metadata)
+                    tags = downloader_post.get_tags(media_metadata)
                     final_path = downloader.get_final_path(tags, ".m4v")
-                    cover_url = downloader.get_cover_url(track_metadata)
+                    cover_url = downloader.get_cover_url(media_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
                     if cover_file_extesion:
                         cover_path = downloader_music_video.get_cover_path(
@@ -777,9 +767,7 @@ def main(
                             f'({queue_progress}) Post video already exists at "{final_path}", skipping'
                         )
                     else:
-                        remuxed_path = downloader_post.get_post_temp_path(
-                            track_metadata["id"]
-                        )
+                        remuxed_path = downloader_post.get_post_temp_path(media_id)
                         logger.debug(f'Downloading to "{remuxed_path}"')
                         downloader.download_ytdlp(remuxed_path, stream_url)
                 if synced_lyrics_only or not save_cover or cover_path is None:
@@ -809,7 +797,7 @@ def main(
             except Exception as e:
                 error_count += 1
                 logger.error(
-                    f'({queue_progress}) Failed to download "{track_metadata["attributes"]["name"]}"',
+                    f'({queue_progress}) Failed to download "{media_metadata["attributes"]["name"]}"',
                     exc_info=not no_exceptions,
                 )
             finally:

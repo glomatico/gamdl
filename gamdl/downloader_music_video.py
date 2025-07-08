@@ -7,7 +7,6 @@ from pathlib import Path
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
-from urllib.parse import urlparse
 
 from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader

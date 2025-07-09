@@ -1,6 +1,6 @@
 # Glomatico’s Apple Music Downloader
 
-Command-line app for downloading Apple Music songs, music videos and post videos.
+A command-line app for downloading Apple Music songs, music videos and post videos.
 
 **Join our Discord Server:** https://discord.gg/aBjMEZ9tnq
 

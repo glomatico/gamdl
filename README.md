@@ -1,6 +1,6 @@
 # Glomatico’s Apple Music Downloader
 
-A Python CLI app for downloading Apple Music songs, music videos and post videos.
+Command-line app for downloading Apple Music songs, music videos and post videos.
 
 **Join our Discord Server:** https://discord.gg/aBjMEZ9tnq
 

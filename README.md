@@ -15,12 +15,24 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 ## Prerequisites
 
 - **Python 3.10 or higher** installed on your system.
-- The **cookies file** of your Apple Music browser session in Netscape format (requires an active subscription).
-  - **Firefox**: Use the [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt) extension.
-  - **Chromium-based Browsers**: Use the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension.
 - **FFmpeg** on your system PATH.
   - **Windows**: Download from [AnimMouse’s FFmpeg Builds](https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases).
   - **Linux**: Download from [John Van Sickle’s FFmpeg Builds](https://johnvansickle.com/ffmpeg/).
+- The **cookies file** of your Apple Music browser session in Netscape format (requires an active subscription).
+  - **Firefox**: Use the [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt) extension.
+  - **Chromium-based Browsers**: Use the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension.
+
+<details>
+	<summary>Cookies file example</summary>
+	<br />
+
+A valid `media-user-token` cookie is required:
+
+```text
+.music.apple.com	TRUE	/	TRUE	1767225600	media-user-token	cookie-value-goes-here
+```
+
+</details>
 
 ### Optional dependencies
 

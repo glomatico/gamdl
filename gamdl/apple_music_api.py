@@ -59,9 +59,8 @@ class AppleMusicApi:
                 "Make sure you have exported the cookies from Apple Music webpage and are logged in "
                 "with an active subscription."
             )
-        storefront = parse_cookie("itua")
         return cls(
-            storefront=storefront,
+            storefront=None,
             media_user_token=media_user_token,
             language=language,
         )
@@ -84,12 +83,6 @@ class AppleMusicApi:
                 "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
             }
         )
-        if self.media_user_token:
-            self.session.cookies.update(
-                {
-                    "media-user-token": self.media_user_token,
-                }
-            )
         home_page = self.session.get(self.APPLE_MUSIC_HOMEPAGE_URL).text
         index_js_uri = re.search(
             r"/(assets/index-legacy-[^/]+\.js)",
@@ -101,8 +94,17 @@ class AppleMusicApi:
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.session.params = {"l": self.language}
-        if not self.storefront:
-            self._fetch_storefront()
+        if self.media_user_token:
+            self.session.cookies.update(
+                {
+                    "media-user-token": self.media_user_token,
+                }
+            )
+            self._set_account_info()
+
+    def _set_account_info(self):
+        self.account_info = self.get_account_info()
+        self.storefront = self.account_info["meta"]["subscription"]["storefront"]
 
     def _check_amp_api_response(self, response: requests.Response):
         try:
@@ -116,15 +118,13 @@ class AppleMusicApi:
         ):
             raise_response_exception(response)
 
-    def _fetch_storefront(self):
-        self.storefront = self.get_user_storefront()["id"]
-
-    def get_user_storefront(
-        self,
-    ) -> dict:
-        response = self.session.get(f"{self.AMP_API_URL}/v1/me/storefront")
+    def get_account_info(self, meta: str = "subscription") -> dict:
+        response = self.session.get(
+            f"{self.AMP_API_URL}/v1/me/account",
+            params={"meta": meta},
+        )
         self._check_amp_api_response(response)
-        return response.json()["data"][0]
+        return response.json()
 
     def get_artist(
         self,

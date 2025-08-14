@@ -382,6 +382,17 @@ def main(
         cookies_path,
         language,
     )
+    if not apple_music_api.account_info["meta"]["subscription"]["active"]:
+        logger.critical(
+            "No active Apple Music subscription found, you won't be able to download"
+            " anything"
+        )
+        return
+    if apple_music_api.account_info["data"][0]["attributes"].get("restrictions"):
+        logger.warning(
+            "Your account has content restrictions enabled, some content may not be"
+            " downloadable"
+        )
     itunes_api = ItunesApi(
         apple_music_api.storefront,
         apple_music_api.language,

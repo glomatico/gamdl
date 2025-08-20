@@ -49,6 +49,7 @@ def convert_param_to_config_string(param: click.Parameter) -> str:
         return str(param.default).lower()
     if isinstance(param.default, None.__class__):
         return "null"
+
     return str(param.default)
 
 
@@ -87,6 +88,7 @@ def update_config_file(
 ) -> None:
     for param in ctx.command.params:
         add_param_to_config(ctx, param, config)
+
     with open(ctx.params["config_path"], "w") as config_file:
         config.write(config_file)
 
@@ -102,6 +104,7 @@ def update_param_from_config(
         == click.core.ParameterSource.COMMANDLINE
     ):
         return
+
     value = config["DEFAULT"].get(param.name)
     if value == "null":
         ctx.params[param.name] = None
@@ -116,10 +119,13 @@ def load_config_file(
 ) -> click.Context:
     if no_config_file:
         return ctx
+
     config = read_config_file(ctx.params["config_path"])
     update_config_file(ctx, config)
+
     for param in ctx.command.params:
         update_param_from_config(ctx, param, config)
+
     return ctx
 
 

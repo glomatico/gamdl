@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import configparser
 import inspect
-import json
 import logging
 from enum import Enum
 from pathlib import Path
@@ -40,23 +40,70 @@ downloader_post_sig = inspect.signature(DownloaderPost.__init__)
 logger = logging.getLogger("gamdl")
 
 
-def get_param_string(param: click.Parameter) -> str:
+def convert_param_to_config_string(param: click.Parameter) -> str:
     if isinstance(param.default, Enum):
         return param.default.value
-    elif isinstance(param.default, Path):
+    if isinstance(param.default, Path):
         return str(param.default)
+    if isinstance(param.default, bool):
+        return str(param.default).lower()
+    if isinstance(param.default, None.__class__):
+        return "null"
+    return str(param.default)
+
+
+def add_param_to_config(
+    ctx: click.Context,
+    param: click.Parameter,
+    config: configparser.ConfigParser,
+) -> None:
+    if (
+        param.name in EXCLUDED_CONFIG_FILE_PARAMS
+        or ctx.get_parameter_source(param.name)
+        == click.core.ParameterSource.COMMANDLINE
+    ):
+        return
+    if config["DEFAULT"].get(param.name) is None:
+        value = convert_param_to_config_string(param)
+        config["DEFAULT"][param.name] = value
+
+
+def read_config_file(config_path: Path) -> configparser.ConfigParser:
+    config = configparser.ConfigParser(interpolation=None)
+    if config_path.exists():
+        config.read(config_path, encoding="utf-8")
     else:
-        return param.default
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config["DEFAULT"] = {}
+    return config
 
 
-def write_default_config_file(ctx: click.Context):
-    ctx.params["config_path"].parent.mkdir(parents=True, exist_ok=True)
-    config_file = {
-        param.name: get_param_string(param)
-        for param in ctx.command.params
-        if param.name not in EXCLUDED_CONFIG_FILE_PARAMS
-    }
-    ctx.params["config_path"].write_text(json.dumps(config_file, indent=4))
+def update_config_file(
+    ctx: click.Context,
+    config: configparser.ConfigParser,
+) -> None:
+    for param in ctx.command.params:
+        add_param_to_config(ctx, param, config)
+    with open(ctx.params["config_path"], "w") as config_file:
+        config.write(config_file)
+
+
+def update_param_from_config(
+    ctx: click.Context,
+    param: click.Parameter,
+    config: configparser.ConfigParser,
+) -> None:
+    if (
+        param.name in EXCLUDED_CONFIG_FILE_PARAMS
+        or ctx.get_parameter_source(param.name)
+        == click.core.ParameterSource.COMMANDLINE
+    ):
+        return
+    value = config["DEFAULT"].get(param.name)
+    if value == "null":
+        ctx.params[param.name] = None
+    else:
+        ctx.params[param.name] = param.type_cast_value(ctx, value)
 
 
 def load_config_file(
@@ -66,16 +113,10 @@ def load_config_file(
 ) -> click.Context:
     if no_config_file:
         return ctx
-    if not ctx.params["config_path"].exists():
-        write_default_config_file(ctx)
-    config_file = dict(json.loads(ctx.params["config_path"].read_text()))
+    config = read_config_file(ctx.params["config_path"])
+    update_config_file(ctx, config)
     for param in ctx.command.params:
-        if (
-            config_file.get(param.name) is not None
-            and not ctx.get_parameter_source(param.name)
-            == click.core.ParameterSource.COMMANDLINE
-        ):
-            ctx.params[param.name] = param.type_cast_value(ctx, config_file[param.name])
+        update_param_from_config(ctx, param, config)
     return ctx
 
 
@@ -129,7 +170,7 @@ def load_config_file(
 @click.option(
     "--config-path",
     type=Path,
-    default=Path.home() / ".gamdl" / "config.json",
+    default=Path.home() / ".gamdl" / "config.ini",
     help="Path to config file.",
 )
 @click.option(

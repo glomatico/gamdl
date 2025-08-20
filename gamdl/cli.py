@@ -323,6 +323,7 @@ def load_config_file(
 @click.option(
     "--exclude-tags",
     type=str,
+    multiple=True,
     default=downloader_sig.parameters["exclude_tags"].default,
     help="Comma-separated tags to exclude.",
 )
@@ -411,7 +412,7 @@ def main(
     template_file_no_album: str,
     template_file_playlist: str,
     template_date: str,
-    exclude_tags: str,
+    exclude_tags: tuple[str],
     cover_size: int,
     truncate: int,
     codec_song: SongCodec,

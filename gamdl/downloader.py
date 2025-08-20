@@ -57,7 +57,7 @@ class Downloader:
         template_file_no_album: str = "{title}",
         template_file_playlist: str = "Playlists/{playlist_artist}/{playlist_title}",
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
-        exclude_tags: str = None,
+        exclude_tags: list[str] = None,
         cover_size: int = 1200,
         truncate: int = None,
         silent: bool = False,
@@ -86,23 +86,19 @@ class Downloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self._set_exclude_tags()
         self._set_binaries_path_full()
-        self._set_exclude_tags_list()
         self._set_truncate()
         self._set_subprocess_additional_args()
+
+    def _set_exclude_tags(self):
+        self.exclude_tags = self.exclude_tags if self.exclude_tags is not None else []
 
     def _set_binaries_path_full(self):
         self.nm3u8dlre_path_full = shutil.which(self.nm3u8dlre_path)
         self.ffmpeg_path_full = shutil.which(self.ffmpeg_path)
         self.mp4box_path_full = shutil.which(self.mp4box_path)
         self.mp4decrypt_path_full = shutil.which(self.mp4decrypt_path)
-
-    def _set_exclude_tags_list(self):
-        self.exclude_tags_list = (
-            [i.lower() for i in self.exclude_tags.split(",")]
-            if self.exclude_tags is not None
-            else []
-        )
 
     def _set_truncate(self):
         if self.truncate is not None:
@@ -509,9 +505,7 @@ class Downloader:
         cover_url: str,
     ):
         to_apply_tags = [
-            tag_name
-            for tag_name in tags.keys()
-            if tag_name not in self.exclude_tags_list
+            tag_name for tag_name in tags.keys() if tag_name not in self.exclude_tags
         ]
         mp4_tags = {}
         for tag_name in to_apply_tags:
@@ -538,10 +532,7 @@ class Downloader:
                 and tags.get(tag_name) is not None
             ):
                 mp4_tags[MP4_TAGS_MAP[tag_name]] = [tags[tag_name]]
-        if (
-            "cover" not in self.exclude_tags_list
-            and self.cover_format != CoverFormat.RAW
-        ):
+        if "cover" not in self.exclude_tags and self.cover_format != CoverFormat.RAW:
             cover_bytes = self.get_cover_url_response_bytes(cover_url)
             if cover_bytes is not None:
                 mp4_tags["covr"] = [

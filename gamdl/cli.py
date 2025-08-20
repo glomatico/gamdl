@@ -63,6 +63,7 @@ def add_param_to_config(
         == click.core.ParameterSource.COMMANDLINE
     ):
         return
+
     if config["DEFAULT"].get(param.name) is None:
         value = convert_param_to_config_string(param)
         config["DEFAULT"][param.name] = value
@@ -70,11 +71,13 @@ def add_param_to_config(
 
 def read_config_file(config_path: Path) -> configparser.ConfigParser:
     config = configparser.ConfigParser(interpolation=None)
+
     if config_path.exists():
         config.read(config_path, encoding="utf-8")
     else:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config["DEFAULT"] = {}
+
     return config
 
 

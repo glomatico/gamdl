@@ -293,17 +293,19 @@ class Downloader:
 
     def get_playlist_file_path(
         self,
-        tags: dict,
-    ):
+        tags: PlaylistTags,
+    ) -> Path:
         template_file = self.template_file_playlist.split("/")
+        tags_dict = tags.__dict__.copy()
+
         return Path(
             self.output_path,
             *[
-                self.get_sanitized_string(i.format(**tags), True)
+                self.get_sanitized_string(i.format(**tags_dict), True)
                 for i in template_file[0:-1]
             ],
             *[
-                self.get_sanitized_string(template_file[-1].format(**tags), False)
+                self.get_sanitized_string(template_file[-1].format(**tags_dict), False)
                 + ".m3u8"
             ],
         )

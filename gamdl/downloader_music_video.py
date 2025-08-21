@@ -11,7 +11,7 @@ from InquirerPy.base.control import Choice
 from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
 from .enums import MediaFileFormat, MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
-from .models import StreamInfo, StreamInfoAv
+from .models import MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
 
 
 class DownloaderMusicVideo:
@@ -191,38 +191,44 @@ class DownloaderMusicVideo:
         id_alt: str,
         itunes_page: dict,
         metadata: dict,
-    ):
+    ) -> MediaTags:
         metadata_itunes = self.downloader.itunes_api.get_resource(id_alt)
-        tags = {
-            "artist": metadata_itunes[0]["artistName"],
-            "artist_id": int(metadata_itunes[0]["artistId"]),
-            "copyright": itunes_page.get("copyright"),
-            "date": self.downloader.sanitize_date(metadata_itunes[0]["releaseDate"]),
-            "genre": metadata_itunes[0]["primaryGenreName"],
-            "genre_id": int(itunes_page["genres"][0]["genreId"]),
-            "media_type": 6,
-            "storefront": int(self.downloader.itunes_api.storefront_id.split("-")[0]),
-            "title": metadata_itunes[0]["trackCensoredName"],
-            "title_id": int(self.downloader.get_media_id(metadata)),
-        }
-        if metadata_itunes[0]["trackExplicitness"] == "notExplicit":
-            tags["rating"] = 0
-        elif metadata_itunes[0]["trackExplicitness"] == "explicit":
-            tags["rating"] = 1
+
+        explicitness = metadata_itunes[0]["trackExplicitness"]
+        if explicitness == "notExplicit":
+            rating = MediaRating.NONE
+        elif explicitness == "explicit":
+            rating = MediaRating.EXPLICIT
         else:
-            tags["rating"] = 2
+            rating = MediaRating.CLEAN
+
+        tags = MediaTags(
+            artist=metadata_itunes[0]["artistName"],
+            artist_id=int(metadata_itunes[0]["artistId"]),
+            copyright=itunes_page.get("copyright"),
+            date=self.downloader.parse_date(metadata_itunes[0]["releaseDate"]),
+            genre=metadata_itunes[0]["primaryGenreName"],
+            genre_id=int(itunes_page["genres"][0]["genreId"]),
+            media_type=MediaType.MUSIC_VIDEO,
+            storefront=int(self.downloader.itunes_api.storefront_id.split("-")[0]),
+            title=metadata_itunes[0]["trackCensoredName"],
+            title_id=int(self.downloader.get_media_id(metadata)),
+            rating=rating,
+        )
+
         if len(metadata_itunes) > 1:
             album = self.downloader.apple_music_api.get_album(
                 itunes_page["collectionId"]
             )
-            tags["album"] = metadata_itunes[1]["collectionCensoredName"]
-            tags["album_artist"] = metadata_itunes[1]["artistName"]
-            tags["album_id"] = int(itunes_page["collectionId"])
-            tags["disc"] = metadata_itunes[0]["discNumber"]
-            tags["disc_total"] = metadata_itunes[0]["discCount"]
-            tags["compilation"] = album["attributes"]["isCompilation"]
-            tags["track"] = metadata_itunes[0]["trackNumber"]
-            tags["track_total"] = metadata_itunes[0]["trackCount"]
+            tags.album = metadata_itunes[1]["collectionCensoredName"]
+            tags.album_artist = metadata_itunes[1]["artistName"]
+            tags.album_id = int(itunes_page["collectionId"])
+            tags.disc = metadata_itunes[0]["discNumber"]
+            tags.disc_total = metadata_itunes[0]["discCount"]
+            tags.compilation = album["attributes"]["isCompilation"]
+            tags.track = metadata_itunes[0]["trackNumber"]
+            tags.track_total = metadata_itunes[0]["trackCount"]
+
         return tags
 
     def get_encrypted_path_video(self, track_id: str) -> str:

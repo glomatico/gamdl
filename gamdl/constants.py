@@ -158,11 +158,6 @@ STOREFRONT_IDS = {
     "ZW": "143605-2,32",
 }
 
-MUSIC_VIDEO_CODEC_MAP = {
-    MusicVideoCodec.H264: "avc1",
-    MusicVideoCodec.H265: "hvc1",
-}
-
 IMAGE_FILE_EXTENSION_MAP = {
     "jpeg": ".jpg",
     "tiff": ".tif",

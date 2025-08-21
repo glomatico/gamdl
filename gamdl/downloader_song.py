@@ -13,7 +13,6 @@ import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from .constants import SONG_CODEC_REGEX_MAP
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
 from .models import Lyrics, MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
@@ -22,6 +21,17 @@ from .models import Lyrics, MediaRating, MediaTags, MediaType, StreamInfo, Strea
 class DownloaderSong:
     DEFAULT_DECRYPTION_KEY = "32b8ade1769e26b1ffb8986352793fc6"
     MP4_FORMAT_CODECS = ["ec-3"]
+    SONG_CODEC_REGEX_MAP = {
+        SongCodec.AAC: r"audio-stereo-\d+",
+        SongCodec.AAC_HE: r"audio-HE-stereo-\d+",
+        SongCodec.AAC_BINAURAL: r"audio-stereo-\d+-binaural",
+        SongCodec.AAC_DOWNMIX: r"audio-stereo-\d+-downmix",
+        SongCodec.AAC_HE_BINAURAL: r"audio-HE-stereo-\d+-binaural",
+        SongCodec.AAC_HE_DOWNMIX: r"audio-HE-stereo-\d+-downmix",
+        SongCodec.ATMOS: r"audio-atmos-.*",
+        SongCodec.AC3: r"audio-ac3-.*",
+        SongCodec.ALAC: r"audio-alac-.*",
+    }
 
     def __init__(
         self,
@@ -62,7 +72,7 @@ class DownloaderSong:
             playlist
             for playlist in m3u8_data["playlists"]
             if re.fullmatch(
-                SONG_CODEC_REGEX_MAP[self.codec], playlist["stream_info"]["audio"]
+                self.SONG_CODEC_REGEX_MAP[self.codec], playlist["stream_info"]["audio"]
             )
         ]
         if not m3u8_master_playlists:

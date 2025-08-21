@@ -64,7 +64,7 @@ class DownloaderSongLegacy(DownloaderSong):
             )
         finally:
             self.downloader.cdm.close(cdm_session)
-        DecryptionKeyAv(
+        return DecryptionKeyAv(
             audio_track=DecryptionKey(
                 kid=decryption_key.kid.hex,
                 key=decryption_key.key.hex(),

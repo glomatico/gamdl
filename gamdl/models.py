@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import typing
 from dataclasses import dataclass
+from pathlib import Path
 
 from .enums import MediaFileFormat, MediaRating, MediaType
 
@@ -131,3 +132,11 @@ class MediaTags:
             "xid ": [self.xid],
         }
         return {k: v for k, v in mp4_tags.items() if v[0] is not None}
+
+
+@dataclass
+class PlaylistTags:
+    playlist_artist: str = None
+    playlist_id: int = None
+    playlist_title: str = None
+    playlist_track: int = None

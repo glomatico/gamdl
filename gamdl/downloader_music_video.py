@@ -8,7 +8,6 @@ import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from .constants import MUSIC_VIDEO_CODEC_MAP
 from .downloader import Downloader
 from .enums import MediaFileFormat, MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
 from .models import MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
@@ -49,17 +48,13 @@ class DownloaderMusicVideo:
         playlists_filtered = [
             playlist
             for playlist in playlists
-            if playlist["stream_info"]["codecs"].startswith(
-                MUSIC_VIDEO_CODEC_MAP[self.codec]
-            )
+            if playlist["stream_info"]["codecs"].startswith(self.codec.fourcc())
         ]
         if not playlists_filtered:
             playlists_filtered = [
                 playlist
                 for playlist in playlists
-                if playlist["stream_info"]["codecs"].startswith(
-                    MUSIC_VIDEO_CODEC_MAP[MusicVideoCodec.H264]
-                )
+                if playlist["stream_info"]["codecs"].startswith(self.codec.fourcc())
             ]
         playlists_filtered.sort(key=lambda x: x["stream_info"]["bandwidth"])
         return playlists_filtered[-1]

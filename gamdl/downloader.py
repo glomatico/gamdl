@@ -19,7 +19,7 @@ from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
-from .models import MediaTags
+from .models import MediaTags, PlaylistTags
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
@@ -283,14 +283,13 @@ class Downloader:
         self,
         playlist_attributes: dict,
         playlist_track: int,
-    ) -> dict:
-        tags = {
-            "playlist_artist": playlist_attributes.get("curatorName", "Apple Music"),
-            "playlist_id": playlist_attributes["playParams"]["id"],
-            "playlist_title": playlist_attributes["name"],
-            "playlist_track": playlist_track,
-        }
-        return tags
+    ) -> PlaylistTags:
+        return PlaylistTags(
+            playlist_artist=playlist_attributes.get("curatorName", "Unknown"),
+            playlist_id=playlist_attributes["playParams"]["id"],
+            playlist_title=playlist_attributes["name"],
+            playlist_track=playlist_track,
+        )
 
     def get_playlist_file_path(
         self,
@@ -427,7 +426,12 @@ class Downloader:
     ) -> str:
         return "." + file_format.value
 
-    def get_final_path(self, tags: MediaTags, file_extension: str) -> Path:
+    def get_final_path(
+        self,
+        tags: MediaTags,
+        file_extension: str,
+        playlist_tags: PlaylistTags,
+    ) -> Path:
         if tags.album is not None:
             template_folder = (
                 self.template_folder_compilation.split("/")
@@ -442,17 +446,21 @@ class Downloader:
         else:
             template_folder = self.template_folder_no_album.split("/")
             template_file = self.template_file_no_album.split("/")
+
         template_final = template_folder + template_file
+
+        tags_dict = tags.__dict__.copy()
+        if playlist_tags:
+            tags_dict.update(playlist_tags.__dict__)
+
         return Path(
             self.output_path,
             *[
-                self.get_sanitized_string(i.format(**tags.__dict__), True)
+                self.get_sanitized_string(i.format(**tags_dict), True)
                 for i in template_final[0:-1]
             ],
             (
-                self.get_sanitized_string(
-                    template_final[-1].format(**tags.__dict__), False
-                )
+                self.get_sanitized_string(template_final[-1].format(**tags_dict), False)
                 + file_extension
             ),
         )

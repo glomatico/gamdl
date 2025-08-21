@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import configparser
 import inspect
 import logging
-from enum import Enum
 from pathlib import Path
 
 import click
@@ -11,6 +9,7 @@ import colorama
 
 from . import __version__
 from .apple_music_api import AppleMusicApi
+from .config_file import ConfigFile
 from .constants import *
 from .custom_logger_formatter import CustomLoggerFormatter
 from .downloader import Downloader
@@ -40,78 +39,6 @@ downloader_post_sig = inspect.signature(DownloaderPost.__init__)
 logger = logging.getLogger("gamdl")
 
 
-def convert_param_to_config_string(param: click.Parameter) -> str:
-    if isinstance(param.default, Enum):
-        return param.default.value
-    if isinstance(param.default, Path):
-        return str(param.default)
-    if isinstance(param.default, bool):
-        return str(param.default).lower()
-    if isinstance(param.default, None.__class__):
-        return "null"
-
-    return str(param.default)
-
-
-def add_param_to_config(
-    ctx: click.Context,
-    param: click.Parameter,
-    config: configparser.ConfigParser,
-) -> None:
-    if (
-        param.name in EXCLUDED_CONFIG_FILE_PARAMS
-        or ctx.get_parameter_source(param.name)
-        == click.core.ParameterSource.COMMANDLINE
-    ):
-        return
-
-    if config["DEFAULT"].get(param.name) is None:
-        value = convert_param_to_config_string(param)
-        config["DEFAULT"][param.name] = value
-
-
-def read_config_file(config_path: Path) -> configparser.ConfigParser:
-    config = configparser.ConfigParser(interpolation=None)
-
-    if config_path.exists():
-        config.read(config_path, encoding="utf-8")
-    else:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config["DEFAULT"] = {}
-
-    return config
-
-
-def update_config_file(
-    ctx: click.Context,
-    config: configparser.ConfigParser,
-) -> None:
-    for param in ctx.command.params:
-        add_param_to_config(ctx, param, config)
-
-    with open(ctx.params["config_path"], "w") as config_file:
-        config.write(config_file)
-
-
-def update_param_from_config(
-    ctx: click.Context,
-    param: click.Parameter,
-    config: configparser.ConfigParser,
-) -> None:
-    if (
-        param.name in EXCLUDED_CONFIG_FILE_PARAMS
-        or ctx.get_parameter_source(param.name)
-        == click.core.ParameterSource.COMMANDLINE
-    ):
-        return
-
-    value = config["DEFAULT"].get(param.name)
-    if value == "null":
-        ctx.params[param.name] = None
-    else:
-        ctx.params[param.name] = param.type_cast_value(ctx, value)
-
-
 def load_config_file(
     ctx: click.Context,
     param: click.Parameter,
@@ -120,11 +47,25 @@ def load_config_file(
     if no_config_file:
         return ctx
 
-    config = read_config_file(ctx.params["config_path"])
-    update_config_file(ctx, config)
+    filtered_params = (
+        param
+        for param in ctx.command.params
+        if param.name not in EXCLUDED_CONFIG_FILE_PARAMS
+    )
 
-    for param in ctx.command.params:
-        update_param_from_config(ctx, param, config)
+    config_file = ConfigFile(ctx.params["config_path"])
+    config_file.add_params_default_to_config(
+        filtered_params,
+    )
+    parsed_params = config_file.parse_params_from_config(
+        (
+            param
+            for param in filtered_params
+            if ctx.get_parameter_source(param.name)
+            != click.core.ParameterSource.COMMANDLINE
+        )
+    )
+    ctx.params.update(parsed_params)
 
     return ctx
 

@@ -47,23 +47,23 @@ def load_config_file(
     if no_config_file:
         return ctx
 
-    filtered_params = (
+    filtered_params = [
         param
         for param in ctx.command.params
         if param.name not in EXCLUDED_CONFIG_FILE_PARAMS
-    )
+    ]
 
     config_file = ConfigFile(ctx.params["config_path"])
     config_file.add_params_default_to_config(
         filtered_params,
     )
     parsed_params = config_file.parse_params_from_config(
-        (
+        [
             param
             for param in filtered_params
             if ctx.get_parameter_source(param.name)
             != click.core.ParameterSource.COMMANDLINE
-        )
+        ]
     )
     ctx.params.update(parsed_params)
 

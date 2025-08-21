@@ -589,9 +589,8 @@ def main(
                             stream_info = downloader_song_legacy.get_stream_info(
                                 webplayback
                             )
-                            logger.debug("Getting decryption key")
                             decryption_key = downloader_song_legacy.get_decryption_key(
-                                stream_info.audio_track.widevine_pssh,
+                                stream_info,
                                 media_id,
                             )
                         else:
@@ -608,8 +607,8 @@ def main(
                                 )
                                 continue
                             logger.debug("Getting decryption key")
-                            decryption_key = downloader.get_decryption_key(
-                                stream_info.audio_track.widevine_pssh,
+                            decryption_key = downloader_song.get_decryption_key(
+                                stream_info,
                                 media_id,
                             )
                         encrypted_path = downloader_song.get_encrypted_path(media_id)
@@ -631,14 +630,14 @@ def main(
                                 encrypted_path,
                                 decrypted_path,
                                 remuxed_path,
-                                decryption_key,
+                                decryption_key.audio_track.key,
                             )
                         else:
                             logger.debug(f'Decrypting to "{decrypted_path}"')
                             downloader_song.decrypt(
                                 encrypted_path,
                                 decrypted_path,
-                                decryption_key,
+                                decryption_key.audio_track.key,
                             )
                             logger.debug(f'Remuxing to "{final_path}"')
                             downloader_song.remux(

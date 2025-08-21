@@ -6,6 +6,7 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
+from .models import MediaTags
 from .enums import PostQuality
 
 
@@ -60,15 +61,15 @@ class DownloaderPost:
             stream_url = self.get_stream_url_from_user(metadata)
         return stream_url
 
-    def get_tags(self, metadata: dict) -> list:
+    def get_tags(self, metadata: dict) -> MediaTags:
         attributes = metadata["attributes"]
-        return {
-            "artist": attributes["artistName"],
-            "date": self.downloader.sanitize_date(attributes["uploadDate"]),
-            "title": attributes["name"],
-            "title_id": int(metadata["id"]),
-            "storefront": int(self.downloader.itunes_api.storefront_id.split("-")[0]),
-        }
+        return MediaTags(
+            artist=attributes.get("artistName"),
+            date=self.downloader.parse_date(attributes.get("uploadDate")),
+            title=attributes.get("name"),
+            title_id=int(metadata["id"]),
+            storefront=int(self.downloader.itunes_api.storefront_id.split("-")[0]),
+        )
 
     def get_post_temp_path(self, track_id: str) -> Path:
         return self.downloader.temp_path / f"{track_id}_temp.m4v"

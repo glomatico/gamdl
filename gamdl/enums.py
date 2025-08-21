@@ -61,17 +61,17 @@ class CoverFormat(Enum):
 
 
 class MediaType(Enum):
-    SONG = "Song"
-    MUSIC_VIDEO = "Music Video"
+    SONG = 1
+    MUSIC_VIDEO = 6
 
     def __str__(self) -> str:
-        return self.value
+        return {
+            MediaType.SONG: "Song",
+            MediaType.MUSIC_VIDEO: "Music Video",
+        }[self]
 
     def __int__(self) -> int:
-        return {
-            MediaType.SONG: 1,
-            MediaType.MUSIC_VIDEO: 6,
-        }[self]
+        return self.value
 
 
 class MediaRating(Enum):

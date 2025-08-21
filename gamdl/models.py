@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import datetime
 import typing
 from dataclasses import dataclass
 
-from .enums import MediaFileFormat, MediaType, MediaRating
+from .enums import MediaFileFormat, MediaRating, MediaType
 
 
 @dataclass
@@ -57,7 +58,7 @@ class MediaTags:
     composer_id: int = None
     composer_sort: str = None
     copyright: str = None
-    date: str = None
+    date: datetime.date | str = None
     disc: int = None
     disc_total: int = None
     gapless: bool = None
@@ -74,7 +75,7 @@ class MediaTags:
     track_total: int = None
     xid: str = None
 
-    def to_mp4_tags(self) -> dict[str, typing.Any]:
+    def to_mp4_tags(self, date_format: str = None) -> dict[str, typing.Any]:
         disc_mp4 = [
             [
                 self.disc if self.disc is not None else 0,
@@ -93,6 +94,14 @@ class MediaTags:
         if track_mp4[0][0] == 0 and track_mp4[0][1] == 0:
             track_mp4 = [None]
 
+        if isinstance(self.date, datetime.date):
+            if date_format is None:
+                date_mp4 = self.date.isoformat()
+            else:
+                date_mp4 = self.date.strftime(date_format)
+        elif isinstance(self.date, str):
+            date_mp4 = self.date
+
         mp4_tags = {
             "\xa9alb": [self.album],
             "aART": [self.album_artist],
@@ -107,7 +116,7 @@ class MediaTags:
             "cmID": [self.composer_id],
             "soco": [self.composer_sort],
             "cprt": [self.copyright],
-            "\xa9day": [self.date],
+            "\xa9day": date_mp4,
             "disk": disc_mp4,
             "pgap": [bool(self.gapless) if self.gapless is not None else None],
             "\xa9gen": [self.genre],

@@ -16,7 +16,7 @@ from InquirerPy.base.control import Choice
 from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
-from .models import Lyrics, StreamInfo, StreamInfoAv
+from .models import Lyrics, MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
 
 
 class DownloaderSong:
@@ -261,45 +261,47 @@ class DownloaderSong:
         lyrics.unsynced = lyrics.unsynced[:-2]
         return lyrics
 
-    def get_tags(self, webplayback: dict, lyrics_unsynced: str) -> dict:
-        tags_raw = webplayback["assets"][0]["metadata"]
-        tags = {
-            "album": tags_raw["playlistName"],
-            "album_artist": tags_raw["playlistArtistName"],
-            "album_id": int(tags_raw["playlistId"]),
-            "album_sort": tags_raw["sort-album"],
-            "artist": tags_raw["artistName"],
-            "artist_id": int(tags_raw["artistId"]),
-            "artist_sort": tags_raw["sort-artist"],
-            "comments": tags_raw.get("comments"),
-            "compilation": tags_raw["compilation"],
-            "composer": tags_raw.get("composerName"),
-            "composer_id": (
-                int(tags_raw.get("composerId")) if tags_raw.get("composerId") else None
-            ),
-            "composer_sort": tags_raw.get("sort-composer"),
-            "copyright": tags_raw.get("copyright"),
-            "date": (
-                self.downloader.sanitize_date(tags_raw["releaseDate"])
-                if tags_raw.get("releaseDate")
+    def get_tags(self, webplayback: dict, lyrics_unsynced: str) -> MediaTags:
+        webplayback_metadata = webplayback["assets"][0]["metadata"]
+        tags = MediaTags(
+            album=webplayback_metadata["playlistName"],
+            album_artist=webplayback_metadata["playlistArtistName"],
+            album_id=int(webplayback_metadata["playlistId"]),
+            album_sort=webplayback_metadata["sort-album"],
+            artist=webplayback_metadata["artistName"],
+            artist_id=int(webplayback_metadata["artistId"]),
+            artist_sort=webplayback_metadata["sort-artist"],
+            comment=webplayback_metadata.get("comments"),
+            compilation=webplayback_metadata["compilation"],
+            composer=webplayback_metadata.get("composerName"),
+            composer_id=(
+                int(webplayback_metadata.get("composerId"))
+                if webplayback_metadata.get("composerId")
                 else None
             ),
-            "disc": tags_raw["discNumber"],
-            "disc_total": tags_raw["discCount"],
-            "gapless": tags_raw["gapless"],
-            "genre": tags_raw.get("genre"),
-            "genre_id": tags_raw["genreId"],
-            "lyrics": lyrics_unsynced if lyrics_unsynced else None,
-            "media_type": 1,
-            "rating": tags_raw["explicit"],
-            "storefront": tags_raw["s"],
-            "title": tags_raw["itemName"],
-            "title_id": int(tags_raw["itemId"]),
-            "title_sort": tags_raw["sort-name"],
-            "track": tags_raw["trackNumber"],
-            "track_total": tags_raw["trackCount"],
-            "xid": tags_raw.get("xid"),
-        }
+            composer_sort=webplayback_metadata.get("sort-composer"),
+            copyright=webplayback_metadata.get("copyright"),
+            date=(
+                self.downloader.sanitize_date(webplayback_metadata["releaseDate"])
+                if webplayback_metadata.get("releaseDate")
+                else None
+            ),
+            disc=webplayback_metadata["discNumber"],
+            disc_total=webplayback_metadata["discCount"],
+            gapless=webplayback_metadata["gapless"],
+            genre=webplayback_metadata.get("genre"),
+            genre_id=int(webplayback_metadata["genreId"]),
+            lyrics=lyrics_unsynced if lyrics_unsynced else None,
+            media_type=MediaType.SONG,
+            rating=MediaRating(webplayback_metadata["explicit"]),
+            storefront=webplayback_metadata["s"],
+            title=webplayback_metadata["itemName"],
+            title_id=int(webplayback_metadata["itemId"]),
+            title_sort=webplayback_metadata["sort-name"],
+            track=webplayback_metadata["trackNumber"],
+            track_total=webplayback_metadata["trackCount"],
+            xid=webplayback_metadata.get("xid"),
+        )
         return tags
 
     def get_encrypted_path(self, track_id: str) -> Path:

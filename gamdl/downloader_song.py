@@ -15,7 +15,15 @@ from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
-from .models import Lyrics, MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
+from .models import (
+    DecryptionKeyAv,
+    Lyrics,
+    MediaRating,
+    MediaTags,
+    MediaType,
+    StreamInfo,
+    StreamInfoAv,
+)
 
 
 class DownloaderSong:
@@ -177,6 +185,19 @@ class DownloaderSong:
         return StreamInfoAv(
             audio_track=stream_info,
             file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
+        )
+
+    def get_decryption_key(
+        self,
+        stream_info: StreamInfoAv,
+        media_id: str,
+    ) -> DecryptionKeyAv:
+        decryption_key = self.downloader.get_decryption_key(
+            stream_info.audio_track.widevine_pssh,
+            media_id,
+        )
+        return DecryptionKeyAv(
+            audio_track=decryption_key,
         )
 
     @staticmethod

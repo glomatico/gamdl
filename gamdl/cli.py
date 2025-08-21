@@ -528,9 +528,12 @@ def main(
                 media_id = downloader.get_media_id(media_metadata)
                 remuxed_path = None
                 if download_queue.playlist_attributes:
-                    playlist_track = download_index
+                    playlist_tags = downloader.get_playlist_tags(
+                        download_queue.playlist_attributes,
+                        download_index,
+                    )
                 else:
-                    playlist_track = None
+                    playlist_tags = None
                 logger.info(
                     f'({queue_progress}) Downloading "{media_metadata["attributes"]["name"]}"'
                 )
@@ -561,15 +564,7 @@ def main(
                         webplayback,
                         lyrics.unsynced if lyrics else None,
                     )
-                    if playlist_track:
-                        tags = {
-                            **tags,
-                            **downloader.get_playlist_tags(
-                                download_queue.playlist_attributes,
-                                playlist_track,
-                            ),
-                        }
-                    final_path = downloader.get_final_path(tags, ".m4a")
+                    final_path = downloader.get_final_path(tags, ".m4a", playlist_tags)
                     lyrics_synced_path = downloader_song.get_lyrics_synced_path(
                         final_path
                     )
@@ -690,14 +685,6 @@ def main(
                         itunes_page,
                         media_metadata,
                     )
-                    if playlist_track:
-                        tags = {
-                            **tags,
-                            **downloader.get_playlist_tags(
-                                download_queue.playlist_attributes,
-                                playlist_track,
-                            ),
-                        }
                     logger.debug("Getting M3U8 data")
                     m3u8_data = downloader_music_video.get_m3u8_master_data(stream_url)
                     stream_info_av = downloader_music_video.get_stream_info(
@@ -709,6 +696,7 @@ def main(
                     final_path = downloader.get_final_path(
                         tags,
                         final_file_extesion,
+                        playlist_tags,
                     )
                     cover_url = downloader.get_cover_url(media_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
@@ -779,7 +767,7 @@ def main(
                 elif media_metadata["type"] == "uploaded-videos":
                     stream_url = downloader_post.get_stream_url(media_metadata)
                     tags = downloader_post.get_tags(media_metadata)
-                    final_path = downloader.get_final_path(tags, ".m4v")
+                    final_path = downloader.get_final_path(tags, ".m4v", playlist_tags)
                     cover_url = downloader.get_cover_url(media_metadata)
                     cover_file_extesion = downloader.get_cover_file_extension(cover_url)
                     if cover_file_extesion:
@@ -809,17 +797,13 @@ def main(
                     downloader.apply_tags(remuxed_path, tags, cover_url)
                     logger.debug(f'Moving to "{final_path}"')
                     downloader.move_to_output_path(remuxed_path, final_path)
-                if (
-                    not synced_lyrics_only
-                    and save_playlist
-                    and download_queue.playlist_attributes
-                ):
+                if not synced_lyrics_only and save_playlist and playlist_tags:
                     playlist_file_path = downloader.get_playlist_file_path(tags)
                     logger.debug(f'Updating M3U8 playlist from "{playlist_file_path}"')
                     downloader.update_playlist_file(
                         playlist_file_path,
                         final_path,
-                        playlist_track,
+                        playlist_tags.playlist_track,
                     )
             except Exception as e:
                 error_count += 1

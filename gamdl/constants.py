@@ -158,11 +158,6 @@ STOREFRONT_IDS = {
     "ZW": "143605-2,32",
 }
 
-IMAGE_FILE_EXTENSION_MAP = {
-    "jpeg": ".jpg",
-    "tiff": ".tif",
-}
-
 
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",

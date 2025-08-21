@@ -20,7 +20,6 @@ from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
 from .models import MediaTags
-from .constants import IMAGE_FILE_EXTENSION_MAP
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
@@ -35,6 +34,10 @@ class Downloader:
         r"(/(?P<storefront>[a-z]{2})/(?P<type>artist|album|playlist|song|music-video|post)/(?P<slug>[^/]*)(?:/(?P<id>[^/?]*))?(?:\?i=)?(?P<sub_id>[0-9a-z]*)?)|"
         r"(/library/(?P<library_type>|playlist|albums)/(?P<library_id>[a-z]\.[0-9a-zA-Z]*))"
     )
+    IMAGE_FILE_EXTENSION_MAP = {
+        "jpeg": ".jpg",
+        "tiff": ".tif",
+    }
 
     def __init__(
         self,
@@ -460,7 +463,7 @@ class Downloader:
             return None
         image_obj = Image.open(io.BytesIO(self.get_cover_bytes(cover_url)))
         image_format = image_obj.format.lower()
-        return IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
+        return self.IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
 
     def get_cover_url(self, metadata: dict) -> str:
         if self.cover_format == CoverFormat.RAW:

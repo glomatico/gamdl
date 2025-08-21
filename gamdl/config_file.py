@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import configparser
 from enum import Enum
 from pathlib import Path

@@ -10,7 +10,14 @@ from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
 from .enums import MediaFileFormat, MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
-from .models import MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
+from .models import (
+    DecryptionKeyAv,
+    MediaRating,
+    MediaTags,
+    MediaType,
+    StreamInfo,
+    StreamInfoAv,
+)
 
 
 class DownloaderMusicVideo:
@@ -173,6 +180,25 @@ class DownloaderMusicVideo:
             video_track=stream_info_video,
             audio_track=stream_info_audio,
             file_format=file_format,
+        )
+
+    def get_decryption_key(
+        self,
+        stream_info: StreamInfoAv,
+        media_id: str,
+    ) -> DecryptionKeyAv:
+        decryption_key_video = self.downloader.get_decryption_key(
+            stream_info.video_track.widevine_pssh,
+            media_id,
+        )
+        decryption_key_audio = self.downloader.get_decryption_key(
+            stream_info.audio_track.widevine_pssh,
+            media_id,
+        )
+
+        return DecryptionKeyAv(
+            video_track=decryption_key_video,
+            audio_track=decryption_key_audio,
         )
 
     def get_music_video_id_alt(self, metadata: dict) -> str | None:

@@ -58,3 +58,33 @@ class CoverFormat(Enum):
     JPG = "jpg"
     PNG = "png"
     RAW = "raw"
+
+
+class MediaType(Enum):
+    SONG = "Song"
+    MUSIC_VIDEO = "Music Video"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __int__(self) -> int:
+        return {
+            MediaType.SONG: 1,
+            MediaType.MUSIC_VIDEO: 6,
+        }[self]
+
+
+class MediaRating(Enum):
+    CLEAN = "Clean"
+    EXPLICIT = "Explicit"
+    NONE = "None"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __int__(self) -> int:
+        return {
+            MediaRating.NONE: 0,
+            MediaRating.EXPLICIT: 1,
+            MediaRating.CLEAN: 2,
+        }[self]

@@ -23,7 +23,7 @@ from .models import MediaTags, PlaylistTags
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
-from .models import DownloadQueue, UrlInfo
+from .models import DownloadQueue, UrlInfo, DecryptionKey
 from .utils import raise_response_exception
 
 
@@ -344,10 +344,12 @@ class Downloader:
     def parse_date(self, date: str) -> datetime.datetime:
         return datetime.datetime.fromisoformat(date[:-1])
 
-    def get_decryption_key(self, pssh: str, track_id: str) -> str:
+    def get_decryption_key(self, pssh: str, track_id: str) -> DecryptionKey:
         try:
             cdm_session = self.cdm.open()
+
             pssh_obj = PSSH(pssh.split(",")[-1])
+
             challenge = base64.b64encode(
                 self.cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
@@ -356,13 +358,17 @@ class Downloader:
                 pssh,
                 challenge,
             )
+
             self.cdm.parse_license(cdm_session, license)
-            decryption_key = next(
+            decryption_key_info = next(
                 i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-            ).key.hex()
+            )
         finally:
             self.cdm.close(cdm_session)
-        return decryption_key
+        return DecryptionKey(
+            key=decryption_key_info.key.hex(),
+            kid=decryption_key_info.kid.hex,
+        )
 
     def download(self, path: Path, stream_url: str):
         if self.download_mode == DownloadMode.YTDLP:

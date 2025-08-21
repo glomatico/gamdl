@@ -711,12 +711,8 @@ def main(
                             f'({queue_progress}) Music video already exists at "{final_path}", skipping'
                         )
                     else:
-                        decryption_key_video = downloader.get_decryption_key(
-                            stream_info_av.video_track.widevine_pssh,
-                            media_id,
-                        )
-                        decryption_key_audio = downloader.get_decryption_key(
-                            stream_info_av.audio_track.widevine_pssh,
+                        decryption_key = downloader_music_video.get_decryption_key(
+                            stream_info_av,
                             media_id,
                         )
                         encrypted_path_video = (
@@ -748,13 +744,13 @@ def main(
                         logger.debug(f'Decrypting video to "{decrypted_path_video}"')
                         downloader_music_video.decrypt(
                             encrypted_path_video,
-                            decryption_key_video,
+                            decryption_key.video_track.key,
                             decrypted_path_video,
                         )
                         logger.debug(f'Decrypting audio to "{decrypted_path_audio}"')
                         downloader_music_video.decrypt(
                             encrypted_path_audio,
-                            decryption_key_audio,
+                            decryption_key.audio_track.key,
                             decrypted_path_audio,
                         )
                         logger.debug(f'Remuxing to "{remuxed_path}"')

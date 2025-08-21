@@ -10,7 +10,7 @@ from pywidevine.license_protocol_pb2 import WidevinePsshData
 
 from .downloader_song import DownloaderSong
 from .enums import MediaFileFormat, RemuxMode, SongCodec
-from .models import StreamInfo, StreamInfoAv
+from .models import StreamInfo, StreamInfoAv, DecryptionKeyAv, DecryptionKey
 
 
 class DownloaderSongLegacy(DownloaderSong):
@@ -30,30 +30,46 @@ class DownloaderSongLegacy(DownloaderSong):
             file_format=MediaFileFormat.M4A,
         )
 
-    def get_decryption_key(self, pssh: str, track_id: str) -> str:
+    def get_decryption_key(
+        self,
+        stream_info: StreamInfoAv,
+        media_id: str,
+    ) -> DecryptionKeyAv:
+        stream_info_audio = stream_info.audio_track
+
         try:
+            cdm_session = self.downloader.cdm.open()
+
             widevine_pssh_data = WidevinePsshData()
             widevine_pssh_data.algorithm = 1
-            widevine_pssh_data.key_ids.append(base64.b64decode(pssh.split(",")[1]))
+            widevine_pssh_data.key_ids.append(
+                base64.b64decode(stream_info_audio.widevine_pssh.split(",")[1])
+            )
             pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
-            cdm_session = self.downloader.cdm.open()
+
             challenge = base64.b64encode(
                 self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
             license = self.downloader.apple_music_api.get_widevine_license(
-                track_id,
-                pssh,
+                media_id,
+                stream_info.audio_track.widevine_pssh,
                 challenge,
             )
+
             self.downloader.cdm.parse_license(cdm_session, license)
             decryption_key = next(
                 i
                 for i in self.downloader.cdm.get_keys(cdm_session)
                 if i.type == "CONTENT"
-            ).key.hex()
+            )
         finally:
             self.downloader.cdm.close(cdm_session)
-        return decryption_key
+        DecryptionKeyAv(
+            audio_track=DecryptionKey(
+                kid=decryption_key.kid.hex,
+                key=decryption_key.key.hex(),
+            )
+        )
 
     def decrypt(
         self,

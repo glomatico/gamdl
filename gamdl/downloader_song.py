@@ -282,7 +282,7 @@ class DownloaderSong:
             composer_sort=webplayback_metadata.get("sort-composer"),
             copyright=webplayback_metadata.get("copyright"),
             date=(
-                self.downloader.sanitize_date(webplayback_metadata["releaseDate"])
+                self.downloader.parse_date(webplayback_metadata["releaseDate"])
                 if webplayback_metadata.get("releaseDate")
                 else None
             ),

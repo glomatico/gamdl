@@ -798,7 +798,9 @@ def main(
                     logger.debug(f'Moving to "{final_path}"')
                     downloader.move_to_output_path(remuxed_path, final_path)
                 if not synced_lyrics_only and save_playlist and playlist_tags:
-                    playlist_file_path = downloader.get_playlist_file_path(tags)
+                    playlist_file_path = downloader.get_playlist_file_path(
+                        playlist_tags
+                    )
                     logger.debug(f'Updating M3U8 playlist from "{playlist_file_path}"')
                     downloader.update_playlist_file(
                         playlist_file_path,

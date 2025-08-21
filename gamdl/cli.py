@@ -364,12 +364,15 @@ def main(
     no_config_file: bool,
 ):
     colorama.just_fix_windows_console()
+
     logger.setLevel(log_level)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(CustomLoggerFormatter())
     logger.addHandler(stream_handler)
-    logger.info("Starting Gamdl")
+
     cookies_path = prompt_path(True, cookies_path, "Cookies file")
+
+    logger.info("Starting Gamdl")
     apple_music_api = AppleMusicApi.from_netscape_cookies(
         cookies_path,
         language,
@@ -385,10 +388,12 @@ def main(
             "Your account has content restrictions enabled, some content may not be"
             " downloadable"
         )
+
     itunes_api = ItunesApi(
         apple_music_api.storefront,
         apple_music_api.language,
     )
+
     downloader = Downloader(
         apple_music_api,
         itunes_api,
@@ -415,38 +420,48 @@ def main(
         truncate,
         log_level in ("WARNING", "ERROR"),
     )
+
     downloader_song = DownloaderSong(
         downloader,
         codec_song,
         synced_lyrics_format,
     )
+
     downloader_song_legacy = DownloaderSongLegacy(
         downloader,
         codec_song,
     )
+
     downloader_music_video = DownloaderMusicVideo(
         downloader,
         codec_music_video,
         remux_format_music_video,
     )
+
     downloader_post = DownloaderPost(
         downloader,
         quality_post,
     )
+
     skip_mv = False
+
     if not synced_lyrics_only:
         if wvd_path:
             wvd_path = prompt_path(True, wvd_path, ".wvd file")
+
         logger.debug("Setting up CDM")
         downloader.set_cdm()
+
         if not downloader.ffmpeg_path_full and (
             remux_mode == RemuxMode.FFMPEG or download_mode == DownloadMode.NM3U8DLRE
         ):
             logger.critical(X_NOT_FOUND_STRING.format("ffmpeg", ffmpeg_path))
             return
+
         if not downloader.mp4box_path_full and remux_mode == RemuxMode.MP4BOX:
             logger.critical(X_NOT_FOUND_STRING.format("MP4Box", mp4box_path))
             return
+
         if (
             not downloader.mp4decrypt_path_full
             and codec_song
@@ -458,30 +473,36 @@ def main(
         ):
             logger.critical(X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path))
             return
+
         if (
             download_mode == DownloadMode.NM3U8DLRE
             and not downloader.nm3u8dlre_path_full
         ):
             logger.critical(X_NOT_FOUND_STRING.format("N_m3u8DL-RE", nm3u8dlre_path))
             return
+
         if not downloader.mp4decrypt_path_full:
             logger.warning(
                 X_NOT_FOUND_STRING.format("mp4decrypt", mp4decrypt_path)
                 + ", music videos will not be downloaded"
             )
             skip_mv = True
+
         if codec_song not in LEGACY_CODECS:
             logger.warning(
                 "You have chosen an experimental codec. "
                 "They're not guaranteed to work due to API limitations."
             )
-    error_count = 0
+
     if read_urls_as_txt:
         _urls = []
         for url in urls:
             if Path(url).exists():
                 _urls.extend(Path(url).read_text(encoding="utf-8").splitlines())
         urls = _urls
+
+    error_count = 0
+
     for url_index, url in enumerate(urls, start=1):
         url_progress = color_text(f"URL {url_index}/{len(urls)}", colorama.Style.DIM)
         try:

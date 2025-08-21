@@ -28,10 +28,12 @@ class ConfigFile:
     def _add_param_default_to_config(
         self,
         param: click.Parameter,
-    ) -> None:
-        if not self.config["DEFAULT"].get(param.name):
-            value = self._serialize_param_default(param)
-            self.config["DEFAULT"][param.name] = value
+    ) -> bool:
+        if self.config["DEFAULT"].get(param.name):
+            return False
+        value = self._serialize_param_default(param)
+        self.config["DEFAULT"][param.name] = value
+        return True
 
     def _parse_param_from_config(
         self,
@@ -62,9 +64,13 @@ class ConfigFile:
         self,
         params: list[click.Parameter],
     ) -> None:
+        has_changes = False
+
         for param in params:
-            self._add_param_default_to_config(param)
-        self._write_config_file()
+            has_changes = self._add_param_default_to_config(param) or has_changes
+
+        if has_changes:
+            self._write_config_file()
 
     def parse_params_from_config(
         self,

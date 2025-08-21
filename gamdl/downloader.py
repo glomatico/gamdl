@@ -337,8 +337,8 @@ class Downloader:
         minutes, seconds = divmod(millis // 1000, 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    def sanitize_date(self, date: str) -> datetime.datetime:
-        return datetime.datetime.fromisoformat(date[:-1]).strftime(self.template_date)
+    def parse_date(self, date: str) -> datetime.datetime:
+        return datetime.datetime.fromisoformat(date[:-1])
 
     def get_decryption_key(self, pssh: str, track_id: str) -> str:
         try:
@@ -514,7 +514,7 @@ class Downloader:
                 if v is not None and k not in self.exclude_tags
             }
         )
-        mp4_tags = filtered_tags.to_mp4_tags()
+        mp4_tags = filtered_tags.to_mp4_tags(self.template_date)
 
         mp4 = MP4(path)
         mp4.clear()

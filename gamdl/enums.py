@@ -75,16 +75,16 @@ class MediaType(Enum):
 
 
 class MediaRating(Enum):
-    CLEAN = "Clean"
-    EXPLICIT = "Explicit"
-    NONE = "None"
+    NONE = 0
+    EXPLICIT = 1
+    CLEAN = 2
 
     def __str__(self) -> str:
-        return self.value
+        return {
+            MediaRating.NONE: "None",
+            MediaRating.EXPLICIT: "Explicit",
+            MediaRating.CLEAN: "Clean",
+        }[self]
 
     def __int__(self) -> int:
-        return {
-            MediaRating.NONE: 0,
-            MediaRating.EXPLICIT: 1,
-            MediaRating.CLEAN: 2,
-        }[self]
+        return self.value

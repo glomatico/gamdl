@@ -1,0 +1,78 @@
+import configparser
+from enum import Enum
+from pathlib import Path
+
+import click
+import typing
+
+
+class ConfigFile:
+    def __init__(
+        self,
+        config_path: Path,
+    ) -> None:
+        self.config_path = config_path
+        self._read_config_file()
+
+    def _serialize_param_default(self, param: click.Parameter) -> str:
+        if isinstance(param.default, Enum):
+            return param.default.value
+        if isinstance(param.default, Path):
+            return str(param.default)
+        if isinstance(param.default, bool):
+            return str(param.default).lower()
+        if isinstance(param.default, None.__class__):
+            return "null"
+        return str(param.default)
+
+    def _add_param_default_to_config(
+        self,
+        param: click.Parameter,
+    ) -> None:
+        if not self.config["DEFAULT"].get(param.name):
+            value = self._serialize_param_default(param)
+            self.config["DEFAULT"][param.name] = value
+
+    def _parse_param_from_config(
+        self,
+        param: click.Parameter,
+    ) -> typing.Any:
+        value = self.config["DEFAULT"].get(param.name)
+        if value == "null":
+            return None
+
+        if param.multiple:
+            value = value.split(",")
+
+        return param.type_cast_value(None, value)
+
+    def _read_config_file(self) -> None:
+        self.config = configparser.ConfigParser(interpolation=None)
+
+        if self.config_path.exists():
+            self.config.read(self.config_path, encoding="utf-8")
+        else:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _write_config_file(self) -> None:
+        with self.config_path.open("w", encoding="utf-8") as config_file:
+            self.config.write(config_file)
+
+    def add_params_default_to_config(
+        self,
+        params: list[click.Parameter],
+    ) -> None:
+        for param in params:
+            self._add_param_default_to_config(param)
+        self._write_config_file()
+
+    def parse_params_from_config(
+        self,
+        params: list[click.Parameter],
+    ) -> dict[str, typing.Any]:
+        parsed_params = {}
+
+        for param in params:
+            parsed_params[param.name] = self._parse_param_from_config(param)
+
+        return parsed_params

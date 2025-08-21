@@ -37,6 +37,12 @@ class MusicVideoCodec(Enum):
     H265 = "h265"
     ASK = "ask"
 
+    def fourcc(self) -> str:
+        return {
+            MusicVideoCodec.H264: "avc1",
+            MusicVideoCodec.H265: "hvc1",
+        }.get(self)
+
 
 class RemuxFormatMusicVideo(Enum):
     M4V = "m4v"

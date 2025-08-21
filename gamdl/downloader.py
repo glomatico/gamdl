@@ -19,7 +19,8 @@ from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
-from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
+from .models import MediaTags
+from .constants import IMAGE_FILE_EXTENSION_MAP
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
@@ -423,16 +424,16 @@ class Downloader:
     ) -> str:
         return "." + file_format.value
 
-    def get_final_path(self, tags: dict, file_extension: str) -> Path:
-        if tags.get("album"):
+    def get_final_path(self, tags: MediaTags, file_extension: str) -> Path:
+        if tags.album is not None:
             template_folder = (
                 self.template_folder_compilation.split("/")
-                if tags.get("compilation")
+                if tags.compilation
                 else self.template_folder_album.split("/")
             )
             template_file = (
                 self.template_file_multi_disc.split("/")
-                if tags["disc_total"] > 1
+                if tags.disc_total > 1
                 else self.template_file_single_disc.split("/")
             )
         else:
@@ -442,20 +443,22 @@ class Downloader:
         return Path(
             self.output_path,
             *[
-                self.get_sanitized_string(i.format(**tags), True)
+                self.get_sanitized_string(i.format(**tags.__dict__), True)
                 for i in template_final[0:-1]
             ],
             (
-                self.get_sanitized_string(template_final[-1].format(**tags), False)
+                self.get_sanitized_string(
+                    template_final[-1].format(**tags.__dict__), False
+                )
                 + file_extension
             ),
         )
 
     def get_cover_file_extension(self, cover_url: str) -> str | None:
-        cover_bytes = self.get_cover_url_response_bytes(cover_url)
+        cover_bytes = self.get_cover_bytes(cover_url)
         if cover_bytes is None:
             return None
-        image_obj = Image.open(io.BytesIO(self.get_cover_url_response_bytes(cover_url)))
+        image_obj = Image.open(io.BytesIO(self.get_cover_bytes(cover_url)))
         image_format = image_obj.format.lower()
         return IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
 
@@ -488,7 +491,7 @@ class Downloader:
 
     @staticmethod
     @functools.lru_cache()
-    def get_cover_url_response_bytes(url: str) -> bytes | None:
+    def get_cover_bytes(url: str) -> bytes | None:
         response = requests.get(url)
         if response.status_code == 200:
             return response.content
@@ -501,54 +504,43 @@ class Downloader:
     def apply_tags(
         self,
         path: Path,
-        tags: dict,
+        tags: MediaTags,
         cover_url: str,
     ):
-        to_apply_tags = [
-            tag_name for tag_name in tags.keys() if tag_name not in self.exclude_tags
-        ]
-        mp4_tags = {}
-        for tag_name in to_apply_tags:
-            if tag_name in ("disc", "disc_total"):
-                if mp4_tags.get("disk") is None:
-                    mp4_tags["disk"] = [[0, 0]]
-                if tag_name == "disc":
-                    mp4_tags["disk"][0][0] = tags[tag_name]
-                elif tag_name == "disc_total":
-                    mp4_tags["disk"][0][1] = tags[tag_name]
-            elif tag_name in ("track", "track_total"):
-                if mp4_tags.get("trkn") is None:
-                    mp4_tags["trkn"] = [[0, 0]]
-                if tag_name == "track":
-                    mp4_tags["trkn"][0][0] = tags[tag_name]
-                elif tag_name == "track_total":
-                    mp4_tags["trkn"][0][1] = tags[tag_name]
-            elif tag_name == "compilation":
-                mp4_tags["cpil"] = tags["compilation"]
-            elif tag_name == "gapless":
-                mp4_tags["pgap"] = tags["gapless"]
-            elif (
-                MP4_TAGS_MAP.get(tag_name) is not None
-                and tags.get(tag_name) is not None
-            ):
-                mp4_tags[MP4_TAGS_MAP[tag_name]] = [tags[tag_name]]
-        if "cover" not in self.exclude_tags and self.cover_format != CoverFormat.RAW:
-            cover_bytes = self.get_cover_url_response_bytes(cover_url)
-            if cover_bytes is not None:
-                mp4_tags["covr"] = [
-                    MP4Cover(
-                        self.get_cover_url_response_bytes(cover_url),
-                        imageformat=(
-                            MP4Cover.FORMAT_JPEG
-                            if self.cover_format == CoverFormat.JPG
-                            else MP4Cover.FORMAT_PNG
-                        ),
-                    )
-                ]
+        filtered_tags = MediaTags(
+            **{
+                k: v
+                for k, v in tags.__dict__.items()
+                if v is not None and k not in self.exclude_tags
+            }
+        )
+        mp4_tags = filtered_tags.to_mp4_tags()
+
         mp4 = MP4(path)
         mp4.clear()
+        if "cover" not in self.exclude_tags and self.cover_format != CoverFormat.RAW:
+            self._apply_cover(mp4, cover_url)
         mp4.update(mp4_tags)
         mp4.save()
+
+    def _apply_cover(
+        self,
+        mp4: MP4,
+        cover_url: str,
+    ) -> None:
+        cover_bytes = self.get_cover_bytes(cover_url)
+        if cover_bytes is None:
+            return
+        mp4["covr"] = [
+            MP4Cover(
+                data=cover_bytes,
+                imageformat=(
+                    MP4Cover.FORMAT_JPEG
+                    if self.cover_format == CoverFormat.JPG
+                    else MP4Cover.FORMAT_PNG
+                ),
+            )
+        ]
 
     def move_to_output_path(
         self,
@@ -561,7 +553,7 @@ class Downloader:
     @functools.lru_cache()
     def save_cover(self, cover_path: Path, cover_url: str):
         cover_path.parent.mkdir(parents=True, exist_ok=True)
-        cover_path.write_bytes(self.get_cover_url_response_bytes(cover_url))
+        cover_path.write_bytes(self.get_cover_bytes(cover_url))
 
     def cleanup_temp_path(self):
         shutil.rmtree(self.temp_path)

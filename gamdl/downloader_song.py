@@ -13,7 +13,7 @@ import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
-from .constants import SONG_CODEC_REGEX_MAP, SYNCED_LYRICS_FILE_EXTENSION_MAP
+from .constants import SONG_CODEC_REGEX_MAP
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
 from .models import Lyrics, MediaRating, MediaTags, MediaType, StreamInfo, StreamInfoAv
@@ -396,9 +396,7 @@ class DownloaderSong:
         )
 
     def get_lyrics_synced_path(self, final_path: Path) -> Path:
-        return final_path.with_suffix(
-            SYNCED_LYRICS_FILE_EXTENSION_MAP[self.synced_lyrics_format]
-        )
+        return final_path.with_suffix("." + self.synced_lyrics_format.value)
 
     def get_cover_path(self, final_path: Path, file_extension: str) -> Path:
         return final_path.parent / ("Cover" + file_extension)

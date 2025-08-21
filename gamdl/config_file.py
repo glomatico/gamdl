@@ -10,9 +10,27 @@ class ConfigFile:
     def __init__(
         self,
         config_path: Path,
+        section_name: str = "gamdl",
     ) -> None:
         self.config_path = config_path
+        self.section_name = section_name
+
         self._read_config_file()
+
+    def _read_config_file(self) -> None:
+        self.config = configparser.ConfigParser(interpolation=None)
+
+        if self.config_path.exists():
+            self.config.read(self.config_path, encoding="utf-8")
+        else:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not self.config.has_section(self.section_name):
+            self.config.add_section(self.section_name)
+
+    def _write_config_file(self) -> None:
+        with self.config_path.open("w", encoding="utf-8") as config_file:
+            self.config.write(config_file)
 
     def _serialize_param_default(self, param: click.Parameter) -> str:
         if isinstance(param.default, Enum):
@@ -29,36 +47,26 @@ class ConfigFile:
         self,
         param: click.Parameter,
     ) -> bool:
-        if self.config["DEFAULT"].get(param.name):
+        if self.config[self.section_name].get(param.name):
             return False
+
         value = self._serialize_param_default(param)
-        self.config["DEFAULT"][param.name] = value
+        self.config[self.section_name][param.name] = value
+
         return True
 
     def _parse_param_from_config(
         self,
         param: click.Parameter,
     ) -> typing.Any:
-        value = self.config["DEFAULT"].get(param.name)
+        value = self.config[self.section_name].get(param.name)
+
         if value == "null":
             return None
-
         if param.multiple:
             value = value.split(",")
 
         return param.type_cast_value(None, value)
-
-    def _read_config_file(self) -> None:
-        self.config = configparser.ConfigParser(interpolation=None)
-
-        if self.config_path.exists():
-            self.config.read(self.config_path, encoding="utf-8")
-        else:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    def _write_config_file(self) -> None:
-        with self.config_path.open("w", encoding="utf-8") as config_file:
-            self.config.write(config_file)
 
     def add_params_default_to_config(
         self,

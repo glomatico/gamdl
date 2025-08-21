@@ -45,6 +45,18 @@ class StreamInfoAv:
 
 
 @dataclass
+class DecryptionKey:
+    kid: str = None
+    key: str = None
+
+
+@dataclass
+class DecryptionKeyAv:
+    video_track: DecryptionKey = None
+    audio_track: DecryptionKey = None
+
+
+@dataclass
 class MediaTags:
     album: str = None
     album_artist: str = None

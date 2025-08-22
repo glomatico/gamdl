@@ -233,7 +233,7 @@ class DownloaderMusicVideo:
             media_type=MediaType.MUSIC_VIDEO,
             storefront=int(self.downloader.itunes_api.storefront_id.split("-")[0]),
             title=metadata_itunes[0]["trackCensoredName"],
-            title_id=int(self.downloader.get_media_id(metadata)),
+            title_id=int(metadata["id"]),
             rating=rating,
         )
 

@@ -466,7 +466,7 @@ class DownloaderMusicVideo:
             logger.debug(f"[{colored_media_id}] Getting stream info")
             stream_info = self.get_stream_info_from_itunes_page(itunes_page)
         else:
-            logger.debug(f"[{colored_media_id}] Getting web playback")
+            logger.debug(f"[{colored_media_id}] Getting webplayback info")
             webplayback = self.downloader.apple_music_api.get_webplayback(media_id)
             logger.debug(f"[{colored_media_id}] Getting stream info")
             stream_info = self.get_stream_info_from_webplayback(webplayback)

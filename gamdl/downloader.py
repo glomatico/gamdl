@@ -450,11 +450,11 @@ class Downloader:
                 dirty_string = dirty_string[: self.truncate - 4]
         return dirty_string.strip()
 
-    def get_final_file_extension(
+    def get_media_file_extension(
         self,
-        file_format: MediaFileFormat,
+        media_file_format: MediaFileFormat,
     ) -> str:
-        return "." + file_format.value
+        return "." + media_file_format.value
 
     def get_temp_path(
         self,

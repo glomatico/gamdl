@@ -3,20 +3,27 @@ from __future__ import annotations
 import base64
 import datetime
 import json
+import logging
 import re
 import subprocess
 from pathlib import Path
 from xml.dom import minidom
 from xml.etree import ElementTree
 
+import colorama
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
+from pywidevine import PSSH
+from pywidevine.license_protocol_pb2 import WidevinePsshData
 
+from .constants import LEGACY_CODECS
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
 from .models import (
+    DecryptionKey,
     DecryptionKeyAv,
+    DownloadInfo,
     Lyrics,
     MediaRating,
     MediaTags,
@@ -24,6 +31,9 @@ from .models import (
     StreamInfo,
     StreamInfoAv,
 )
+from .utils import color_text
+
+logger = logging.getLogger("gamdl")
 
 
 class DownloaderSong:
@@ -46,10 +56,12 @@ class DownloaderSong:
         downloader: Downloader,
         codec: SongCodec = SongCodec.AAC_LEGACY,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
+        synced_lyrics_only: bool = False,
     ):
         self.downloader = downloader
         self.codec = codec
         self.synced_lyrics_format = synced_lyrics_format
+        self.synced_lyrics_only = synced_lyrics_only
 
     def get_drm_infos(self, m3u8_data: dict) -> dict:
         drm_info_raw = next(
@@ -187,6 +199,22 @@ class DownloaderSong:
             file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
         )
 
+    def get_stream_info_legacy(self, webplayback: dict) -> StreamInfoAv:
+        flavor = "32:ctrp64" if self.codec == SongCodec.AAC_HE_LEGACY else "28:ctrp256"
+
+        stream_info = StreamInfo()
+        stream_info.stream_url = next(
+            i for i in webplayback["assets"] if i["flavor"] == flavor
+        )["URL"]
+
+        m3u8_obj = m3u8.load(stream_info.stream_url)
+        stream_info.widevine_pssh = m3u8_obj.keys[0].uri
+
+        return StreamInfoAv(
+            audio_track=stream_info,
+            file_format=MediaFileFormat.M4A,
+        )
+
     def get_decryption_key(
         self,
         stream_info: StreamInfoAv,
@@ -198,6 +226,47 @@ class DownloaderSong:
         )
         return DecryptionKeyAv(
             audio_track=decryption_key,
+        )
+
+    def get_decryption_key_legacy(
+        self,
+        stream_info: StreamInfoAv,
+        media_id: str,
+    ) -> DecryptionKeyAv:
+        stream_info_audio = stream_info.audio_track
+
+        try:
+            cdm_session = self.downloader.cdm.open()
+
+            widevine_pssh_data = WidevinePsshData()
+            widevine_pssh_data.algorithm = 1
+            widevine_pssh_data.key_ids.append(
+                base64.b64decode(stream_info_audio.widevine_pssh.split(",")[1])
+            )
+            pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
+
+            challenge = base64.b64encode(
+                self.downloader.cdm.get_license_challenge(cdm_session, pssh_obj)
+            ).decode()
+            license = self.downloader.apple_music_api.get_widevine_license(
+                media_id,
+                stream_info.audio_track.widevine_pssh,
+                challenge,
+            )
+
+            self.downloader.cdm.parse_license(cdm_session, license)
+            decryption_key = next(
+                i
+                for i in self.downloader.cdm.get_keys(cdm_session)
+                if i.type == "CONTENT"
+            )
+        finally:
+            self.downloader.cdm.close(cdm_session)
+        return DecryptionKeyAv(
+            audio_track=DecryptionKey(
+                kid=decryption_key.kid.hex,
+                key=decryption_key.key.hex(),
+            )
         )
 
     @staticmethod
@@ -364,27 +433,60 @@ class DownloaderSong:
         encrypted_path: Path,
         decrypted_path: Path,
         decryption_key: str,
+        codec: SongCodec,
     ):
-        self.fix_key_id(encrypted_path)
+        if codec in LEGACY_CODECS:
+            keys = [
+                f"0:{decryption_key}",
+            ]
+        else:
+            self.fix_key_id(encrypted_path)
+            keys = [
+                "0" * 32 + f":{decryption_key}",
+                "1" * 32 + f":{self.DEFAULT_DECRYPTION_KEY}",
+            ]
         subprocess.run(
             [
                 self.downloader.mp4decrypt_path_full,
                 encrypted_path,
-                "--key",
-                f"00000000000000000000000000000001:{decryption_key}",
-                "--key",
-                f"00000000000000000000000000000000:{self.DEFAULT_DECRYPTION_KEY}",
+                *[f"--key={key}" for key in keys],
                 decrypted_path,
             ],
             check=True,
             **self.downloader.subprocess_additional_args,
         )
 
-    def remux(self, decrypted_path: Path, remuxed_path: Path):
-        if self.downloader.remux_mode == RemuxMode.MP4BOX:
-            self.remux_mp4box(decrypted_path, remuxed_path)
-        elif self.downloader.remux_mode == RemuxMode.FFMPEG:
-            self.remux_ffmpeg(decrypted_path, remuxed_path)
+    def stage(
+        self,
+        codec: SongCodec,
+        encrypted_path: Path,
+        decrypted_path: Path,
+        decryption_key: DecryptionKeyAv,
+        staged_path: Path,
+    ):
+        if codec in LEGACY_CODECS and self.downloader.remux_mode == RemuxMode.FFMPEG:
+            self.remux_ffmpeg(
+                decrypted_path,
+                staged_path,
+                decryption_key.audio_track.key,
+            )
+        else:
+            self.decrypt(
+                encrypted_path,
+                decrypted_path,
+                decryption_key.audio_track.key,
+                codec,
+            )
+            if self.downloader.remux_mode == RemuxMode.FFMPEG:
+                self.remux_ffmpeg(
+                    decrypted_path,
+                    staged_path,
+                )
+            else:
+                self.remux_mp4box(
+                    decrypted_path,
+                    staged_path,
+                )
 
     def remux_mp4box(self, decrypted_path: Path, remuxed_path: Path):
         subprocess.run(
@@ -435,3 +537,117 @@ class DownloaderSong:
     def save_lyrics_synced(self, lyrics_synced_path: Path, lyrics_synced: str):
         lyrics_synced_path.parent.mkdir(parents=True, exist_ok=True)
         lyrics_synced_path.write_text(lyrics_synced, encoding="utf8")
+
+    def download(
+        self,
+        media_id: str = None,
+        media_metadata: dict = None,
+        playlist_attributes: dict = None,
+    ) -> DownloadInfo:
+        download_info = DownloadInfo()
+
+        if playlist_attributes:
+            playlist_tags = self.downloader.get_playlist_tags(playlist_attributes)
+        else:
+            playlist_tags = None
+
+        if not media_metadata:
+            logger.debug(f"[{media_id_colored}] Getting song metadata")
+            media_metadata = self.downloader.apple_music_api.get_song(media_id)
+        elif not media_id:
+            media_id = self.downloader.get_media_id(media_metadata)
+        else:
+            raise ValueError("Either media_id or media_metadata must be provided")
+        download_info.media_metadata = media_metadata
+        download_info.media_id = media_id
+
+        media_id_colored = color_text(media_id, colorama.Style.DIM)
+
+        logger.debug(f"[{media_id_colored}] Getting lyrics")
+        lyrics = self.get_lyrics(media_metadata)
+        download_info.lyrics = lyrics
+
+        logger.debug(f"[{media_id_colored}] Getting webplayback info")
+        webplayback = self.downloader.apple_music_api.get_webplayback(
+            media_id,
+            playlist_attributes,
+        )
+        tags = self.get_tags(
+            webplayback,
+            lyrics.unsynced if lyrics else None,
+        )
+        final_path = self.downloader.get_final_path(tags, ".m4a", playlist_tags)
+        download_info.tags = tags
+        download_info.final_path = final_path
+
+        if self.synced_lyrics_only:
+            return download_info
+
+        cover_url = self.downloader.get_cover_url(media_metadata)
+        cover_format = self.downloader.get_cover_format(cover_url)
+        download_info.cover_url = cover_url
+        download_info.cover_format = cover_format
+
+        if final_path.exists() and not self.downloader.overwrite:
+            logger.warning(f'Song already exists at "{final_path}", skipping')
+            return download_info
+        logger.debug(f"[{media_id_colored}] Getting stream info")
+        if self.codec in LEGACY_CODECS:
+            stream_info = self.get_stream_info_legacy(webplayback)
+            logger.debug(f"[{media_id_colored}] Getting decryption key")
+            decryption_key = self.get_decryption_key_legacy(
+                stream_info,
+                media_id,
+            )
+            download_info.stream_info = stream_info
+            download_info.decryption_key = decryption_key
+        else:
+            stream_info = self.get_stream_info(media_metadata)
+            if not stream_info or not stream_info.audio_track.widevine_pssh:
+                logger.error(
+                    f"[{media_id_colored}] Song is not downloadable or is not "
+                    "available in the selected codec, skipping",
+                )
+                return download_info
+            logger.debug(f"[{media_id_colored}] Getting decryption key")
+            decryption_key = self.get_decryption_key(
+                stream_info,
+                media_id,
+            )
+        download_info.stream_info = stream_info
+        download_info.decryption_key = decryption_key
+
+        encrypted_path = self.downloader.get_temp_path(
+            media_id,
+            "encrypted",
+            ".m4a",
+        )
+        decrypted_path = self.downloader.get_temp_path(
+            media_id,
+            "decrypted",
+            ".m4a",
+        )
+        staged_path = self.downloader.get_temp_path(
+            media_id,
+            "staged",
+            ".m4a",
+        )
+
+        logger.debug(f'[{media_id_colored}] Downloading to "{encrypted_path}"')
+        self.downloader.download(
+            encrypted_path,
+            download_info.stream_info.audio_track.stream_url,
+        )
+
+        logger.debug(
+            f'[{media_id_colored}] Decryping/remuxing to "{decrypted_path}"/"{staged_path}"'
+        )
+        self.stage(
+            self.codec,
+            encrypted_path,
+            decrypted_path,
+            decryption_key,
+            staged_path,
+        )
+        download_info.staged_path = staged_path
+        return download_info

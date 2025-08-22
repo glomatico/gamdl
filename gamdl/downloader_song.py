@@ -610,7 +610,7 @@ class DownloaderSong:
 
         if not self.downloader.is_media_streamable(media_metadata):
             logger.warning(
-                f"{color_text(media_metadata['id'], colorama.Style.DIM)} "
+                f"[{color_text(media_metadata['id'], colorama.Style.DIM)}] "
                 "Track is not streamable or downloadable, skipping"
             )
             return download_info

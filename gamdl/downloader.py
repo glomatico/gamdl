@@ -59,6 +59,8 @@ class Downloader:
         overwrite: bool = False,
         save_cover: bool = False,
         save_playlist: bool = False,
+        no_synced_lyrics: bool = False,
+        synced_lyrics_only: bool = False,
         nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
@@ -87,6 +89,8 @@ class Downloader:
         self.overwrite = overwrite
         self.save_cover = save_cover
         self.save_playlist = save_playlist
+        self.no_synced_lyrics = no_synced_lyrics
+        self.synced_lyrics_only = synced_lyrics_only
         self.nm3u8dlre_path = nm3u8dlre_path
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
@@ -667,9 +671,11 @@ class Downloader:
                 download_info.cover_url,
             )
         if (
-            download_info.synced_lyrics_path is None
-            or download_info.lyrics.synced is None
-        ) or not download_info.staged_path:
+            self.no_synced_lyrics
+            or not download_info.lyrics
+            or not download_info.lyrics.synced
+            or (not download_info.staged_path and not self.synced_lyrics_only)
+        ):
             pass
         elif download_info.synced_lyrics_path.exists() and not self.overwrite:
             logger.debug(

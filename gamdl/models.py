@@ -156,6 +156,7 @@ class PlaylistTags:
 
 @dataclass
 class DownloadInfo:
+    media_metadata: dict = None
     media_id: str = None
     alt_media_id: str = None
     playlist_tags: PlaylistTags = None

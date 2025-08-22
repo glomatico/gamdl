@@ -65,8 +65,6 @@ class ConfigFile:
 
         if value == "null":
             return None
-        if param.multiple:
-            value = value.split(",")
 
         return param.type_cast_value(None, value)
 

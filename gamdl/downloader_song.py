@@ -589,10 +589,7 @@ class DownloaderSong:
             raise ValueError("Either media_id or media_metadata must be provided")
 
         if not media_id:
-            if media_metadata["type"] == "library-songs":
-                media_id = self.downloader.get_media_id_of_library_media(media_metadata)
-            else:
-                media_id = media_metadata["id"]
+            media_id = self.downloader.get_media_id_of_library_media(media_metadata)
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not media_metadata:

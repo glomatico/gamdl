@@ -682,8 +682,4 @@ class DownloaderSong:
         )
         download_info.staged_path = staged_path
 
-        self.downloader._final_processing(
-            download_info,
-        )
-
         return download_info

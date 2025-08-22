@@ -660,7 +660,7 @@ class DownloaderSong:
         else:
             stream_info = self.get_stream_info(media_metadata)
             if not stream_info or not stream_info.audio_track.widevine_pssh:
-                logger.error(
+                logger.warning(
                     f"[{colored_media_id}] Song is not downloadable or is not "
                     "available in the selected codec, skipping",
                 )

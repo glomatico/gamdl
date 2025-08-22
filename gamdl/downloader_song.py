@@ -637,7 +637,9 @@ class DownloaderSong:
         download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
-            logger.warning(f'Song already exists at "{final_path}", skipping')
+            logger.warning(
+                f'[{media_id_colored}] Song already exists at "{final_path}", skipping'
+            )
             return download_info
 
         logger.debug(f"[{media_id_colored}] Getting stream info")

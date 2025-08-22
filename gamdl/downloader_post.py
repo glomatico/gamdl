@@ -159,6 +159,4 @@ class DownloaderPost:
         )
         download_info.staged_path = staged_path
 
-        logger.info(f"[{colored_media_id}] Download completed successfully")
-
         return download_info

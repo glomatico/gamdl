@@ -649,6 +649,7 @@ class Downloader:
                 download_info.staged_path,
                 download_info.final_path,
             )
+            logger.info(f"[{colored_media_id}] Download completed successfully")
         if not download_info.cover_path and not self.save_cover:
             pass
         elif download_info.cover_path.exists() and not self.overwrite:

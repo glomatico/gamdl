@@ -610,6 +610,8 @@ class Downloader:
         )
 
     def cleanup_temp_path(self):
+        if not self.temp_path.exists():
+            return
         shutil.rmtree(self.temp_path)
 
     def _final_processing(

@@ -295,6 +295,12 @@ class Downloader:
         play_params = library_media_metadata["attributes"].get("playParams", {})
         return play_params.get("catalogId")
 
+    def is_media_streamable(
+        self,
+        media_metadata: dict,
+    ) -> bool:
+        return bool(media_metadata.get("playParams"))
+
     def get_playlist_tags(
         self,
         playlist_attributes: dict,

@@ -16,7 +16,6 @@ from .downloader import Downloader
 from .downloader_music_video import DownloaderMusicVideo
 from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
-from .downloader_song_legacy import DownloaderSongLegacy
 from .enums import (
     CoverFormat,
     DownloadMode,
@@ -86,36 +85,10 @@ def load_config_file(
     help="Don't skip downloading music videos in albums/playlists.",
 )
 @click.option(
-    "--save-cover",
-    "-s",
-    is_flag=True,
-    help="Save cover as a separate file.",
-)
-@click.option(
-    "--overwrite",
-    is_flag=True,
-    help="Overwrite existing files.",
-)
-@click.option(
     "--read-urls-as-txt",
     "-r",
     is_flag=True,
     help="Interpret URLs as paths to text files containing URLs separated by newlines",
-)
-@click.option(
-    "--save-playlist",
-    is_flag=True,
-    help="Save a M3U8 playlist file when downloading a playlist.",
-)
-@click.option(
-    "--synced-lyrics-only",
-    is_flag=True,
-    help="Download only the synced lyrics.",
-)
-@click.option(
-    "--no-synced-lyrics",
-    is_flag=True,
-    help="Don't download the synced lyrics.",
 )
 @click.option(
     "--config-path",
@@ -170,6 +143,22 @@ def load_config_file(
     type=Path,
     default=downloader_sig.parameters["wvd_path"].default,
     help="Path to .wvd file.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Overwrite existing files.",
+)
+@click.option(
+    "--save-cover",
+    "-s",
+    is_flag=True,
+    help="Save cover as a separate file.",
+)
+@click.option(
+    "--save-playlist",
+    is_flag=True,
+    help="Save a M3U8 playlist file when downloading a playlist.",
 )
 @click.option(
     "--nm3u8dlre-path",
@@ -293,6 +282,16 @@ def load_config_file(
     default=downloader_song_sig.parameters["synced_lyrics_format"].default,
     help="Synced lyrics format.",
 )
+@click.option(
+    "--synced-lyrics-only",
+    is_flag=True,
+    help="Download only the synced lyrics.",
+)
+@click.option(
+    "--no-synced-lyrics",
+    is_flag=True,
+    help="Don't download the synced lyrics.",
+)
 # DownloaderMusicVideo specific options
 @click.option(
     "--codec-music-video",
@@ -324,12 +323,7 @@ def load_config_file(
 def main(
     urls: list[str],
     disable_music_video_skip: bool,
-    save_cover: bool,
-    overwrite: bool,
     read_urls_as_txt: bool,
-    save_playlist: bool,
-    synced_lyrics_only: bool,
-    no_synced_lyrics: bool,
     config_path: Path,
     log_level: str,
     no_exceptions: bool,
@@ -338,6 +332,9 @@ def main(
     output_path: Path,
     temp_path: Path,
     wvd_path: Path,
+    overwrite: bool,
+    save_cover: bool,
+    save_playlist: bool,
     nm3u8dlre_path: str,
     mp4decrypt_path: str,
     ffmpeg_path: str,
@@ -353,11 +350,13 @@ def main(
     template_file_no_album: str,
     template_file_playlist: str,
     template_date: str,
-    exclude_tags: tuple[str],
+    exclude_tags: tuple[str, ...],
     cover_size: int,
     truncate: int,
     codec_song: SongCodec,
     synced_lyrics_format: SyncedLyricsFormat,
+    synced_lyrics_only: bool,
+    no_synced_lyrics: bool,
     codec_music_video: MusicVideoCodec,
     remux_format_music_video: RemuxFormatMusicVideo,
     quality_post: PostQuality,
@@ -400,6 +399,9 @@ def main(
         output_path,
         temp_path,
         wvd_path,
+        overwrite,
+        save_cover,
+        save_playlist,
         nm3u8dlre_path,
         mp4decrypt_path,
         ffmpeg_path,
@@ -425,13 +427,9 @@ def main(
         downloader,
         codec_song,
         synced_lyrics_format,
+        synced_lyrics_only,
+        no_synced_lyrics,
     )
-
-    downloader_song_legacy = DownloaderSongLegacy(
-        downloader,
-        codec_song,
-    )
-
     downloader_music_video = DownloaderMusicVideo(
         downloader,
         codec_music_video,
@@ -525,7 +523,6 @@ def main(
                 colorama.Style.DIM,
             )
             try:
-                media_id = downloader.get_media_id(media_metadata)
                 remuxed_path = None
                 if download_queue.playlist_attributes:
                     playlist_tags = downloader.get_playlist_tags(
@@ -537,11 +534,6 @@ def main(
                 logger.info(
                     f'({queue_progress}) Downloading "{media_metadata["attributes"]["name"]}"'
                 )
-                if media_id is None:
-                    logger.warning(
-                        f"({queue_progress}) Track is not streamable or downloadable, skipping"
-                    )
-                    continue
                 if (
                     (synced_lyrics_only and media_metadata["type"] != "songs")
                     or (media_metadata["type"] == "music-videos" and skip_mv)
@@ -556,105 +548,9 @@ def main(
                     )
                     continue
                 elif media_metadata["type"] in ("songs", "library-songs"):
-                    logger.debug("Getting lyrics")
-                    lyrics = downloader_song.get_lyrics(media_metadata)
-                    logger.debug("Getting webplayback")
-                    webplayback = apple_music_api.get_webplayback(media_id)
-                    tags = downloader_song.get_tags(
-                        webplayback,
-                        lyrics.unsynced if lyrics else None,
+                    downloader_song.download(
+                        media_metadata=media_metadata,
                     )
-                    final_path = downloader.get_final_path(tags, ".m4a", playlist_tags)
-                    lyrics_synced_path = downloader_song.get_lyrics_synced_path(
-                        final_path
-                    )
-                    cover_url = downloader.get_cover_url(media_metadata)
-                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
-                    if cover_file_extesion:
-                        cover_path = downloader_song.get_cover_path(
-                            final_path,
-                            cover_file_extesion,
-                        )
-                    else:
-                        cover_path = None
-                    if synced_lyrics_only:
-                        pass
-                    elif final_path.exists() and not overwrite:
-                        logger.warning(
-                            f'({queue_progress}) Song already exists at "{final_path}", skipping'
-                        )
-                    else:
-                        logger.debug("Getting stream info")
-                        if codec_song in LEGACY_CODECS:
-                            stream_info = downloader_song_legacy.get_stream_info(
-                                webplayback
-                            )
-                            decryption_key = downloader_song_legacy.get_decryption_key(
-                                stream_info,
-                                media_id,
-                            )
-                        else:
-                            stream_info = downloader_song.get_stream_info(
-                                media_metadata
-                            )
-                            if (
-                                stream_info is None
-                                or not stream_info.audio_track.widevine_pssh
-                            ):
-                                logger.warning(
-                                    f"({queue_progress}) Song is not downloadable or is not"
-                                    " available in the chosen codec, skipping"
-                                )
-                                continue
-                            logger.debug("Getting decryption key")
-                            decryption_key = downloader_song.get_decryption_key(
-                                stream_info,
-                                media_id,
-                            )
-                        encrypted_path = downloader_song.get_encrypted_path(media_id)
-                        decrypted_path = downloader_song.get_decrypted_path(media_id)
-                        remuxed_path = downloader_song.get_remuxed_path(
-                            media_id,
-                            stream_info.file_format,
-                        )
-                        logger.debug(f'Downloading to "{encrypted_path}"')
-                        downloader.download(
-                            encrypted_path,
-                            stream_info.audio_track.stream_url,
-                        )
-                        if codec_song in LEGACY_CODECS:
-                            logger.debug(
-                                f'Decrypting/Remuxing to "{decrypted_path}"/"{remuxed_path}"'
-                            )
-                            downloader_song_legacy.remux(
-                                encrypted_path,
-                                decrypted_path,
-                                remuxed_path,
-                                decryption_key.audio_track.key,
-                            )
-                        else:
-                            logger.debug(f'Decrypting to "{decrypted_path}"')
-                            downloader_song.decrypt(
-                                encrypted_path,
-                                decrypted_path,
-                                decryption_key.audio_track.key,
-                            )
-                            logger.debug(f'Remuxing to "{final_path}"')
-                            downloader_song.remux(
-                                decrypted_path,
-                                remuxed_path,
-                            )
-                    if no_synced_lyrics or not lyrics or not lyrics.synced:
-                        pass
-                    elif lyrics_synced_path.exists() and not overwrite:
-                        logger.debug(
-                            f'Synced lyrics already exists at "{lyrics_synced_path}", skipping'
-                        )
-                    else:
-                        logger.debug(f'Saving synced lyrics to "{lyrics_synced_path}"')
-                        downloader_song.save_lyrics_synced(
-                            lyrics_synced_path, lyrics.synced
-                        )
                 elif media_metadata["type"] in ("music-videos", "library-music-videos"):
                     music_video_id_alt = (
                         downloader_music_video.get_music_video_id_alt(media_metadata)
@@ -698,7 +594,7 @@ def main(
                         playlist_tags,
                     )
                     cover_url = downloader.get_cover_url(media_metadata)
-                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    cover_file_extesion = downloader.get_cover_format(cover_url)
                     if cover_file_extesion:
                         cover_path = downloader_music_video.get_cover_path(
                             final_path,
@@ -764,7 +660,7 @@ def main(
                     tags = downloader_post.get_tags(media_metadata)
                     final_path = downloader.get_final_path(tags, ".m4v", playlist_tags)
                     cover_url = downloader.get_cover_url(media_metadata)
-                    cover_file_extesion = downloader.get_cover_file_extension(cover_url)
+                    cover_file_extesion = downloader.get_cover_format(cover_url)
                     if cover_file_extesion:
                         cover_path = downloader_music_video.get_cover_path(
                             final_path,
@@ -780,36 +676,10 @@ def main(
                         remuxed_path = downloader_post.get_post_temp_path(media_id)
                         logger.debug(f'Downloading to "{remuxed_path}"')
                         downloader.download_ytdlp(remuxed_path, stream_url)
-                if synced_lyrics_only or not save_cover or cover_path is None:
-                    pass
-                elif cover_path.exists() and not overwrite:
-                    logger.debug(f'Cover already exists at "{cover_path}", skipping')
-                else:
-                    logger.debug(f'Saving cover to "{cover_path}"')
-                    downloader.save_cover(cover_path, cover_url)
-                if remuxed_path:
-                    logger.debug("Applying tags")
-                    downloader.apply_tags(remuxed_path, tags, cover_url)
-                    logger.debug(f'Moving to "{final_path}"')
-                    downloader.move_to_output_path(remuxed_path, final_path)
-                if not synced_lyrics_only and save_playlist and playlist_tags:
-                    playlist_file_path = downloader.get_playlist_file_path(
-                        playlist_tags
-                    )
-                    logger.debug(f'Updating M3U8 playlist from "{playlist_file_path}"')
-                    downloader.update_playlist_file(
-                        playlist_file_path,
-                        final_path,
-                        playlist_tags.playlist_track,
-                    )
             except Exception as e:
                 error_count += 1
                 logger.error(
                     f'({queue_progress}) Failed to download "{media_metadata["attributes"]["name"]}"',
                     exc_info=not no_exceptions,
                 )
-            finally:
-                if temp_path.exists():
-                    logger.debug(f'Cleaning up "{temp_path}"')
-                    downloader.cleanup_temp_path()
     logger.info(f"Done ({error_count} error(s))")

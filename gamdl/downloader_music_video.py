@@ -437,14 +437,14 @@ class DownloaderMusicVideo:
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not media_metadata:
-            logger.debug(f"[{colored_media_id}] Getting music video metadata")
+            logger.debug(f"[{colored_media_id}] Getting Music Video metadata")
             media_metadata = self.downloader.apple_music_api.get_music_video(media_id)
         download_info.media_metadata = media_metadata
 
         if not self.downloader.is_media_streamable(media_metadata):
             logger.warning(
                 f"[{color_text(media_metadata['id'], colorama.Style.DIM)}] "
-                "Music video is not streamable or downloadable, skipping"
+                "Music Video is not streamable or downloadable, skipping"
             )
             return download_info
 
@@ -494,7 +494,7 @@ class DownloaderMusicVideo:
 
         if final_path.exists() and not self.downloader.overwrite:
             logger.warning(
-                f'[{colored_media_id}] Music video already exists at "{final_path}", skipping'
+                f'[{colored_media_id}] Music Video already exists at "{final_path}", skipping'
             )
             return download_info
 
@@ -530,6 +530,8 @@ class DownloaderMusicVideo:
             self.downloader.get_media_file_extension(stream_info.file_format),
         )
 
+        logger.info(f"[{colored_media_id}] Downloading video Music Video")
+
         logger.debug(
             f'[{colored_media_id}] Downloading video to "{encrypted_path_video}"'
         )
@@ -559,7 +561,5 @@ class DownloaderMusicVideo:
             decryption_key,
         )
         download_info.staged_path = staged_path
-
-        logger.info(f"[{colored_media_id}] Download completed successfully")
 
         return download_info

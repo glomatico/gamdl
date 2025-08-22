@@ -506,6 +506,12 @@ class Downloader:
         image_format = image_obj.format.lower()
         return image_format
 
+    def get_cover_file_extension(self, cover_format: str) -> str:
+        return self.IMAGE_FILE_EXTENSION_MAP.get(
+            cover_format,
+            f".{cover_format.lower()}",
+        )
+
     def get_cover_url(self, metadata: dict) -> str:
         if self.cover_format == CoverFormat.RAW:
             return self._get_raw_cover_url(metadata["attributes"]["artwork"]["url"])

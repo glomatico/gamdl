@@ -34,7 +34,7 @@ class DownloaderMusicVideo:
         downloader: Downloader,
         codec: MusicVideoCodec = MusicVideoCodec.H264,
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
-    ):
+    ) -> None:
         self.downloader = downloader
         self.codec = codec
         self.remux_format = remux_format
@@ -127,7 +127,7 @@ class DownloaderMusicVideo:
         ).execute()
         return selected
 
-    def get_pssh(self, m3u8_data: dict):
+    def get_pssh(self, m3u8_data: dict) -> str:
         return next(
             (
                 key
@@ -276,7 +276,12 @@ class DownloaderMusicVideo:
 
         return tags
 
-    def decrypt(self, encrypted_path: Path, decryption_key: str, decrypted_path: Path):
+    def decrypt(
+        self,
+        encrypted_path: Path,
+        decryption_key: str,
+        decrypted_path: Path,
+    ) -> None:
         subprocess.run(
             [
                 self.downloader.mp4decrypt_path_full,
@@ -294,7 +299,7 @@ class DownloaderMusicVideo:
         decrypted_path_audio: Path,
         decrypted_path_video: Path,
         fixed_path: Path,
-    ):
+    ) -> None:
         subprocess.run(
             [
                 self.downloader.mp4box_path_full,
@@ -318,7 +323,7 @@ class DownloaderMusicVideo:
         decrypted_path_video: Path,
         decrypte_path_audio: Path,
         fixed_path: Path,
-    ):
+    ) -> None:
         subprocess.run(
             [
                 self.downloader.ffmpeg_path_full,
@@ -349,7 +354,7 @@ class DownloaderMusicVideo:
         decrypted_path_audio: Path,
         staged_path: Path,
         decryption_key: DecryptionKeyAv,
-    ):
+    ) -> None:
         self.decrypt(
             encrypted_path_video,
             decryption_key.video_track.key,

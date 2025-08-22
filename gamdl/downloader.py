@@ -57,6 +57,7 @@ class Downloader:
         wvd_path: Path = None,
         overwrite: bool = False,
         save_cover: bool = False,
+        save_playlist: bool = False,
         nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
@@ -84,6 +85,7 @@ class Downloader:
         self.wvd_path = wvd_path
         self.overwrite = overwrite
         self.save_cover = save_cover
+        self.save_playlist = save_playlist
         self.nm3u8dlre_path = nm3u8dlre_path
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path

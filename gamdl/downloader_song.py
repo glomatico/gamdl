@@ -50,6 +50,24 @@ class DownloaderSong:
         SongCodec.AC3: r"audio-ac3-.*",
         SongCodec.ALAC: r"audio-alac-.*",
     }
+    DRM_DEFAULT_KEY_MAPPING = {
+        "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed": (
+            "data:text/plain;base64,AAAAOHBzc2gAAAAA7e+LqXnWSs6jyCfc1R0h7QAAABgSEAAAAAA"
+            "AAAAAczEvZTEgICBI88aJmwY="
+        ),
+        "com.microsoft.playready": (
+            "data:text/plain;charset=UTF-16;base64,vgEAAAEAAQC0ATwAVwBSAE0ASABFAEEARABF"
+            "AFIAIAB4AG0AbABuAHMAPQAiAGgAdAB0AHAAOgAvAC8AcwBjAGgAZQBtAGEAcwAuAG0AaQBjAH"
+            "IAbwBzAG8AZgB0AC4AYwBvAG0ALwBEAFIATQAvADIAMAAwADcALwAwADMALwBQAGwAYQB5AFIA"
+            "ZQBhAGQAeQBIAGUAYQBkAGUAcgAiACAAdgBlAHIAcwBpAG8AbgA9ACIANAAuADMALgAwAC4AMA"
+            "AiAD4APABEAEEAVABBAD4APABQAFIATwBUAEUAQwBUAEkATgBGAE8APgA8AEsASQBEAFMAPgA8"
+            "AEsASQBEACAAQQBMAEcASQBEAD0AIgBBAEUAUwBDAEIAQwAiACAAVgBBAEwAVQBFAD0AIgBBAE"
+            "EAQQBBAEEAQQBBAEEAQQBBAEIAegBNAFMAOQBsAE0AUwBBAGcASQBBAD0APQAiAD4APAAvAEsA"
+            "SQBEAD4APAAvAEsASQBEAFMAPgA8AC8AUABSAE8AVABFAEMAVABJAE4ARgBPAD4APAAvAEQAQQ"
+            "BUAEEAPgA8AC8AVwBSAE0ASABFAEEARABFAFIAPgA="
+        ),
+        "com.apple.streamingkeydelivery": "skd://itunes.apple.com/P000000000/s1/e1",
+    }
 
     def __init__(
         self,
@@ -61,28 +79,29 @@ class DownloaderSong:
         self.codec = codec
         self.synced_lyrics_format = synced_lyrics_format
 
-    def get_drm_infos(self, m3u8_data: dict) -> dict:
-        drm_info_raw = next(
+    def _search_m3u8_metadata(self, m3u8_data: dict, data_id: str) -> dict:
+        searched = next(
             (
                 session_data
                 for session_data in m3u8_data["session_data"]
-                if session_data["data_id"] == "com.apple.hls.AudioSessionKeyInfo"
+                if session_data["data_id"] == data_id
             ),
             None,
         )
-        if not drm_info_raw:
+        if not searched:
             return None
-        return json.loads(base64.b64decode(drm_info_raw["value"]).decode("utf-8"))
+        return json.loads(base64.b64decode(searched["value"]).decode("utf-8"))
 
-    def get_asset_infos(self, m3u8_data: dict) -> dict:
-        return json.loads(
-            base64.b64decode(
-                next(
-                    session_data
-                    for session_data in m3u8_data["session_data"]
-                    if session_data["data_id"] == "com.apple.hls.audioAssetMetadata"
-                )["value"]
-            ).decode("utf-8")
+    def get_audio_session_key_metadata(self, m3u8_data: dict) -> dict:
+        return self._search_m3u8_metadata(
+            m3u8_data,
+            "com.apple.hls.AudioSessionKeyInfo",
+        )
+
+    def get_asset_metadata(self, m3u8_data: dict) -> dict:
+        return self._search_m3u8_metadata(
+            m3u8_data,
+            "com.apple.hls.audioAssetMetadata",
         )
 
     def get_playlist_from_codec(self, m3u8_data: dict) -> dict | None:
@@ -113,7 +132,7 @@ class DownloaderSong:
         ).execute()
         return selected
 
-    def _get_drm_data(
+    def _get_drm_uri_from_session_key(
         self,
         drm_infos: dict,
         drm_ids: list,
@@ -131,29 +150,77 @@ class DownloaderSong:
             return None
         return drm_info[drm_key]["URI"]
 
-    def get_widevine_pssh(
+    def _get_drm_uri_from_m3u8_keys(
         self,
-        drm_infos: dict,
-        drm_ids: list,
+        m3u8_obj: m3u8.M3U8,
+        drm_key: str,
     ) -> str | None:
-        return self._get_drm_data(
-            drm_infos,
-            drm_ids,
-            "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed",
+        drm_uri = next(
+            (
+                key
+                for key in m3u8_obj.keys
+                if key.keyformat == drm_key
+                and key.uri != self.DRM_DEFAULT_KEY_MAPPING[drm_key]
+            ),
+            None,
+        )
+        if not drm_uri:
+            return None
+        return drm_uri.uri
+
+    def _get_stream_info(self, m3u8_url: str) -> StreamInfoAv | None:
+        stream_info = StreamInfo()
+        m3u8_master_obj = m3u8.load(m3u8_url)
+        m3u8_master_data = m3u8_master_obj.data
+
+        if self.codec == SongCodec.ASK:
+            playlist = self.get_playlist_from_user(m3u8_master_data)
+        else:
+            playlist = self.get_playlist_from_codec(m3u8_master_data)
+        if playlist is None:
+            return None
+        stream_info.stream_url = m3u8_master_obj.base_uri + playlist["uri"]
+
+        stream_info.codec = playlist["stream_info"]["codecs"]
+        is_mp4 = any(
+            stream_info.codec.startswith(possible_codec)
+            for possible_codec in self.MP4_FORMAT_CODECS
         )
 
-    def get_playready_pssh(self, drm_infos: dict, drm_ids: list) -> str | None:
-        return self._get_drm_data(
-            drm_infos,
-            drm_ids,
-            "com.microsoft.playready",
-        )
+        session_key_metadata = self.get_audio_session_key_metadata(m3u8_master_data)
+        if session_key_metadata:
+            asset_metadata = self.get_asset_metadata(m3u8_master_data)
+            variant_id = playlist["stream_info"]["stable_variant_id"]
+            drm_ids = asset_metadata[variant_id]["AUDIO-SESSION-KEY-IDS"]
+            (
+                stream_info.widevine_pssh,
+                stream_info.playready_pssh,
+                stream_info.fairplay_key,
+            ) = (
+                self._get_drm_uri_from_session_key(
+                    session_key_metadata,
+                    drm_ids,
+                    drm_key,
+                )
+                for drm_key in self.DRM_DEFAULT_KEY_MAPPING.keys()
+            )
+        else:
+            m3u8_obj = m3u8.load(stream_info.stream_url)
+            (
+                stream_info.widevine_pssh,
+                stream_info.playready_pssh,
+                stream_info.fairplay_key,
+            ) = (
+                self._get_drm_uri_from_m3u8_keys(
+                    m3u8_obj,
+                    drm_key,
+                )
+                for drm_key in self.DRM_DEFAULT_KEY_MAPPING.keys()
+            )
 
-    def get_fairplay_key(self, drm_infos: dict, drm_ids: list) -> str | None:
-        return self._get_drm_data(
-            drm_infos,
-            drm_ids,
-            "com.apple.streamingkeydelivery",
+        return StreamInfoAv(
+            audio_track=stream_info,
+            file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
         )
 
     def get_stream_info(self, track_metadata: dict) -> StreamInfoAv | None:
@@ -161,41 +228,6 @@ class DownloaderSong:
         if not m3u8_url:
             return None
         return self._get_stream_info(m3u8_url)
-
-    def _get_stream_info(self, m3u8_url: str) -> StreamInfoAv | None:
-        stream_info = StreamInfo()
-        m3u8_obj = m3u8.load(m3u8_url)
-        m3u8_data = m3u8_obj.data
-        drm_infos = self.get_drm_infos(m3u8_data)
-        if not drm_infos:
-            return None
-        asset_infos = self.get_asset_infos(m3u8_data)
-        if self.codec == SongCodec.ASK:
-            playlist = self.get_playlist_from_user(m3u8_data)
-        else:
-            playlist = self.get_playlist_from_codec(m3u8_data)
-        if playlist is None:
-            return None
-        stream_info.stream_url = m3u8_obj.base_uri + playlist["uri"]
-        variant_id = playlist["stream_info"]["stable_variant_id"]
-        drm_ids = asset_infos[variant_id]["AUDIO-SESSION-KEY-IDS"]
-        widevine_pssh, playready_pssh, fairplay_key = (
-            self.get_widevine_pssh(drm_infos, drm_ids),
-            self.get_playready_pssh(drm_infos, drm_ids),
-            self.get_fairplay_key(drm_infos, drm_ids),
-        )
-        stream_info.widevine_pssh = widevine_pssh
-        stream_info.playready_pssh = playready_pssh
-        stream_info.fairplay_key = fairplay_key
-        stream_info.codec = playlist["stream_info"]["codecs"]
-        is_mp4 = any(
-            stream_info.codec.startswith(possible_codec)
-            for possible_codec in self.MP4_FORMAT_CODECS
-        )
-        return StreamInfoAv(
-            audio_track=stream_info,
-            file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
-        )
 
     def get_stream_info_legacy(self, webplayback: dict) -> StreamInfoAv:
         flavor = "32:ctrp64" if self.codec == SongCodec.AAC_HE_LEGACY else "28:ctrp256"

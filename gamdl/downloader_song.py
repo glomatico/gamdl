@@ -552,7 +552,7 @@ class DownloaderSong:
         media_id: str = None,
         media_metadata: dict = None,
         playlist_attributes: dict = None,
-    ):
+    ) -> DownloadInfo:
         try:
             download_info = self._download(
                 media_id,
@@ -562,6 +562,7 @@ class DownloaderSong:
             self.downloader._final_processing(download_info)
         finally:
             self.downloader.cleanup_temp_path()
+        return download_info
 
     def _download(
         self,

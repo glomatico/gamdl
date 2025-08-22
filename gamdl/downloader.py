@@ -11,6 +11,7 @@ import subprocess
 import typing
 from pathlib import Path
 
+import colorama
 import requests
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
@@ -31,7 +32,7 @@ from .models import (
     PlaylistTags,
     UrlInfo,
 )
-from .utils import raise_response_exception
+from .utils import color_text, raise_response_exception
 
 logger = logging.getLogger("gamdl")
 
@@ -618,9 +619,11 @@ class Downloader:
         self,
         download_info: DownloadInfo,
     ) -> None:
+        colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
+
         if download_info.staged_path:
             logger.debug(
-                f"[{download_info.media_id}] Applying tags to {download_info.staged_path}"
+                f"[{colored_media_id}] Applying tags to {download_info.staged_path}"
             )
             self.apply_tags(
                 download_info.staged_path,
@@ -628,7 +631,7 @@ class Downloader:
                 download_info.cover_url,
             )
             logger.debug(
-                f'[{download_info.media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
+                f'[{colored_media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
             )
             self.move_to_output_path(
                 download_info.staged_path,
@@ -636,7 +639,7 @@ class Downloader:
             )
         if download_info.cover_path and self.save_cover:
             logger.debug(
-                f'[{download_info.media_id}] Saving cover to "{download_info.cover_path}"'
+                f'[{colored_media_id}] Saving cover to "{download_info.cover_path}"'
             )
             self.write_cover(
                 download_info.cover_path,
@@ -648,7 +651,7 @@ class Downloader:
             and download_info.lyrics.synced
         ):
             logger.debug(
-                f'[{download_info.media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
+                f'[{colored_media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
             )
             self.write_synced_lyrics(
                 download_info.synced_lyrics_path,
@@ -659,7 +662,7 @@ class Downloader:
                 download_info.playlist_tags
             )
             logger.debug(
-                f'[{download_info.media_id}] Updating playlist file "{playlist_file_path}"'
+                f'[{colored_media_id}] Updating playlist file "{playlist_file_path}"'
             )
             self.update_playlist_file(
                 playlist_file_path,

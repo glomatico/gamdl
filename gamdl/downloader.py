@@ -676,7 +676,6 @@ class Downloader:
             self.no_synced_lyrics
             or not download_info.lyrics
             or not download_info.lyrics.synced
-            or not self.synced_lyrics_only
         ):
             pass
         elif download_info.synced_lyrics_path.exists() and not self.overwrite:

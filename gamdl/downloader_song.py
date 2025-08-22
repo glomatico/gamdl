@@ -57,11 +57,13 @@ class DownloaderSong:
         codec: SongCodec = SongCodec.AAC_LEGACY,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         synced_lyrics_only: bool = False,
+        no_synced_lyrics: bool = False,
     ):
         self.downloader = downloader
         self.codec = codec
         self.synced_lyrics_format = synced_lyrics_format
         self.synced_lyrics_only = synced_lyrics_only
+        self.no_synced_lyrics = no_synced_lyrics
 
     def get_drm_infos(self, m3u8_data: dict) -> dict:
         drm_info_raw = next(
@@ -614,6 +616,10 @@ class DownloaderSong:
         final_path = self.downloader.get_final_path(tags, ".m4a", playlist_tags)
         download_info.tags = tags
         download_info.final_path = final_path
+
+        if lyrics and lyrics.synced and not self.no_synced_lyrics:
+            synced_lyrics_path = self.get_lyrics_synced_path(final_path)
+            download_info.synced_lyrics_path = synced_lyrics_path
 
         if self.synced_lyrics_only:
             return download_info

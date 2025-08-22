@@ -443,6 +443,7 @@ class DownloaderSong:
         subprocess.run(
             [
                 self.downloader.mp4decrypt_path_full,
+                *keys,
                 encrypted_path,
                 decrypted_path,
             ],

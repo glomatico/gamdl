@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 import urllib.parse
 from pathlib import Path
 
+import colorama
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
@@ -12,12 +14,16 @@ from .downloader import Downloader
 from .enums import MediaFileFormat, MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
 from .models import (
     DecryptionKeyAv,
+    DownloadInfo,
     MediaRating,
     MediaTags,
     MediaType,
     StreamInfo,
     StreamInfoAv,
 )
+from .utils import color_text
+
+logger = logging.getLogger("gamdl")
 
 
 class DownloaderMusicVideo:
@@ -155,7 +161,7 @@ class DownloaderMusicVideo:
         stream_info.widevine_pssh = self.get_pssh(m3u8_data)
         return stream_info
 
-    def get_stream_info(
+    def _get_stream_info(
         self,
         m3u8_master_data: dict,
     ) -> StreamInfoAv:
@@ -181,6 +187,24 @@ class DownloaderMusicVideo:
             audio_track=stream_info_audio,
             file_format=file_format,
         )
+
+    def get_stream_info_from_webplayback(
+        self,
+        webplayback: dict,
+    ) -> StreamInfoAv:
+        m3u8_master_data = self.get_m3u8_master_data(
+            self.get_stream_url_from_webplayback(webplayback)
+        )
+        return self._get_stream_info(m3u8_master_data)
+
+    def get_stream_info_from_itunes_page(
+        self,
+        itunes_page: dict,
+    ) -> StreamInfoAv:
+        m3u8_master_data = self.get_m3u8_master_data(
+            self.get_stream_url_from_itunes_page(itunes_page)
+        )
+        return self._get_stream_info(m3u8_master_data)
 
     def get_decryption_key(
         self,
@@ -252,25 +276,6 @@ class DownloaderMusicVideo:
 
         return tags
 
-    def get_encrypted_path_video(self, track_id: str) -> str:
-        return self.downloader.temp_path / f"encrypted_{track_id}.mp4"
-
-    def get_encrypted_path_audio(self, track_id: str) -> str:
-        return self.downloader.temp_path / f"encrypted_{track_id}.m4a"
-
-    def get_decrypted_path_video(self, track_id: str) -> str:
-        return self.downloader.temp_path / f"decrypted_{track_id}.mp4"
-
-    def get_decrypted_path_audio(self, track_id: str) -> str:
-        return self.downloader.temp_path / f"decrypted_{track_id}.m4a"
-
-    def get_remuxed_path(
-        self,
-        track_id: str,
-        file_extension: str,
-    ) -> str:
-        return self.downloader.temp_path / (f"remuxed_{track_id}" + file_extension)
-
     def decrypt(self, encrypted_path: Path, decryption_key: str, decrypted_path: Path):
         subprocess.run(
             [
@@ -336,26 +341,218 @@ class DownloaderMusicVideo:
             **self.downloader.subprocess_additional_args,
         )
 
-    def remux(
+    def stage(
         self,
+        encrypted_path_video: Path,
+        encrypted_path_audio: Path,
         decrypted_path_video: Path,
         decrypted_path_audio: Path,
-        remuxed_path: Path,
+        staged_path: Path,
+        decryption_key: DecryptionKeyAv,
     ):
+        self.decrypt(
+            encrypted_path_video,
+            decryption_key.video_track.key,
+            decrypted_path_video,
+        )
+        self.decrypt(
+            encrypted_path_audio,
+            decryption_key.audio_track.key,
+            decrypted_path_audio,
+        )
+
         if self.downloader.remux_mode == RemuxMode.MP4BOX:
             self.remux_mp4box(
                 decrypted_path_audio,
                 decrypted_path_video,
-                remuxed_path,
+                staged_path,
             )
         elif self.downloader.remux_mode == RemuxMode.FFMPEG:
             self.remux_ffmpeg(
                 decrypted_path_video,
                 decrypted_path_audio,
-                remuxed_path,
+                staged_path,
             )
 
     def get_cover_path(self, final_path: Path, cover_format: str) -> Path:
         return final_path.with_suffix(
             self.downloader.get_cover_file_extension(cover_format)
         )
+
+    def download(
+        self,
+        media_id: str = None,
+        media_metadata: dict = None,
+        playlist_attributes: dict = None,
+    ) -> DownloadInfo:
+        try:
+            download_info = self._download(
+                media_id,
+                media_metadata,
+                playlist_attributes,
+            )
+            self.downloader._final_processing(download_info)
+        finally:
+            self.downloader.cleanup_temp_path()
+        return download_info
+
+    def _download(
+        self,
+        media_id: str = None,
+        media_metadata: dict = None,
+        playlist_attributes: dict = None,
+        playlist_track: int = None,
+    ) -> DownloadInfo:
+        download_info = DownloadInfo()
+
+        if (playlist_attributes is None) != (playlist_track is None):
+            raise ValueError(
+                "playlist_attributes and playlist_track must be provided together"
+            )
+        if playlist_attributes:
+            playlist_tags = self.downloader.get_playlist_tags(
+                playlist_attributes,
+                playlist_track,
+            )
+        else:
+            playlist_tags = None
+        download_info.playlist_tags = playlist_tags
+
+        if not media_id and not media_metadata:
+            raise ValueError("Either media_id or media_metadata must be provided")
+
+        if not media_id:
+            if media_metadata["type"] == "library-music-videos":
+                media_id = self.downloader.get_media_id_of_library_media(media_metadata)
+            else:
+                media_id = media_metadata["id"]
+        download_info.media_id = media_id
+        colored_media_id = color_text(media_id, colorama.Style.DIM)
+
+        if not media_metadata:
+            logger.debug(f"[{colored_media_id}] Getting music video metadata")
+            media_metadata = self.downloader.apple_music_api.get_music_video(media_id)
+        download_info.media_metadata = media_metadata
+
+        if not self.downloader.is_media_streamable(media_metadata):
+            logger.warning(
+                f"[{color_text(media_metadata['id'], colorama.Style.DIM)}] "
+                "Music video is not streamable or downloadable, skipping"
+            )
+            return download_info
+
+        alt_media_id = self.get_music_video_id_alt(media_metadata) or media_id
+        download_info.alt_media_id = alt_media_id
+
+        logger.debug(f"[{colored_media_id}] Getting iTunes page")
+        itunes_page = self.downloader.itunes_api.get_itunes_page(
+            "music-video",
+            alt_media_id,
+        )
+
+        logger.debug(f"[{colored_media_id}] Getting tags")
+        tags = self.get_tags(
+            alt_media_id,
+            itunes_page,
+            media_metadata,
+        )
+        download_info.tags = tags
+
+        if alt_media_id == media_id:
+            logger.debug(f"[{colored_media_id}] Getting stream info")
+            stream_info = self.get_stream_info_from_itunes_page(itunes_page)
+        else:
+            logger.debug(f"[{colored_media_id}] Getting web playback")
+            webplayback = self.downloader.apple_music_api.get_webplayback(media_id)
+            logger.debug(f"[{colored_media_id}] Getting stream info")
+            stream_info = self.get_stream_info_from_webplayback(webplayback)
+        download_info.stream_info = stream_info
+
+        final_path = self.downloader.get_final_path(
+            tags,
+            self.downloader.get_media_file_extension(stream_info.file_format),
+            playlist_tags,
+        )
+        download_info.final_path = final_path
+
+        cover_url = self.downloader.get_cover_url(media_metadata)
+        cover_format = self.downloader.get_cover_format(cover_url)
+        if cover_format and self.downloader.save_cover:
+            cover_path = self.get_cover_path(final_path, cover_format)
+        else:
+            cover_path = None
+        download_info.cover_url = cover_url
+        download_info.cover_format = cover_format
+        download_info.cover_path = cover_path
+
+        if final_path.exists() and not self.downloader.overwrite:
+            logger.warning(
+                f'[{colored_media_id}] Music video already exists at "{final_path}", skipping'
+            )
+            return download_info
+
+        logger.debug(f"[{colored_media_id}] Getting decryption key")
+        decryption_key = self.get_decryption_key(
+            stream_info,
+            media_id,
+        )
+
+        encrypted_path_video = self.downloader.get_temp_path(
+            media_id,
+            "encrypted_video",
+            ".mp4",
+        )
+        encrypted_path_audio = self.downloader.get_temp_path(
+            media_id,
+            "encrypted_audio",
+            ".m4a",
+        )
+        decrypted_path_video = self.downloader.get_temp_path(
+            media_id,
+            "decrypted_video",
+            ".mp4",
+        )
+        decrypted_path_audio = self.downloader.get_temp_path(
+            media_id,
+            "decrypted_audio",
+            ".m4a",
+        )
+        staged_path = self.downloader.get_temp_path(
+            media_id,
+            "staged",
+            self.downloader.get_media_file_extension(stream_info.file_format),
+        )
+
+        logger.debug(
+            f'[{colored_media_id}] Downloading video to "{encrypted_path_video}"'
+        )
+        self.download(
+            encrypted_path_video,
+            stream_info.video_track.stream_url,
+        )
+
+        logger.debug(
+            f'[{colored_media_id}] Downloading audio to "{encrypted_path_audio}"'
+        )
+        self.downloader.download(
+            encrypted_path_audio,
+            stream_info.audio_track.stream_url,
+        )
+
+        logger.debug(
+            f'Decrypting video/audio to "{decrypted_path_video}"/"{decrypted_path_audio}" '
+            f'and remuxing to "{staged_path}"'
+        )
+        self.stage(
+            encrypted_path_video,
+            encrypted_path_audio,
+            decrypted_path_video,
+            decrypted_path_audio,
+            staged_path,
+            decryption_key,
+        )
+        download_info.staged_path = staged_path
+
+        logger.info(f"[{colored_media_id}] Download completed successfully")
+
+        return download_info

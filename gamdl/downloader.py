@@ -634,6 +634,7 @@ class Downloader:
     def _final_processing(
         self,
         download_info: DownloadInfo,
+        skip_final_move: bool = False,
     ) -> None:
         colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
 
@@ -649,10 +650,11 @@ class Downloader:
             logger.debug(
                 f'[{colored_media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
             )
-            self.move_to_output_path(
-                download_info.staged_path,
-                download_info.final_path,
-            )
+            if not skip_final_move:
+                self.move_to_output_path(
+                    download_info.staged_path,
+                    download_info.final_path,
+                )
             logger.info(f"[{colored_media_id}] Download completed successfully")
 
         if (

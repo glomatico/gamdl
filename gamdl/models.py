@@ -152,3 +152,18 @@ class PlaylistTags:
     playlist_id: int = None
     playlist_title: str = None
     playlist_track: int = None
+
+
+@dataclass
+class DownloadInfo:
+    media_id: str = None
+    alt_media_id: str = None
+    playlist_tags: PlaylistTags = None
+    lyrics: Lyrics = None
+    tags: MediaTags = None
+    final_path: Path = None
+    cover_url: str = None
+    cover_format: str = None
+    stream_info: StreamInfoAv = None
+    decryption_key: DecryptionKeyAv = None
+    staged_path: Path = None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import typing
 from pathlib import Path
 
 import click
@@ -36,6 +37,37 @@ downloader_music_video_sig = inspect.signature(DownloaderMusicVideo.__init__)
 downloader_post_sig = inspect.signature(DownloaderPost.__init__)
 
 logger = logging.getLogger("gamdl")
+
+
+class Csv(click.ParamType):
+    name = "csv"
+
+    def __init__(
+        self,
+        subtype: typing.Any,
+    ) -> None:
+        self.subtype = subtype
+
+    def convert(
+        self,
+        value: str | None,
+        param: click.Parameter,
+        ctx: click.Context,
+    ) -> list[typing.Any]:
+        if value is None:
+            return []
+        items = [v.strip() for v in value.split(",") if v.strip()]
+        result = []
+        for item in items:
+            try:
+                result.append(self.subtype(item))
+            except ValueError as e:
+                self.fail(
+                    f"'{item}' is not a valid value for {self.subtype.__name__}",
+                    param,
+                    ctx,
+                )
+        return result
 
 
 def load_config_file(
@@ -267,8 +299,7 @@ def load_config_file(
 )
 @click.option(
     "--exclude-tags",
-    type=str,
-    multiple=True,
+    type=Csv(str),
     default=downloader_sig.parameters["exclude_tags"].default,
     help="Comma-separated tags to exclude.",
 )

@@ -466,7 +466,7 @@ class DownloaderSong:
     ):
         if codec in LEGACY_CODECS and self.downloader.remux_mode == RemuxMode.FFMPEG:
             self.remux_ffmpeg(
-                decrypted_path,
+                encrypted_path,
                 staged_path,
                 decryption_key.audio_track.key,
             )
@@ -509,13 +509,22 @@ class DownloaderSong:
         self,
         decrypted_path: Path,
         remuxed_path: Path,
+        decryption_key: str = None,
     ):
+        if decryption_key:
+            decryption_key_arg = [
+                "-decryption_key",
+                decryption_key,
+            ]
+        else:
+            decryption_key_arg = []
         subprocess.run(
             [
                 self.downloader.ffmpeg_path_full,
                 "-loglevel",
                 "error",
                 "-y",
+                *decryption_key_arg,
                 "-i",
                 decrypted_path,
                 "-c",

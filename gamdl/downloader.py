@@ -654,6 +654,7 @@ class Downloader:
                 download_info.final_path,
             )
             logger.info(f"[{colored_media_id}] Download completed successfully")
+
         if (
             download_info.cover_path and not self.save_cover
         ) or not download_info.cover_path:
@@ -670,6 +671,7 @@ class Downloader:
                 download_info.cover_path,
                 download_info.cover_url,
             )
+
         if (
             self.no_synced_lyrics
             or not download_info.lyrics

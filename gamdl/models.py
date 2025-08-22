@@ -165,6 +165,8 @@ class DownloadInfo:
     final_path: Path = None
     cover_url: str = None
     cover_format: str = None
+    cover_path: Path = None
     stream_info: StreamInfoAv = None
     decryption_key: DecryptionKeyAv = None
     staged_path: Path = None
+    synced_lyrics_path: Path = None

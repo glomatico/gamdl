@@ -635,12 +635,7 @@ class DownloaderSong:
 
         logger.debug(f"[{colored_media_id}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)
-        if lyrics and lyrics.synced:
-            synced_lyrics_path = self.get_lyrics_synced_path(final_path)
-        else:
-            synced_lyrics_path = None
         download_info.lyrics = lyrics
-        download_info.synced_lyrics_path = synced_lyrics_path
 
         logger.debug(f"[{colored_media_id}] Getting webplayback info")
         webplayback = self.downloader.apple_music_api.get_webplayback(
@@ -653,6 +648,12 @@ class DownloaderSong:
         final_path = self.downloader.get_final_path(tags, ".m4a", playlist_tags)
         download_info.tags = tags
         download_info.final_path = final_path
+
+        if lyrics and lyrics.synced:
+            synced_lyrics_path = self.get_lyrics_synced_path(final_path)
+        else:
+            synced_lyrics_path = None
+        download_info.synced_lyrics_path = synced_lyrics_path
 
         if self.downloader.synced_lyrics_only:
             logger.info(

@@ -551,17 +551,18 @@ class DownloaderSong:
         else:
             playlist_tags = None
 
+        if not media_id and not media_metadata:
+            raise ValueError("Either media_id or media_metadata must be provided")
+
+        if not media_id:
+            media_id = self.downloader.get_media_id(media_metadata)
+        media_id_colored = color_text(media_id, colorama.Style.DIM)
+
         if not media_metadata:
             logger.debug(f"[{media_id_colored}] Getting song metadata")
             media_metadata = self.downloader.apple_music_api.get_song(media_id)
-        elif not media_id:
-            media_id = self.downloader.get_media_id(media_metadata)
-        else:
-            raise ValueError("Either media_id or media_metadata must be provided")
         download_info.media_metadata = media_metadata
         download_info.media_id = media_id
-
-        media_id_colored = color_text(media_id, colorama.Style.DIM)
 
         logger.debug(f"[{media_id_colored}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)
@@ -570,7 +571,6 @@ class DownloaderSong:
         logger.debug(f"[{media_id_colored}] Getting webplayback info")
         webplayback = self.downloader.apple_music_api.get_webplayback(
             media_id,
-            playlist_attributes,
         )
         tags = self.get_tags(
             webplayback,
@@ -591,6 +591,7 @@ class DownloaderSong:
         if final_path.exists() and not self.downloader.overwrite:
             logger.warning(f'Song already exists at "{final_path}", skipping')
             return download_info
+
         logger.debug(f"[{media_id_colored}] Getting stream info")
         if self.codec in LEGACY_CODECS:
             stream_info = self.get_stream_info_legacy(webplayback)
@@ -650,4 +651,5 @@ class DownloaderSong:
             staged_path,
         )
         download_info.staged_path = staged_path
+
         return download_info

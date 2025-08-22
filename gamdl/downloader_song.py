@@ -324,7 +324,7 @@ class DownloaderSong:
             return None
         elif track_metadata.get("relationships") is None:
             track_metadata = self.downloader.apple_music_api.get_song(
-                self.downloader.get_media_id(track_metadata)
+                self.downloader.get_media_id_of_library_media(track_metadata)
             )
         if (
             track_metadata["relationships"].get("lyrics")
@@ -596,7 +596,10 @@ class DownloaderSong:
             raise ValueError("Either media_id or media_metadata must be provided")
 
         if not media_id:
-            media_id = self.downloader.get_media_id(media_metadata)
+            if media_metadata["type"] == "library-songs":
+                media_id = self.downloader.get_media_id_of_library_media(media_metadata)
+            else:
+                media_id = media_metadata["id"]
         media_id_colored = color_text(media_id, colorama.Style.DIM)
 
         if not media_metadata:
@@ -604,6 +607,13 @@ class DownloaderSong:
             media_metadata = self.downloader.apple_music_api.get_song(media_id)
         download_info.media_metadata = media_metadata
         download_info.media_id = media_id
+
+        if not self.downloader.is_media_streamable(media_metadata):
+            logger.warning(
+                f"{color_text(media_metadata['id'], colorama.Style.DIM)} "
+                "Track is not streamable or downloadable, skipping"
+            )
+            return download_info
 
         logger.debug(f"[{media_id_colored}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)

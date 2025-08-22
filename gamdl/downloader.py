@@ -592,7 +592,7 @@ class Downloader:
         shutil.move(staged_path, final_path)
 
     @functools.lru_cache()
-    def save_cover(self, cover_path: Path, cover_url: str):
+    def write_cover(self, cover_path: Path, cover_url: str):
         cover_path.parent.mkdir(parents=True, exist_ok=True)
         cover_path.write_bytes(self.get_cover_bytes(cover_url))
 
@@ -623,7 +623,7 @@ class Downloader:
             logger.debug(
                 f'[{download_info.media_id}] Saving cover to "{download_info.cover_path}"'
             )
-            self.save_cover(
+            self.write_cover(
                 download_info.cover_path,
                 download_info.cover_url,
             )

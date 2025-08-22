@@ -636,6 +636,9 @@ class DownloaderSong:
             download_info.synced_lyrics_path = synced_lyrics_path
 
         if self.synced_lyrics_only:
+            logger.info(
+                f"[{colored_media_id}] Downloading synced lyrics only, skipping song download"
+            )
             return download_info
 
         cover_url = self.downloader.get_cover_url(media_metadata)

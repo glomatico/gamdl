@@ -687,7 +687,7 @@ class DownloaderSong:
         staged_path = self.downloader.get_temp_path(
             media_id,
             "staged",
-            ".m4a",
+            stream_info.file_format,
         )
 
         logger.info(f"[{colored_media_id}] Downloading song")

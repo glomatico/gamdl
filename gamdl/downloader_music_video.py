@@ -410,9 +410,9 @@ class DownloaderMusicVideo:
     ) -> DownloadInfo:
         download_info = DownloadInfo()
 
-        if (playlist_attributes is None) != (playlist_track is None):
+        if playlist_track is None and playlist_attributes:
             raise ValueError(
-                "playlist_attributes and playlist_track must be provided together"
+                "playlist_track must be provided if playlist_attributes is provided"
             )
         if playlist_attributes:
             playlist_tags = self.downloader.get_playlist_tags(

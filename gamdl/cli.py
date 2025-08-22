@@ -532,7 +532,7 @@ def main(
                 else:
                     playlist_tags = None
                 logger.info(
-                    f'({queue_progress}) Downloading "{media_metadata["attributes"]["name"]}"'
+                    f'({queue_progress}) "{media_metadata["attributes"]["name"]}"'
                 )
                 if (
                     (synced_lyrics_only and media_metadata["type"] != "songs")

@@ -542,8 +542,10 @@ class DownloaderSong:
     def get_lyrics_synced_path(self, final_path: Path) -> Path:
         return final_path.with_suffix("." + self.synced_lyrics_format.value)
 
-    def get_cover_path(self, final_path: Path, file_extension: str) -> Path:
-        return final_path.parent / ("Cover" + file_extension)
+    def get_cover_path(self, final_path: Path, cover_format: str) -> Path:
+        return final_path.parent / (
+            "Cover" + self.downloader.get_cover_file_extension(cover_format)
+        )
 
     def save_lyrics_synced(self, lyrics_synced_path: Path, lyrics_synced: str):
         lyrics_synced_path.parent.mkdir(parents=True, exist_ok=True)

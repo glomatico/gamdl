@@ -388,7 +388,7 @@ def main(
     template_file_no_album: str,
     template_file_playlist: str,
     template_date: str,
-    exclude_tags: tuple[str, ...],
+    exclude_tags: list[str],
     cover_size: int,
     truncate: int,
     codec_song: SongCodec,

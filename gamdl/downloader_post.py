@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+import colorama
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
-from .models import MediaTags
 from .enums import PostQuality
+from .models import DownloadInfo, MediaTags
+from .utils import color_text
+
+logger = logging.getLogger("gamdl")
 
 
 class DownloaderPost:
@@ -71,5 +76,89 @@ class DownloaderPost:
             storefront=int(self.downloader.itunes_api.storefront_id.split("-")[0]),
         )
 
-    def get_post_temp_path(self, track_id: str) -> Path:
-        return self.downloader.temp_path / f"{track_id}_temp.m4v"
+    def get_cover_path(self, final_path: Path, cover_format: str) -> Path:
+        return final_path.with_suffix(
+            self.downloader.get_cover_file_extension(cover_format)
+        )
+
+    def download(
+        self,
+        media_id: str = None,
+        media_metadata: dict = None,
+    ) -> DownloadInfo:
+        try:
+            download_info = self._download(
+                media_id,
+                media_metadata,
+            )
+            self.downloader._final_processing(download_info)
+        finally:
+            self.downloader.cleanup_temp_path()
+        return download_info
+
+    def _download(
+        self,
+        media_id: str = None,
+        media_metadata: dict = None,
+    ) -> DownloadInfo:
+        download_info = DownloadInfo()
+
+        if not media_id and not media_metadata:
+            raise ValueError("Either media_id or media_metadata must be provided")
+
+        if not media_id:
+            media_id = media_metadata["id"]
+        download_info.media_id = media_id
+        colored_media_id = color_text(media_id, colorama.Style.DIM)
+
+        if not media_metadata:
+            logger.debug(f"[{colored_media_id}] Getting post video metadata")
+            print(media_id)
+            media_metadata = self.downloader.apple_music_api.get_post(media_id)
+        download_info.media_metadata = media_metadata
+
+        if not self.downloader.is_media_streamable(media_metadata):
+            logger.warning(
+                f"[{colored_media_id}] "
+                "Post video is not streamable or downloadable, skipping"
+            )
+            return download_info
+
+        tags = self.get_tags(media_metadata)
+        final_path = self.downloader.get_final_path(
+            tags,
+            ".m4v",
+            None,
+        )
+        download_info.tags = tags
+        download_info.final_path = final_path
+
+        cover_url = self.downloader.get_cover_url(media_metadata)
+        cover_format = self.downloader.get_cover_format(cover_url)
+        if cover_format and self.downloader.save_cover:
+            cover_path = self.get_cover_path(final_path, cover_format)
+        else:
+            cover_path = None
+        download_info.cover_url = cover_url
+        download_info.cover_format = cover_format
+        download_info.cover_path = cover_path
+
+        stream_url = self.get_stream_url(media_metadata)
+        staged_path = self.downloader.get_temp_path(
+            media_id,
+            "stage",
+            ".m4v",
+        )
+
+        logger.info(f"[{colored_media_id}] Downloading post video")
+
+        logger.debug(f"[{colored_media_id}] Downloading to {staged_path}")
+        self.downloader.download_ytdlp(
+            staged_path,
+            stream_url,
+        )
+        download_info.staged_path = staged_path
+
+        logger.info(f"[{colored_media_id}] Download completed successfully")
+
+        return download_info

@@ -652,3 +652,15 @@ class Downloader:
                 download_info.synced_lyrics_path,
                 download_info.lyrics.synced,
             )
+        if download_info.playlist_tags and self.save_playlist:
+            playlist_file_path = self.get_playlist_file_path(
+                download_info.playlist_tags
+            )
+            logger.debug(
+                f'[{download_info.media_id}] Updating playlist file "{playlist_file_path}"'
+            )
+            self.update_playlist_file(
+                playlist_file_path,
+                download_info.final_path,
+                download_info.playlist_tags.playlist_track,
+            )

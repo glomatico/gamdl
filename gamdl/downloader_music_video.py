@@ -533,7 +533,7 @@ class DownloaderMusicVideo:
         logger.debug(
             f'[{colored_media_id}] Downloading video to "{encrypted_path_video}"'
         )
-        self.download(
+        self.downloader.download(
             encrypted_path_video,
             stream_info.video_track.stream_url,
         )

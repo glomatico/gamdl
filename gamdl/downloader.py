@@ -436,6 +436,15 @@ class Downloader:
     ) -> str:
         return "." + file_format.value
 
+    def get_temp_path(
+        self,
+        media_id: str,
+        tag: str,
+        file_extension: str,
+    ):
+        temp_path = self.temp_path / (f"{media_id}_{tag}" + file_extension)
+        return temp_path
+
     def get_final_path(
         self,
         tags: MediaTags,
@@ -565,11 +574,11 @@ class Downloader:
 
     def move_to_output_path(
         self,
-        remuxed_path: Path,
+        staged_path: Path,
         final_path: Path,
     ):
         final_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(remuxed_path, final_path)
+        shutil.move(staged_path, final_path)
 
     @functools.lru_cache()
     def save_cover(self, cover_path: Path, cover_url: str):

@@ -4,6 +4,7 @@ import base64
 import datetime
 import functools
 import io
+import logging
 import re
 import shutil
 import subprocess
@@ -19,12 +20,20 @@ from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
-from .models import MediaTags, PlaylistTags
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
-from .models import DownloadQueue, UrlInfo, DecryptionKey
+from .models import (
+    DecryptionKey,
+    DownloadInfo,
+    DownloadQueue,
+    MediaTags,
+    PlaylistTags,
+    UrlInfo,
+)
 from .utils import raise_response_exception
+
+logger = logging.getLogger("gamdl")
 
 
 class Downloader:
@@ -591,3 +600,44 @@ class Downloader:
 
     def cleanup_temp_path(self):
         shutil.rmtree(self.temp_path)
+
+    def _final_processing(
+        self,
+        download_info: DownloadInfo,
+    ) -> None:
+        if download_info.staged_path:
+            logger.debug(
+                f"[{download_info.media_id}] Applying tags to {download_info.staged_path}"
+            )
+            self.apply_tags(
+                download_info.staged_path,
+                download_info.tags,
+                download_info.cover_url,
+            )
+            logger.debug(
+                f'[{download_info.media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
+            )
+            self.move_to_output_path(
+                download_info.staged_path,
+                download_info.final_path,
+            )
+        if download_info.cover_path and self.save_cover:
+            logger.debug(
+                f'[{download_info.media_id}] Saving cover to "{download_info.cover_path}"'
+            )
+            self.save_cover(
+                download_info.cover_path,
+                download_info.cover_url,
+            )
+        if (
+            download_info.lyrics
+            and download_info.synced_lyrics_path
+            and download_info.lyrics.synced
+        ):
+            logger.debug(
+                f'[{download_info.media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
+            )
+            self.save_synced_lyrics(
+                download_info.synced_lyrics_path,
+                download_info.lyrics.synced,
+            )

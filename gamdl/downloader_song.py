@@ -439,19 +439,21 @@ class DownloaderSong:
     ):
         if codec in LEGACY_CODECS:
             keys = [
+                "--key",
                 f"0:{decryption_key}",
             ]
         else:
             self.fix_key_id(encrypted_path)
             keys = [
+                "--key",
                 "0" * 32 + f":{decryption_key}",
+                "--key",
                 "1" * 32 + f":{self.DEFAULT_DECRYPTION_KEY}",
             ]
         subprocess.run(
             [
                 self.downloader.mp4decrypt_path_full,
                 encrypted_path,
-                *[f"--key={key}" for key in keys],
                 decrypted_path,
             ],
             check=True,
@@ -565,7 +567,7 @@ class DownloaderSong:
             )
             self.downloader._final_processing(download_info)
             colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
-            logger.info(f"[{colored_media_id} Download completed successfully")
+            logger.info(f"[{colored_media_id}] Download completed successfully")
         finally:
             self.downloader.cleanup_temp_path()
         return download_info

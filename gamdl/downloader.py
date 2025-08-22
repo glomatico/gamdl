@@ -293,7 +293,7 @@ class Downloader:
         library_media_metadata: dict,
     ) -> str | None:
         play_params = library_media_metadata["attributes"].get("playParams", {})
-        return play_params.get("catalogId")
+        return play_params.get("catalogId", library_media_metadata["id"])
 
     def is_media_streamable(
         self,

@@ -569,13 +569,22 @@ class DownloaderSong:
         media_id: str = None,
         media_metadata: dict = None,
         playlist_attributes: dict = None,
+        playlist_track: int = None,
     ) -> DownloadInfo:
         download_info = DownloadInfo()
 
+        if (playlist_attributes is None) != (playlist_track is None):
+            raise ValueError(
+                "playlist_attributes and playlist_track must be provided together"
+            )
         if playlist_attributes:
-            playlist_tags = self.downloader.get_playlist_tags(playlist_attributes)
+            playlist_tags = self.downloader.get_playlist_tags(
+                playlist_attributes,
+                playlist_track,
+            )
         else:
             playlist_tags = None
+        download_info.playlist_tags = playlist_tags
 
         if not media_id and not media_metadata:
             raise ValueError("Either media_id or media_metadata must be provided")

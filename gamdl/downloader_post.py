@@ -112,7 +112,7 @@ class DownloaderPost:
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not media_metadata:
-            logger.debug(f"[{colored_media_id}] Getting post video metadata")
+            logger.debug(f"[{colored_media_id}] Getting Post Video metadata")
             print(media_id)
             media_metadata = self.downloader.apple_music_api.get_post(media_id)
         download_info.media_metadata = media_metadata
@@ -120,7 +120,7 @@ class DownloaderPost:
         if not self.downloader.is_media_streamable(media_metadata):
             logger.warning(
                 f"[{colored_media_id}] "
-                "Post video is not streamable or downloadable, skipping"
+                "Post Video is not streamable or downloadable, skipping"
             )
             return download_info
 
@@ -150,7 +150,7 @@ class DownloaderPost:
             ".m4v",
         )
 
-        logger.info(f"[{colored_media_id}] Downloading post video")
+        logger.info(f"[{colored_media_id}] Downloading Post Video")
 
         logger.debug(f"[{colored_media_id}] Downloading to {staged_path}")
         self.downloader.download_ytdlp(

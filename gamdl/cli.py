@@ -523,14 +523,6 @@ def main(
                 colorama.Style.DIM,
             )
             try:
-                remuxed_path = None
-                if download_queue.playlist_attributes:
-                    playlist_tags = downloader.get_playlist_tags(
-                        download_queue.playlist_attributes,
-                        download_index,
-                    )
-                else:
-                    playlist_tags = None
                 logger.info(
                     f'({queue_progress}) "{media_metadata["attributes"]["name"]}"'
                 )
@@ -550,11 +542,14 @@ def main(
                 elif media_metadata["type"] in ("songs", "library-songs"):
                     downloader_song.download(
                         media_metadata=media_metadata,
+                        playlist_attributes=download_queue.playlist_attributes,
+                        playlist_track=download_index,
                     )
                 elif media_metadata["type"] in ("music-videos", "library-music-videos"):
                     downloader_music_video.download(
                         media_metadata=media_metadata,
-                        playlist_tags=playlist_tags,
+                        playlist_attributes=download_queue.playlist_attributes,
+                        playlist_track=download_index,
                     )
                 elif media_metadata["type"] == "uploaded-videos":
                     stream_url = downloader_post.get_stream_url(media_metadata)

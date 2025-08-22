@@ -596,6 +596,17 @@ class Downloader:
         cover_path.parent.mkdir(parents=True, exist_ok=True)
         cover_path.write_bytes(self.get_cover_bytes(cover_url))
 
+    def write_synced_lyrics(
+        self,
+        synced_lyrics_path: Path,
+        synced_lyrics: str,
+    ):
+        synced_lyrics_path.parent.mkdir(parents=True, exist_ok=True)
+        synced_lyrics_path.write_text(
+            synced_lyrics,
+            encoding="utf8",
+        )
+
     def cleanup_temp_path(self):
         shutil.rmtree(self.temp_path)
 
@@ -635,7 +646,7 @@ class Downloader:
             logger.debug(
                 f'[{download_info.media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
             )
-            self.save_synced_lyrics(
+            self.write_synced_lyrics(
                 download_info.synced_lyrics_path,
                 download_info.lyrics.synced,
             )

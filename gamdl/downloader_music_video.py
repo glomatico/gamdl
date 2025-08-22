@@ -355,5 +355,7 @@ class DownloaderMusicVideo:
                 remuxed_path,
             )
 
-    def get_cover_path(self, final_path: Path, file_extension: str) -> Path:
-        return final_path.with_suffix(file_extension)
+    def get_cover_path(self, final_path: Path, cover_format: str) -> Path:
+        return final_path.with_suffix(
+            self.downloader.get_cover_file_extension(cover_format)
+        )

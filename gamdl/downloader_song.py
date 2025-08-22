@@ -564,6 +564,8 @@ class DownloaderSong:
                 playlist_attributes,
             )
             self.downloader._final_processing(download_info)
+            colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
+            logger.info(f"[{colored_media_id} Download completed successfully")
         finally:
             self.downloader.cleanup_temp_path()
         return download_info

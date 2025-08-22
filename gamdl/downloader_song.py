@@ -56,14 +56,10 @@ class DownloaderSong:
         downloader: Downloader,
         codec: SongCodec = SongCodec.AAC_LEGACY,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
-        synced_lyrics_only: bool = False,
-        no_synced_lyrics: bool = False,
     ):
         self.downloader = downloader
         self.codec = codec
         self.synced_lyrics_format = synced_lyrics_format
-        self.synced_lyrics_only = synced_lyrics_only
-        self.no_synced_lyrics = no_synced_lyrics
 
     def get_drm_infos(self, m3u8_data: dict) -> dict:
         drm_info_raw = next(
@@ -621,11 +617,10 @@ class DownloaderSong:
         download_info.tags = tags
         download_info.final_path = final_path
 
-        if lyrics and lyrics.synced and not self.no_synced_lyrics:
-            synced_lyrics_path = self.get_lyrics_synced_path(final_path)
-            download_info.synced_lyrics_path = synced_lyrics_path
+        synced_lyrics_path = self.get_lyrics_synced_path(final_path)
+        download_info.synced_lyrics_path = synced_lyrics_path
 
-        if self.synced_lyrics_only:
+        if self.downloader.synced_lyrics_only:
             logger.info(
                 f"[{colored_media_id}] Downloading synced lyrics only, skipping song download"
             )
@@ -633,7 +628,7 @@ class DownloaderSong:
 
         cover_url = self.downloader.get_cover_url(media_metadata)
         cover_format = self.downloader.get_cover_format(cover_url)
-        if cover_format and self.downloader.save_cover:
+        if cover_format:
             cover_path = self.get_cover_path(final_path, cover_format)
         else:
             cover_path = None

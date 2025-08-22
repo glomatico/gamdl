@@ -113,7 +113,6 @@ class DownloaderPost:
 
         if not media_metadata:
             logger.debug(f"[{colored_media_id}] Getting Post Video metadata")
-            print(media_id)
             media_metadata = self.downloader.apple_music_api.get_post(media_id)
         download_info.media_metadata = media_metadata
 

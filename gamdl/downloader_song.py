@@ -552,6 +552,22 @@ class DownloaderSong:
         media_id: str = None,
         media_metadata: dict = None,
         playlist_attributes: dict = None,
+    ):
+        try:
+            download_info = self._download(
+                media_id,
+                media_metadata,
+                playlist_attributes,
+            )
+            self.downloader._final_processing(download_info)
+        finally:
+            self.downloader.cleanup_temp_path()
+
+    def _download(
+        self,
+        media_id: str = None,
+        media_metadata: dict = None,
+        playlist_attributes: dict = None,
     ) -> DownloadInfo:
         download_info = DownloadInfo()
 
@@ -594,8 +610,13 @@ class DownloaderSong:
 
         cover_url = self.downloader.get_cover_url(media_metadata)
         cover_format = self.downloader.get_cover_format(cover_url)
+        if cover_format and self.downloader.save_cover:
+            cover_path = self.get_cover_path(final_path, cover_format)
+        else:
+            cover_path = None
         download_info.cover_url = cover_url
         download_info.cover_format = cover_format
+        download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
             logger.warning(f'Song already exists at "{final_path}", skipping')
@@ -660,5 +681,9 @@ class DownloaderSong:
             staged_path,
         )
         download_info.staged_path = staged_path
+
+        self.downloader._final_processing(
+            download_info,
+        )
 
         return download_info

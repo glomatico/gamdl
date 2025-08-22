@@ -430,15 +430,15 @@ class DownloaderSong:
         if codec in LEGACY_CODECS:
             keys = [
                 "--key",
-                f"0:{decryption_key}",
+                f"1:{decryption_key}",
             ]
         else:
             self.fix_key_id(encrypted_path)
             keys = [
                 "--key",
-                "0" * 32 + f":{decryption_key}",
+                "0" * 31 + "1" + f":{decryption_key}",
                 "--key",
-                "1" * 32 + f":{self.DEFAULT_DECRYPTION_KEY}",
+                "0" * 32 + f":{self.DEFAULT_DECRYPTION_KEY}",
             ]
         subprocess.run(
             [
@@ -689,7 +689,7 @@ class DownloaderSong:
         staged_path = self.downloader.get_temp_path(
             media_id,
             "staged",
-            stream_info.file_format,
+            self.downloader.get_media_file_extension(stream_info.file_format),
         )
 
         logger.info(f"[{colored_media_id}] Downloading song")

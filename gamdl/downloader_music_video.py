@@ -530,7 +530,7 @@ class DownloaderMusicVideo:
             self.downloader.get_media_file_extension(stream_info.file_format),
         )
 
-        logger.info(f"[{colored_media_id}] Downloading video Music Video")
+        logger.info(f"[{colored_media_id}] Downloading Music Video")
 
         logger.debug(
             f'[{colored_media_id}] Downloading video to "{encrypted_path_video}"'

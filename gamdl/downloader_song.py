@@ -567,7 +567,6 @@ class DownloaderSong:
             )
             self.downloader._final_processing(download_info)
             colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
-            logger.info(f"[{colored_media_id}] Download completed successfully")
         finally:
             self.downloader.cleanup_temp_path()
         return download_info
@@ -602,10 +601,10 @@ class DownloaderSong:
                 media_id = self.downloader.get_media_id_of_library_media(media_metadata)
             else:
                 media_id = media_metadata["id"]
-        media_id_colored = color_text(media_id, colorama.Style.DIM)
+        colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not media_metadata:
-            logger.debug(f"[{media_id_colored}] Getting song metadata")
+            logger.debug(f"[{colored_media_id}] Getting song metadata")
             media_metadata = self.downloader.apple_music_api.get_song(media_id)
         download_info.media_metadata = media_metadata
         download_info.media_id = media_id
@@ -617,11 +616,13 @@ class DownloaderSong:
             )
             return download_info
 
-        logger.debug(f"[{media_id_colored}] Getting lyrics")
+        logger.info(f"[{colored_media_id}] Downloading song")
+
+        logger.debug(f"[{colored_media_id}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)
         download_info.lyrics = lyrics
 
-        logger.debug(f"[{media_id_colored}] Getting webplayback info")
+        logger.debug(f"[{colored_media_id}] Getting webplayback info")
         webplayback = self.downloader.apple_music_api.get_webplayback(
             media_id,
         )
@@ -652,14 +653,14 @@ class DownloaderSong:
 
         if final_path.exists() and not self.downloader.overwrite:
             logger.warning(
-                f'[{media_id_colored}] Song already exists at "{final_path}", skipping'
+                f'[{colored_media_id}] Song already exists at "{final_path}", skipping'
             )
             return download_info
 
-        logger.debug(f"[{media_id_colored}] Getting stream info")
+        logger.debug(f"[{colored_media_id}] Getting stream info")
         if self.codec in LEGACY_CODECS:
             stream_info = self.get_stream_info_legacy(webplayback)
-            logger.debug(f"[{media_id_colored}] Getting decryption key")
+            logger.debug(f"[{colored_media_id}] Getting decryption key")
             decryption_key = self.get_decryption_key_legacy(
                 stream_info,
                 media_id,
@@ -670,11 +671,11 @@ class DownloaderSong:
             stream_info = self.get_stream_info(media_metadata)
             if not stream_info or not stream_info.audio_track.widevine_pssh:
                 logger.error(
-                    f"[{media_id_colored}] Song is not downloadable or is not "
+                    f"[{colored_media_id}] Song is not downloadable or is not "
                     "available in the selected codec, skipping",
                 )
                 return download_info
-            logger.debug(f"[{media_id_colored}] Getting decryption key")
+            logger.debug(f"[{colored_media_id}] Getting decryption key")
             decryption_key = self.get_decryption_key(
                 stream_info,
                 media_id,
@@ -698,14 +699,14 @@ class DownloaderSong:
             ".m4a",
         )
 
-        logger.debug(f'[{media_id_colored}] Downloading to "{encrypted_path}"')
+        logger.debug(f'[{colored_media_id}] Downloading to "{encrypted_path}"')
         self.downloader.download(
             encrypted_path,
             download_info.stream_info.audio_track.stream_url,
         )
 
         logger.debug(
-            f'[{media_id_colored}] Decryping/remuxing to "{decrypted_path}"/"{staged_path}"'
+            f'[{colored_media_id}] Decryping/remuxing to "{decrypted_path}"/"{staged_path}"'
         )
         self.stage(
             self.codec,
@@ -715,5 +716,7 @@ class DownloaderSong:
             staged_path,
         )
         download_info.staged_path = staged_path
+
+        logger.info(f"[{colored_media_id}] Download completed successfully")
 
         return download_info

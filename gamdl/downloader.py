@@ -475,13 +475,13 @@ class Downloader:
             ),
         )
 
-    def get_cover_file_extension(self, cover_url: str) -> str | None:
+    def get_cover_format(self, cover_url: str) -> str | None:
         cover_bytes = self.get_cover_bytes(cover_url)
         if cover_bytes is None:
             return None
         image_obj = Image.open(io.BytesIO(self.get_cover_bytes(cover_url)))
         image_format = image_obj.format.lower()
-        return self.IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
+        return image_format
 
     def get_cover_url(self, metadata: dict) -> str:
         if self.cover_format == CoverFormat.RAW:

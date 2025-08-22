@@ -299,7 +299,7 @@ class Downloader:
         self,
         media_metadata: dict,
     ) -> bool:
-        return bool(media_metadata.get("playParams"))
+        return bool(media_metadata["attributes"].get("playParams"))
 
     def get_playlist_tags(
         self,

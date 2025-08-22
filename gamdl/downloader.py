@@ -364,7 +364,7 @@ class Downloader:
         return f"{minutes:02d}:{seconds:02d}"
 
     def parse_date(self, date: str) -> datetime.datetime:
-        return datetime.datetime.fromisoformat(date[:-1])
+        return datetime.datetime.fromisoformat(date.split("Z")[0])
 
     def get_decryption_key(self, pssh: str, track_id: str) -> DecryptionKey:
         try:

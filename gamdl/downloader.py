@@ -655,8 +655,8 @@ class Downloader:
             )
             logger.info(f"[{colored_media_id}] Download completed successfully")
         if (
-            not download_info.cover_path and not self.save_cover
-        ) or not download_info.staged_path:
+            download_info.cover_path and not self.save_cover
+        ) or not download_info.cover_path:
             pass
         elif download_info.cover_path.exists() and not self.overwrite:
             logger.debug(
@@ -674,7 +674,7 @@ class Downloader:
             self.no_synced_lyrics
             or not download_info.lyrics
             or not download_info.lyrics.synced
-            or (not download_info.staged_path and not self.synced_lyrics_only)
+            or not self.synced_lyrics_only
         ):
             pass
         elif download_info.synced_lyrics_path.exists() and not self.overwrite:

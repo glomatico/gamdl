@@ -148,17 +148,32 @@ def load_config_file(
     "--overwrite",
     is_flag=True,
     help="Overwrite existing files.",
+    default=downloader_sig.parameters["overwrite"].default,
 )
 @click.option(
     "--save-cover",
     "-s",
     is_flag=True,
     help="Save cover as a separate file.",
+    default=downloader_sig.parameters["save_cover"].default,
 )
 @click.option(
     "--save-playlist",
     is_flag=True,
     help="Save a M3U8 playlist file when downloading a playlist.",
+    default=downloader_sig.parameters["save_playlist"].default,
+)
+@click.option(
+    "--no-synced-lyrics",
+    is_flag=True,
+    help="Don't download the synced lyrics.",
+    default=downloader_sig.parameters["no_synced_lyrics"].default,
+)
+@click.option(
+    "--synced-lyrics-only",
+    is_flag=True,
+    help="Download only the synced lyrics.",
+    default=downloader_sig.parameters["synced_lyrics_only"].default,
 )
 @click.option(
     "--nm3u8dlre-path",
@@ -282,16 +297,6 @@ def load_config_file(
     default=downloader_song_sig.parameters["synced_lyrics_format"].default,
     help="Synced lyrics format.",
 )
-@click.option(
-    "--synced-lyrics-only",
-    is_flag=True,
-    help="Download only the synced lyrics.",
-)
-@click.option(
-    "--no-synced-lyrics",
-    is_flag=True,
-    help="Don't download the synced lyrics.",
-)
 # DownloaderMusicVideo specific options
 @click.option(
     "--codec-music-video",
@@ -335,6 +340,8 @@ def main(
     overwrite: bool,
     save_cover: bool,
     save_playlist: bool,
+    no_synced_lyrics: bool,
+    synced_lyrics_only: bool,
     nm3u8dlre_path: str,
     mp4decrypt_path: str,
     ffmpeg_path: str,
@@ -355,8 +362,6 @@ def main(
     truncate: int,
     codec_song: SongCodec,
     synced_lyrics_format: SyncedLyricsFormat,
-    synced_lyrics_only: bool,
-    no_synced_lyrics: bool,
     codec_music_video: MusicVideoCodec,
     remux_format_music_video: RemuxFormatMusicVideo,
     quality_post: PostQuality,
@@ -402,6 +407,8 @@ def main(
         overwrite,
         save_cover,
         save_playlist,
+        no_synced_lyrics,
+        synced_lyrics_only,
         nm3u8dlre_path,
         mp4decrypt_path,
         ffmpeg_path,
@@ -427,8 +434,6 @@ def main(
         downloader,
         codec_song,
         synced_lyrics_format,
-        synced_lyrics_only,
-        no_synced_lyrics,
     )
     downloader_music_video = DownloaderMusicVideo(
         downloader,
@@ -526,6 +531,7 @@ def main(
                 logger.info(
                     f'({queue_progress}) "{media_metadata["attributes"]["name"]}"'
                 )
+
                 if (
                     (synced_lyrics_only and media_metadata["type"] != "songs")
                     or (media_metadata["type"] == "music-videos" and skip_mv)
@@ -539,43 +545,32 @@ def main(
                         f"({queue_progress}) Track is not downloadable with current configuration, skipping"
                     )
                     continue
-                elif media_metadata["type"] in ("songs", "library-songs"):
+
+                if media_metadata["type"] in ("songs", "library-songs"):
                     downloader_song.download(
                         media_metadata=media_metadata,
                         playlist_attributes=download_queue.playlist_attributes,
                         playlist_track=download_index,
                     )
-                elif media_metadata["type"] in ("music-videos", "library-music-videos"):
+
+                if media_metadata["type"] in ("music-videos", "library-music-videos"):
                     downloader_music_video.download(
                         media_metadata=media_metadata,
                         playlist_attributes=download_queue.playlist_attributes,
                         playlist_track=download_index,
                     )
-                elif media_metadata["type"] == "uploaded-videos":
-                    stream_url = downloader_post.get_stream_url(media_metadata)
-                    tags = downloader_post.get_tags(media_metadata)
-                    final_path = downloader.get_final_path(tags, ".m4v", playlist_tags)
-                    cover_url = downloader.get_cover_url(media_metadata)
-                    cover_file_extesion = downloader.get_cover_format(cover_url)
-                    if cover_file_extesion:
-                        cover_path = downloader_music_video.get_cover_path(
-                            final_path,
-                            cover_file_extesion,
-                        )
-                    else:
-                        cover_path = None
-                    if final_path.exists() and not overwrite:
-                        logger.warning(
-                            f'({queue_progress}) Post video already exists at "{final_path}", skipping'
-                        )
-                    else:
-                        remuxed_path = downloader_post.get_post_temp_path(media_id)
-                        logger.debug(f'Downloading to "{remuxed_path}"')
-                        downloader.download_ytdlp(remuxed_path, stream_url)
+
+                if media_metadata["type"] == "uploaded-videos":
+                    downloader_post.download(
+                        media_metadata=media_metadata,
+                    )
+            except KeyboardInterrupt:
+                exit(0)
             except Exception as e:
                 error_count += 1
                 logger.error(
                     f'({queue_progress}) Failed to download "{media_metadata["attributes"]["name"]}"',
                     exc_info=not no_exceptions,
                 )
+
     logger.info(f"Done ({error_count} error(s))")

@@ -616,8 +616,6 @@ class DownloaderSong:
             )
             return download_info
 
-        logger.info(f"[{colored_media_id}] Downloading song")
-
         logger.debug(f"[{colored_media_id}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)
         download_info.lyrics = lyrics
@@ -698,6 +696,8 @@ class DownloaderSong:
             "staged",
             ".m4a",
         )
+
+        logger.info(f"[{colored_media_id}] Downloading song")
 
         logger.debug(f'[{colored_media_id}] Downloading to "{encrypted_path}"')
         self.downloader.download(

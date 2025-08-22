@@ -549,12 +549,14 @@ class DownloaderSong:
         media_id: str = None,
         media_metadata: dict = None,
         playlist_attributes: dict = None,
+        playlist_track: int = None,
     ) -> DownloadInfo:
         try:
             download_info = self._download(
                 media_id,
                 media_metadata,
                 playlist_attributes,
+                playlist_track,
             )
             self.downloader._final_processing(download_info)
         finally:

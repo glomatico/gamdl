@@ -643,7 +643,13 @@ class Downloader:
                 download_info.staged_path,
                 download_info.final_path,
             )
-        if download_info.cover_path and self.save_cover:
+        if not download_info.cover_path and not self.save_cover:
+            pass
+        elif download_info.cover_path.exists() and not self.overwrite:
+            logger.debug(
+                f'[{colored_media_id}] Cover already exists at "{download_info.cover_path}", skipping'
+            )
+        else:
             logger.debug(
                 f'[{colored_media_id}] Saving cover to "{download_info.cover_path}"'
             )
@@ -652,10 +658,15 @@ class Downloader:
                 download_info.cover_url,
             )
         if (
-            download_info.lyrics
-            and download_info.synced_lyrics_path
-            and download_info.lyrics.synced
+            download_info.synced_lyrics_path is None
+            or download_info.lyrics.synced is None
         ):
+            pass
+        elif download_info.synced_lyrics_path.exists() and not self.overwrite:
+            logger.debug(
+                f'[{colored_media_id}] Synced lyrics already exist at "{download_info.synced_lyrics_path}", skipping'
+            )
+        else:
             logger.debug(
                 f'[{colored_media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
             )

@@ -19,12 +19,12 @@ A command-line app for downloading Apple Music songs, music videos and post vide
   - **Firefox**: Use the [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt) extension.
   - **Chromium-based Browsers**: Use the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension.
 - **FFmpeg** on your system PATH.
-  - **Windows**: Download from [AnimMouse’s FFmpeg Builds](https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases).
-  - **Linux**: Download from [John Van Sickle’s FFmpeg Builds](https://johnvansickle.com/ffmpeg/).
+  - **Windows**: Download from [AnimMouse's FFmpeg Builds](https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases).
+  - **Linux**: Download from [John Van Sickle's FFmpeg Builds](https://johnvansickle.com/ffmpeg/).
 
 ### Optional dependencies
 
-The following tools are optional but required for specific features. Add them to your system’s PATH or specify their paths using command-line arguments or the config file.
+The following tools are optional but required for specific features. Add them to your system's PATH or specify their paths using command-line arguments or the config file.
 
 - [mp4decrypt](https://www.bento4.com/downloads/): Required for `mp4box` remux mode, music video downloads, and experimental song codecs.
 - [MP4Box](https://gpac.io/downloads/gpac-nightly-builds/): Required for `mp4box` remux mode.
@@ -39,7 +39,7 @@ The following tools are optional but required for specific features. Add them to
    ```
 
 2. Set up the cookies file.
-   - Move the cookies file to the directory where you’ll run Gamdl and rename it to `cookies.txt`.
+   - Move the cookies file to the directory where you'll run Gamdl and rename it to `cookies.txt`.
    - Alternatively, specify the path to the cookies file using command-line arguments or the config file.
 
 ## Usage
@@ -178,7 +178,7 @@ The following variables can be used in the template folders/files and/or in the 
 ### Remux Modes
 
 - `ffmpeg`: Default remuxing mode.
-- `mp4box`: Alternative remuxing mode (doesn’t convert closed captions in music videos).
+- `mp4box`: Alternative remuxing mode (doesn't convert closed captions in music videos).
 
 ### Download modes
 

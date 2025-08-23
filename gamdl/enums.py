@@ -25,6 +25,9 @@ class SongCodec(Enum):
     ALAC = "alac"
     ASK = "ask"
 
+    def is_legacy(self) -> bool:
+        return self in {SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY}
+
 
 class SyncedLyricsFormat(Enum):
     LRC = "lrc"

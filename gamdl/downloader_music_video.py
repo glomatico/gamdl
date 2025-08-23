@@ -32,7 +32,7 @@ class DownloaderMusicVideo:
     def __init__(
         self,
         downloader: Downloader,
-        codec: MusicVideoCodec = MusicVideoCodec.H264,
+        codec: list[MusicVideoCodec] = [MusicVideoCodec.H264, MusicVideoCodec.H265],
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
     ) -> None:
         self.downloader = downloader
@@ -51,38 +51,60 @@ class DownloaderMusicVideo:
             query=urllib.parse.urlencode(query, doseq=True)
         ).geturl()
 
-    def get_m3u8_master_data(self, stream_url_master: str) -> dict:
-        return m3u8.load(stream_url_master).data
-
-    def get_playlist_video(
+    def _get_best_video_playlist(
         self,
-        playlists: list[dict],
-    ) -> dict:
+        playlists: list[m3u8.Playlist],
+        codec: MusicVideoCodec,
+    ) -> m3u8.Playlist | None:
         playlists_filtered = [
             playlist
             for playlist in playlists
-            if playlist["stream_info"]["codecs"].startswith(self.codec.fourcc())
+            if playlist.stream_info.codecs.startswith(codec.fourcc())
         ]
         if not playlists_filtered:
-            playlists_filtered = [
-                playlist
-                for playlist in playlists
-                if playlist["stream_info"]["codecs"].startswith(self.codec.fourcc())
-            ]
-        playlists_filtered.sort(key=lambda x: x["stream_info"]["bandwidth"])
+            return None
+
+        playlists_filtered.sort(key=lambda x: x.stream_info.bandwidth)
         return playlists_filtered[-1]
 
-    def get_playlist_video_from_user(
+    def get_best_video_playlist(
         self,
-        playlists: list[dict],
-    ) -> dict:
+        playlists: list[m3u8.Playlist],
+    ) -> m3u8.Playlist | None:
+        for codec in self.codec:
+            playlist = self._get_best_video_playlist(
+                playlists,
+                codec,
+            )
+            if playlist:
+                return playlist
+        return None
+
+    def get_best_stereo_audio_playlist(
+        self,
+        playlist_master_data: dict,
+    ) -> dict | None:
+        audio_playlist = next(
+            (
+                media
+                for media in playlist_master_data["media"]
+                if media["group_id"] == "audio-stereo-256"
+            ),
+            None,
+        )
+        return audio_playlist
+
+    def get_video_playlist_from_user(
+        self,
+        playlists: list[m3u8.Playlist],
+    ) -> m3u8.Playlist:
         choices = [
             Choice(
                 name=" | ".join(
                     [
-                        playlist["stream_info"]["codecs"][:4],
-                        playlist["stream_info"]["resolution"],
-                        str(playlist["stream_info"]["bandwidth"]),
+                        playlist.stream_info.codecs[:4],
+                        playlist.stream_info.resolution,
+                        str(playlist.stream_info.bandwidth),
                     ]
                 ),
                 value=playlist,
@@ -93,80 +115,89 @@ class DownloaderMusicVideo:
             message="Select which video codec to download: (Codec | Resolution | Bitrate)",
             choices=choices,
         ).execute()
+
         return selected
 
-    def get_playlist_audio(
+    def get_audio_playlist_from_user(
         self,
-        playlists: list[dict],
-    ) -> dict:
-        stream_url = next(
-            (
-                playlist
-                for playlist in playlists
-                if playlist["group_id"] == "audio-stereo-256"
-            ),
-            None,
-        )
-        return stream_url
-
-    def get_playlist_audio_from_user(
-        self,
-        playlists: list[dict],
+        playlist_master_data: dict,
     ) -> dict:
         choices = [
             Choice(
                 name=playlist["group_id"],
                 value=playlist,
             )
-            for playlist in playlists
+            for playlist in playlist_master_data["media"]
             if playlist.get("uri")
         ]
         selected = inquirer.select(
             message="Select which audio codec to download:",
             choices=choices,
         ).execute()
+
         return selected
 
-    def get_pssh(self, m3u8_data: dict) -> str:
+    def get_pssh(self, m3u8_obj: m3u8.M3U8) -> str:
         return next(
             (
                 key
-                for key in m3u8_data["keys"]
-                if key["keyformat"] == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
+                for key in m3u8_obj.keys
+                if key.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
             ),
             None,
-        )["uri"]
+        ).uri
 
-    def get_stream_info_video(self, m3u8_master_data: dict) -> StreamInfo:
+    def get_stream_info_video(
+        self, playlist_master_m3u8_obj: m3u8.M3U8
+    ) -> StreamInfo | None:
         stream_info = StreamInfo()
+
         if self.codec != MusicVideoCodec.ASK:
-            playlist = self.get_playlist_video(m3u8_master_data["playlists"])
+            playlist = self.get_best_video_playlist(playlist_master_m3u8_obj.playlists)
         else:
-            playlist = self.get_playlist_video_from_user(m3u8_master_data["playlists"])
-        stream_info.stream_url = playlist["uri"]
-        stream_info.codec = playlist["stream_info"]["codecs"]
-        m3u8_data = m3u8.load(stream_info.stream_url).data
-        stream_info.widevine_pssh = self.get_pssh(m3u8_data)
+            playlist = self.get_video_playlist_from_user(
+                playlist_master_m3u8_obj.playlists
+            )
+        if not playlist:
+            return None
+
+        stream_info.stream_url = playlist.uri
+        stream_info.codec = playlist.stream_info.codecs
+
+        playlist_m3u8_obj = m3u8.load(stream_info.stream_url)
+        stream_info.widevine_pssh = self.get_pssh(playlist_m3u8_obj)
+
         return stream_info
 
-    def get_stream_info_audio(self, m3u8_master_data: dict) -> StreamInfo:
+    def get_stream_info_audio(self, playlist_master_data: dict) -> StreamInfo | None:
         stream_info = StreamInfo()
+
         if self.codec != MusicVideoCodec.ASK:
-            playlist = self.get_playlist_audio(m3u8_master_data["media"])
+            playlist = self.get_best_stereo_audio_playlist(playlist_master_data)
         else:
-            playlist = self.get_playlist_audio_from_user(m3u8_master_data["media"])
+            playlist = self.get_audio_playlist_from_user(playlist_master_data)
+        if not playlist:
+            return None
+
         stream_info.stream_url = playlist["uri"]
         stream_info.codec = playlist["group_id"]
-        m3u8_data = m3u8.load(stream_info.stream_url).data
-        stream_info.widevine_pssh = self.get_pssh(m3u8_data)
+
+        playlist_m3u8_obj = m3u8.load(stream_info.stream_url)
+        stream_info.widevine_pssh = self.get_pssh(playlist_m3u8_obj)
+
         return stream_info
 
     def _get_stream_info(
         self,
-        m3u8_master_data: dict,
-    ) -> StreamInfoAv:
-        stream_info_video = self.get_stream_info_video(m3u8_master_data)
-        stream_info_audio = self.get_stream_info_audio(m3u8_master_data)
+        stream_url: str,
+    ) -> StreamInfoAv | None:
+        playlist_master_m3u8_obj = m3u8.load(stream_url)
+
+        stream_info_video = self.get_stream_info_video(playlist_master_m3u8_obj)
+        stream_info_audio = self.get_stream_info_audio(playlist_master_m3u8_obj.data)
+        if not stream_info_video or not stream_info_audio:
+            return None
+
         use_mp4 = (
             any(
                 stream_info_video.codec.startswith(codec)
@@ -182,6 +213,7 @@ class DownloaderMusicVideo:
             file_format = MediaFileFormat.MP4
         else:
             file_format = MediaFileFormat.M4V
+
         return StreamInfoAv(
             video_track=stream_info_video,
             audio_track=stream_info_audio,
@@ -191,20 +223,14 @@ class DownloaderMusicVideo:
     def get_stream_info_from_webplayback(
         self,
         webplayback: dict,
-    ) -> StreamInfoAv:
-        m3u8_master_data = self.get_m3u8_master_data(
-            self.get_stream_url_from_webplayback(webplayback)
-        )
-        return self._get_stream_info(m3u8_master_data)
+    ) -> StreamInfoAv | None:
+        return self._get_stream_info(self.get_stream_url_from_webplayback(webplayback))
 
     def get_stream_info_from_itunes_page(
         self,
         itunes_page: dict,
-    ) -> StreamInfoAv:
-        m3u8_master_data = self.get_m3u8_master_data(
-            self.get_stream_url_from_itunes_page(itunes_page)
-        )
-        return self._get_stream_info(m3u8_master_data)
+    ) -> StreamInfoAv | None:
+        return self._get_stream_info(self.get_stream_url_from_itunes_page(itunes_page))
 
     def get_decryption_key(
         self,
@@ -471,6 +497,11 @@ class DownloaderMusicVideo:
             webplayback = self.downloader.apple_music_api.get_webplayback(media_id)
             logger.debug(f"[{colored_media_id}] Getting stream info")
             stream_info = self.get_stream_info_from_webplayback(webplayback)
+        if not stream_info:
+            logger.warning(
+                f"[{colored_media_id}] Video/Audio stream with the selected codec(s) not found, skipping"
+            )
+            return download_info
         download_info.stream_info = stream_info
 
         final_path = self.downloader.get_final_path(

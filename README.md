@@ -229,3 +229,27 @@ The following variables can be used in the template folders/files and/or in the 
 - `jpg`: Default format.
 - `png`: Lossless format.
 - `raw`: Raw cover without processing (requires `save_cover` to save separately).
+
+
+## Embedding
+Gamdl can be used as a library in Python scripts. Here's a basic example of downloading a song by its ID:
+
+```python
+from gamdl import AppleMusicApi, ItunesApi, Downloader, DownloaderSong
+
+
+apple_music_api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
+itunes_api = ItunesApi(
+    storefront=apple_music_api.storefront,
+    language=apple_music_api.language,
+)
+
+downloader = Downloader(
+    apple_music_api=apple_music_api,
+    itunes_api=itunes_api,
+)
+downloader.set_cdm()
+downloader_song = DownloaderSong(downloader=downloader)
+
+downloader_song.download(media_id="1624945512")
+```

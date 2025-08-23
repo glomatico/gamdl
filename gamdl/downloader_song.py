@@ -17,7 +17,6 @@ from InquirerPy.base.control import Choice
 from pywidevine import PSSH
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 
-from .constants import LEGACY_CODECS
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
 from .models import (
@@ -455,7 +454,7 @@ class DownloaderSong:
         decryption_key: str,
         codec: SongCodec,
     ):
-        if codec in LEGACY_CODECS:
+        if codec.is_legacy():
             keys = [
                 "--key",
                 f"1:{decryption_key}",
@@ -487,7 +486,7 @@ class DownloaderSong:
         decryption_key: DecryptionKeyAv,
         staged_path: Path,
     ):
-        if codec in LEGACY_CODECS and self.downloader.remux_mode == RemuxMode.FFMPEG:
+        if codec.is_legacy() and self.downloader.remux_mode == RemuxMode.FFMPEG:
             self.remux_ffmpeg(
                 encrypted_path,
                 staged_path,
@@ -679,7 +678,7 @@ class DownloaderSong:
             return download_info
 
         logger.debug(f"[{colored_media_id}] Getting stream info")
-        if self.codec in LEGACY_CODECS:
+        if self.codec.is_legacy():
             stream_info = self.get_stream_info_legacy(webplayback)
             logger.debug(f"[{colored_media_id}] Getting decryption key")
             decryption_key = self.get_decryption_key_legacy(

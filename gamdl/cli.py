@@ -522,7 +522,7 @@ def main(
             )
             skip_mv = True
 
-        if codec_song not in LEGACY_CODECS:
+        if codec_song.is_legacy():
             logger.warning(
                 "You have chosen an experimental codec. "
                 "They're not guaranteed to work due to API limitations."

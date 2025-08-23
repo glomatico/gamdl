@@ -169,8 +169,3 @@ EXCLUDED_CONFIG_FILE_PARAMS = (
 )
 
 X_NOT_FOUND_STRING = '{} not found at "{}"'
-
-LEGACY_CODECS = [
-    SongCodec.AAC_LEGACY,
-    SongCodec.AAC_HE_LEGACY,
-]

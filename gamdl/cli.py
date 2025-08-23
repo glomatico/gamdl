@@ -50,13 +50,16 @@ class Csv(click.ParamType):
 
     def convert(
         self,
-        value: str | None,
+        value: str | typing.Any,
         param: click.Parameter,
         ctx: click.Context,
     ) -> list[typing.Any]:
         if value is None:
             return []
-        items = [v.strip() for v in value.split(",") if v.strip()]
+        if isinstance(value, str):
+            items = [v.strip() for v in value.split(",") if v.strip()]
+        else:
+            items = value
         result = []
         for item in items:
             try:

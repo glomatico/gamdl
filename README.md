@@ -1,4 +1,4 @@
-# Glomatico’s Apple Music Downloader
+# Glomatico's Apple Music Downloader
 
 A command-line app for downloading Apple Music songs, music videos and post videos.
 

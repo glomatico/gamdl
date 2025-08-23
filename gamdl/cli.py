@@ -331,9 +331,9 @@ def load_config_file(
 # DownloaderMusicVideo specific options
 @click.option(
     "--codec-music-video",
-    type=MusicVideoCodec,
+    type=Csv(MusicVideoCodec),
     default=downloader_music_video_sig.parameters["codec"].default,
-    help="Music video codec.",
+    help="Comma-separated music video codec priority.",
 )
 @click.option(
     "--remux-format-music-video",
@@ -393,7 +393,7 @@ def main(
     truncate: int,
     codec_song: SongCodec,
     synced_lyrics_format: SyncedLyricsFormat,
-    codec_music_video: MusicVideoCodec,
+    codec_music_video: list[MusicVideoCodec],
     remux_format_music_video: RemuxFormatMusicVideo,
     quality_post: PostQuality,
     no_config_file: bool,

@@ -24,6 +24,8 @@ from .enums import (
     PostQuality,
     RemuxFormatMusicVideo,
     RemuxMode,
+    SongCodec,
+    SyncedLyricsFormat,
 )
 from .itunes_api import ItunesApi
 from .utils import color_text, prompt_path

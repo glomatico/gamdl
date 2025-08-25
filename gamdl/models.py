@@ -128,7 +128,7 @@ class MediaTags:
             "atID": [self.artist_id],
             "soar": [self.artist_sort],
             "\xa9cmt": [self.comment],
-            "cpil": [int(self.compilation) if self.compilation is not None else None],
+            "cpil": [bool(self.compilation) if self.compilation is not None else None],
             "\xa9wrt": [self.composer],
             "cmID": [self.composer_id],
             "soco": [self.composer_sort],

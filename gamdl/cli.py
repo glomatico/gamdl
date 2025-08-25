@@ -549,6 +549,9 @@ def main(
             url_info = downloader.parse_url_info(url)
             download_queue = downloader.get_download_queue(url_info)
             download_queue_medias_metadata = download_queue.medias_metadata
+            if not download_queue_medias_metadata[0]:
+                logger.error(f"({url_progress}) Media not found, skipping")
+                continue
         except Exception as e:
             error_count += 1
             logger.error(
@@ -557,7 +560,8 @@ def main(
             )
             continue
         for download_index, media_metadata in enumerate(
-            download_queue_medias_metadata, start=1
+            download_queue_medias_metadata,
+            start=1,
         ):
             queue_progress = color_text(
                 f"Track {download_index}/{len(download_queue_medias_metadata)} from URL {url_index}/{len(urls)}",

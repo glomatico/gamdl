@@ -56,12 +56,9 @@ class Csv(click.ParamType):
         param: click.Parameter,
         ctx: click.Context,
     ) -> list[typing.Any]:
-        if value is None:
-            return []
-        if isinstance(value, str):
-            items = [v.strip() for v in value.split(",") if v.strip()]
-        else:
-            items = value
+        if not isinstance(value, str):
+            return value
+        items = [v.strip() for v in value.split(",") if v.strip()]
         result = []
         for item in items:
             try:

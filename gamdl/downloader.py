@@ -575,12 +575,17 @@ class Downloader:
             }
         )
         mp4_tags = filtered_tags.to_mp4_tags(self.template_date)
+        skip_tagging = "all" in self.exclude_tags
 
         mp4 = MP4(path)
         mp4.clear()
-        if "cover" not in self.exclude_tags and self.cover_format != CoverFormat.RAW:
-            self._apply_cover(mp4, cover_url)
-        mp4.update(mp4_tags)
+        if not skip_tagging:
+            if (
+                "cover" not in self.exclude_tags
+                and self.cover_format != CoverFormat.RAW
+            ):
+                self._apply_cover(mp4, cover_url)
+            mp4.update(mp4_tags)
         mp4.save()
 
     def _apply_cover(

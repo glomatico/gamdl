@@ -175,6 +175,8 @@ The following variables can be used in the template folders/files and/or in the 
 - `track_total`
 - `xid`
 
+The date variable supports strftime formats. For example, `{date:%Y}` will be replaced with the year of the release date.
+
 ### Remux Modes
 
 - `ffmpeg`: Default remuxing mode.

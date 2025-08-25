@@ -96,7 +96,7 @@ class MediaTags:
         disc_mp4 = [
             [
                 self.disc if self.disc is not None else 0,
-                self.disc_total if self.disc is not None else 0,
+                self.disc_total if self.disc_total is not None else 0,
             ]
         ]
         if disc_mp4[0][0] == 0 and disc_mp4[0][1] == 0:
@@ -105,7 +105,7 @@ class MediaTags:
         track_mp4 = [
             [
                 self.track if self.track is not None else 0,
-                self.track_total if self.track is not None else 0,
+                self.track_total if self.track_total is not None else 0,
             ]
         ]
         if track_mp4[0][0] == 0 and track_mp4[0][1] == 0:
@@ -145,6 +145,7 @@ class MediaTags:
             "\xa9nam": [self.title],
             "cnID": [self.title_id],
             "sonm": [self.title_sort],
+            "trkn": track_mp4,
             "xid ": [self.xid],
         }
         return {k: v for k, v in mp4_tags.items() if v[0] is not None}

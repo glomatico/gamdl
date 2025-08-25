@@ -12,8 +12,12 @@ from .enums import MediaFileFormat, MediaRating, MediaType
 class UrlInfo:
     storefront: str = None
     type: str = None
+    slug: str = None
     id: str = None
-    is_library: bool = None
+    sub_id: str = None
+    library_storefront: str = None
+    library_type: str = None
+    library_id: str = None
 
 
 @dataclass

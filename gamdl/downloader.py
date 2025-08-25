@@ -41,8 +41,17 @@ class Downloader:
     ILLEGAL_CHARS_RE = r'[\\/:*?"<>|;]'
     ILLEGAL_CHAR_REPLACEMENT = "_"
     VALID_URL_RE = (
-        r"(/(?P<storefront>[a-z]{2})/(?P<type>artist|album|playlist|song|music-video|post)/(?P<slug>[^/]*)(?:/(?P<id>[^/?]*))?(?:\?i=)?(?P<sub_id>[0-9a-z]*)?)|"
-        r"(/library/(?P<library_type>|playlist|albums)/(?P<library_id>[a-z]\.[0-9a-zA-Z]*))"
+        r"("
+        r"/(?P<storefront>[a-z]{2})"
+        r"/(?P<type>artist|album|playlist|song|music-video|post)"
+        r"(?:/(?P<slug>[a-z0-9-]+))?"
+        r"/(?P<id>[0-9]+|pl\.[0-9a-z]{32}|pl\.u-[a-zA-Z0-9]{15})"
+        r"(?:\?i=(?P<sub_id>[0-9]+))?"
+        r")|("
+        r"(?:/(?P<library_storefront>[a-z]{2}))?"
+        r"/library/(?P<library_type>|playlist|albums)"
+        r"/(?P<library_id>p\.[a-zA-Z0-9]{15}|l\.[a-zA-Z0-9]{7})"
+        r")"
     )
     IMAGE_FILE_EXTENSION_MAP = {
         "jpeg": ".jpg",
@@ -143,33 +152,24 @@ class Downloader:
         else:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
 
-    def get_url_info(self, url: str) -> UrlInfo:
-        url_info = UrlInfo()
+    def parse_url_info(self, url: str) -> UrlInfo:
         url_regex_result = re.search(
             self.VALID_URL_RE,
             url,
         )
-        is_library = url_regex_result.group("library_type") is not None
-        if is_library:
-            url_info.type = url_regex_result.group("library_type")
-            url_info.id = url_regex_result.group("library_id")
-        else:
-            url_info.storefront = url_regex_result.group("storefront")
-            url_info.type = (
-                "song"
-                if url_regex_result.group("sub_id")
-                else url_regex_result.group("type")
-            )
-            url_info.id = (
-                url_regex_result.group("sub_id")
-                or url_regex_result.group("id")
-                or url_regex_result.group("sub_id")
-            )
-        url_info.is_library = is_library
-        return url_info
+        if not url_regex_result:
+            raise ValueError(f"Invalid URL: {url}")
+
+        return UrlInfo(
+            **url_regex_result.groupdict(),
+        )
 
     def get_download_queue(self, url_info: UrlInfo) -> DownloadQueue:
-        return self._get_download_queue(url_info.type, url_info.id, url_info.is_library)
+        return self._get_download_queue(
+            url_info.type or url_info.library_type,
+            url_info.id or url_info.library_id,
+            url_info.library_id is not None,
+        )
 
     def _get_download_queue(
         self,
@@ -185,7 +185,7 @@ class Downloader:
             )
         elif url_type == "song":
             download_queue.medias_metadata = [self.apple_music_api.get_song(id)]
-        elif url_type in ("album", "albums"):
+        elif url_type in {"album", "albums"}:
             if is_library:
                 album = self.apple_music_api.get_library_album(id)
             else:

@@ -291,6 +291,9 @@ class DownloaderMusicVideo:
             album = self.downloader.apple_music_api.get_album(
                 itunes_page["collectionId"]
             )
+            if not album:
+                return tags
+
             tags.album = metadata_itunes[1]["collectionCensoredName"]
             tags.album_artist = metadata_itunes[1]["artistName"]
             tags.album_id = int(itunes_page["collectionId"])

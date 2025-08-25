@@ -152,13 +152,13 @@ class Downloader:
         else:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
 
-    def parse_url_info(self, url: str) -> UrlInfo:
+    def parse_url_info(self, url: str) -> UrlInfo | None:
         url_regex_result = re.search(
             self.VALID_URL_RE,
             url,
         )
         if not url_regex_result:
-            raise ValueError(f"Invalid URL: {url}")
+            return None
 
         return UrlInfo(
             **url_regex_result.groupdict(),

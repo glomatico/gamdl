@@ -547,9 +547,14 @@ def main(
         try:
             logger.info(f'({url_progress}) Checking "{url}"')
             url_info = downloader.parse_url_info(url)
+            if not url_info:
+                error_count += 1
+                logger.error(f"({url_progress}) Invalid URL, skipping")
+                continue
             download_queue = downloader.get_download_queue(url_info)
             download_queue_medias_metadata = download_queue.medias_metadata
             if not download_queue_medias_metadata[0]:
+                error_count += 1
                 logger.error(f"({url_progress}) Media not found, skipping")
                 continue
         except Exception as e:

@@ -546,7 +546,7 @@ def main(
         url_progress = color_text(f"URL {url_index}/{len(urls)}", colorama.Style.DIM)
         try:
             logger.info(f'({url_progress}) Checking "{url}"')
-            url_info = downloader.get_url_info(url)
+            url_info = downloader.parse_url_info(url)
             download_queue = downloader.get_download_queue(url_info)
             download_queue_medias_metadata = download_queue.medias_metadata
         except Exception as e:

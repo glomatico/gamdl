@@ -154,7 +154,7 @@ The following variables can be used in the template folders/files and/or in the 
 - `composer_sort`
 - `copyright`
 - `cover`
-- `date`
+- `date`: Supports strftime formats. For example, `{date:%Y}` will be replaced with the year of the release date.
 - `disc`
 - `disc_total`
 - `gapless`
@@ -175,8 +175,6 @@ The following variables can be used in the template folders/files and/or in the 
 - `track_total`
 - `xid`
 - `all`: Skip tagging.
-
-The date variable supports strftime formats. For example, `{date:%Y}` will be replaced with the year of the release date.
 
 ### Remux Modes
 

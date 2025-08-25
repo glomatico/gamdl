@@ -25,6 +25,7 @@ def prompt_path(is_file: bool, initial_path: Path, description: str) -> Path:
         path_type=Path,
     )
     while True:
+        path_type = "file" if is_file else "folder"
         try:
             path_obj = path_validator.convert(initial_path, None, None)
             break
@@ -33,7 +34,8 @@ def prompt_path(is_file: bool, initial_path: Path, description: str) -> Path:
                 (
                     f"{X_NOT_FOUND_STRING.format(description, initial_path.absolute())} or "
                     "the specified path is not valid. "
-                    "Move it to that location, type the path or drag and drop it here. "
+                    f"Move the {path_type} to that location, type a new path "
+                    f"or drag and drop the {path_type} here. "
                     "Then, press enter to continue"
                 ),
                 default=str(initial_path),

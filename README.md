@@ -90,7 +90,7 @@ gamdl [OPTIONS] URLS...
 
 Gamdl can be configured by using the command-line arguments or the config file.
 
-The config file is created automatically when you run Gamdl for the first time at `~/.gamdl/config.json` on Linux and `%USERPROFILE%\.gamdl\config.json` on Windows.
+The config file is created automatically when you run Gamdl for the first time at `~/.gamdl/config.ini` on Linux and `%USERPROFILE%\.gamdl\config.ini` on Windows.
 
 Config file values can be overridden using command-line arguments.
 

@@ -616,19 +616,28 @@ class DownloaderSong:
         if not media_id and not media_metadata:
             raise ValueError("Either media_id or media_metadata must be provided")
 
-        if not media_id:
-            media_id = self.downloader.get_media_id_of_library_media(media_metadata)
-        colored_media_id = color_text(media_id, colorama.Style.DIM)
-
         if not media_metadata:
-            logger.debug(f"[{colored_media_id}] Getting song metadata")
+            logger.debug(
+                f"[{color_text(media_id, colorama.Style.DIM)}] Getting Song metadata"
+            )
             media_metadata = self.downloader.apple_music_api.get_song(media_id)
         download_info.media_metadata = media_metadata
+
+        if not media_id:
+            media_id = self.downloader.get_media_id_of_library_media(media_metadata)
         download_info.media_id = media_id
+        colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not self.downloader.is_media_streamable(media_metadata):
             logger.warning(
-                f"[{color_text(media_metadata['id'], colorama.Style.DIM)}] "
+                f"[{colored_media_id}] "
+                "Song is not streamable or downloadable, skipping"
+            )
+            return download_info
+
+        if not self.downloader.is_media_streamable(media_metadata):
+            logger.warning(
+                f"[{colored_media_id}] "
                 "Track is not streamable or downloadable, skipping"
             )
             return download_info

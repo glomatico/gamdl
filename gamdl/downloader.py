@@ -172,7 +172,7 @@ class Downloader:
 
     def get_download_queue(self, url_info: UrlInfo) -> DownloadQueue:
         return self._get_download_queue(
-            url_info.type or url_info.library_type,
+            "song" if url_info.sub_id else url_info.type,
             url_info.sub_id or url_info.id or url_info.library_id,
             url_info.library_id is not None,
         )

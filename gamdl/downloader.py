@@ -33,6 +33,7 @@ from .models import (
     UrlInfo,
 )
 from .utils import color_text, raise_response_exception
+import random
 
 logger = logging.getLogger("gamdl")
 
@@ -63,7 +64,7 @@ class Downloader:
         apple_music_api: AppleMusicApi,
         itunes_api: ItunesApi,
         output_path: Path = Path("./Apple Music"),
-        temp_path: Path = Path("./temp"),
+        temp_path: Path = Path("."),
         wvd_path: Path = None,
         overwrite: bool = False,
         save_cover: bool = False,
@@ -119,10 +120,15 @@ class Downloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self._set_temp_path()
         self._set_exclude_tags()
         self._set_binaries_path_full()
         self._set_truncate()
         self._set_subprocess_additional_args()
+
+    def _set_temp_path(self):
+        random_suffix = "".join(random.choices("1234567890", k=8))
+        self.temp_path = self.temp_path / f"gamdl_temp_{random_suffix}"
 
     def _set_exclude_tags(self):
         self.exclude_tags = self.exclude_tags if self.exclude_tags is not None else []
@@ -632,9 +638,8 @@ class Downloader:
         )
 
     def cleanup_temp_path(self):
-        if not self.temp_path.exists():
-            return
-        shutil.rmtree(self.temp_path)
+        if self.temp_path.exists():
+            shutil.rmtree(self.temp_path)
 
     def _final_processing(
         self,

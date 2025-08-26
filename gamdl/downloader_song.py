@@ -371,10 +371,12 @@ class DownloaderSong:
         synced_lyrics = []
         index = 1
         for div in lyrics_ttml_et.iter("{http://www.w3.org/ns/ttml}div"):
-            unsynced_lyrics.append([])
+            stanza = []
+            unsynced_lyrics.append(stanza)
+
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
                 if p.text is not None:
-                    unsynced_lyrics[-1].append(p.text)
+                    stanza.append(p.text)
 
                 if p.attrib.get("begin"):
                     if self.synced_lyrics_format == SyncedLyricsFormat.LRC:

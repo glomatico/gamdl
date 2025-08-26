@@ -366,29 +366,42 @@ class DownloaderSong:
         return lyrics
 
     def _get_lyrics(self, lyrics_ttml: str) -> Lyrics:
-        lyrics = Lyrics("", "")
         lyrics_ttml_et = ElementTree.fromstring(lyrics_ttml)
+        unsynced_lyrics = []
+        synced_lyrics = []
         index = 1
         for div in lyrics_ttml_et.iter("{http://www.w3.org/ns/ttml}div"):
+            unsynced_lyrics.append([])
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
                 if p.text is not None:
-                    lyrics.unsynced += p.text + "\n"
+                    unsynced_lyrics[-1].append(p.text)
+
                 if p.attrib.get("begin"):
                     if self.synced_lyrics_format == SyncedLyricsFormat.LRC:
-                        lyrics.synced += f"{self.get_lyrics_synced_line_lrc(p.attrib.get('begin'), p.text)}"
-                    elif self.synced_lyrics_format == SyncedLyricsFormat.SRT:
-                        lyrics.synced += f"{self.get_lyrics_synced_line_srt(index, p.attrib.get('begin'), p.attrib.get('end'), p.text)}"
-                    elif self.synced_lyrics_format == SyncedLyricsFormat.TTML:
-                        if not lyrics.synced:
-                            lyrics.synced = minidom.parseString(
-                                lyrics_ttml
-                            ).toprettyxml()
+                        synced_lyrics.append(
+                            f"{self.get_lyrics_synced_line_lrc(p.attrib.get('begin'), p.text)}"
+                        )
+
+                    if self.synced_lyrics_format == SyncedLyricsFormat.SRT:
+                        synced_lyrics.append(
+                            f"{self.get_lyrics_synced_line_srt(index, p.attrib.get('begin'), p.attrib.get('end'), p.text)}"
+                        )
+
+                    if self.synced_lyrics_format == SyncedLyricsFormat.TTML:
+                        if not synced_lyrics:
+                            synced_lyrics.append(
+                                minidom.parseString(lyrics_ttml).toprettyxml()
+                            )
                         continue
-                    lyrics.synced += "\n"
+
                     index += 1
-            lyrics.unsynced += "\n"
-        lyrics.unsynced = lyrics.unsynced[:-2]
-        return lyrics
+
+        return Lyrics(
+            synced="\n".join(synced_lyrics) + "\n",
+            unsynced="\n\n".join(
+                ["\n".join(lyric_group) for lyric_group in unsynced_lyrics]
+            ),
+        )
 
     def get_tags(self, webplayback: dict, lyrics_unsynced: str) -> MediaTags:
         webplayback_metadata = webplayback["assets"][0]["metadata"]

@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import typing
+import uuid
 from pathlib import Path
 
 import colorama
@@ -33,7 +34,6 @@ from .models import (
     UrlInfo,
 )
 from .utils import color_text, raise_response_exception
-import random
 
 logger = logging.getLogger("gamdl")
 
@@ -127,7 +127,7 @@ class Downloader:
         self._set_subprocess_additional_args()
 
     def _set_temp_path(self):
-        random_suffix = "".join(random.choices("1234567890", k=8))
+        random_suffix = uuid.uuid4().hex[:8]
         self.temp_path = self.temp_path / f"gamdl_temp_{random_suffix}"
 
     def _set_exclude_tags(self):

@@ -52,6 +52,33 @@ class RemuxFormatMusicVideo(Enum):
     MP4 = "mp4"
 
 
+class MusicVideoResolution(Enum):
+    R240P = "240p"
+    R360P = "360p"
+    R480P = "480p"
+    R576P = "576p"
+    R720P = "720p"
+    R1080P = "1080p"
+    R1440P = "1440p"
+    R2160P = "2160p"
+
+    def is_not_exceeding(self, vertical_res: int) -> bool:
+        next_res = self.next_res()
+        if next_res is not None:
+            return vertical_res < int(next_res)
+        return vertical_res >= int(self)
+
+    def next_res(self) -> "MusicVideoResolution | None":
+        if self == MusicVideoResolution.R2160P:
+            return None
+        resolutions = list(MusicVideoResolution)
+        index = resolutions.index(self)
+        return resolutions[index + 1]
+
+    def __int__(self) -> int:
+        return int(self.value[:-1])
+
+
 class MediaFileFormat(Enum):
     M4A = "m4a"
     MP4 = "mp4"

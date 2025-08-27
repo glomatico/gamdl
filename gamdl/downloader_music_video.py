@@ -11,7 +11,13 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
-from .enums import MediaFileFormat, MusicVideoCodec, RemuxFormatMusicVideo, RemuxMode
+from .enums import (
+    MediaFileFormat,
+    MusicVideoCodec,
+    MusicVideoResolution,
+    RemuxFormatMusicVideo,
+    RemuxMode,
+)
 from .models import (
     DecryptionKeyAv,
     DownloadInfo,
@@ -34,10 +40,12 @@ class DownloaderMusicVideo:
         downloader: Downloader,
         codec: list[MusicVideoCodec] = [MusicVideoCodec.H264, MusicVideoCodec.H265],
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
+        max_resolution: MusicVideoResolution = MusicVideoResolution.R1080P,
     ) -> None:
         self.downloader = downloader
         self.codec = codec
         self.remux_format = remux_format
+        self.max_resolution = max_resolution
 
     def get_stream_url_from_webplayback(self, webplayback: dict) -> str:
         return webplayback["hls-playlist-url"]
@@ -51,7 +59,7 @@ class DownloaderMusicVideo:
             query=urllib.parse.urlencode(query, doseq=True)
         ).geturl()
 
-    def _get_best_video_playlist(
+    def _get_video_playlist_from_resolution(
         self,
         playlists: list[m3u8.Playlist],
         codec: MusicVideoCodec,
@@ -60,6 +68,9 @@ class DownloaderMusicVideo:
             playlist
             for playlist in playlists
             if playlist.stream_info.codecs.startswith(codec.fourcc())
+            and self.max_resolution.is_not_exceeding(
+                playlist.stream_info.resolution[-1]
+            )
         ]
         if not playlists_filtered:
             return None
@@ -67,12 +78,12 @@ class DownloaderMusicVideo:
         playlists_filtered.sort(key=lambda x: x.stream_info.bandwidth)
         return playlists_filtered[-1]
 
-    def get_best_video_playlist(
+    def get_video_playlist_from_resolution(
         self,
         playlists: list[m3u8.Playlist],
     ) -> m3u8.Playlist | None:
         for codec in self.codec:
-            playlist = self._get_best_video_playlist(
+            playlist = self._get_video_playlist_from_resolution(
                 playlists,
                 codec,
             )
@@ -103,7 +114,7 @@ class DownloaderMusicVideo:
                 name=" | ".join(
                     [
                         playlist.stream_info.codecs[:4],
-                        playlist.stream_info.resolution,
+                        "x".join(str(v) for v in playlist.stream_info.resolution),
                         str(playlist.stream_info.bandwidth),
                     ]
                 ),
@@ -152,8 +163,10 @@ class DownloaderMusicVideo:
     ) -> StreamInfo | None:
         stream_info = StreamInfo()
 
-        if self.codec != MusicVideoCodec.ASK:
-            playlist = self.get_best_video_playlist(playlist_master_m3u8_obj.playlists)
+        if MusicVideoCodec.ASK not in self.codec:
+            playlist = self.get_video_playlist_from_resolution(
+                playlist_master_m3u8_obj.playlists
+            )
         else:
             playlist = self.get_video_playlist_from_user(
                 playlist_master_m3u8_obj.playlists

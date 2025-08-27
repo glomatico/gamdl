@@ -206,14 +206,27 @@ The following variables can be used in the template folders/files and/or in the 
 
 ### Music Videos Codecs
 
-- `h264`: Up to 1080p with AAC 256kbps.
-- `h265`: Up to 2160p with AAC 256kpbs.
+- `h264`
+- `h265`
 - `ask`: Prompt to choose available video and audio codecs.
 
 ### Music Videos Remux Formats
 
 - `m4v`: Default remux format.
 - `mp4`
+
+### Music Videos Maximum Resolutions
+
+- H.264 Resolutions:
+  - `240p`
+  - `360p`
+  - `480p`
+  - `576p`
+  - `720p`
+  - `1080p`
+- H.265-only Resolutions:
+  - `1440p`
+  - `2160p`
 
 ### Post videos/extra videos qualities
 

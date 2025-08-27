@@ -134,6 +134,7 @@ Config file values can be overridden using command-line arguments.
 | `--codec-music-video` / `codec_music_video`                     | Comma-separated music video codec priority.                                  | h264,h265                                    |
 | `--remux-format-music-video` / `remux_format_music_video`       | Music video remux format.                                                    | m4v                                          |
 | `--quality-post` / `quality_post`                               | Post video quality.                                                          | best                                         |
+| `--max-resolution` / `max_resolution`                           | Maximum music video resolution.                                              | 1080p                                        |
 | `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | false                                        |
 
 ### Tags variables

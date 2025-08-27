@@ -66,7 +66,7 @@ class MusicVideoResolution(Enum):
         next_res = self.next_res()
         if next_res is not None:
             return vertical_res < int(next_res)
-        return vertical_res >= int(self)
+        return True
 
     def next_res(self) -> "MusicVideoResolution | None":
         if self == MusicVideoResolution.R2160P:

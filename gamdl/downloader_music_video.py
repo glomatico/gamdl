@@ -59,37 +59,37 @@ class DownloaderMusicVideo:
             query=urllib.parse.urlencode(query, doseq=True)
         ).geturl()
 
-    def _get_video_playlist_from_resolution(
-        self,
-        playlists: list[m3u8.Playlist],
-        codec: MusicVideoCodec,
-    ) -> m3u8.Playlist | None:
-        playlists_filtered = [
-            playlist
-            for playlist in playlists
-            if playlist.stream_info.codecs.startswith(codec.fourcc())
-            and self.max_resolution.is_not_exceeding(
-                playlist.stream_info.resolution[-1]
-            )
-        ]
-        if not playlists_filtered:
-            return None
-
-        playlists_filtered.sort(key=lambda x: x.stream_info.bandwidth)
-        return playlists_filtered[-1]
-
     def get_video_playlist_from_resolution(
         self,
         playlists: list[m3u8.Playlist],
     ) -> m3u8.Playlist | None:
-        for codec in self.codec:
-            playlist = self._get_video_playlist_from_resolution(
-                playlists,
-                codec,
-            )
-            if playlist:
-                return playlist
-        return None
+        playlists_filtered = set()
+        for playlist in playlists:
+            for codec in self.codec:
+                if playlist.stream_info.codecs.startswith(
+                    codec.fourcc()
+                ) and self.max_resolution.is_not_exceeding(
+                    playlist.stream_info.resolution[-1]
+                ):
+                    playlists_filtered.add(playlist)
+
+        if not playlists_filtered:
+            return None
+
+        playlists_filtered = list(playlists_filtered)
+
+        def sort_key(playlist: m3u8.Playlist) -> tuple[int, int, int]:
+            resolution = playlist.stream_info.resolution[-1]
+            codec_preference = len(self.codec)
+            for i, preferred_codec in enumerate(self.codec):
+                if playlist.stream_info.codecs.startswith(preferred_codec.fourcc()):
+                    codec_preference = i
+                    break
+            bandwidth = playlist.stream_info.bandwidth
+            return (-resolution, codec_preference, -bandwidth)
+
+        playlists_filtered.sort(key=sort_key)
+        return playlists_filtered[0]
 
     def get_best_stereo_audio_playlist(
         self,

@@ -201,7 +201,7 @@ The following variables can be used in the template folders/files and/or in the 
   - `aac-he-downmix`: AAC-HE 64kbps downmix.
   - `atmos`: Dolby Atmos 768kbps.
   - `ac3`: AC3 640kbps.
-  - `alac`: ALAC up to 24-bit/192 kHz. No reports of successful downloads have been made.
+  - `alac`: ALAC up to 24-bit/192 kHz (no reports of successful downloads have been made).
   - `ask`: Prompt to choose available audio codec.
 
 ### Music Videos Codecs

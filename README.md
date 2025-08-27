@@ -221,7 +221,7 @@ The following variables can be used in the template folders/files and/or in the 
   - `240p`
   - `360p`
   - `480p`
-  - `576p`
+  - `540p`
   - `720p`
   - `1080p`
 - H.265-only Resolutions:

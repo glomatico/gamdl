@@ -345,10 +345,10 @@ def load_config_file(
     help="Music video remux format.",
 )
 @click.option(
-    "--max-resolution",
+    "--resolution",
     type=MusicVideoResolution,
-    default=downloader_music_video_sig.parameters["max_resolution"].default,
-    help="Maximum music video resolution.",
+    default=downloader_music_video_sig.parameters["resolution"].default,
+    help="Target video resolution for music videos.",
 )
 # DownloaderPost specific options
 @click.option(
@@ -404,7 +404,7 @@ def main(
     synced_lyrics_format: SyncedLyricsFormat,
     codec_music_video: list[MusicVideoCodec],
     remux_format_music_video: RemuxFormatMusicVideo,
-    max_resolution: MusicVideoResolution,
+    resolution: MusicVideoResolution,
     quality_post: PostQuality,
     no_config_file: bool,
 ):
@@ -480,7 +480,7 @@ def main(
         downloader,
         codec_music_video,
         remux_format_music_video,
-        max_resolution,
+        resolution,
     )
 
     downloader_post = DownloaderPost(

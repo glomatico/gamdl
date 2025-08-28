@@ -62,19 +62,6 @@ class MusicVideoResolution(Enum):
     R1440P = "1440p"
     R2160P = "2160p"
 
-    def is_not_exceeding(self, vertical_res: int) -> bool:
-        next_res = self.next_res()
-        if next_res is not None:
-            return vertical_res < int(next_res)
-        return True
-
-    def next_res(self) -> "MusicVideoResolution | None":
-        if self == MusicVideoResolution.R2160P:
-            return None
-        resolutions = list(MusicVideoResolution)
-        index = resolutions.index(self)
-        return resolutions[index + 1]
-
     def __int__(self) -> int:
         return int(self.value[:-1])
 

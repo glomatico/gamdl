@@ -40,7 +40,7 @@ class ItunesApi:
         self,
         resource_id: str,
         entity: str = "album",
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             self.ITUNES_LOOKUP_API_URL,
             params={
@@ -51,21 +51,20 @@ class ItunesApi:
         try:
             response.raise_for_status()
             response_dict = response.json()
-            resource = response_dict.get("results")
-            assert resource
         except (
             requests.HTTPError,
             requests.exceptions.JSONDecodeError,
-            AssertionError,
         ):
             raise_response_exception(response)
-        return resource
+        if response_dict.get("results"):
+            return response_dict["results"]
+        return None
 
     def get_itunes_page(
         self,
         resource_type: str,
         resource_id: str,
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.ITUNES_PAGE_API_URL}/{resource_type}/{resource_id}"
         )
@@ -75,11 +74,9 @@ class ItunesApi:
             itunes_page = response_dict["storePlatformData"]["product-dv"][
                 "results"
             ].get(resource_id)
-            assert itunes_page
         except (
             requests.HTTPError,
             requests.exceptions.JSONDecodeError,
-            AssertionError,
         ):
             raise_response_exception(response)
         return itunes_page

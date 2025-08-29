@@ -583,7 +583,10 @@ def main(
                 )
 
                 if (
-                    (synced_lyrics_only and media_metadata["type"] != "songs")
+                    (
+                        synced_lyrics_only
+                        and media_metadata["type"] not in {"songs", "library-songs"}
+                    )
                     or (media_metadata["type"] == "music-videos" and skip_mv)
                     or (
                         media_metadata["type"] == "music-videos"
@@ -596,14 +599,14 @@ def main(
                     )
                     continue
 
-                if media_metadata["type"] in ("songs", "library-songs"):
+                if media_metadata["type"] in {"songs", "library-songs"}:
                     downloader_song.download(
                         media_metadata=media_metadata,
                         playlist_attributes=download_queue.playlist_attributes,
                         playlist_track=download_index,
                     )
 
-                if media_metadata["type"] in ("music-videos", "library-music-videos"):
+                if media_metadata["type"] in {"music-videos", "library-music-videos"}:
                     downloader_music_video.download(
                         media_metadata=media_metadata,
                         playlist_attributes=download_queue.playlist_attributes,

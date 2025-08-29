@@ -4,12 +4,15 @@ import base64
 import datetime
 import functools
 import io
+import logging
 import re
 import shutil
 import subprocess
 import typing
+import uuid
 from pathlib import Path
 
+import colorama
 import requests
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
@@ -19,29 +22,55 @@ from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
-from .constants import IMAGE_FILE_EXTENSION_MAP, MP4_TAGS_MAP
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
-from .models import DownloadQueue, UrlInfo
-from .utils import raise_response_exception
+from .models import (
+    DecryptionKey,
+    DownloadInfo,
+    DownloadQueue,
+    MediaTags,
+    PlaylistTags,
+    UrlInfo,
+)
+from .utils import color_text, raise_response_exception
+
+logger = logging.getLogger("gamdl")
 
 
 class Downloader:
     ILLEGAL_CHARS_RE = r'[\\/:*?"<>|;]'
     ILLEGAL_CHAR_REPLACEMENT = "_"
     VALID_URL_RE = (
-        r"(/(?P<storefront>[a-z]{2})/(?P<type>artist|album|playlist|song|music-video|post)/(?P<slug>[^/]*)(?:/(?P<id>[^/?]*))?(?:\?i=)?(?P<sub_id>[0-9a-z]*)?)|"
-        r"(/library/(?P<library_type>|playlist|albums)/(?P<library_id>[a-z]\.[0-9a-zA-Z]*))"
+        r"("
+        r"/(?P<storefront>[a-z]{2})"
+        r"/(?P<type>artist|album|playlist|song|music-video|post)"
+        r"(?:/(?P<slug>[a-z0-9-]+))?"
+        r"/(?P<id>[0-9]+|pl\.[0-9a-z]{32}|pl\.u-[a-zA-Z0-9]{15})"
+        r"(?:\?i=(?P<sub_id>[0-9]+))?"
+        r")|("
+        r"(?:/(?P<library_storefront>[a-z]{2}))?"
+        r"/library/(?P<library_type>|playlist|albums)"
+        r"/(?P<library_id>p\.[a-zA-Z0-9]{15}|l\.[a-zA-Z0-9]{7})"
+        r")"
     )
+    IMAGE_FILE_EXTENSION_MAP = {
+        "jpeg": ".jpg",
+        "tiff": ".tif",
+    }
 
     def __init__(
         self,
         apple_music_api: AppleMusicApi,
         itunes_api: ItunesApi,
         output_path: Path = Path("./Apple Music"),
-        temp_path: Path = Path("./temp"),
+        temp_path: Path = Path("."),
         wvd_path: Path = None,
+        overwrite: bool = False,
+        save_cover: bool = False,
+        save_playlist: bool = False,
+        no_synced_lyrics: bool = False,
+        synced_lyrics_only: bool = False,
         nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
@@ -57,7 +86,7 @@ class Downloader:
         template_file_no_album: str = "{title}",
         template_file_playlist: str = "Playlists/{playlist_artist}/{playlist_title}",
         template_date: str = "%Y-%m-%dT%H:%M:%SZ",
-        exclude_tags: str = None,
+        exclude_tags: list[str] = None,
         cover_size: int = 1200,
         truncate: int = None,
         silent: bool = False,
@@ -67,6 +96,11 @@ class Downloader:
         self.output_path = output_path
         self.temp_path = temp_path
         self.wvd_path = wvd_path
+        self.overwrite = overwrite
+        self.save_cover = save_cover
+        self.save_playlist = save_playlist
+        self.no_synced_lyrics = no_synced_lyrics
+        self.synced_lyrics_only = synced_lyrics_only
         self.nm3u8dlre_path = nm3u8dlre_path
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
@@ -86,23 +120,24 @@ class Downloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self._set_temp_path()
+        self._set_exclude_tags()
         self._set_binaries_path_full()
-        self._set_exclude_tags_list()
         self._set_truncate()
         self._set_subprocess_additional_args()
+
+    def _set_temp_path(self):
+        random_suffix = uuid.uuid4().hex[:8]
+        self.temp_path = self.temp_path / f"gamdl_temp_{random_suffix}"
+
+    def _set_exclude_tags(self):
+        self.exclude_tags = self.exclude_tags if self.exclude_tags is not None else []
 
     def _set_binaries_path_full(self):
         self.nm3u8dlre_path_full = shutil.which(self.nm3u8dlre_path)
         self.ffmpeg_path_full = shutil.which(self.ffmpeg_path)
         self.mp4box_path_full = shutil.which(self.mp4box_path)
         self.mp4decrypt_path_full = shutil.which(self.mp4decrypt_path)
-
-    def _set_exclude_tags_list(self):
-        self.exclude_tags_list = (
-            [i.lower() for i in self.exclude_tags.split(",")]
-            if self.exclude_tags is not None
-            else []
-        )
 
     def _set_truncate(self):
         if self.truncate is not None:
@@ -123,33 +158,24 @@ class Downloader:
         else:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
 
-    def get_url_info(self, url: str) -> UrlInfo:
-        url_info = UrlInfo()
+    def parse_url_info(self, url: str) -> UrlInfo | None:
         url_regex_result = re.search(
             self.VALID_URL_RE,
             url,
         )
-        is_library = url_regex_result.group("library_type") is not None
-        if is_library:
-            url_info.type = url_regex_result.group("library_type")
-            url_info.id = url_regex_result.group("library_id")
-        else:
-            url_info.storefront = url_regex_result.group("storefront")
-            url_info.type = (
-                "song"
-                if url_regex_result.group("sub_id")
-                else url_regex_result.group("type")
-            )
-            url_info.id = (
-                url_regex_result.group("sub_id")
-                or url_regex_result.group("id")
-                or url_regex_result.group("sub_id")
-            )
-        url_info.is_library = is_library
-        return url_info
+        if not url_regex_result:
+            return None
+
+        return UrlInfo(
+            **url_regex_result.groupdict(),
+        )
 
     def get_download_queue(self, url_info: UrlInfo) -> DownloadQueue:
-        return self._get_download_queue(url_info.type, url_info.id, url_info.is_library)
+        return self._get_download_queue(
+            "song" if url_info.sub_id else url_info.type,
+            url_info.sub_id or url_info.id or url_info.library_id,
+            url_info.library_id is not None,
+        )
 
     def _get_download_queue(
         self,
@@ -165,7 +191,7 @@ class Downloader:
             )
         elif url_type == "song":
             download_queue.medias_metadata = [self.apple_music_api.get_song(id)]
-        elif url_type in ("album", "albums"):
+        elif url_type in {"album", "albums"}:
             if is_library:
                 album = self.apple_music_api.get_library_album(id)
             else:
@@ -272,39 +298,46 @@ class Downloader:
         for music_video in selected:
             yield music_video
 
-    def get_media_id(
+    def get_media_id_of_library_media(
+        self,
+        library_media_metadata: dict,
+    ) -> str:
+        play_params = library_media_metadata["attributes"].get("playParams", {})
+        return play_params.get("catalogId", library_media_metadata["id"])
+
+    def is_media_streamable(
         self,
         media_metadata: dict,
-    ) -> str | None:
-        play_params = media_metadata["attributes"].get("playParams", {})
-        return play_params.get("catalogId") or play_params.get("id")
+    ) -> bool:
+        return bool(media_metadata["attributes"].get("playParams"))
 
     def get_playlist_tags(
         self,
         playlist_attributes: dict,
         playlist_track: int,
-    ) -> dict:
-        tags = {
-            "playlist_artist": playlist_attributes.get("curatorName", "Apple Music"),
-            "playlist_id": playlist_attributes["playParams"]["id"],
-            "playlist_title": playlist_attributes["name"],
-            "playlist_track": playlist_track,
-        }
-        return tags
+    ) -> PlaylistTags:
+        return PlaylistTags(
+            playlist_artist=playlist_attributes.get("curatorName", "Unknown"),
+            playlist_id=playlist_attributes["playParams"]["id"],
+            playlist_title=playlist_attributes["name"],
+            playlist_track=playlist_track,
+        )
 
     def get_playlist_file_path(
         self,
-        tags: dict,
-    ):
+        tags: PlaylistTags,
+    ) -> Path:
         template_file = self.template_file_playlist.split("/")
+        tags_dict = tags.__dict__.copy()
+
         return Path(
             self.output_path,
             *[
-                self.get_sanitized_string(i.format(**tags), True)
+                self.get_sanitized_string(i.format(**tags_dict), True)
                 for i in template_file[0:-1]
             ],
             *[
-                self.get_sanitized_string(template_file[-1].format(**tags), False)
+                self.get_sanitized_string(template_file[-1].format(**tags_dict), False)
                 + ".m3u8"
             ],
         )
@@ -340,13 +373,15 @@ class Downloader:
         minutes, seconds = divmod(millis // 1000, 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    def sanitize_date(self, date: str) -> datetime.datetime:
-        return datetime.datetime.fromisoformat(date[:-1]).strftime(self.template_date)
+    def parse_date(self, date: str) -> datetime.datetime:
+        return datetime.datetime.fromisoformat(date.split("Z")[0])
 
-    def get_decryption_key(self, pssh: str, track_id: str) -> str:
+    def get_decryption_key(self, pssh: str, track_id: str) -> DecryptionKey:
         try:
             cdm_session = self.cdm.open()
+
             pssh_obj = PSSH(pssh.split(",")[-1])
+
             challenge = base64.b64encode(
                 self.cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
@@ -355,13 +390,17 @@ class Downloader:
                 pssh,
                 challenge,
             )
+
             self.cdm.parse_license(cdm_session, license)
-            decryption_key = next(
+            decryption_key_info = next(
                 i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-            ).key.hex()
+            )
         finally:
             self.cdm.close(cdm_session)
-        return decryption_key
+        return DecryptionKey(
+            key=decryption_key_info.key.hex(),
+            kid=decryption_key_info.kid.hex,
+        )
 
     def download(self, path: Path, stream_url: str):
         if self.download_mode == DownloadMode.YTDLP:
@@ -421,47 +460,73 @@ class Downloader:
                 dirty_string = dirty_string[: self.truncate - 4]
         return dirty_string.strip()
 
-    def get_final_file_extension(
+    def get_media_file_extension(
         self,
-        file_format: MediaFileFormat,
+        media_file_format: MediaFileFormat,
     ) -> str:
-        return "." + file_format.value
+        return "." + media_file_format.value
 
-    def get_final_path(self, tags: dict, file_extension: str) -> Path:
-        if tags.get("album"):
+    def get_temp_path(
+        self,
+        media_id: str,
+        tag: str,
+        file_extension: str,
+    ):
+        temp_path = self.temp_path / (f"{media_id}_{tag}" + file_extension)
+        return temp_path
+
+    def get_final_path(
+        self,
+        tags: MediaTags,
+        file_extension: str,
+        playlist_tags: PlaylistTags,
+    ) -> Path:
+        if tags.album is not None:
             template_folder = (
                 self.template_folder_compilation.split("/")
-                if tags.get("compilation")
+                if tags.compilation
                 else self.template_folder_album.split("/")
             )
             template_file = (
                 self.template_file_multi_disc.split("/")
-                if tags["disc_total"] > 1
+                if tags.disc_total > 1
                 else self.template_file_single_disc.split("/")
             )
         else:
             template_folder = self.template_folder_no_album.split("/")
             template_file = self.template_file_no_album.split("/")
+
         template_final = template_folder + template_file
+
+        tags_dict = tags.__dict__.copy()
+        if playlist_tags:
+            tags_dict.update(playlist_tags.__dict__)
+
         return Path(
             self.output_path,
             *[
-                self.get_sanitized_string(i.format(**tags), True)
+                self.get_sanitized_string(i.format(**tags_dict), True)
                 for i in template_final[0:-1]
             ],
             (
-                self.get_sanitized_string(template_final[-1].format(**tags), False)
+                self.get_sanitized_string(template_final[-1].format(**tags_dict), False)
                 + file_extension
             ),
         )
 
-    def get_cover_file_extension(self, cover_url: str) -> str | None:
-        cover_bytes = self.get_cover_url_response_bytes(cover_url)
+    def get_cover_format(self, cover_url: str) -> str | None:
+        cover_bytes = self.get_cover_bytes(cover_url)
         if cover_bytes is None:
             return None
-        image_obj = Image.open(io.BytesIO(self.get_cover_url_response_bytes(cover_url)))
+        image_obj = Image.open(io.BytesIO(self.get_cover_bytes(cover_url)))
         image_format = image_obj.format.lower()
-        return IMAGE_FILE_EXTENSION_MAP.get(image_format, f".{image_format}")
+        return image_format
+
+    def get_cover_file_extension(self, cover_format: str) -> str:
+        return self.IMAGE_FILE_EXTENSION_MAP.get(
+            cover_format,
+            f".{cover_format.lower()}",
+        )
 
     def get_cover_url(self, metadata: dict) -> str:
         if self.cover_format == CoverFormat.RAW:
@@ -492,7 +557,7 @@ class Downloader:
 
     @staticmethod
     @functools.lru_cache()
-    def get_cover_url_response_bytes(url: str) -> bytes | None:
+    def get_cover_bytes(url: str) -> bytes | None:
         response = requests.get(url)
         if response.status_code == 200:
             return response.content
@@ -505,72 +570,151 @@ class Downloader:
     def apply_tags(
         self,
         path: Path,
-        tags: dict,
+        tags: MediaTags,
         cover_url: str,
     ):
-        to_apply_tags = [
-            tag_name
-            for tag_name in tags.keys()
-            if tag_name not in self.exclude_tags_list
-        ]
-        mp4_tags = {}
-        for tag_name in to_apply_tags:
-            if tag_name in ("disc", "disc_total"):
-                if mp4_tags.get("disk") is None:
-                    mp4_tags["disk"] = [[0, 0]]
-                if tag_name == "disc":
-                    mp4_tags["disk"][0][0] = tags[tag_name]
-                elif tag_name == "disc_total":
-                    mp4_tags["disk"][0][1] = tags[tag_name]
-            elif tag_name in ("track", "track_total"):
-                if mp4_tags.get("trkn") is None:
-                    mp4_tags["trkn"] = [[0, 0]]
-                if tag_name == "track":
-                    mp4_tags["trkn"][0][0] = tags[tag_name]
-                elif tag_name == "track_total":
-                    mp4_tags["trkn"][0][1] = tags[tag_name]
-            elif tag_name == "compilation":
-                mp4_tags["cpil"] = tags["compilation"]
-            elif tag_name == "gapless":
-                mp4_tags["pgap"] = tags["gapless"]
-            elif (
-                MP4_TAGS_MAP.get(tag_name) is not None
-                and tags.get(tag_name) is not None
-            ):
-                mp4_tags[MP4_TAGS_MAP[tag_name]] = [tags[tag_name]]
-        if (
-            "cover" not in self.exclude_tags_list
-            and self.cover_format != CoverFormat.RAW
-        ):
-            cover_bytes = self.get_cover_url_response_bytes(cover_url)
-            if cover_bytes is not None:
-                mp4_tags["covr"] = [
-                    MP4Cover(
-                        self.get_cover_url_response_bytes(cover_url),
-                        imageformat=(
-                            MP4Cover.FORMAT_JPEG
-                            if self.cover_format == CoverFormat.JPG
-                            else MP4Cover.FORMAT_PNG
-                        ),
-                    )
-                ]
+        filtered_tags = MediaTags(
+            **{
+                k: v
+                for k, v in tags.__dict__.items()
+                if v is not None and k not in self.exclude_tags
+            }
+        )
+        mp4_tags = filtered_tags.to_mp4_tags(self.template_date)
+        skip_tagging = "all" in self.exclude_tags
+
         mp4 = MP4(path)
         mp4.clear()
-        mp4.update(mp4_tags)
+        if not skip_tagging:
+            if (
+                "cover" not in self.exclude_tags
+                and self.cover_format != CoverFormat.RAW
+            ):
+                self._apply_cover(mp4, cover_url)
+            mp4.update(mp4_tags)
         mp4.save()
+
+    def _apply_cover(
+        self,
+        mp4: MP4,
+        cover_url: str,
+    ) -> None:
+        cover_bytes = self.get_cover_bytes(cover_url)
+        if cover_bytes is None:
+            return
+        mp4["covr"] = [
+            MP4Cover(
+                data=cover_bytes,
+                imageformat=(
+                    MP4Cover.FORMAT_JPEG
+                    if self.cover_format == CoverFormat.JPG
+                    else MP4Cover.FORMAT_PNG
+                ),
+            )
+        ]
 
     def move_to_output_path(
         self,
-        remuxed_path: Path,
+        staged_path: Path,
         final_path: Path,
     ):
         final_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(remuxed_path, final_path)
+        shutil.move(staged_path, final_path)
 
     @functools.lru_cache()
-    def save_cover(self, cover_path: Path, cover_url: str):
+    def write_cover(self, cover_path: Path, cover_url: str):
         cover_path.parent.mkdir(parents=True, exist_ok=True)
-        cover_path.write_bytes(self.get_cover_url_response_bytes(cover_url))
+        cover_path.write_bytes(self.get_cover_bytes(cover_url))
+
+    def write_synced_lyrics(
+        self,
+        synced_lyrics_path: Path,
+        synced_lyrics: str,
+    ):
+        synced_lyrics_path.parent.mkdir(parents=True, exist_ok=True)
+        synced_lyrics_path.write_text(
+            synced_lyrics,
+            encoding="utf8",
+        )
 
     def cleanup_temp_path(self):
-        shutil.rmtree(self.temp_path)
+        if self.temp_path.exists():
+            shutil.rmtree(self.temp_path)
+
+    def _final_processing(
+        self,
+        download_info: DownloadInfo,
+        skip_final_move: bool = False,
+    ) -> None:
+        colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
+
+        if download_info.staged_path:
+            logger.debug(
+                f"[{colored_media_id}] Applying tags to {download_info.staged_path}"
+            )
+            self.apply_tags(
+                download_info.staged_path,
+                download_info.tags,
+                download_info.cover_url,
+            )
+            logger.debug(
+                f'[{colored_media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
+            )
+            if not skip_final_move:
+                self.move_to_output_path(
+                    download_info.staged_path,
+                    download_info.final_path,
+                )
+            logger.info(f"[{colored_media_id}] Download completed successfully")
+
+        if (
+            download_info.cover_path and not self.save_cover
+        ) or not download_info.cover_path:
+            pass
+        elif download_info.cover_path.exists() and not self.overwrite:
+            logger.debug(
+                f'[{colored_media_id}] Cover already exists at "{download_info.cover_path}", skipping'
+            )
+        else:
+            logger.debug(
+                f'[{colored_media_id}] Saving cover to "{download_info.cover_path}"'
+            )
+            self.write_cover(
+                download_info.cover_path,
+                download_info.cover_url,
+            )
+
+        if (
+            self.no_synced_lyrics
+            or not download_info.lyrics
+            or not download_info.lyrics.synced
+        ):
+            pass
+        elif download_info.synced_lyrics_path.exists() and not self.overwrite:
+            logger.debug(
+                f'[{colored_media_id}] Synced lyrics already exist at "{download_info.synced_lyrics_path}", skipping'
+            )
+        else:
+            logger.debug(
+                f'[{colored_media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
+            )
+            self.write_synced_lyrics(
+                download_info.synced_lyrics_path,
+                download_info.lyrics.synced,
+            )
+        if (
+            download_info.playlist_tags
+            and self.save_playlist
+            and download_info.staged_path
+        ):
+            playlist_file_path = self.get_playlist_file_path(
+                download_info.playlist_tags
+            )
+            logger.debug(
+                f'[{colored_media_id}] Updating playlist file "{playlist_file_path}"'
+            )
+            self.update_playlist_file(
+                playlist_file_path,
+                download_info.final_path,
+                download_info.playlist_tags.playlist_track,
+            )

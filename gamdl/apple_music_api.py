@@ -50,8 +50,10 @@ class AppleMusicApi:
             ),
             None,
         )
+
         cookies = MozillaCookieJar(cookies_path)
         cookies.load(ignore_discard=True, ignore_expires=True)
+
         media_user_token = parse_cookie("media-user-token")
         if not media_user_token:
             raise ValueError(
@@ -59,6 +61,7 @@ class AppleMusicApi:
                 "Make sure you have exported the cookies from Apple Music webpage and are logged in "
                 "with an active subscription."
             )
+
         return cls(
             storefront=None,
             media_user_token=media_user_token,
@@ -83,6 +86,7 @@ class AppleMusicApi:
                 "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
             }
         )
+
         home_page = self.session.get(self.APPLE_MUSIC_HOMEPAGE_URL).text
         index_js_uri = re.search(
             r"/(assets/index-legacy-[^/]+\.js)",
@@ -92,8 +96,10 @@ class AppleMusicApi:
             f"{self.APPLE_MUSIC_HOMEPAGE_URL}/{index_js_uri}"
         ).text
         token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
+
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.session.params = {"l": self.language}
+
         if self.media_user_token:
             self.session.cookies.update(
                 {
@@ -106,7 +112,7 @@ class AppleMusicApi:
         self.account_info = self.get_account_info()
         self.storefront = self.account_info["meta"]["subscription"]["storefront"]
 
-    def _check_amp_api_response(self, response: requests.Response):
+    def _check_amp_api_response(self, response: requests.Response) -> None:
         try:
             response.raise_for_status()
             response_dict = response.json()
@@ -124,6 +130,7 @@ class AppleMusicApi:
             params={"meta": meta},
         )
         self._check_amp_api_response(response)
+
         return response.json()
 
     def get_artist(
@@ -132,7 +139,7 @@ class AppleMusicApi:
         include: str = "albums,music-videos",
         limit: int = 100,
         fetch_all: bool = True,
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/artists/{artist_id}",
             params={
@@ -140,7 +147,10 @@ class AppleMusicApi:
                 **{f"limit[{_include}]": limit for _include in include.split(",")},
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         artist = response.json()["data"][0]
         if fetch_all:
             for _include in include.split(","):
@@ -157,7 +167,7 @@ class AppleMusicApi:
         song_id: str,
         extend: str = "extendedAssetUrls",
         include: str = "lyrics,albums",
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/songs/{song_id}",
             params={
@@ -165,31 +175,40 @@ class AppleMusicApi:
                 "extend": extend,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         return response.json()["data"][0]
 
     def get_music_video(
         self,
         music_video_id: str,
         include: str = "albums",
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/music-videos/{music_video_id}",
             params={
                 "include": include,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         return response.json()["data"][0]
 
     def get_post(
         self,
         post_id: str,
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/uploaded-videos/{post_id}"
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         return response.json()["data"][0]
 
     @functools.lru_cache()
@@ -197,14 +216,17 @@ class AppleMusicApi:
         self,
         album_id: str,
         extend: str = "extendedAssetUrls",
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/albums/{album_id}",
             params={
                 "extend": extend,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         return response.json()["data"][0]
 
     def get_playlist(
@@ -213,7 +235,7 @@ class AppleMusicApi:
         limit_tracks: int = 300,
         extend: str = "extendedAssetUrls",
         fetch_all: bool = True,
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/playlists/{playlist_id}",
             params={
@@ -221,7 +243,10 @@ class AppleMusicApi:
                 "limit[tracks]": limit_tracks,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         playlist = response.json()["data"][0]
         if fetch_all:
             for additional_data in self._extend_api_data(
@@ -238,8 +263,7 @@ class AppleMusicApi:
         types: str = "songs,albums,artists,playlists",
         limit: int = 25,
         offset: int = 0,
-    ) -> dict:
-
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/catalog/{self.storefront}/search",
             params={
@@ -249,17 +273,27 @@ class AppleMusicApi:
                 "offset": offset,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         return response.json()["results"]
 
-    def get_library_album(self, album_id: str, extend: str = "extendedAssetUrls"):
+    def get_library_album(
+        self,
+        album_id: str,
+        extend: str = "extendedAssetUrls",
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/me/library/albums/{album_id}",
             params={
                 "extend": extend,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         return response.json()["data"][0]
 
     def get_library_playlist(
@@ -269,7 +303,7 @@ class AppleMusicApi:
         limit: int = 100,
         extend: str = "extendedAssetUrls",
         fetch_all: bool = True,
-    ) -> dict:
+    ) -> dict | None:
         response = self.session.get(
             f"{self.AMP_API_URL}/v1/me/library/playlists/{playlist_id}",
             params={
@@ -278,7 +312,10 @@ class AppleMusicApi:
                 "extend": extend,
             },
         )
+        if response.status_code == 404:
+            return None
         self._check_amp_api_response(response)
+
         playlist = response.json()["data"][0]
         if fetch_all:
             for additional_data in self._extend_api_data(
@@ -316,6 +353,7 @@ class AppleMusicApi:
             },
         )
         self._check_amp_api_response(response)
+
         return response.json()
 
     def get_webplayback(
@@ -329,6 +367,7 @@ class AppleMusicApi:
                 "language": self.language,
             },
         )
+
         try:
             response.raise_for_status()
             response_dict = response.json()
@@ -340,6 +379,7 @@ class AppleMusicApi:
             AssertionError,
         ):
             raise_response_exception(response)
+
         return webplayback[0]
 
     def get_widevine_license(
@@ -359,6 +399,7 @@ class AppleMusicApi:
                 "user-initiated": True,
             },
         )
+
         try:
             response.raise_for_status()
             response_dict = response.json()
@@ -370,4 +411,5 @@ class AppleMusicApi:
             AssertionError,
         ):
             raise_response_exception(response)
+
         return widevine_license

@@ -1,5 +1,3 @@
-from gamdl.enums import MusicVideoCodec, SongCodec, SyncedLyricsFormat
-
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
     "AG": "143540-2,32",
@@ -158,61 +156,6 @@ STOREFRONT_IDS = {
     "ZW": "143605-2,32",
 }
 
-MP4_TAGS_MAP = {
-    "album": "\xa9alb",
-    "album_artist": "aART",
-    "album_id": "plID",
-    "album_sort": "soal",
-    "artist": "\xa9ART",
-    "artist_id": "atID",
-    "artist_sort": "soar",
-    "comment": "\xa9cmt",
-    "composer": "\xa9wrt",
-    "composer_id": "cmID",
-    "composer_sort": "soco",
-    "copyright": "cprt",
-    "date": "\xa9day",
-    "genre": "\xa9gen",
-    "genre_id": "geID",
-    "lyrics": "\xa9lyr",
-    "media_type": "stik",
-    "rating": "rtng",
-    "storefront": "sfID",
-    "title": "\xa9nam",
-    "title_id": "cnID",
-    "title_sort": "sonm",
-    "xid": "xid ",
-}
-
-SONG_CODEC_REGEX_MAP = {
-    SongCodec.AAC: r"audio-stereo-\d+",
-    SongCodec.AAC_HE: r"audio-HE-stereo-\d+",
-    SongCodec.AAC_BINAURAL: r"audio-stereo-\d+-binaural",
-    SongCodec.AAC_DOWNMIX: r"audio-stereo-\d+-downmix",
-    SongCodec.AAC_HE_BINAURAL: r"audio-HE-stereo-\d+-binaural",
-    SongCodec.AAC_HE_DOWNMIX: r"audio-HE-stereo-\d+-downmix",
-    SongCodec.ATMOS: r"audio-atmos-.*",
-    SongCodec.AC3: r"audio-ac3-.*",
-    SongCodec.ALAC: r"audio-alac-.*",
-}
-
-MUSIC_VIDEO_CODEC_MAP = {
-    MusicVideoCodec.H264: "avc1",
-    MusicVideoCodec.H265: "hvc1",
-}
-
-SYNCED_LYRICS_FILE_EXTENSION_MAP = {
-    SyncedLyricsFormat.LRC: ".lrc",
-    SyncedLyricsFormat.SRT: ".srt",
-    SyncedLyricsFormat.TTML: ".ttml",
-}
-
-
-IMAGE_FILE_EXTENSION_MAP = {
-    "jpeg": ".jpg",
-    "tiff": ".tif",
-}
-
 
 EXCLUDED_CONFIG_FILE_PARAMS = (
     "urls",
@@ -224,8 +167,3 @@ EXCLUDED_CONFIG_FILE_PARAMS = (
 )
 
 X_NOT_FOUND_STRING = '{} not found at "{}"'
-
-LEGACY_CODECS = [
-    SongCodec.AAC_LEGACY,
-    SongCodec.AAC_HE_LEGACY,
-]

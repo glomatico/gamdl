@@ -68,9 +68,10 @@ class DownloaderPost:
 
     def get_tags(self, metadata: dict) -> MediaTags:
         attributes = metadata["attributes"]
+        upload_date = attributes.get("uploadDate")
         return MediaTags(
             artist=attributes.get("artistName"),
-            date=self.downloader.parse_date(attributes.get("uploadDate")),
+            date=self.downloader.parse_date(upload_date) if upload_date else None,
             title=attributes.get("name"),
             title_id=int(metadata["id"]),
             storefront=int(self.downloader.itunes_api.storefront_id.split("-")[0]),

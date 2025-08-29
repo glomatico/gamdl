@@ -86,14 +86,13 @@ class DownloaderPost:
         self,
         media_id: str = None,
         media_metadata: dict = None,
-        skip_final_move: bool = False,
     ) -> DownloadInfo:
         try:
             download_info = self._download(
                 media_id,
                 media_metadata,
             )
-            self.downloader._final_processing(download_info, skip_final_move)
+            self.downloader._final_processing(download_info)
         finally:
             self.downloader.cleanup_temp_path()
         return download_info

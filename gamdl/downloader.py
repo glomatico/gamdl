@@ -90,6 +90,7 @@ class Downloader:
         cover_size: int = 1200,
         truncate: int = None,
         silent: bool = False,
+        skip_processing: bool = False,
     ):
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
@@ -120,6 +121,7 @@ class Downloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self.skip_processing = skip_processing
         self._set_temp_path()
         self._set_exclude_tags()
         self._set_binaries_path_full()
@@ -638,14 +640,16 @@ class Downloader:
         )
 
     def cleanup_temp_path(self):
-        if self.temp_path.exists():
+        if self.temp_path.exists() and not self.skip_processing:
             shutil.rmtree(self.temp_path)
 
     def _final_processing(
         self,
         download_info: DownloadInfo,
-        skip_final_move: bool = False,
     ) -> None:
+        if self.skip_processing:
+            return
+
         colored_media_id = color_text(download_info.media_id, colorama.Style.DIM)
 
         if download_info.staged_path:
@@ -660,11 +664,10 @@ class Downloader:
             logger.debug(
                 f'[{colored_media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
             )
-            if not skip_final_move:
-                self.move_to_output_path(
-                    download_info.staged_path,
-                    download_info.final_path,
-                )
+            self.move_to_output_path(
+                download_info.staged_path,
+                download_info.final_path,
+            )
             logger.info(f"[{colored_media_id}] Download completed successfully")
 
         if (

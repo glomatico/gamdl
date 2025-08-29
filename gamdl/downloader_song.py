@@ -592,7 +592,6 @@ class DownloaderSong:
         media_metadata: dict = None,
         playlist_attributes: dict = None,
         playlist_track: int = None,
-        skip_final_move: bool = False,
     ) -> DownloadInfo:
         try:
             download_info = self._download(
@@ -601,7 +600,7 @@ class DownloaderSong:
                 playlist_attributes,
                 playlist_track,
             )
-            self.downloader._final_processing(download_info, skip_final_move)
+            self.downloader._final_processing(download_info)
         finally:
             self.downloader.cleanup_temp_path()
         return download_info

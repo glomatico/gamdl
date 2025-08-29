@@ -416,6 +416,8 @@ def main(
     logger.addHandler(stream_handler)
 
     cookies_path = prompt_path(True, cookies_path, "Cookies file")
+    if wvd_path:
+        wvd_path = prompt_path(True, wvd_path, ".wvd file")
 
     logger.info("Starting Gamdl")
     apple_music_api = AppleMusicApi.from_netscape_cookies(
@@ -491,9 +493,6 @@ def main(
     skip_mv = False
 
     if not synced_lyrics_only:
-        if wvd_path:
-            wvd_path = prompt_path(True, wvd_path, ".wvd file")
-
         logger.debug("Setting up CDM")
         downloader.set_cdm()
 

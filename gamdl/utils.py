@@ -24,8 +24,8 @@ def prompt_path(is_file: bool, initial_path: Path, description: str) -> Path:
         dir_okay=not is_file,
         path_type=Path,
     )
+    path_type = "file" if is_file else "folder"
     while True:
-        path_type = "file" if is_file else "folder"
         try:
             path_obj = path_validator.convert(initial_path, None, None)
             break

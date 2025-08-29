@@ -626,4 +626,4 @@ def main(
                     exc_info=not no_exceptions,
                 )
 
-    logger.info(f"Done ({error_count} error(s))")
+    logger.info(f"Done, {error_count} error(s) occurred")

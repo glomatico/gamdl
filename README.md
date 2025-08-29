@@ -98,7 +98,7 @@ Config file values can be overridden using command-line arguments.
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------- |
 | `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                     | `false`                                        |
 | `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs separated by newlines  | `false`                                        |
-| `--config-path` / -                                             | Path to config file.                                                         | `<home>/.gamdl/config.json`                    |
+| `--config-path` / -                                             | Path to config file.                                                         | `<home>/.gamdl/config.ini`                     |
 | `--log-level` / `log_level`                                     | Log level.                                                                   | `INFO`                                         |
 | `--no-exceptions` / `no_exceptions`                             | Don't print exceptions.                                                      | `false`                                        |
 | `--cookies-path`, `-c` / `cookies_path`                         | Path to .txt cookies file.                                                   | `./cookies.txt`                                |

@@ -537,7 +537,7 @@ class DownloaderMusicVideo:
         download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
-            raise MediaFileAlreadyExistsException()
+            raise MediaFileAlreadyExistsException(final_path)
 
         logger.debug(f"[{colored_media_id}] Getting decryption key")
         decryption_key = self.get_decryption_key(

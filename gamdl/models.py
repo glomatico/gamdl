@@ -118,6 +118,8 @@ class MediaTags:
                 date_mp4 = self.date.strftime(date_format)
         elif isinstance(self.date, str):
             date_mp4 = self.date
+        else:
+            date_mp4 = None
 
         mp4_tags = {
             "\xa9alb": [self.album],

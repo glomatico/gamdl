@@ -649,13 +649,6 @@ class DownloaderSong:
             )
             return download_info
 
-        if not self.downloader.is_media_streamable(media_metadata):
-            logger.warning(
-                f"[{colored_media_id}] "
-                "Track is not streamable or downloadable, skipping"
-            )
-            return download_info
-
         logger.debug(f"[{colored_media_id}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)
         download_info.lyrics = lyrics

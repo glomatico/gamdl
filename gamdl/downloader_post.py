@@ -9,6 +9,7 @@ from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
 from .enums import PostQuality
+from .exceptions import MediaNotStreamableException
 from .models import DownloadInfo, MediaTags
 from .utils import color_text
 
@@ -121,11 +122,7 @@ class DownloaderPost:
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not self.downloader.is_media_streamable(media_metadata):
-            logger.warning(
-                f"[{colored_media_id}] "
-                "Post Video is not streamable or downloadable, skipping"
-            )
-            return download_info
+            raise MediaNotStreamableException()
 
         tags = self.get_tags(media_metadata)
         final_path = self.downloader.get_final_path(

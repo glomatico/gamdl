@@ -19,6 +19,7 @@ from pywidevine.license_protocol_pb2 import WidevinePsshData
 
 from .downloader import Downloader
 from .enums import MediaFileFormat, RemuxMode, SongCodec, SyncedLyricsFormat
+from .exceptions import *
 from .models import (
     DecryptionKey,
     DecryptionKeyAv,
@@ -643,11 +644,7 @@ class DownloaderSong:
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not self.downloader.is_media_streamable(media_metadata):
-            logger.warning(
-                f"[{colored_media_id}] "
-                "Song is not streamable or downloadable, skipping"
-            )
-            return download_info
+            raise MediaNotStreamableException()
 
         logger.debug(f"[{colored_media_id}] Getting lyrics")
         lyrics = self.get_lyrics(media_metadata)
@@ -688,10 +685,7 @@ class DownloaderSong:
         download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
-            logger.warning(
-                f'[{colored_media_id}] Song already exists at "{final_path}", skipping'
-            )
-            return download_info
+            raise MediaFileAlreadyExistsException()
 
         logger.debug(f"[{colored_media_id}] Getting stream info")
         if self.codec.is_legacy():
@@ -706,11 +700,7 @@ class DownloaderSong:
         else:
             stream_info = self.get_stream_info(media_metadata)
             if not stream_info or not stream_info.audio_track.widevine_pssh:
-                logger.warning(
-                    f"[{colored_media_id}] Song is not downloadable or is not "
-                    "available in the selected codec, skipping",
-                )
-                return download_info
+                raise MediaFormatNotAvailableException()
             logger.debug(f"[{colored_media_id}] Getting decryption key")
             decryption_key = self.get_decryption_key(
                 stream_info,

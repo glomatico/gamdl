@@ -28,6 +28,7 @@ from .enums import (
     SongCodec,
     SyncedLyricsFormat,
 )
+from .exceptions import *
 from .itunes_api import ItunesApi
 from .utils import color_text, prompt_path
 
@@ -619,6 +620,14 @@ def main(
                     )
             except KeyboardInterrupt:
                 exit(0)
+            except (
+                MediaNotStreamableException,
+                MediaFileAlreadyExistsException,
+                MediaFormatNotAvailableException,
+            ) as e:
+                logger.warning(
+                    f"({queue_progress}) {e}, skipping",
+                )
             except Exception as e:
                 error_count += 1
                 logger.error(

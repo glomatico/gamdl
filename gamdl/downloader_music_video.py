@@ -18,6 +18,7 @@ from .enums import (
     RemuxFormatMusicVideo,
     RemuxMode,
 )
+from .exceptions import *
 from .models import (
     DecryptionKeyAv,
     DownloadInfo,
@@ -487,11 +488,7 @@ class DownloaderMusicVideo:
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
         if not self.downloader.is_media_streamable(media_metadata):
-            logger.warning(
-                f"[{colored_media_id}] "
-                "Music Video is not streamable or downloadable, skipping"
-            )
-            return download_info
+            raise MediaNotStreamableException()
 
         alt_media_id = self.get_music_video_id_alt(media_metadata) or media_id
         download_info.alt_media_id = alt_media_id
@@ -519,10 +516,7 @@ class DownloaderMusicVideo:
             logger.debug(f"[{colored_media_id}] Getting stream info")
             stream_info = self.get_stream_info_from_webplayback(webplayback)
         if not stream_info:
-            logger.warning(
-                f"[{colored_media_id}] Video/Audio stream with the selected codec(s) not found, skipping"
-            )
-            return download_info
+            raise MediaFormatNotAvailableException()
         download_info.stream_info = stream_info
 
         final_path = self.downloader.get_final_path(
@@ -543,10 +537,7 @@ class DownloaderMusicVideo:
         download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
-            logger.warning(
-                f'[{colored_media_id}] Music Video already exists at "{final_path}", skipping'
-            )
-            return download_info
+            raise MediaFileAlreadyExistsException()
 
         logger.debug(f"[{colored_media_id}] Getting decryption key")
         decryption_key = self.get_decryption_key(

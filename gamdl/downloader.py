@@ -639,8 +639,11 @@ class Downloader:
             encoding="utf8",
         )
 
-    def cleanup_temp_path(self):
-        if self.temp_path.exists() and not self.skip_processing:
+    def cleanup_temp_path(self, override_skip_processing_check: bool = False) -> None:
+        if self.skip_processing and not override_skip_processing_check:
+            return
+
+        if self.temp_path.exists():
             shutil.rmtree(self.temp_path)
 
     def _final_processing(

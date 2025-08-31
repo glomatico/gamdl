@@ -566,7 +566,7 @@ def main(
         except Exception as e:
             error_count += 1
             logger.error(
-                f'({url_progress}) Failed to check "{url}"',
+                f'({url_progress}) Failed to process URL "{url}", skipping',
                 exc_info=not no_exceptions,
             )
             continue

@@ -130,7 +130,7 @@ class Downloader:
 
     def _set_temp_path(self):
         random_suffix = uuid.uuid4().hex[:8]
-        self.temp_path = self.temp_path / f"gamdl_temp_{random_suffix}"
+        self.temp_path_generated = self.temp_path / f"gamdl_temp_{random_suffix}"
 
     def _set_exclude_tags(self):
         self.exclude_tags = self.exclude_tags if self.exclude_tags is not None else []
@@ -474,7 +474,7 @@ class Downloader:
         tag: str,
         file_extension: str,
     ):
-        temp_path = self.temp_path / (f"{media_id}_{tag}" + file_extension)
+        temp_path = self.temp_path_generated / (f"{media_id}_{tag}" + file_extension)
         return temp_path
 
     def get_final_path(
@@ -643,8 +643,8 @@ class Downloader:
         if self.skip_processing and not override_skip_processing_check:
             return
 
-        if self.temp_path.exists():
-            shutil.rmtree(self.temp_path)
+        if self.temp_path_generated.exists():
+            shutil.rmtree(self.temp_path_generated)
 
     def _final_processing(
         self,

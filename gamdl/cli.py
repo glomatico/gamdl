@@ -551,18 +551,22 @@ def main(
     for url_index, url in enumerate(urls, start=1):
         url_progress = color_text(f"URL {url_index}/{len(urls)}", colorama.Style.DIM)
         try:
-            logger.info(f'({url_progress}) Checking "{url}"')
+            logger.info(f'({url_progress}) Processing "{url}"')
             url_info = downloader.parse_url_info(url)
+
             if not url_info:
                 error_count += 1
                 logger.error(f"({url_progress}) Invalid URL, skipping")
                 continue
+
             download_queue = downloader.get_download_queue(url_info)
-            download_queue_medias_metadata = download_queue.medias_metadata
-            if not download_queue_medias_metadata[0]:
+
+            if not download_queue:
                 error_count += 1
                 logger.error(f"({url_progress}) Media not found, skipping")
                 continue
+
+            download_queue_medias_metadata = download_queue.medias_metadata
         except Exception as e:
             error_count += 1
             logger.error(

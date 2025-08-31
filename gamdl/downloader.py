@@ -187,39 +187,70 @@ class Downloader:
         url_type: str,
         id: str,
         is_library: bool,
-    ) -> DownloadQueue:
+    ) -> DownloadQueue | None:
         download_queue = DownloadQueue()
+
         if url_type == "artist":
             artist = self.apple_music_api.get_artist(id)
+
+            if artist is None:
+                return None
+
             download_queue.medias_metadata = list(
                 self.get_download_queue_from_artist(artist)
             )
-        elif url_type == "song":
-            download_queue.medias_metadata = [self.apple_music_api.get_song(id)]
-        elif url_type in {"album", "albums"}:
+
+        if url_type == "song":
+            song = self.apple_music_api.get_song(id)
+
+            if song is None:
+                return None
+
+            download_queue.medias_metadata = [song]
+
+        if url_type in {"album", "albums"}:
             if is_library:
                 album = self.apple_music_api.get_library_album(id)
             else:
                 album = self.apple_music_api.get_album(id)
+
+            if album is None:
+                return None
+
             download_queue.medias_metadata = [
                 track for track in album["relationships"]["tracks"]["data"]
             ]
-        elif url_type == "playlist":
+
+        if url_type == "playlist":
             if is_library:
                 playlist = self.apple_music_api.get_library_playlist(id)
-                download_queue.medias_metadata = [
-                    track for track in playlist["relationships"]["tracks"]["data"]
-                ]
             else:
                 playlist = self.apple_music_api.get_playlist(id)
-                download_queue.medias_metadata = [
-                    track for track in playlist["relationships"]["tracks"]["data"]
-                ]
+
+            if playlist is None:
+                return None
+
+            download_queue.medias_metadata = [
+                track for track in playlist["relationships"]["tracks"]["data"]
+            ]
             download_queue.playlist_attributes = playlist["attributes"]
-        elif url_type == "music-video":
-            download_queue.medias_metadata = [self.apple_music_api.get_music_video(id)]
-        elif url_type == "post":
-            download_queue.medias_metadata = [self.apple_music_api.get_post(id)]
+
+        if url_type == "music-video":
+            music_video = self.apple_music_api.get_music_video(id)
+
+            if music_video is None:
+                return None
+
+            download_queue.medias_metadata = [music_video]
+
+        if url_type == "post":
+            post = self.apple_music_api.get_post(id)
+
+            if post is None:
+                return None
+
+            download_queue.medias_metadata = [post]
+
         return download_queue
 
     def get_download_queue_from_artist(

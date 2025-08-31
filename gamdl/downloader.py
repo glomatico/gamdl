@@ -705,11 +705,7 @@ class Downloader:
                 download_info.synced_lyrics_path,
                 download_info.lyrics.synced,
             )
-        if (
-            download_info.playlist_tags
-            and self.save_playlist
-            and download_info.staged_path
-        ):
+        if download_info.playlist_tags and self.save_playlist:
             playlist_file_path = self.get_playlist_file_path(
                 download_info.playlist_tags
             )

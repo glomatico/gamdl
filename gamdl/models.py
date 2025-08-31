@@ -135,7 +135,7 @@ class MediaTags:
             "cmID": [self.composer_id],
             "soco": [self.composer_sort],
             "cprt": [self.copyright],
-            "\xa9day": date_mp4,
+            "\xa9day": [date_mp4],
             "disk": disc_mp4,
             "pgap": [bool(self.gapless) if self.gapless is not None else None],
             "\xa9gen": [self.genre],

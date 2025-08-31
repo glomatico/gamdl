@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import typing
+import urllib.parse
 import uuid
 from pathlib import Path
 
@@ -45,7 +46,7 @@ class Downloader:
         r"("
         r"/(?P<storefront>[a-z]{2})"
         r"/(?P<type>artist|album|playlist|song|music-video|post)"
-        r"(?:/(?P<slug>[a-z0-9-]+))?"
+        r"(?:/(?P<slug>[^\s/]+))?"
         r"/(?P<id>[0-9]+|pl\.[0-9a-z]{32}|pl\.u-[a-zA-Z0-9]{15})"
         r"(?:\?i=(?P<sub_id>[0-9]+))?"
         r")|("
@@ -161,6 +162,8 @@ class Downloader:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
 
     def parse_url_info(self, url: str) -> UrlInfo | None:
+        url = urllib.parse.unquote(url)
+
         url_regex_result = re.search(
             self.VALID_URL_RE,
             url,

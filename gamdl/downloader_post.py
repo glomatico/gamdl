@@ -9,7 +9,7 @@ from InquirerPy.base.control import Choice
 
 from .downloader import Downloader
 from .enums import PostQuality
-from .exceptions import MediaNotStreamableException
+from .exceptions import MediaFileAlreadyExistsException, MediaNotStreamableException
 from .models import DownloadInfo, MediaTags
 from .utils import color_text
 
@@ -132,6 +132,9 @@ class DownloaderPost:
         )
         download_info.tags = tags
         download_info.final_path = final_path
+
+        if final_path.exists() and not self.downloader.overwrite:
+            raise MediaFileAlreadyExistsException(final_path)
 
         cover_url = self.downloader.get_cover_url(media_metadata)
         cover_format = self.downloader.get_cover_format(cover_url)

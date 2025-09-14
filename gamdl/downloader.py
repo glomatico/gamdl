@@ -706,13 +706,14 @@ class Downloader:
         **kwargs,
     ) -> typing.Generator[DownloadInfo, None, None]:
         exception = None
+        download_info = None
         try:
             for download_info in func(*args, **kwargs):
                 yield download_info
         except Exception as e:
             exception = e
         finally:
-            if isinstance(download_info, DownloadInfo):
+            if download_info is not None and isinstance(download_info, DownloadInfo):
                 self._final_processing(download_info)
 
             if exception is not None:
@@ -720,7 +721,7 @@ class Downloader:
 
     def _final_processing(self, download_info: DownloadInfo) -> None:
         if self.skip_processing:
-            return download_info
+            return
 
         if download_info.media_id:
             colored_media_id = color_text(

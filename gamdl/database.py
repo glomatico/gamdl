@@ -9,7 +9,7 @@ class Database:
             media_path TEXT NOT NULL
         )
     """
-    WRITE_MEDIA_QUERY = """
+    ADD_MEDIA_QUERY = """
         INSERT OR REPLACE INTO media (media_id, media_path) VALUES (?, ?)
     """
     GET_MEDIA_QUERY = """
@@ -27,10 +27,10 @@ class Database:
             conn.execute(self.INITIAL_QUERY)
             conn.commit()
 
-    def write_media(self, media_id: str, media_path: Path):
+    def add_media(self, media_id: str, media_path: Path):
         with sqlite3.connect(self.file_path) as conn:
             conn.execute(
-                self.WRITE_MEDIA_QUERY,
+                self.ADD_MEDIA_QUERY,
                 (
                     media_id,
                     str(media_path.absolute()),

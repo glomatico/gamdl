@@ -597,7 +597,7 @@ class DownloaderMusicVideo:
         )
 
         logger.debug(
-            f"[{colored_media_id}]"
+            f"[{colored_media_id}] "
             "Decrypting video/audio to "
             f'{decrypted_path_video}"/"{decrypted_path_audio}" '
             f'and remuxing to "{staged_path}"'

@@ -272,5 +272,7 @@ downloader = Downloader(
 downloader.set_cdm()
 downloader_song = DownloaderSong(downloader=downloader)
 
-downloader_song.download(media_id="1624945512")
+for download_info in downloader_song.download(media_id="1624945512"):
+    # Process download_info as needed
+    pass
 ```

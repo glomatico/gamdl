@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import typing
 from pathlib import Path
 
 import colorama
@@ -87,23 +88,20 @@ class DownloaderPost:
         self,
         media_id: str = None,
         media_metadata: dict = None,
-    ) -> DownloadInfo:
-        try:
-            download_info = self._download(
-                media_id,
-                media_metadata,
-            )
-            self.downloader._final_processing(download_info)
-        finally:
-            self.downloader.cleanup_temp_path()
-        return download_info
+    ) -> typing.Generator[DownloadInfo, None, None]:
+        yield from self.downloader._final_processing_wrapper(
+            self._download,
+            media_id,
+            media_metadata,
+        )
 
     def _download(
         self,
         media_id: str = None,
         media_metadata: dict = None,
-    ) -> DownloadInfo:
+    ) -> typing.Generator[DownloadInfo, None, None]:
         download_info = DownloadInfo()
+        yield download_info
 
         if not media_id and not media_metadata:
             raise ValueError("Either media_id or media_metadata must be provided")
@@ -113,7 +111,11 @@ class DownloaderPost:
         download_info.media_id = media_id
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
-        self.downloader.check_database_and_raise(media_id)
+        database_final_path = self.downloader.get_database_final_path(media_id)
+        if database_final_path:
+            download_info.final_path = database_final_path
+            yield download_info
+            raise MediaFileAlreadyExistsException(database_final_path)
 
         if not media_metadata:
             logger.debug(f"[{colored_media_id}] Getting Post Video metadata")
@@ -121,6 +123,7 @@ class DownloaderPost:
         download_info.media_metadata = media_metadata
 
         if not self.downloader.is_media_streamable(media_metadata):
+            yield download_info
             raise MediaNotStreamableException()
 
         tags = self.get_tags(media_metadata)
@@ -133,6 +136,7 @@ class DownloaderPost:
         download_info.final_path = final_path
 
         if final_path.exists() and not self.downloader.overwrite:
+            yield download_info
             raise MediaFileAlreadyExistsException(final_path)
 
         cover_url = self.downloader.get_cover_url(media_metadata)
@@ -161,4 +165,4 @@ class DownloaderPost:
         )
         download_info.staged_path = staged_path
 
-        return download_info
+        yield download_info

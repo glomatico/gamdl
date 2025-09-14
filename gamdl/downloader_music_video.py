@@ -430,24 +430,22 @@ class DownloaderMusicVideo:
             self.downloader.get_cover_file_extension(cover_format)
         )
 
+    import typing
+
     def download(
         self,
         media_id: str = None,
         media_metadata: dict = None,
         playlist_attributes: dict = None,
         playlist_track: int = None,
-    ) -> DownloadInfo:
-        try:
-            download_info = self._download(
-                media_id,
-                media_metadata,
-                playlist_attributes,
-                playlist_track,
-            )
-            self.downloader._final_processing(download_info)
-        finally:
-            self.downloader.cleanup_temp_path()
-        return download_info
+    ) -> typing.Generator[DownloadInfo, None, None]:
+        yield from self.downloader._final_processing_wrapper(
+            self._download,
+            media_id,
+            media_metadata,
+            playlist_attributes,
+            playlist_track,
+        )
 
     def _download(
         self,
@@ -455,8 +453,9 @@ class DownloaderMusicVideo:
         media_metadata: dict = None,
         playlist_attributes: dict = None,
         playlist_track: int = None,
-    ) -> DownloadInfo:
+    ) -> typing.Generator[DownloadInfo, None, None]:
         download_info = DownloadInfo()
+        yield download_info
 
         if playlist_track is None and playlist_attributes:
             raise ValueError(
@@ -479,7 +478,11 @@ class DownloaderMusicVideo:
         download_info.media_id = media_id
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
-        self.downloader.check_database_and_raise(media_id)
+        database_final_path = self.downloader.get_database_final_path(media_id)
+        if database_final_path:
+            download_info.final_path = database_final_path
+            yield download_info
+            raise MediaFileAlreadyExistsException(database_final_path)
 
         if not media_metadata:
             logger.debug(f"[{colored_media_id}] Getting Music Video metadata")
@@ -487,6 +490,7 @@ class DownloaderMusicVideo:
         download_info.media_metadata = media_metadata
 
         if not self.downloader.is_media_streamable(media_metadata):
+            yield download_info
             raise MediaNotStreamableException()
 
         alt_media_id = self.get_music_video_id_alt(media_metadata) or media_id
@@ -514,8 +518,11 @@ class DownloaderMusicVideo:
             webplayback = self.downloader.apple_music_api.get_webplayback(media_id)
             logger.debug(f"[{colored_media_id}] Getting stream info")
             stream_info = self.get_stream_info_from_webplayback(webplayback)
+
         if not stream_info:
+            yield download_info
             raise MediaFormatNotAvailableException()
+
         download_info.stream_info = stream_info
 
         final_path = self.downloader.get_final_path(
@@ -536,6 +543,7 @@ class DownloaderMusicVideo:
         download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
+            yield download_info
             raise MediaFileAlreadyExistsException(final_path)
 
         logger.debug(f"[{colored_media_id}] Getting decryption key")
@@ -589,6 +597,7 @@ class DownloaderMusicVideo:
         )
 
         logger.debug(
+            f"[{colored_media_id}]"
             "Decrypting video/audio to "
             f'{decrypted_path_video}"/"{decrypted_path_audio}" '
             f'and remuxing to "{staged_path}"'
@@ -603,4 +612,4 @@ class DownloaderMusicVideo:
         )
         download_info.staged_path = staged_path
 
-        return download_info
+        yield download_info

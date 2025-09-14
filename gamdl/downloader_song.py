@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import subprocess
+import typing
 from pathlib import Path
 from xml.dom import minidom
 from xml.etree import ElementTree
@@ -593,18 +594,14 @@ class DownloaderSong:
         media_metadata: dict = None,
         playlist_attributes: dict = None,
         playlist_track: int = None,
-    ) -> DownloadInfo:
-        try:
-            download_info = self._download(
-                media_id,
-                media_metadata,
-                playlist_attributes,
-                playlist_track,
-            )
-            self.downloader._final_processing(download_info)
-        finally:
-            self.downloader.cleanup_temp_path()
-        return download_info
+    ) -> typing.Generator[DownloadInfo, None, None]:
+        yield from self.downloader._final_processing_wrapper(
+            self._download,
+            media_id,
+            media_metadata,
+            playlist_attributes,
+            playlist_track,
+        )
 
     def _download(
         self,
@@ -612,8 +609,9 @@ class DownloaderSong:
         media_metadata: dict = None,
         playlist_attributes: dict = None,
         playlist_track: int = None,
-    ) -> DownloadInfo:
+    ) -> typing.Generator[DownloadInfo, None, None]:
         download_info = DownloadInfo()
+        yield download_info
 
         if playlist_track is None and playlist_attributes:
             raise ValueError(
@@ -636,7 +634,11 @@ class DownloaderSong:
         download_info.media_id = media_id
         colored_media_id = color_text(media_id, colorama.Style.DIM)
 
-        self.downloader.check_database_and_raise(media_id)
+        database_final_path = self.downloader.get_database_final_path(media_id)
+        if database_final_path:
+            download_info.final_path = database_final_path
+            yield download_info
+            raise MediaFileAlreadyExistsException(database_final_path)
 
         if not media_metadata:
             logger.debug(f"[{colored_media_id}] Getting Song metadata")
@@ -672,7 +674,8 @@ class DownloaderSong:
             logger.info(
                 f"[{colored_media_id}] Downloading synced lyrics only, skipping song download"
             )
-            return download_info
+            yield download_info
+            return
 
         cover_url = self.downloader.get_cover_url(media_metadata)
         cover_format = self.downloader.get_cover_format(cover_url)
@@ -685,6 +688,7 @@ class DownloaderSong:
         download_info.cover_path = cover_path
 
         if final_path.exists() and not self.downloader.overwrite:
+            yield download_info
             raise MediaFileAlreadyExistsException(final_path)
 
         logger.debug(f"[{colored_media_id}] Getting stream info")
@@ -699,8 +703,11 @@ class DownloaderSong:
             download_info.decryption_key = decryption_key
         else:
             stream_info = self.get_stream_info(media_metadata)
+
             if not stream_info or not stream_info.audio_track.widevine_pssh:
+                yield download_info
                 raise MediaFormatNotAvailableException()
+
             logger.debug(f"[{colored_media_id}] Getting decryption key")
             decryption_key = self.get_decryption_key(
                 stream_info,
@@ -745,4 +752,4 @@ class DownloaderSong:
         )
         download_info.staged_path = staged_path
 
-        return download_info
+        yield download_info

@@ -25,7 +25,6 @@ from yt_dlp import YoutubeDL
 from .apple_music_api import AppleMusicApi
 from .database import Database
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
-from .exceptions import MediaFileAlreadyExistsException
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
 from .models import (
@@ -700,101 +699,111 @@ class Downloader:
         if self.temp_path_generated.exists():
             shutil.rmtree(self.temp_path_generated)
 
-    def _final_processing_wrapper(self, func, *args, **kwargs) -> DownloadInfo | None:
+    def _final_processing_wrapper(
+        self,
+        func,
+        *args,
+        **kwargs,
+    ) -> typing.Generator[DownloadInfo, None, None]:
+        exception = None
         try:
             for download_info in func(*args, **kwargs):
-                pass
+                yield download_info
+        except Exception as e:
+            exception = e
         finally:
-            if not isinstance(download_info, DownloadInfo):
-                return
+            if isinstance(download_info, DownloadInfo):
+                self._final_processing(download_info)
 
-            if self.skip_processing:
-                return download_info
+            if exception is not None:
+                raise exception
 
-            if download_info.media_id:
-                colored_media_id = color_text(
-                    download_info.media_id,
-                    colorama.Style.DIM,
-                )
-            else:
-                colored_media_id = color_text(
-                    "Unknown",
-                    colorama.Style.DIM,
-                )
-
-            if download_info.staged_path:
-                logger.debug(
-                    f'[{colored_media_id}] Applying tags to "{download_info.staged_path}"'
-                )
-                self.apply_tags(
-                    download_info.staged_path,
-                    download_info.tags,
-                    download_info.cover_url,
-                )
-                logger.debug(
-                    f'[{colored_media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
-                )
-                self.move_to_output_path(
-                    download_info.staged_path,
-                    download_info.final_path,
-                )
-                logger.info(f"[{colored_media_id}] Download completed successfully")
-
-                if self.database is not None:
-                    self.database.write_media(
-                        download_info.media_id,
-                        download_info.final_path,
-                    )
-
-            if (
-                download_info.cover_path and not self.save_cover
-            ) or not download_info.cover_path:
-                pass
-            elif download_info.cover_path.exists() and not self.overwrite:
-                logger.debug(
-                    f'[{colored_media_id}] Cover already exists at "{download_info.cover_path}", skipping'
-                )
-            else:
-                logger.debug(
-                    f'[{colored_media_id}] Saving cover to "{download_info.cover_path}"'
-                )
-                self.write_cover(
-                    download_info.cover_path,
-                    download_info.cover_url,
-                )
-
-            if (
-                self.no_synced_lyrics
-                or not download_info.lyrics
-                or not download_info.lyrics.synced
-            ):
-                pass
-            elif download_info.synced_lyrics_path.exists() and not self.overwrite:
-                logger.debug(
-                    f'[{colored_media_id}] Synced lyrics already exist at "{download_info.synced_lyrics_path}", skipping'
-                )
-            else:
-                logger.debug(
-                    f'[{colored_media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
-                )
-                self.write_synced_lyrics(
-                    download_info.synced_lyrics_path,
-                    download_info.lyrics.synced,
-                )
-
-            if download_info.playlist_tags and self.save_playlist:
-                playlist_file_path = self.get_playlist_file_path(
-                    download_info.playlist_tags
-                )
-                logger.debug(
-                    f'[{colored_media_id}] Updating playlist file "{playlist_file_path}"'
-                )
-                self.update_playlist_file(
-                    playlist_file_path,
-                    download_info.final_path,
-                    download_info.playlist_tags.playlist_track,
-                )
-
-            self.cleanup_temp_path()
-
+    def _final_processing(self, download_info: DownloadInfo) -> None:
+        if self.skip_processing:
             return download_info
+
+        if download_info.media_id:
+            colored_media_id = color_text(
+                download_info.media_id,
+                colorama.Style.DIM,
+            )
+        else:
+            colored_media_id = color_text(
+                "Unknown",
+                colorama.Style.DIM,
+            )
+
+        if download_info.staged_path:
+            logger.debug(
+                f'[{colored_media_id}] Applying tags to "{download_info.staged_path}"'
+            )
+            self.apply_tags(
+                download_info.staged_path,
+                download_info.tags,
+                download_info.cover_url,
+            )
+            logger.debug(
+                f'[{colored_media_id}] Moving "{download_info.staged_path}" to "{download_info.final_path}"'
+            )
+            self.move_to_output_path(
+                download_info.staged_path,
+                download_info.final_path,
+            )
+            logger.info(f"[{colored_media_id}] Download completed successfully")
+
+            if self.database is not None:
+                self.database.write_media(
+                    download_info.media_id,
+                    download_info.final_path,
+                )
+
+        if (
+            download_info.cover_path and not self.save_cover
+        ) or not download_info.cover_path:
+            pass
+        elif download_info.cover_path.exists() and not self.overwrite:
+            logger.debug(
+                f'[{colored_media_id}] Cover already exists at "{download_info.cover_path}", skipping'
+            )
+        else:
+            logger.debug(
+                f'[{colored_media_id}] Saving cover to "{download_info.cover_path}"'
+            )
+            self.write_cover(
+                download_info.cover_path,
+                download_info.cover_url,
+            )
+
+        if (
+            self.no_synced_lyrics
+            or not download_info.lyrics
+            or not download_info.lyrics.synced
+        ):
+            pass
+        elif download_info.synced_lyrics_path.exists() and not self.overwrite:
+            logger.debug(
+                f'[{colored_media_id}] Synced lyrics already exist at "{download_info.synced_lyrics_path}", skipping'
+            )
+        else:
+            logger.debug(
+                f'[{colored_media_id}] Saving synced lyrics to "{download_info.synced_lyrics_path}"'
+            )
+            self.write_synced_lyrics(
+                download_info.synced_lyrics_path,
+                download_info.lyrics.synced,
+            )
+
+        if download_info.playlist_tags and self.save_playlist:
+            playlist_file_path = self.get_playlist_file_path(
+                download_info.playlist_tags
+            )
+            logger.debug(
+                f'[{colored_media_id}] Updating playlist file "{playlist_file_path}"'
+            )
+            self.update_playlist_file(
+                playlist_file_path,
+                download_info.final_path,
+                download_info.playlist_tags.playlist_track,
+            )
+
+        self.cleanup_temp_path()

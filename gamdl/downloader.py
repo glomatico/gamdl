@@ -724,7 +724,7 @@ class Downloader:
 
             if download_info.staged_path:
                 logger.debug(
-                    f"[{colored_media_id}] Applying tags to {download_info.staged_path}"
+                    f'[{colored_media_id}] Applying tags to "{download_info.staged_path}"'
                 )
                 self.apply_tags(
                     download_info.staged_path,

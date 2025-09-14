@@ -757,13 +757,14 @@ class Downloader:
             )
             logger.info(f"[{colored_media_id}] Download completed successfully")
 
-            logger.debug(
-                f'[{colored_media_id}] Adding entry to database at "{self.database_path}"'
-            )
-            self.database.add_media(
-                download_info.media_id,
-                download_info.final_path,
-            )
+            if self.database is not None:
+                logger.debug(
+                    f'[{colored_media_id}] Adding entry to database at "{self.database_path}"'
+                )
+                self.database.add_media(
+                    download_info.media_id,
+                    download_info.final_path,
+                )
 
         if (
             download_info.cover_path and not self.save_cover

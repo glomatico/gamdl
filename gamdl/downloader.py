@@ -23,7 +23,9 @@ from pywidevine import PSSH, Cdm, Device
 from yt_dlp import YoutubeDL
 
 from .apple_music_api import AppleMusicApi
+from .database import Database
 from .enums import CoverFormat, DownloadMode, MediaFileFormat, RemuxMode
+from .exceptions import MediaFileAlreadyExistsException
 from .hardcoded_wvd import HARDCODED_WVD
 from .itunes_api import ItunesApi
 from .models import (
@@ -90,6 +92,7 @@ class Downloader:
         exclude_tags: list[str] = None,
         cover_size: int = 1200,
         truncate: int = None,
+        database_path: Path = None,
         silent: bool = False,
         skip_processing: bool = False,
     ):
@@ -121,12 +124,14 @@ class Downloader:
         self.exclude_tags = exclude_tags
         self.cover_size = cover_size
         self.truncate = truncate
+        self.database_path = database_path
         self.silent = silent
         self.skip_processing = skip_processing
         self._set_temp_path()
         self._set_exclude_tags()
         self._set_binaries_path_full()
         self._set_truncate()
+        self._set_database()
         self._set_subprocess_additional_args()
 
     def _set_temp_path(self):
@@ -145,6 +150,12 @@ class Downloader:
     def _set_truncate(self):
         if self.truncate is not None:
             self.truncate = None if self.truncate < 4 else self.truncate
+
+    def _set_database(self):
+        if self.database_path is not None:
+            self.database = Database(self.database_path)
+        else:
+            self.database = None
 
     def _set_subprocess_additional_args(self):
         if self.silent:
@@ -346,6 +357,18 @@ class Downloader:
         media_metadata: dict,
     ) -> bool:
         return bool(media_metadata["attributes"].get("playParams"))
+
+    def check_database_and_raise(self, media_id: str) -> None:
+        if self.database is None:
+            return
+
+        final_path_database = self.database.get_media(media_id)
+        if (
+            final_path_database is not None
+            and final_path_database.exists()
+            and not self.overwrite
+        ):
+            raise MediaFileAlreadyExistsException(final_path_database)
 
     def get_playlist_tags(
         self,
@@ -706,6 +729,12 @@ class Downloader:
                 download_info.final_path,
             )
             logger.info(f"[{colored_media_id}] Download completed successfully")
+
+            if self.database is not None:
+                self.database.write_media(
+                    download_info.media_id,
+                    download_info.final_path,
+                )
 
         if (
             download_info.cover_path and not self.save_cover

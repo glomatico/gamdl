@@ -108,18 +108,17 @@ class DownloaderPost:
         if not media_id and not media_metadata:
             raise ValueError("Either media_id or media_metadata must be provided")
 
-        if not media_metadata:
-            logger.debug(
-                f"[{color_text(media_id, colorama.Style.DIM)}] "
-                "Getting Post Video metadata"
-            )
-            media_metadata = self.downloader.apple_music_api.get_post(media_id)
-        download_info.media_metadata = media_metadata
-
-        if not media_id:
+        if media_metadata:
             media_id = media_metadata["id"]
         download_info.media_id = media_id
         colored_media_id = color_text(media_id, colorama.Style.DIM)
+
+        self.downloader.check_database_and_raise(media_id)
+
+        if not media_metadata:
+            logger.debug(f"[{colored_media_id}] Getting Post Video metadata")
+            media_metadata = self.downloader.apple_music_api.get_post(media_id)
+        download_info.media_metadata = media_metadata
 
         if not self.downloader.is_media_streamable(media_metadata):
             raise MediaNotStreamableException()

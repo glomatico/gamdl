@@ -714,12 +714,17 @@ class Downloader:
             exception = e
         finally:
             if download_info is not None and isinstance(download_info, DownloadInfo):
-                self._final_processing(download_info)
+                self._final_processing(
+                    download_info,
+                )
 
             if exception is not None:
                 raise exception
 
-    def _final_processing(self, download_info: DownloadInfo) -> None:
+    def _final_processing(
+        self,
+        download_info: DownloadInfo,
+    ) -> None:
         if self.skip_processing:
             return
 
@@ -752,11 +757,13 @@ class Downloader:
             )
             logger.info(f"[{colored_media_id}] Download completed successfully")
 
-            if self.database is not None:
-                self.database.write_media(
-                    download_info.media_id,
-                    download_info.final_path,
-                )
+            logger.debug(
+                f'[{colored_media_id}] Adding entry to database at "{self.database_path}"'
+            )
+            self.database.add_media(
+                download_info.media_id,
+                download_info.final_path,
+            )
 
         if (
             download_info.cover_path and not self.save_cover

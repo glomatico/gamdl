@@ -48,7 +48,7 @@ class Downloader:
         r"/(?P<storefront>[a-z]{2})"
         r"/(?P<type>artist|album|playlist|song|music-video|post)"
         r"(?:/(?P<slug>[^\s/]+))?"
-        r"/(?P<id>[0-9]+|pl\.[0-9a-z]{32}|pl\.u-[a-zA-Z0-9]{10})"
+        r"/(?P<id>[0-9]+|pl\.[0-9a-z]{32}|pl\.u-[a-zA-Z0-9]+)"
         r"(?:\?i=(?P<sub_id>[0-9]+))?"
         r")|("
         r"(?:/(?P<library_storefront>[a-z]{2}))?"

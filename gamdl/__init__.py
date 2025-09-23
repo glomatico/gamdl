@@ -5,4 +5,4 @@ from .downloader_post import DownloaderPost
 from .downloader_song import DownloaderSong
 from .itunes_api import ItunesApi
 
-__version__ = "2.6.3"
+__version__ = "2.6.4"

@@ -83,22 +83,18 @@ class AppleMusicApi:
                 "sec-fetch-dest": "empty",
                 "sec-fetch-mode": "cors",
                 "sec-fetch-site": "same-site",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
             }
         )
 
-        home_page = self.session.get(self.APPLE_MUSIC_HOMEPAGE_URL).text
-        index_js_uri = re.search(
-            r"/(assets/index-legacy-[^/]+\.js)",
-            home_page,
-        ).group(1)
-        index_js_page = self.session.get(
-            f"{self.APPLE_MUSIC_HOMEPAGE_URL}/{index_js_uri}"
-        ).text
-        token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
+
+        token = self._discover_token_from_homepage()
+
 
         self.session.headers.update({"authorization": f"Bearer {token}"})
         self.session.params = {"l": self.language}
+
 
         if self.media_user_token:
             self.session.cookies.update(
@@ -107,6 +103,118 @@ class AppleMusicApi:
                 }
             )
             self._set_account_info()
+
+    def _discover_token_from_homepage(self) -> str:
+        """
+        Robust token discovery:
+        - Try multiple storefront home pages (us/ca).
+        - Check inline JWT in HTML.
+        - Collect candidates from <script src>, <link rel="modulepreload" href>, and data-src
+          covering Vite-style names: index~..., index-legacy~..., and fallback to any /assets/*.js.
+        - Prioritize index-legacy~, then index~, then other likely entries.
+        - Fetch a handful of candidates and return the first JWT-shaped token found.
+        """
+        home_urls = [
+            f"{self.APPLE_MUSIC_HOMEPAGE_URL}/us/browse",
+            f"{self.APPLE_MUSIC_HOMEPAGE_URL}/ca/home",
+        ]
+
+        homepage_html = ""
+        for u in home_urls:
+            try:
+                r = self.session.get(
+                    u,
+                    headers={
+                        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "accept-language": "en-US,en;q=0.9",
+                        "cache-control": "no-cache",
+                    },
+                    timeout=15,
+                )
+                if r.ok and r.text:
+                    homepage_html = r.text
+                    break
+            except requests.RequestException:
+                continue
+
+        if not homepage_html:
+            raise Exception("Failed to load Apple Music homepage for token discovery.")
+
+
+        jwt_inline = self._find_jwt(homepage_html)
+        if jwt_inline:
+            return jwt_inline
+
+
+        candidates = self._collect_asset_candidates(homepage_html)
+
+
+        for url in candidates[:12]:
+            try:
+                resp = self.session.get(url, timeout=15)
+                if not resp.ok:
+                    continue
+                token = self._find_jwt(resp.text)
+                if token:
+                    return token
+            except requests.RequestException:
+                continue
+
+        raise Exception(
+            "Developer token not found in current assets; Apple likely changed bundles. "
+            "Update the discovery patterns or supply a server-generated token."
+        )
+
+    @staticmethod
+    def _find_jwt(text: str) -> str | None:
+        """
+        JWT-shaped token: header.payload.signature using base64url.
+        """
+        m = re.search(r'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+', text)
+        return m.group(0) if m else None
+
+    def _collect_asset_candidates(self, html: str) -> list[str]:
+        """
+        Extract candidate asset URLs from the homepage HTML:
+        - Match src/href/data-src attributes pointing to /assets/*.js
+        - Prioritize index-legacy~, then index~, then app~/main~/bootstrap~ style entries
+        - Normalize to absolute URLs
+        """
+        urls = set()
+
+
+        patterns = [
+            r'(?:src|href|data-src)=["\'](\/?assets\/index~[a-z0-9]+\.js)["\']',
+            r'(?:src|href|data-src)=["\'](\/?assets\/index-legacy~[a-z0-9]+\.js)["\']',
+        
+            r'(?:src|href|data-src)=["\'](\/?assets\/[A-Za-z0-9/_\-.]+\.js)["\']',
+        ]
+
+        for rx in patterns:
+            for m in re.finditer(rx, html, flags=re.IGNORECASE):
+                urls.add(m.group(1))
+
+        def to_abs(u: str) -> str:
+            if u.startswith("http://") or u.startswith("https://"):
+                return u
+            if u.startswith("/"):
+                return f"{self.APPLE_MUSIC_HOMEPAGE_URL}{u}"
+            return f"{self.APPLE_MUSIC_HOMEPAGE_URL}/{u}"
+
+        candidates = [to_abs(u) for u in urls]
+
+        def score(s: str) -> int:
+            n = s.lower()
+            if "index-legacy~" in n:
+                return 0
+            if "index~" in n:
+                return 1
+            if any(k in n for k in ("app~", "main~", "bootstrap~")):
+                return 2
+            return 3
+
+        candidates.sort(key=score)
+        return candidates
 
     def _set_account_info(self):
         self.account_info = self.get_account_info()

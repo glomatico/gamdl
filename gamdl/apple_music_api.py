@@ -89,7 +89,7 @@ class AppleMusicApi:
 
         home_page = self.session.get(self.APPLE_MUSIC_HOMEPAGE_URL).text
         index_js_uri = re.search(
-            r"/(assets/index-legacy-[^/]+\.js)",
+            r"/(assets/index-legacy[~-][^/\"]+\.js)",
             home_page,
         ).group(1)
         index_js_page = self.session.get(

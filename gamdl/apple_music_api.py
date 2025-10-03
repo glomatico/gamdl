@@ -105,15 +105,7 @@ class AppleMusicApi:
             self._set_account_info()
 
     def _discover_token_from_homepage(self) -> str:
-        """
-        Robust token discovery:
-        - Try multiple storefront home pages (us/ca).
-        - Check inline JWT in HTML.
-        - Collect candidates from <script src>, <link rel="modulepreload" href>, and data-src
-          covering Vite-style names: index~..., index-legacy~..., and fallback to any /assets/*.js.
-        - Prioritize index-legacy~, then index~, then other likely entries.
-        - Fetch a handful of candidates and return the first JWT-shaped token found.
-        """
+
         home_urls = [
             f"{self.APPLE_MUSIC_HOMEPAGE_URL}/us/browse",
             f"{self.APPLE_MUSIC_HOMEPAGE_URL}/ca/home",
@@ -167,19 +159,12 @@ class AppleMusicApi:
 
     @staticmethod
     def _find_jwt(text: str) -> str | None:
-        """
-        JWT-shaped token: header.payload.signature using base64url.
-        """
+
         m = re.search(r'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+', text)
         return m.group(0) if m else None
 
     def _collect_asset_candidates(self, html: str) -> list[str]:
-        """
-        Extract candidate asset URLs from the homepage HTML:
-        - Match src/href/data-src attributes pointing to /assets/*.js
-        - Prioritize index-legacy~, then index~, then app~/main~/bootstrap~ style entries
-        - Normalize to absolute URLs
-        """
+
         urls = set()
 
 

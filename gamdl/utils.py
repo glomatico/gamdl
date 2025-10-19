@@ -15,3 +15,10 @@ def safe_json(httpx_response: httpx.Response) -> dict:
         return httpx_response.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
         return {}
+
+
+async def get_response_text(url: str) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        raise_for_status(response)
+        return response.text

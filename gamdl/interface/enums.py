@@ -68,3 +68,17 @@ class MusicVideoCodec(Enum):
 
     def fourcc(self) -> str:
         return FOURCC_MAP[self.value]
+
+
+class MusicVideoResolution(Enum):
+    R240P = "240p"
+    R360P = "360p"
+    R480P = "480p"
+    R540P = "540p"
+    R720P = "720p"
+    R1080P = "1080p"
+    R1440P = "1440p"
+    R2160P = "2160p"
+
+    def __int__(self) -> int:
+        return int(self.value[:-1])

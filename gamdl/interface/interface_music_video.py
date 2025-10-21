@@ -8,7 +8,7 @@ from pywidevine import Cdm
 
 from ..utils import get_response_text
 from .constants import MP4_FORMAT_CODECS
-from .enums import MediaRating, MediaType, MusicVideoCodec
+from .enums import MediaRating, MediaType, MusicVideoCodec, MusicVideoResolution
 from .interface import AppleMusicInterface
 from .types import DecryptionKeyAv, MediaFileFormat, MediaTags, StreamInfo, StreamInfoAv
 
@@ -121,7 +121,7 @@ class AppleMusicMusicVideoInterface:
         metadata: dict,
         itunes_page_metadata: dict,
         codec_priority: list[MusicVideoCodec],
-        resolution: int,
+        resolution: MusicVideoResolution,
     ) -> StreamInfoAv:
         alt_video_id = self.get_alt_id(metadata)
         if alt_video_id == metadata["id"]:
@@ -171,7 +171,7 @@ class AppleMusicMusicVideoInterface:
         self,
         video_playlists: list[m3u8.Playlist],
         codec: MusicVideoCodec,
-        resolution: int,
+        resolution: MusicVideoResolution,
     ) -> m3u8.Playlist | None:
         playlists_filtered = [
             playlist
@@ -267,7 +267,7 @@ class AppleMusicMusicVideoInterface:
         self,
         playlist_master_m3u8_obj: m3u8.M3U8,
         codec_priority: list[MusicVideoCodec],
-        resolution: int,
+        resolution: MusicVideoResolution,
     ) -> StreamInfo | None:
         stream_info = StreamInfo()
 

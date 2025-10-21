@@ -13,6 +13,7 @@ from pywidevine import Cdm, Device
 from yt_dlp import YoutubeDL
 
 from ..api.apple_music_api import AppleMusicApi
+from ..api.itunes_api import ItunesApi
 from ..interface.interface import AppleMusicInterface
 from ..interface.types import MediaTags, PlaylistTags
 from ..utils import async_subprocess, raise_for_status
@@ -29,7 +30,7 @@ from .hardcoded_wvd import HARDCODED_WVD
 class AppleMusicBaseDownloader:
     def __init__(
         self,
-        api: AppleMusicApi,
+        apple_music_api: AppleMusicApi,
         output_path: str = "./Apple Music",
         temp_path: str = ".",
         wvd_path: str = None,
@@ -60,7 +61,7 @@ class AppleMusicBaseDownloader:
         silent: bool = False,
         skip_processing: bool = False,
     ):
-        self.api = api
+        self.apple_music_api = apple_music_api
         self.output_path = output_path
         self.temp_path = temp_path
         self.wvd_path = wvd_path
@@ -109,7 +110,11 @@ class AppleMusicBaseDownloader:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
 
     def _setup_interface(self):
-        self.interface = AppleMusicInterface(self.api)
+        self.itunes_api = ItunesApi(
+            self.apple_music_api.storefront,
+            self.apple_music_api.language,
+        )
+        self.interface = AppleMusicInterface(self.apple_music_api)
 
     def get_random_uuid(self) -> str:
         return uuid.uuid4().hex[:8]

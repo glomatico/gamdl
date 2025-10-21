@@ -187,10 +187,6 @@ class AppleMusicMusicVideoDownloader:
         )
         download_item.decryption_key = decryption_key
 
-        download_item.cover_url_template = self.downloader.get_cover_url_template(
-            music_video_metadata,
-        )
-
         download_item.random_uuid = self.downloader.get_random_uuid()
         download_item.staged_path = self.downloader.get_temp_path(
             music_video_id,
@@ -209,6 +205,10 @@ class AppleMusicMusicVideoDownloader:
             download_item.media_tags,
             Path(download_item.staged_path).suffix,
             playlist_metadata,
+        )
+
+        download_item.cover_url_template = self.downloader.get_cover_url_template(
+            music_video_metadata,
         )
         cover_file_extension = await self.downloader.get_cover_file_extension(
             download_item.cover_url_template,

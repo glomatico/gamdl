@@ -55,7 +55,8 @@ class AppleMusicDownloader:
     async def download(self, download_item: DownloadItem) -> None:
         try:
             await self._download(download_item)
-            await self._final_processing(download_item)
+            if not self.base_downloader.skip_processing:
+                await self._final_processing(download_item)
         finally:
             self.base_downloader.cleanup_temp(download_item.random_uuid)
 
@@ -89,9 +90,6 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        if self.base_downloader.skip_processing:
-            return
-
         if Path(download_item.staged_path).exists():
             self.base_downloader.move_to_final_path(
                 download_item.staged_path,

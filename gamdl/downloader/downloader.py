@@ -2,6 +2,11 @@ import asyncio
 from pathlib import Path
 
 from ..utils import safe_gather
+from .constants import (
+    MUSIC_VIDEO_MEDIA_TYPE,
+    SONG_MEDIA_TYPE,
+    UPLOADED_VIDEO_MEDIA_TYPE,
+)
 from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
@@ -33,17 +38,17 @@ class AppleMusicDownloader:
     ) -> DownloadItem:
         download_item = None
 
-        if media_metadata["type"] in {"songs", "library-songs"}:
+        if media_metadata["type"] in SONG_MEDIA_TYPE:
             download_item = await self.song_downloader.get_download_item(
                 media_metadata,
             )
 
-        if media_metadata["type"] in {"music-videos", "library-music-videos"}:
+        if media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
             download_item = await self.music_video_downloader.get_download_item(
                 media_metadata,
             )
 
-        if media_metadata["type"] == "uploaded-videos":
+        if media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
             download_item = await self.uploaded_video_downloader.get_download_item(
                 media_metadata,
             )
@@ -95,10 +100,8 @@ class AppleMusicDownloader:
                 download_item.media_metadata["id"],
             )
         if download_item.media_metadata["type"] in {
-            "songs",
-            "library-songs",
-            "music-videos",
-            "library-music-videos",
+            *SONG_MEDIA_TYPE,
+            *MUSIC_VIDEO_MEDIA_TYPE,
         } and (
             not download_item.stream_info
             or not download_item.stream_info.audio_track.widevine_pssh
@@ -108,16 +111,13 @@ class AppleMusicDownloader:
                 download_item.media_metadata["id"],
             )
 
-        if download_item.media_metadata["type"] in {"songs", "library-songs"}:
+        if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
             await self.song_downloader.download(download_item)
 
-        if download_item.media_metadata["type"] in {
-            "music-videos",
-            "library-music-videos",
-        }:
+        if download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
             await self.music_video_downloader.download(download_item)
 
-        if download_item.media_metadata["type"] == "uploaded-videos":
+        if download_item.media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
             await self.uploaded_video_downloader.download(download_item)
 
     async def _final_processing(

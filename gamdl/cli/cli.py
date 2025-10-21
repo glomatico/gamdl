@@ -162,11 +162,6 @@ def make_sync(func):
     required=True,
 )
 @click.option(
-    "--disable-music-video-skip",
-    is_flag=True,
-    help="Don't skip downloading music videos in albums/playlists.",
-)
-@click.option(
     "--read-urls-as-txt",
     "-r",
     is_flag=True,
@@ -425,7 +420,6 @@ def make_sync(func):
 @make_sync
 async def main(
     urls: list[str],
-    disable_music_video_skip: bool,
     read_urls_as_txt: bool,
     config_path: str,
     log_level: str,

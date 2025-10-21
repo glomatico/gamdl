@@ -3,6 +3,7 @@ import asyncio
 from ..utils import safe_gather
 from .downloader_base import AppleMusicBaseDownloader
 from .downloader_song import AppleMusicSongDownloader
+from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .types import DownloadItem
 from pathlib import Path
 from .exceptions import (
@@ -17,9 +18,11 @@ class AppleMusicDownloader:
         self,
         base_downloader: AppleMusicBaseDownloader,
         song_downloader: AppleMusicSongDownloader,
+        music_video_downloader: AppleMusicMusicVideoDownloader,
     ):
         self.base_downloader = base_downloader
         self.song_downloader = song_downloader
+        self.music_video_downloader = music_video_downloader
 
     async def get_single_download_item(
         self,
@@ -29,6 +32,11 @@ class AppleMusicDownloader:
 
         if media_metadata["type"] in {"songs", "library-songs"}:
             download_item = await self.song_downloader.get_download_item(
+                media_metadata,
+            )
+
+        if media_metadata["type"] in {"music-videos", "library-music-videos"}:
+            download_item = await self.music_video_downloader.get_download_item(
                 media_metadata,
             )
 
@@ -88,6 +96,12 @@ class AppleMusicDownloader:
 
         if download_item.media_metadata["type"] in {"songs", "library-songs"}:
             await self.song_downloader.download(download_item)
+
+        if download_item.media_metadata["type"] in {
+            "music-videos",
+            "library-music-videos",
+        }:
+            await self.music_video_downloader.download(download_item)
 
     async def _final_processing(
         self,

@@ -358,7 +358,7 @@ class AppleMusicApi:
     async def extend_api_data(
         self,
         api_response: dict,
-        extend: str,
+        extend: str = "extendedAssetUrls",
     ) -> typing.AsyncGenerator[dict, None]:
         next_uri = api_response.get("next")
         if not next_uri:

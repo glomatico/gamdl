@@ -49,7 +49,7 @@ class AppleMusicSongInterface:
             or "lyrics" not in song_metadata["relationships"]
         ):
             song_metadata = (
-                await self.interface.api.get_song(
+                await self.interface.apple_music_api.get_song(
                     self.interface.get_media_id_of_library_media(song_metadata)
                 )
             )["data"][0]
@@ -416,10 +416,12 @@ class AppleMusicSongInterface:
             challenge = base64.b64encode(
                 cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
-            license_response = await self.interface.api.get_license_exchange(
-                stream_info.media_id,
-                stream_info.audio_track.widevine_pssh,
-                challenge,
+            license_response = (
+                await self.interface.apple_music_api.get_license_exchange(
+                    stream_info.media_id,
+                    stream_info.audio_track.widevine_pssh,
+                    challenge,
+                )
             )
 
             cdm.parse_license(cdm_session, license_response["license"])

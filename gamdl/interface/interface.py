@@ -5,6 +5,7 @@ import logging
 from pywidevine import PSSH, Cdm
 
 from ..api.apple_music_api import AppleMusicApi
+from ..api.itunes_api import ItunesApi
 from .types import DecryptionKey
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,11 @@ logger = logging.getLogger(__name__)
 class AppleMusicInterface:
     def __init__(
         self,
-        api: AppleMusicApi,
+        apple_music_api: AppleMusicApi,
+        itunes_api: ItunesApi,
     ) -> None:
-        self.api = api
+        self.apple_music_api = apple_music_api
+        self.itunes_api = itunes_api
 
     @staticmethod
     def get_media_id_of_library_media(library_media_metadata: dict) -> str:
@@ -40,7 +43,7 @@ class AppleMusicInterface:
             challenge = base64.b64encode(
                 cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
-            license = await self.api.get_license_exchange(
+            license = await self.apple_music_api.get_license_exchange(
                 track_id,
                 track_uri,
                 challenge,

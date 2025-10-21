@@ -1,16 +1,17 @@
 import asyncio
+from pathlib import Path
 
 from ..utils import safe_gather
 from .downloader_base import AppleMusicBaseDownloader
-from .downloader_song import AppleMusicSongDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
-from .types import DownloadItem
-from pathlib import Path
+from .downloader_song import AppleMusicSongDownloader
+from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
 from .exceptions import (
-    MediaNotStreamableError,
-    MediaFormatNotAvailableError,
     MediaFileAlreadyExistsError,
+    MediaFormatNotAvailableError,
+    MediaNotStreamableError,
 )
+from .types import DownloadItem
 
 
 class AppleMusicDownloader:
@@ -19,10 +20,12 @@ class AppleMusicDownloader:
         base_downloader: AppleMusicBaseDownloader,
         song_downloader: AppleMusicSongDownloader,
         music_video_downloader: AppleMusicMusicVideoDownloader,
+        uploaded_video_downloader: AppleMusicUploadedVideoDownloader,
     ):
         self.base_downloader = base_downloader
         self.song_downloader = song_downloader
         self.music_video_downloader = music_video_downloader
+        self.uploaded_video_downloader = uploaded_video_downloader
 
     async def get_single_download_item(
         self,
@@ -37,6 +40,11 @@ class AppleMusicDownloader:
 
         if media_metadata["type"] in {"music-videos", "library-music-videos"}:
             download_item = await self.music_video_downloader.get_download_item(
+                media_metadata,
+            )
+
+        if media_metadata["type"] == "uploaded-videos":
+            download_item = await self.uploaded_video_downloader.get_download_item(
                 media_metadata,
             )
 
@@ -86,9 +94,15 @@ class AppleMusicDownloader:
             raise MediaNotStreamableError(
                 download_item.media_metadata["id"],
             )
-        if (
+        if download_item.media_metadata["type"] in {
+            "songs",
+            "library-songs",
+            "music-videos",
+            "library-music-videos",
+        } and (
             not download_item.stream_info
             or not download_item.stream_info.audio_track.widevine_pssh
+            or not download_item.stream_info.video_track.stream_url
         ):
             raise MediaFormatNotAvailableError(
                 download_item.media_metadata["id"],
@@ -102,6 +116,9 @@ class AppleMusicDownloader:
             "library-music-videos",
         }:
             await self.music_video_downloader.download(download_item)
+
+        if download_item.media_metadata["type"] == "uploaded-videos":
+            await self.uploaded_video_downloader.download(download_item)
 
     async def _final_processing(
         self,

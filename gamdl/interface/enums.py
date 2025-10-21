@@ -82,3 +82,8 @@ class MusicVideoResolution(Enum):
 
     def __int__(self) -> int:
         return int(self.value[:-1])
+
+
+class UploadedVideoQuality(Enum):
+    BEST = "best"
+    ASK = "ask"

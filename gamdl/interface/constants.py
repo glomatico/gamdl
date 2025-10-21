@@ -46,3 +46,12 @@ FOURCC_MAP = {
     "h264": "avc1",
     "h265": "hvc1",
 }
+
+UPLOADED_VIDEO_QUALITY_RANK = [
+    "1080pHdVideo",
+    "720pHdVideo",
+    "sdVideoWithPlusAudio",
+    "sdVideo",
+    "sd480pVideo",
+    "provisionalUploadVideo",
+]

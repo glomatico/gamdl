@@ -14,13 +14,13 @@ class AppleMusicSongDownloader:
     def __init__(
         self,
         downloader: AppleMusicBaseDownloader,
-        song_codec: SongCodec = SongCodec.AAC_LEGACY,
+        codec: SongCodec = SongCodec.AAC_LEGACY,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
     ):
         self.downloader = downloader
-        self.song_codec = song_codec
+        self.codec = codec
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
@@ -61,11 +61,11 @@ class AppleMusicSongDownloader:
                 song_metadata,
             )
 
-        if self.song_codec.is_legacy():
+        if self.codec.is_legacy():
             download_item.stream_info = (
                 await self.song_interface.get_stream_info_legacy(
                     webplayback,
-                    self.song_codec,
+                    self.codec,
                 )
             )
             download_item.decryption_key = (
@@ -77,7 +77,7 @@ class AppleMusicSongDownloader:
         else:
             download_item.stream_info = await self.song_interface.get_stream_info(
                 song_metadata,
-                self.song_codec,
+                self.codec,
             )
             if (
                 download_item.stream_info
@@ -288,7 +288,7 @@ class AppleMusicSongDownloader:
             decrypted_path,
             download_item.staged_path,
             download_item.decryption_key,
-            self.song_codec,
+            self.codec,
         )
 
         await self.downloader.apply_tags(

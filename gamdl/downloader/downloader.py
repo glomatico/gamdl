@@ -55,19 +55,25 @@ class AppleMusicDownloader:
 
         return download_item
 
-    async def get_album_download_items(
+    async def get_collection_download_items(
         self,
-        album_metadata: dict,
+        collection_metadata: dict,
     ) -> list[DownloadItem | Exception]:
-        tasks = []
-        for media_metadata in album_metadata["relationships"]["tracks"]["data"]:
-            tasks.append(
-                asyncio.create_task(
-                    self.song_downloader.get_download_item(
-                        media_metadata,
-                    )
+        collection_metadata["relationships"]["tracks"]["data"].extend(
+            extended_data
+            async for extended_data in self.base_downloader.apple_music_api.extend_api_data(
+                collection_metadata["relationships"]["tracks"],
+            )
+        )
+
+        tasks = [
+            asyncio.create_task(
+                self.song_downloader.get_download_item(
+                    media_metadata,
                 )
             )
+            for media_metadata in collection_metadata["relationships"]["tracks"]["data"]
+        ]
 
         download_items = await safe_gather(*tasks)
         return download_items

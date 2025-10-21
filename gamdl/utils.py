@@ -48,7 +48,7 @@ async def async_subprocess(*args: str, silent: bool = False) -> None:
 
 async def safe_gather(
     *tasks: typing.Awaitable[typing.Any],
-    limit: int = 10,
+    limit: int = 5,
 ) -> list[typing.Any]:
     semaphore = asyncio.Semaphore(limit)
 
@@ -56,4 +56,7 @@ async def safe_gather(
         async with semaphore:
             return await task
 
-    return await asyncio.gather(*(bounded_task(task) for task in tasks))
+    return await asyncio.gather(
+        *(bounded_task(task) for task in tasks),
+        return_exceptions=True,
+    )

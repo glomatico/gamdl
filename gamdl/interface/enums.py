@@ -1,6 +1,11 @@
 from enum import Enum
 
-from .constants import MEDIA_RATING_STR_MAP, MEDIA_TYPE_STR_MAP, LEGACY_SONG_CODECS
+from .constants import (
+    FOURCC_MAP,
+    LEGACY_SONG_CODECS,
+    MEDIA_RATING_STR_MAP,
+    MEDIA_TYPE_STR_MAP,
+)
 
 
 class SyncedLyricsFormat(Enum):
@@ -54,3 +59,12 @@ class SongCodec(Enum):
 
     def is_legacy(self) -> bool:
         return self.value in LEGACY_SONG_CODECS
+
+
+class MusicVideoCodec(Enum):
+    H264 = "h264"
+    H265 = "h265"
+    ASK = "ask"
+
+    def fourcc(self) -> str:
+        return FOURCC_MAP[self.value]

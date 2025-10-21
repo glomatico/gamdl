@@ -15,3 +15,8 @@ class CoverFormat(Enum):
     JPG = "jpg"
     PNG = "png"
     RAW = "raw"
+
+
+class RemuxFormatMusicVideo(Enum):
+    M4V = "m4v"
+    MP4 = "mp4"

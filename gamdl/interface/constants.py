@@ -29,7 +29,7 @@ DRM_DEFAULT_KEY_MAPPING = {
     ),
     "com.apple.streamingkeydelivery": "skd://itunes.apple.com/P000000000/s1/e1",
 }
-MP4_FORMAT_CODECS = ["ec-3"]
+MP4_FORMAT_CODECS = ["ec-3", "hvc1", "audio-atmos", "audio-ec3"]
 SONG_CODEC_REGEX_MAP = {
     "aac": r"audio-stereo-\d+",
     "aac-he": r"audio-HE-stereo-\d+",
@@ -40,4 +40,9 @@ SONG_CODEC_REGEX_MAP = {
     "atmos": r"audio-atmos-.*",
     "ac3": r"audio-ac3-.*",
     "alac": r"audio-alac-.*",
+}
+
+FOURCC_MAP = {
+    "h264": "avc1",
+    "h265": "hvc1",
 }

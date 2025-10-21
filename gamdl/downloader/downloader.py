@@ -13,7 +13,6 @@ from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
 from .exceptions import (
-    MediaFileAlreadyExistsError,
     MediaFormatNotAvailableError,
     MediaNotStreamableError,
 )
@@ -199,7 +198,9 @@ class AppleMusicDownloader:
             Path(download_item.final_path).exists()
             and not self.base_downloader.overwrite
         ):
-            raise MediaFileAlreadyExistsError(download_item.final_path)
+            raise FileExistsError(
+                f'Media file already exists at "{download_item.final_path}"'
+            )
         if not self.base_downloader.is_media_streamable(
             download_item.media_metadata,
         ):

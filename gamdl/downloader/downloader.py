@@ -37,28 +37,31 @@ class AppleMusicDownloader:
     async def get_album_download_items(
         self,
         album_metadata: dict,
-    ) -> list[DownloadItem]:
+    ) -> list[DownloadItem | Exception]:
         tasks = []
         for media_metadata in album_metadata["relationships"]["tracks"]["data"]:
-            if media_metadata["type"] in {"songs", "library-songs"}:
-                tasks.append(
-                    asyncio.create_task(
-                        self.song_downloader.get_download_item(
-                            media_metadata,
-                        )
+            tasks.append(
+                asyncio.create_task(
+                    self.song_downloader.get_download_item(
+                        media_metadata,
                     )
                 )
+            )
 
         download_items = await safe_gather(*tasks)
         return download_items
 
     async def download(self, download_item: DownloadItem) -> None:
         try:
+            if isinstance(download_item, Exception):
+                raise download_item
+
             await self._download(download_item)
             if not self.base_downloader.skip_processing:
                 await self._final_processing(download_item)
         finally:
-            self.base_downloader.cleanup_temp(download_item.random_uuid)
+            if isinstance(download_item, DownloadItem):
+                self.base_downloader.cleanup_temp(download_item.random_uuid)
 
     async def _download(
         self,

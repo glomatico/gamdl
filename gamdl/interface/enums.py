@@ -1,0 +1,56 @@
+from enum import Enum
+
+from .constants import MEDIA_RATING_STR_MAP, MEDIA_TYPE_STR_MAP, LEGACY_SONG_CODECS
+
+
+class SyncedLyricsFormat(Enum):
+    LRC = "lrc"
+    SRT = "srt"
+    TTML = "ttml"
+
+
+class MediaType(Enum):
+    SONG = 1
+    MUSIC_VIDEO = 6
+
+    def __str__(self) -> str:
+        return MEDIA_TYPE_STR_MAP[self.value]
+
+    def __int__(self) -> int:
+        return self.value
+
+
+class MediaRating(Enum):
+    NONE = 0
+    EXPLICIT = 1
+    CLEAN = 2
+
+    def __str__(self) -> str:
+        return MEDIA_RATING_STR_MAP[self.value]
+
+    def __int__(self) -> int:
+        return self.value
+
+
+class MediaFileFormat(Enum):
+    MP4 = "mp4"
+    M4V = "m4v"
+    M4A = "m4a"
+
+
+class SongCodec(Enum):
+    AAC_LEGACY = "aac-legacy"
+    AAC_HE_LEGACY = "aac-he-legacy"
+    AAC = "aac"
+    AAC_HE = "aac-he"
+    AAC_BINAURAL = "aac-binaural"
+    AAC_DOWNMIX = "aac-downmix"
+    AAC_HE_BINAURAL = "aac-he-binaural"
+    AAC_HE_DOWNMIX = "aac-he-downmix"
+    ATMOS = "atmos"
+    AC3 = "ac3"
+    ALAC = "alac"
+    ASK = "ask"
+
+    def is_legacy(self) -> bool:
+        return self.value in LEGACY_SONG_CODECS

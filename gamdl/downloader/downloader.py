@@ -144,7 +144,7 @@ class AppleMusicDownloader:
         if (
             download_item.lyrics
             and download_item.lyrics.synced
-            and not self.song_downloader.skip_synced_lyrics
+            and not self.song_downloader.no_synced_lyrics
         ):
             self.song_downloader.write_synced_lyrics(
                 download_item.lyrics.synced,

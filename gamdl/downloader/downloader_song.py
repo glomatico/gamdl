@@ -16,13 +16,13 @@ class AppleMusicSongDownloader:
         downloader: AppleMusicBaseDownloader,
         song_codec: SongCodec = SongCodec.AAC_LEGACY,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
-        skip_synced_lyrics: bool = False,
+        no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
     ):
         self.downloader = downloader
         self.song_codec = song_codec
         self.synced_lyrics_format = synced_lyrics_format
-        self.skip_synced_lyrics = skip_synced_lyrics
+        self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
 
     def setup(self):

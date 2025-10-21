@@ -108,13 +108,15 @@ class AppleMusicBaseDownloader:
             self.cdm = Cdm.from_device(Device.load(self.wvd_path))
         else:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
+        self.cdm.MAX_NUM_OF_SESSIONS = float("inf")
 
     def _setup_interface(self):
         self.itunes_api = ItunesApi(
             self.apple_music_api.storefront,
             self.apple_music_api.language,
         )
-        self.interface = AppleMusicInterface(self.apple_music_api)
+        self.itunes_api.setup()
+        self.interface = AppleMusicInterface(self.apple_music_api, self.itunes_api)
 
     def get_random_uuid(self) -> str:
         return uuid.uuid4().hex[:8]

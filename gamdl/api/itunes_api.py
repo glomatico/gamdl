@@ -17,9 +17,9 @@ class ItunesApi:
         self.storefront = storefront
         self.language = language
 
-    async def setup(self) -> None:
+    def setup(self) -> None:
         self._setup_storefront_id()
-        await self._setup_session()
+        self._setup_session()
 
     def _setup_storefront_id(self) -> None:
         try:
@@ -27,7 +27,7 @@ class ItunesApi:
         except KeyError:
             raise Exception(f"No storefront id for {self.storefront}")
 
-    async def _setup_session(self) -> None:
+    def _setup_session(self) -> None:
         self.client = httpx.AsyncClient(
             params={
                 "country": self.storefront,

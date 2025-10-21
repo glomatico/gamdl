@@ -60,10 +60,12 @@ class AppleMusicDownloader:
         collection_metadata: dict,
     ) -> list[DownloadItem | Exception]:
         collection_metadata["relationships"]["tracks"]["data"].extend(
-            extended_data
-            async for extended_data in self.base_downloader.apple_music_api.extend_api_data(
-                collection_metadata["relationships"]["tracks"],
-            )
+            [
+                extended_data
+                async for extended_data in self.base_downloader.apple_music_api.extend_api_data(
+                    collection_metadata["relationships"]["tracks"],
+                )
+            ]
         )
 
         tasks = [
@@ -213,7 +215,6 @@ class AppleMusicDownloader:
         } and (
             not download_item.stream_info
             or not download_item.stream_info.audio_track.widevine_pssh
-            or not download_item.stream_info.video_track.stream_url
         ):
             raise MediaFormatNotAvailableError(
                 download_item.media_metadata["id"],

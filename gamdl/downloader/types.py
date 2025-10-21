@@ -23,3 +23,15 @@ class DownloadItem:
     final_path: str = None
     synced_lyrics_path: str = None
     cover_path: str = None
+
+
+@dataclass
+class UrlInfo:
+    storefront: str = None
+    type: str = None
+    slug: str = None
+    id: str = None
+    sub_id: str = None
+    library_storefront: str = None
+    library_type: str = None
+    library_id: str = None

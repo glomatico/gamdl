@@ -6,6 +6,7 @@ from .constants import (
     MUSIC_VIDEO_MEDIA_TYPE,
     SONG_MEDIA_TYPE,
     UPLOADED_VIDEO_MEDIA_TYPE,
+    VALID_URL_PATTERN,
 )
 from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
@@ -16,7 +17,7 @@ from .exceptions import (
     MediaFormatNotAvailableError,
     MediaNotStreamableError,
 )
-from .types import DownloadItem
+from .types import DownloadItem, UrlInfo
 
 
 class AppleMusicDownloader:
@@ -76,6 +77,106 @@ class AppleMusicDownloader:
         ]
 
         download_items = await safe_gather(*tasks)
+        return download_items
+
+    def get_url_info(self, url: str) -> UrlInfo | None:
+        match = VALID_URL_PATTERN.match(url)
+        if not match:
+            return None
+
+        return UrlInfo(
+            **match.groupdict(),
+        )
+
+    async def get_download_queue(
+        self,
+        url_info: UrlInfo,
+    ) -> list[DownloadItem | Exception] | None:
+        return await self._get_download_queue(
+            "song" if url_info.sub_id else url_info.type,
+            url_info.sub_id or url_info.id or url_info.library_id,
+            url_info.library_id is not None,
+        )
+
+    async def _get_download_queue(
+        self,
+        url_type: str,
+        id: str,
+        is_library: bool,
+    ) -> list[DownloadItem | Exception] | None:
+        download_items = []
+
+        if url_type == "artist":
+            pass
+
+        if url_type == "song":
+            song_respose = await self.base_downloader.apple_music_api.get_song(id)
+
+            if song_respose is None:
+                return None
+
+            download_items.append(
+                await self.get_single_download_item(song_respose["data"][0])
+            )
+
+        if url_type in {"album", "albums"}:
+            if is_library:
+                album_response = (
+                    await self.base_downloader.apple_music_api.get_library_album(id)
+                )
+            else:
+                album_response = await self.base_downloader.apple_music_api.get_album(
+                    id
+                )
+
+            if album_response is None:
+                return None
+
+            download_items = await self.get_collection_download_items(
+                album_response["data"][0],
+            )
+
+        if url_type == "playlist":
+            if is_library:
+                playlist_response = (
+                    await self.base_downloader.apple_music_api.get_library_playlist(id)
+                )
+            else:
+                playlist_response = (
+                    await self.base_downloader.apple_music_api.get_playlist(id)
+                )
+
+            if playlist_response is None:
+                return None
+
+            download_items = await self.get_collection_download_items(
+                playlist_response["data"][0],
+            )
+
+        if url_type == "music-video":
+            music_video_response = (
+                await self.base_downloader.apple_music_api.get_music_video(id)
+            )
+
+            if music_video_response is None:
+                return None
+
+            download_items.append(
+                await self.get_single_download_item(music_video_response["data"][0])
+            )
+
+        if url_type == "post":
+            uploaded_video = (
+                await self.base_downloader.apple_music_api.get_uploaded_video(id)
+            )
+
+            if uploaded_video is None:
+                return None
+
+            download_items.append(
+                await self.get_single_download_item(uploaded_video["data"][0])
+            )
+
         return download_items
 
     async def download(self, download_item: DownloadItem) -> None:

@@ -27,7 +27,7 @@ class AppleMusicUploadedVideoInterface:
         )
         return metadata["attributes"]["assetTokens"][best_quality]
 
-    def get_stream_url_from_user(self, metadata: dict) -> str:
+    async def get_stream_url_from_user(self, metadata: dict) -> str:
         qualities = list(metadata["attributes"]["assetTokens"].keys())
         choices = [
             Choice(
@@ -36,29 +36,32 @@ class AppleMusicUploadedVideoInterface:
             )
             for quality in qualities
         ]
-        selected = inquirer.select(
+        selected = await inquirer.select(
             message="Select which quality to download:",
             choices=choices,
-        ).execute()
+        ).execute_async()
+
         return metadata["attributes"]["assetTokens"][selected]
 
-    def get_stream_url(self, metadata: dict, quality: UploadedVideoQuality) -> str:
+    async def get_stream_url(
+        self, metadata: dict, quality: UploadedVideoQuality
+    ) -> str:
         if quality == UploadedVideoQuality.BEST:
             stream_url = self.get_stream_url_best(metadata)
 
         if quality == UploadedVideoQuality.ASK:
-            stream_url = self.get_stream_url_from_user(metadata)
+            stream_url = await self.get_stream_url_from_user(metadata)
 
         logger.debug(f"Stream URL: {stream_url}")
 
         return stream_url
 
-    def get_stream_info(
+    async def get_stream_info(
         self,
         metadata: dict,
         quality: UploadedVideoQuality,
     ) -> StreamInfo:
-        stream_url = self.get_stream_url(metadata, quality)
+        stream_url = await self.get_stream_url(metadata, quality)
         stream_info = StreamInfoAv(
             file_format=MediaFileFormat.M4V,
             video_track=StreamInfo(

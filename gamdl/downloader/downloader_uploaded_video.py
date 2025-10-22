@@ -38,7 +38,7 @@ class AppleMusicUploadedVideoDownloader:
             uploaded_video_metadata,
         )
 
-        download_item.stream_info = self.uploaded_video_interface.get_stream_info(
+        download_item.stream_info = await self.uploaded_video_interface.get_stream_info(
             uploaded_video_metadata,
             self.quality,
         )

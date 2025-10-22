@@ -248,10 +248,10 @@ class AppleMusicMusicVideoInterface:
             for playlist in playlist_master_data["media"]
             if playlist.get("uri")
         ]
-        selected = inquirer.select(
+        selected = await inquirer.select(
             message="Select which audio codec to download:",
             choices=choices,
-        ).execute()
+        ).execute_async()
 
         return selected
 
@@ -308,7 +308,7 @@ class AppleMusicMusicVideoInterface:
         if MusicVideoCodec.ASK not in codec_priority:
             playlist = self.get_best_stereo_audio_playlist(playlist_master_data)
         else:
-            playlist = self.get_audio_playlist_from_user(playlist_master_data)
+            playlist = await self.get_audio_playlist_from_user(playlist_master_data)
 
         if not playlist:
             return None

@@ -256,10 +256,22 @@ class AppleMusicBaseDownloader:
         )
 
     def get_cover_url(self, cover_url_template: str) -> str:
+        return self.format_cover_url(
+            cover_url_template,
+            self.cover_size,
+            self.cover_format.value,
+        )
+
+    def format_cover_url(
+        self,
+        cover_url_template: str,
+        cover_size: int,
+        cover_format: str,
+    ) -> str:
         return re.sub(
             r"\{w\}x\{h\}([a-z]{2})\.jpg",
             (
-                f"{self.cover_size}x{self.cover_size}bb.{self.cover_format.value}"
+                f"{cover_size}x{cover_size}bb.{cover_format}"
                 if self.cover_format != CoverFormat.RAW
                 else ""
             ),

@@ -403,9 +403,9 @@ def make_sync(func):
     default=music_video_downloader_sig.parameters["resolution"].default,
     help="Target video resolution for music videos.",
 )
-# DownloaderPost specific options
+# DownloaderUploadedVideo specific options
 @click.option(
-    "--quality-post",
+    "--uploaded-video-quality",
     type=UploadedVideoQuality,
     default=uploaded_video_downloader_sig.parameters["quality"].default,
     help="Upload videos quality.",
@@ -460,7 +460,7 @@ async def main(
     music_video_codec_priority: list[MusicVideoCodec],
     music_video_remux_format: RemuxFormatMusicVideo,
     music_video_resolution: MusicVideoResolution,
-    quality_post: UploadedVideoQuality,
+    uploaded_video_quality: UploadedVideoQuality,
     *args,
     **kwargs,
 ):
@@ -546,7 +546,7 @@ async def main(
 
     uploaded_video_downloader = AppleMusicUploadedVideoDownloader(
         base_downloader,
-        quality=quality_post,
+        quality=uploaded_video_quality,
     )
     uploaded_video_downloader.setup()
 

@@ -172,6 +172,9 @@ class AppleMusicMusicVideoDownloader:
                 playlist_metadata,
                 music_video_metadata,
             )
+            download_item.playlist_file_path = self.downloader.get_playlist_file_path(
+                download_item.playlist_tags,
+            )
 
         stream_info = await self.music_video_interface.get_stream_info(
             music_video_metadata,

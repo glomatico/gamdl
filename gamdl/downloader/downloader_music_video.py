@@ -232,7 +232,7 @@ class AppleMusicMusicVideoDownloader:
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "encrypted_video",
-            ".m4a",
+            ".mp4",
         )
         encrypted_path_audio = self.downloader.get_temp_path(
             download_item.media_metadata["id"],
@@ -254,7 +254,7 @@ class AppleMusicMusicVideoDownloader:
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "decrypted_video",
-            ".m4a",
+            ".mp4",
         )
         decrypted_path_audio = self.downloader.get_temp_path(
             download_item.media_metadata["id"],

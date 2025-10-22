@@ -129,10 +129,12 @@ class AppleMusicMusicVideoInterface:
                 itunes_page_metadata,
             )
         else:
-            webplayback = await self.interface.apple_music_api.get_webplayback(
+            webplayback_response = await self.interface.apple_music_api.get_webplayback(
                 metadata["id"]
             )
-            m3u8_master_url = self.get_m3u8_master_url_from_webplayback(webplayback)
+            m3u8_master_url = self.get_m3u8_master_url_from_webplayback(
+                webplayback_response["songList"][0],
+            )
 
         playlist_master_m3u8_obj = m3u8.loads(await get_response_text(m3u8_master_url))
         playlist_master_m3u8_obj.base_uri = m3u8_master_url.rpartition("/")[0]

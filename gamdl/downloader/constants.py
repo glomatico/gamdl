@@ -9,9 +9,11 @@ TEMP_PATH_TEMPLATE = "gamdl_temp_{}"
 ILLEGAL_CHARS_RE = r'[\\/:*?"<>|;]'
 ILLEGAL_CHAR_REPLACEMENT = "_"
 
-SONG_MEDIA_TYPE = {"songs", "library-songs"}
-MUSIC_VIDEO_MEDIA_TYPE = {"music-videos", "library-music-videos"}
-UPLOADED_VIDEO_MEDIA_TYPE = {"uploaded-videos"}
+SONG_MEDIA_TYPE = {"song", "songs", "library-songs"}
+ALBUM_MEDIA_TYPE = {"album", "albums", "library-albums"}
+MUSIC_VIDEO_MEDIA_TYPE = {"music-video", "music-videos", "library-music-videos"}
+UPLOADED_VIDEO_MEDIA_TYPE = {"post", "uploaded-videos"}
+PLAYLIST_MEDIA_TYPE = {"playlist", "playlists", "library-playlists"}
 
 VALID_URL_PATTERN = re.compile(
     r"https://music\.apple\.com"

@@ -60,6 +60,9 @@ class AppleMusicSongDownloader:
                 playlist_metadata,
                 song_metadata,
             )
+            download_item.playlist_file_path = self.downloader.get_playlist_file_path(
+                download_item.playlist_tags,
+            )
 
         if self.codec.is_legacy():
             download_item.stream_info = (
@@ -106,7 +109,7 @@ class AppleMusicSongDownloader:
         download_item.final_path = self.downloader.get_final_path(
             download_item.media_tags,
             ".m4a",
-            playlist_metadata,
+            download_item.playlist_tags,
         )
         download_item.synced_lyrics_path = self.get_lyrics_synced_path(
             download_item.final_path,

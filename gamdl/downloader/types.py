@@ -21,6 +21,7 @@ class DownloadItem:
     cover_url_template: str = None
     staged_path: str = None
     final_path: str = None
+    playlist_file_path: str = None
     synced_lyrics_path: str = None
     cover_path: str = None
 

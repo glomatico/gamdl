@@ -37,8 +37,6 @@ class AppleMusicBaseDownloader:
         overwrite: bool = False,
         save_cover: bool = False,
         save_playlist: bool = False,
-        no_synced_lyrics: bool = False,
-        synced_lyrics_only: bool = False,
         nm3u8dlre_path: str = "N_m3u8DL-RE",
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
@@ -46,14 +44,14 @@ class AppleMusicBaseDownloader:
         download_mode: DownloadMode = DownloadMode.YTDLP,
         remux_mode: RemuxMode = RemuxMode.FFMPEG,
         cover_format: CoverFormat = CoverFormat.JPG,
-        template_folder_album: str = "{album_artist}/{album}",
-        template_folder_compilation: str = "Compilations/{album}",
-        template_file_single_disc: str = "{track:02d} {title}",
-        template_file_multi_disc: str = "{disc}-{track:02d} {title}",
-        template_folder_no_album: str = "{artist}/Unknown Album",
-        template_file_no_album: str = "{title}",
-        template_file_playlist: str = "Playlists/{playlist_artist}/{playlist_title}",
-        template_date: str = "%Y-%m-%dT%H:%M:%SZ",
+        album_folder_template: str = "{album_artist}/{album}",
+        compilation_folder_template: str = "Compilations/{album}",
+        single_disc_folder_template: str = "{track:02d} {title}",
+        multi_disc_folder_template: str = "{disc}-{track:02d} {title}",
+        no_album_folder_template: str = "{artist}/Unknown Album",
+        no_album_file_template: str = "{title}",
+        playlist_file_template: str = "Playlists/{playlist_artist}/{playlist_title}",
+        date_tag_template: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: list[str] = None,
         cover_size: int = 1200,
         truncate: int = None,
@@ -68,8 +66,6 @@ class AppleMusicBaseDownloader:
         self.overwrite = overwrite
         self.save_cover = save_cover
         self.save_playlist = save_playlist
-        self.no_synced_lyrics = no_synced_lyrics
-        self.synced_lyrics_only = synced_lyrics_only
         self.nm3u8dlre_path = nm3u8dlre_path
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
@@ -77,14 +73,14 @@ class AppleMusicBaseDownloader:
         self.download_mode = download_mode
         self.remux_mode = remux_mode
         self.cover_format = cover_format
-        self.template_folder_album = template_folder_album
-        self.template_folder_compilation = template_folder_compilation
-        self.template_file_single_disc = template_file_single_disc
-        self.template_file_multi_disc = template_file_multi_disc
-        self.template_folder_no_album = template_folder_no_album
-        self.template_file_no_album = template_file_no_album
-        self.template_file_playlist = template_file_playlist
-        self.template_date = template_date
+        self.album_folder_template = album_folder_template
+        self.compilation_folder_template = compilation_folder_template
+        self.single_disc_folder_template = single_disc_folder_template
+        self.multi_disc_folder_template = multi_disc_folder_template
+        self.no_album_folder_template = no_album_folder_template
+        self.no_album_file_template = no_album_file_template
+        self.playlist_file_template = playlist_file_template
+        self.date_tag_template = date_tag_template
         self.exclude_tags = exclude_tags
         self.cover_size = cover_size
         self.truncate = truncate
@@ -98,7 +94,7 @@ class AppleMusicBaseDownloader:
         self._setup_interface()
 
     def _setup_binary_paths(self):
-        self.full_n3u8dlre_path = shutil.which(self.nm3u8dlre_path)
+        self.full_nm3u8dlre_path = shutil.which(self.nm3u8dlre_path)
         self.full_mp4decrypt_path = shutil.which(self.mp4decrypt_path)
         self.full_ffmpeg_path = shutil.which(self.ffmpeg_path)
         self.full_mp4box_path = shutil.which(self.mp4box_path)
@@ -208,18 +204,18 @@ class AppleMusicBaseDownloader:
     ) -> str:
         if tags.album is not None:
             template_folder = (
-                self.template_folder_compilation.split("/")
+                self.compilation_folder_template.split("/")
                 if tags.compilation
-                else self.template_folder_album.split("/")
+                else self.album_folder_template.split("/")
             )
             template_file = (
-                self.template_file_multi_disc.split("/")
+                self.multi_disc_folder_template.split("/")
                 if tags.disc_total > 1
-                else self.template_file_single_disc.split("/")
+                else self.single_disc_folder_template.split("/")
             )
         else:
-            template_folder = self.template_folder_no_album.split("/")
-            template_file = self.template_file_no_album.split("/")
+            template_folder = self.no_album_folder_template.split("/")
+            template_file = self.no_album_file_template.split("/")
 
         template_final = template_folder + template_file
 
@@ -304,7 +300,7 @@ class AppleMusicBaseDownloader:
 
         download_path_obj.parent.mkdir(parents=True, exist_ok=True)
         await async_subprocess(
-            self.full_n3u8dlre_path,
+            self.full_nm3u8dlre_path,
             stream_url,
             "--binary-merge",
             "--no-log",
@@ -336,7 +332,7 @@ class AppleMusicBaseDownloader:
                 if v is not None and k not in exclude_tags
             }
         )
-        mp4_tags = filtered_tags.as_mp4_tags(self.template_date)
+        mp4_tags = filtered_tags.as_mp4_tags(self.date_tag_template)
         skip_tagging = "all" in exclude_tags
 
         mp4 = MP4(media_path)
@@ -381,6 +377,61 @@ class AppleMusicBaseDownloader:
     ) -> None:
         Path(cover_path).parent.mkdir(parents=True, exist_ok=True)
         Path(cover_path).write_bytes(cover_bytes)
+
+    def get_playlist_file_path(
+        self,
+        tags: PlaylistTags,
+    ) -> str:
+        template_file = self.playlist_file_template.split("/")
+        tags_dict = tags.__dict__.copy()
+
+        return str(
+            Path(
+                self.output_path,
+                *[
+                    self.get_sanitized_string(i.format(**tags_dict), True)
+                    for i in template_file[0:-1]
+                ],
+                *[
+                    self.get_sanitized_string(
+                        template_file[-1].format(**tags_dict), False
+                    )
+                    + ".m3u8"
+                ],
+            )
+        )
+
+    def update_playlist_file(
+        self,
+        playlist_file_path: str,
+        final_path: str,
+        playlist_track: int,
+    ) -> None:
+        playlist_file_path_obj = Path(playlist_file_path)
+        final_path_obj = Path(final_path)
+        output_dir_obj = Path(self.output_path)
+
+        playlist_file_path_obj.parent.mkdir(parents=True, exist_ok=True)
+        playlist_file_path_parent_parts_len = len(playlist_file_path_obj.parent.parts)
+        output_path_parts_len = len(output_dir_obj.parts)
+
+        final_path_relative = Path(
+            ("../" * (playlist_file_path_parent_parts_len - output_path_parts_len)),
+            *final_path_obj.parts[output_path_parts_len:],
+        )
+        playlist_file_lines = (
+            playlist_file_path_obj.open("r", encoding="utf8").readlines()
+            if playlist_file_path_obj.exists()
+            else []
+        )
+        if len(playlist_file_lines) < playlist_track:
+            playlist_file_lines.extend(
+                "\n" for _ in range(playlist_track - len(playlist_file_lines))
+            )
+
+        playlist_file_lines[playlist_track - 1] = final_path_relative.as_posix() + "\n"
+        with playlist_file_path_obj.open("w", encoding="utf8") as playlist_file:
+            playlist_file.writelines(playlist_file_lines)
 
     def cleanup_temp(self, random_uuid: str) -> None:
         temp_folder = Path(self.temp_path) / TEMP_PATH_TEMPLATE.format(random_uuid)

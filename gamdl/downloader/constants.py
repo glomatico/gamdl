@@ -12,6 +12,7 @@ ILLEGAL_CHAR_REPLACEMENT = "_"
 SONG_MEDIA_TYPE = {"song", "songs", "library-songs"}
 ALBUM_MEDIA_TYPE = {"album", "albums", "library-albums"}
 MUSIC_VIDEO_MEDIA_TYPE = {"music-video", "music-videos", "library-music-videos"}
+ARTIST_MEDIA_TYPE = {"artist", "artists", "library-artists"}
 UPLOADED_VIDEO_MEDIA_TYPE = {"post", "uploaded-videos"}
 PLAYLIST_MEDIA_TYPE = {"playlist", "playlists", "library-playlists"}
 

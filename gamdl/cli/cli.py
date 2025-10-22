@@ -24,6 +24,7 @@ from ..downloader.exceptions import (
     MediaFormatNotAvailableError,
     MediaNotStreamableError,
 )
+from ..downloader.types import DownloadItem
 from ..interface.enums import (
     MusicVideoCodec,
     MusicVideoResolution,
@@ -607,7 +608,14 @@ async def main(
                 f"[Track {download_index}/{len(download_queue)}]",
                 dim=True,
             )
-            media_title = download_item.media_metadata["attributes"]["name"]
+            media_title = (
+                download_item.media_metadata["attributes"]["name"]
+                if isinstance(
+                    download_item,
+                    DownloadItem,
+                )
+                else "Unknown Title"
+            )
             logger.info(download_queue_progress + f' Downloading "{media_title}"')
             try:
                 await downloader.download(download_item)

@@ -1,3 +1,3 @@
-from .cli.cli import main
+from gamdl.cli.cli import main
 
 main()

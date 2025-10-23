@@ -17,7 +17,7 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 ### Required
 
 - **Python 3.10 or higher**
-- **Apple Music Cookies** - Export your browser cookies in Netscape format while logged in with an active subscription:
+- **Apple Music Cookies** - Export your browser cookies in Netscape format while logged in with an active subscription at the Apple Music website:
   - **Firefox**: [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt)
   - **Chromium**: [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
 - **FFmpeg** - Must be in your system PATH
@@ -206,7 +206,8 @@ Use these variables in folder/file templates or `--exclude-tags`:
 
 **Formats:**
 
-- `m4v`, `mp4`
+- `m4v`
+- `mp4`
 
 ### 📺 Post Video Quality
 

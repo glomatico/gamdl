@@ -57,30 +57,30 @@ uploaded_video_downloader_sig = inspect.signature(
     "--read-urls-as-txt",
     "-r",
     is_flag=True,
-    help="Interpret URLs as paths to text files containing URLs separated by newlines",
+    help="Read URLs from text files",
 )
 @click.option(
     "--config-path",
     type=click.Path(file_okay=True, dir_okay=False, writable=True, resolve_path=True),
     default=str(Path.home() / ".gamdl" / "config.ini"),
-    help="Path to config file.",
+    help="Config file path",
 )
 @click.option(
     "--log-level",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
     default="INFO",
-    help="Log level.",
+    help="Logging level",
 )
 @click.option(
     "--log-file",
     type=click.Path(file_okay=True, dir_okay=False, writable=True, resolve_path=True),
     default=None,
-    help="Path to log file.",
+    help="Log file path",
 )
 @click.option(
     "--no-exceptions",
     is_flag=True,
-    help="Don't print exceptions.",
+    help="Don't print exceptions",
 )
 # API specific options
 @click.option(
@@ -88,14 +88,14 @@ uploaded_video_downloader_sig = inspect.signature(
     "-c",
     type=PathPrompt(is_file=True),
     default=api_sig.parameters["cookies_path"].default,
-    help="Path to .txt cookies file.",
+    help="Cookies file path",
 )
 @click.option(
     "--language",
     "-l",
     type=str,
     default=api_sig.parameters["language"].default,
-    help="Metadata language as an ISO-2A language code (don't always work for videos).",
+    help="Metadata language",
 )
 # Base Downloader specific options
 @click.option(
@@ -103,170 +103,170 @@ uploaded_video_downloader_sig = inspect.signature(
     "-o",
     type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True),
     default=base_downloader_sig.parameters["output_path"].default,
-    help="Path to output directory.",
+    help="Output directory path",
 )
 @click.option(
     "--temp-path",
     type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True),
     default=base_downloader_sig.parameters["temp_path"].default,
-    help="Path to temporary directory.",
+    help="Temporary directory path",
 )
 @click.option(
     "--wvd-path",
     type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True),
     default=base_downloader_sig.parameters["wvd_path"].default,
-    help="Path to .wvd file.",
+    help=".wvd file executable path",
 )
 @click.option(
     "--overwrite",
     is_flag=True,
-    help="Overwrite existing files.",
+    help="Overwrite existing files",
     default=base_downloader_sig.parameters["overwrite"].default,
 )
 @click.option(
     "--save-cover",
     "-s",
     is_flag=True,
-    help="Save cover as a separate file.",
+    help="Save cover as separate file",
     default=base_downloader_sig.parameters["save_cover"].default,
 )
 @click.option(
     "--save-playlist",
     is_flag=True,
-    help="Save a M3U8 playlist file when downloading a playlist.",
+    help="Save M3U8 playlist file",
     default=base_downloader_sig.parameters["save_playlist"].default,
 )
 @click.option(
     "--nm3u8dlre-path",
     type=str,
     default=base_downloader_sig.parameters["nm3u8dlre_path"].default,
-    help="Path to N_m3u8DL-RE binary.",
+    help="N_m3u8DL-RE executable path",
 )
 @click.option(
     "--mp4decrypt-path",
     type=str,
     default=base_downloader_sig.parameters["mp4decrypt_path"].default,
-    help="Path to mp4decrypt binary.",
+    help="mp4decrypt executable path",
 )
 @click.option(
     "--ffmpeg-path",
     type=str,
     default=base_downloader_sig.parameters["ffmpeg_path"].default,
-    help="Path to FFmpeg binary.",
+    help="FFmpeg executable path",
 )
 @click.option(
     "--mp4box-path",
     type=str,
     default=base_downloader_sig.parameters["mp4box_path"].default,
-    help="Path to MP4Box binary.",
+    help="MP4Box executable path",
 )
 @click.option(
     "--download-mode",
     type=DownloadMode,
     default=base_downloader_sig.parameters["download_mode"].default,
-    help="Download mode.",
+    help="Download mode",
 )
 @click.option(
     "--remux-mode",
     type=RemuxMode,
     default=base_downloader_sig.parameters["remux_mode"].default,
-    help="Remux mode.",
+    help="Remux mode",
 )
 @click.option(
     "--cover-format",
     type=CoverFormat,
     default=base_downloader_sig.parameters["cover_format"].default,
-    help="Cover format.",
+    help="Cover format",
 )
 @click.option(
     "--album-folder-template",
     type=str,
     default=base_downloader_sig.parameters["album_folder_template"].default,
-    help="Template folder for tracks that are part of an album.",
+    help="Album folder template",
 )
 @click.option(
     "--compilation-folder-template",
     type=str,
     default=base_downloader_sig.parameters["compilation_folder_template"].default,
-    help="Template folder for tracks that are part of a compilation album.",
+    help="Compilation folder template",
 )
 @click.option(
     "--single-disc-folder-template",
     type=str,
     default=base_downloader_sig.parameters["single_disc_folder_template"].default,
-    help="Template file for the tracks that are part of a single-disc album.",
+    help="Single disc template",
 )
 @click.option(
     "--multi-disc-folder-template",
     type=str,
     default=base_downloader_sig.parameters["multi_disc_folder_template"].default,
-    help="Template file for the tracks that are part of a multi-disc album.",
+    help="Multi disc template",
 )
 @click.option(
     "--no-album-folder-template",
     type=str,
     default=base_downloader_sig.parameters["no_album_folder_template"].default,
-    help="Template folder for the tracks that are not part of an album.",
+    help="No album folder template",
 )
 @click.option(
     "--no-album-file-template",
     type=str,
     default=base_downloader_sig.parameters["no_album_file_template"].default,
-    help="Template file for the tracks that are not part of an album.",
+    help="No album file template",
 )
 @click.option(
     "--playlist-file-template",
     type=str,
     default=base_downloader_sig.parameters["playlist_file_template"].default,
-    help="Template file for the M3U8 playlist.",
+    help="Playlist template",
 )
 @click.option(
     "--date-tag-template",
     type=str,
     default=base_downloader_sig.parameters["date_tag_template"].default,
-    help="Date tag template.",
+    help="Date tag template",
 )
 @click.option(
     "--exclude-tags",
     type=Csv(str),
     default=base_downloader_sig.parameters["exclude_tags"].default,
-    help="Comma-separated tags to exclude.",
+    help="Comma-separated tags to exclude",
 )
 @click.option(
     "--cover-size",
     type=int,
     default=base_downloader_sig.parameters["cover_size"].default,
-    help="Cover size.",
+    help="Cover size in pixels",
 )
 @click.option(
     "--truncate",
     type=int,
     default=base_downloader_sig.parameters["truncate"].default,
-    help="Maximum length of the file/folder names.",
+    help="Max filename length",
 )
 # DownloaderSong specific options
 @click.option(
     "--codec-song",
     type=SongCodec,
     default=song_downloader_sig.parameters["codec"].default,
-    help="Song codec.",
+    help="Song codec",
 )
 @click.option(
     "--synced-lyrics-format",
     type=SyncedLyricsFormat,
     default=song_downloader_sig.parameters["synced_lyrics_format"].default,
-    help="Synced lyrics format.",
+    help="Synced lyrics format",
 )
 @click.option(
     "--no-synced-lyrics",
     is_flag=True,
-    help="Don't download the synced lyrics.",
+    help="Don't download synced lyrics",
     default=song_downloader_sig.parameters["no_synced_lyrics"].default,
 )
 @click.option(
     "--synced-lyrics-only",
     is_flag=True,
-    help="Download only the synced lyrics.",
+    help="Download only synced lyrics",
     default=song_downloader_sig.parameters["synced_lyrics_only"].default,
 )
 # DownloaderMusicVideo specific options
@@ -274,26 +274,26 @@ uploaded_video_downloader_sig = inspect.signature(
     "--music-video-codec-priority",
     type=Csv(MusicVideoCodec),
     default=music_video_downloader_sig.parameters["codec_priority"].default,
-    help="Comma-separated music video codec priority.",
+    help="Comma-separated codec priority",
 )
 @click.option(
     "--music-video-remux-format",
     type=RemuxFormatMusicVideo,
     default=music_video_downloader_sig.parameters["remux_format"].default,
-    help="Music video remux format.",
+    help="Music video remux format",
 )
 @click.option(
     "--music-video-resolution",
     type=MusicVideoResolution,
     default=music_video_downloader_sig.parameters["resolution"].default,
-    help="Target video resolution for music videos.",
+    help="Max music video resolution",
 )
 # DownloaderUploadedVideo specific options
 @click.option(
     "--uploaded-video-quality",
     type=UploadedVideoQuality,
     default=uploaded_video_downloader_sig.parameters["quality"].default,
-    help="Upload videos quality.",
+    help="Post video quality",
 )
 # This option should always be last
 @click.option(
@@ -301,7 +301,7 @@ uploaded_video_downloader_sig = inspect.signature(
     "-n",
     is_flag=True,
     callback=load_config_file,
-    help="Do not use a config file.",
+    help="Don't use a config file",
 )
 @make_sync
 async def main(

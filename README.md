@@ -26,11 +26,11 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 ### Optional
 
-Add these tools to your system PATH or specify their paths via command-line arguments:
+Add these tools to your system PATH for additional features:
 
 - **[mp4decrypt](https://www.bento4.com/downloads/)** - Required for `mp4box` remux mode, music videos, and experimental codecs
 - **[MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)** - Required for `mp4box` remux mode
-- **[N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)** - Required for `nm3u8dlre` download mode
+- **[N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)** - Required for `nm3u8dlre` download mode, which is faster than the default downloader
 
 ## 📦 Installation
 
@@ -100,56 +100,57 @@ The file is created automatically on first run. Command-line arguments override 
 
 ### 📝 Configuration Options
 
-| Option                          | Description                              | Default                                        |
-| ------------------------------- | ---------------------------------------- | ---------------------------------------------- |
-| **General Options**             |                                          |                                                |
-| `--read-urls-as-txt`, `-r`      | Read URLs from text files                | `false`                                        |
-| `--config-path`                 | Path to config file                      | `<home>/.gamdl/config.ini`                     |
-| `--log-level`                   | Logging level (DEBUG/INFO/WARNING/ERROR) | `INFO`                                         |
-| `--log-file`                    | Path to log file                         | -                                              |
-| `--no-exceptions`               | Don't print exceptions                   | `false`                                        |
-| **Apple Music Options**         |                                          |                                                |
-| `--cookies-path`, `-c`          | Path to cookies file                     | `./cookies.txt`                                |
-| `--language`, `-l`              | Metadata language (ISO-2A code)          | `en-US`                                        |
-| **Output Options**              |                                          |                                                |
-| `--output-path`, `-o`           | Output directory                         | `./Apple Music`                                |
-| `--temp-path`                   | Temporary directory                      | `.`                                            |
-| `--overwrite`                   | Overwrite existing files                 | `false`                                        |
-| `--save-cover`, `-s`            | Save cover as separate file              | `false`                                        |
-| `--save-playlist`               | Save M3U8 playlist file                  | `false`                                        |
-| **Download Options**            |                                          |                                                |
-| `--download-mode`               | Download mode (`ytdlp`/`nm3u8dlre`)      | `ytdlp`                                        |
-| `--remux-mode`                  | Remux mode (`ffmpeg`/`mp4box`)           | `ffmpeg`                                       |
-| `--cover-format`                | Cover format (`jpg`/`png`/`raw`)         | `jpg`                                          |
-| `--cover-size`                  | Cover size in pixels                     | `1200`                                         |
-| `--truncate`                    | Max filename length                      | -                                              |
-| **Binary Paths**                |                                          |                                                |
-| `--nm3u8dlre-path`              | Path to N_m3u8DL-RE                      | `N_m3u8DL-RE`                                  |
-| `--mp4decrypt-path`             | Path to mp4decrypt                       | `mp4decrypt`                                   |
-| `--ffmpeg-path`                 | Path to FFmpeg                           | `ffmpeg`                                       |
-| `--mp4box-path`                 | Path to MP4Box                           | `MP4Box`                                       |
-| `--wvd-path`                    | Path to .wvd file                        | -                                              |
-| **Template Options**            |                                          |                                                |
-| `--album-folder-template`       | Album folder template                    | `{album_artist}/{album}`                       |
-| `--compilation-folder-template` | Compilation folder template              | `Compilations/{album}`                         |
-| `--single-disc-folder-template` | Single disc template                     | `{track:02d} {title}`                          |
-| `--multi-disc-folder-template`  | Multi disc template                      | `{disc}-{track:02d} {title}`                   |
-| `--no-album-folder-template`    | No album folder template                 | `{artist}/Unknown Album`                       |
-| `--no-album-file-template`      | No album file template                   | `{title}`                                      |
-| `--playlist-file-template`      | Playlist template                        | `Playlists/{playlist_artist}/{playlist_title}` |
-| `--date-tag-template`           | Date format template                     | `%Y-%m-%dT%H:%M:%SZ`                           |
-| `--exclude-tags`                | Comma-separated tags to exclude          | -                                              |
-| **Song Options**                |                                          |                                                |
-| `--codec-song`                  | Song codec (see below)                   | `aac-legacy`                                   |
-| `--synced-lyrics-format`        | Lyrics format (`lrc`/`srt`/`ttml`)       | `lrc`                                          |
-| `--no-synced-lyrics`            | Don't download synced lyrics             | `false`                                        |
-| `--synced-lyrics-only`          | Download only synced lyrics              | `false`                                        |
-| **Music Video Options**         |                                          |                                                |
-| `--music-video-codec-priority`  | Codec priority (comma-separated)         | `h265,h264`                                    |
-| `--music-video-remux-format`    | Remux format (`m4v`/`mp4`)               | `m4v`                                          |
-| `--music-video-resolution`      | Max resolution (see below)               | `1080p`                                        |
-| **Post Video Options**          |                                          |                                                |
-| `--uploaded-video-quality`      | Quality (`best`/`ask`)                   | `best`                                         |
+| Option                          | Description                               | Default                                        |
+| ------------------------------- | ----------------------------------------- | ---------------------------------------------- |
+| **General Options**             |                                           |                                                |
+| `--read-urls-as-txt`, `-r`      | Read URLs from text files                 | `false`                                        |
+| `--config-path`                 | Config file path                          | `<home>/.gamdl/config.ini`                     |
+| `--log-level`                   | Logging level (DEBUG/INFO/WARNING/ERROR)  | `INFO`                                         |
+| `--log-file`                    | Log file path                             | -                                              |
+| `--no-exceptions`               | Don't print exceptions                    | `false`                                        |
+| `--no-config-file`, `-n`        | Don't use a config file                   | `false`                                        |
+| **Apple Music Options**         |                                           |                                                |
+| `--cookies-path`, `-c`          | Cookies file path                         | `./cookies.txt`                                |
+| `--language`, `-l`              | Metadata language (ISO-2A code)           | `en-US`                                        |
+| **Output Options**              |                                           |                                                |
+| `--output-path`, `-o`           | Output directory path                     | `./Apple Music`                                |
+| `--temp-path`                   | Temporary directory path                  | `.`                                            |
+| `--overwrite`                   | Overwrite existing files                  | `false`                                        |
+| `--save-cover`, `-s`            | Save cover as separate file               | `false`                                        |
+| `--save-playlist`               | Save M3U8 playlist file                   | `false`                                        |
+| **Download Options**            |                                           |                                                |
+| `--download-mode`               | Download mode (`ytdlp`/`nm3u8dlre`)       | `ytdlp`                                        |
+| `--remux-mode`                  | Remux mode (`ffmpeg`/`mp4box`)            | `ffmpeg`                                       |
+| `--cover-format`                | Cover format (`jpg`/`png`/`raw`)          | `jpg`                                          |
+| `--cover-size`                  | Cover size in pixels                      | `1200`                                         |
+| `--truncate`                    | Max filename length                       | -                                              |
+| **Binary Paths**                |                                           |                                                |
+| `--nm3u8dlre-path`              | N_m3u8DL-RE executable path               | `N_m3u8DL-RE`                                  |
+| `--mp4decrypt-path`             | mp4decrypt executable path                | `mp4decrypt`                                   |
+| `--ffmpeg-path`                 | FFmpeg executable path                    | `ffmpeg`                                       |
+| `--mp4box-path`                 | MP4Box executable path                    | `MP4Box`                                       |
+| `--wvd-path`                    | .wvd file executable path                 | -                                              |
+| **Template Options**            |                                           |                                                |
+| `--album-folder-template`       | Album folder template                     | `{album_artist}/{album}`                       |
+| `--compilation-folder-template` | Compilation folder template               | `Compilations/{album}`                         |
+| `--single-disc-folder-template` | Single disc template                      | `{track:02d} {title}`                          |
+| `--multi-disc-folder-template`  | Multi disc template                       | `{disc}-{track:02d} {title}`                   |
+| `--no-album-folder-template`    | No album folder template                  | `{artist}/Unknown Album`                       |
+| `--no-album-file-template`      | No album file template                    | `{title}`                                      |
+| `--playlist-file-template`      | Playlist template                         | `Playlists/{playlist_artist}/{playlist_title}` |
+| `--date-tag-template`           | Date tag template                         | `%Y-%m-%dT%H:%M:%SZ`                           |
+| `--exclude-tags`                | Comma-separated tags to exclude           | -                                              |
+| **Song Options**                |                                           |                                                |
+| `--codec-song`                  | Song codec (see below)                    | `aac-legacy`                                   |
+| `--synced-lyrics-format`        | Synced lyrics format (`lrc`/`srt`/`ttml`) | `lrc`                                          |
+| `--no-synced-lyrics`            | Don't download synced lyrics              | `false`                                        |
+| `--synced-lyrics-only`          | Download only synced lyrics               | `false`                                        |
+| **Music Video Options**         |                                           |                                                |
+| `--music-video-codec-priority`  | Comma-separated codec priority            | `h264,h265`                                    |
+| `--music-video-remux-format`    | Music video remux format (`m4v`/`mp4`)    | `m4v`                                          |
+| `--music-video-resolution`      | Max music video resolution (see below)    | `1080p`                                        |
+| **Post Video Options**          |                                           |                                                |
+| `--uploaded-video-quality`      | Post video quality (`best`/`ask`)         | `best`                                         |
 
 ### 🏷️ Template Variables
 

@@ -230,20 +230,18 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `srt` - SubRip subtitle format (more accurate timing)
 - `ttml` - Native Apple Music format (not compatible with most media players)
 
-### Music Video Options
-
-**Codecs:**
+### Music Video Codecs
 
 - `h264`
 - `h265`
 - `ask` - Interactive codec selection
 
-**Resolutions:**
+### Music Video Resolutions
 
 - H.264: `240p`, `360p`, `480p`, `540p`, `720p`, `1080p`
 - H.265 only: `1440p`, `2160p`
 
-**Formats:**
+### Music Video Remux Formats
 
 - `m4v`, `mp4`
 

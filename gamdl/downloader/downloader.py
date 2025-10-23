@@ -337,9 +337,6 @@ class AppleMusicDownloader:
 
     async def download(self, download_item: DownloadItem | Exception) -> None:
         try:
-            if isinstance(download_item, Exception):
-                raise download_item
-
             await self._download(download_item)
             if not self.base_downloader.skip_processing:
                 await self._final_processing(download_item)
@@ -349,8 +346,13 @@ class AppleMusicDownloader:
 
     async def _download(
         self,
-        download_item: DownloadItem,
+        download_item: DownloadItem | Exception,
     ) -> None:
+        if isinstance(download_item, Exception):
+            raise download_item
+        if self.song_downloader.synced_lyrics_only:
+            return
+
         if (
             Path(download_item.final_path).exists()
             and not self.base_downloader.overwrite
@@ -396,7 +398,7 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        if Path(download_item.staged_path).exists():
+        if download_item.staged_path and Path(download_item.staged_path).exists():
             self.base_downloader.move_to_final_path(
                 download_item.staged_path,
                 download_item.final_path,

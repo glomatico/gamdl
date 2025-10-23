@@ -46,8 +46,6 @@ class AppleMusicSongDownloader:
             song_metadata,
             self.synced_lyrics_format,
         )
-        if self.synced_lyrics_only:
-            return download_item
 
         webplayback = await self.downloader.apple_music_api.get_webplayback(song_id)
         download_item.media_tags = self.song_interface.get_tags(
@@ -63,6 +61,18 @@ class AppleMusicSongDownloader:
             download_item.playlist_file_path = self.downloader.get_playlist_file_path(
                 download_item.playlist_tags,
             )
+
+        download_item.final_path = self.downloader.get_final_path(
+            download_item.media_tags,
+            ".m4a",
+            download_item.playlist_tags,
+        )
+        download_item.synced_lyrics_path = self.get_lyrics_synced_path(
+            download_item.final_path,
+        )
+
+        if self.synced_lyrics_only:
+            return download_item
 
         if self.codec.is_legacy():
             download_item.stream_info = (
@@ -105,14 +115,6 @@ class AppleMusicSongDownloader:
             download_item.random_uuid,
             "staged",
             "." + download_item.stream_info.file_format.value,
-        )
-        download_item.final_path = self.downloader.get_final_path(
-            download_item.media_tags,
-            ".m4a",
-            download_item.playlist_tags,
-        )
-        download_item.synced_lyrics_path = self.get_lyrics_synced_path(
-            download_item.final_path,
         )
         cover_file_extension = await self.downloader.get_cover_file_extension(
             download_item.cover_url_template,

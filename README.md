@@ -188,13 +188,15 @@ Use these variables in folder/file templates or `--exclude-tags`:
 - `atmos` - Dolby Atmos 768kbps
 - `ac3` - AC3 640kbps
 - `alac` - ALAC up to 24-bit/192kHz
-- `ask` - Prompt to choose codec
+- `ask` - Interactive experimental codec selection
 
 ### 🎬 Music Video Options
 
 **Codecs:**
 
-- `h264`, `h265`, `ask`
+- `h264`
+- `h265`
+- `ask` - Interactive codec selection
 
 **Resolutions:**
 
@@ -203,7 +205,7 @@ Use these variables in folder/file templates or `--exclude-tags`:
 
 **Formats:**
 
-- `m4v` (default), `mp4`
+- `m4v`, `mp4`
 
 ### 📺 Post Video Quality
 

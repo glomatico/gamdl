@@ -29,8 +29,7 @@ from ..interface import (
     UploadedVideoQuality,
 )
 from .constants import X_NOT_IN_PATH
-from .custom_logger_formatter import CustomLoggerFormatter
-from .utils import Csv, PathPrompt, load_config_file, make_sync
+from .utils import Csv, CustomLoggerFormatter, PathPrompt, load_config_file, make_sync
 
 logger = logging.getLogger(__name__)
 

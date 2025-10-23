@@ -96,21 +96,19 @@ Config file values can be overridden using command-line arguments.
 
 | Command-line argument / Config file key                         | Description                                                                  | Default value                                  |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------- |
-| `--disable-music-video-skip` / `disable_music_video_skip`       | Don't skip downloading music videos in albums/playlists.                     | `false`                                        |
 | `--read-urls-as-txt`, `-r` / -                                  | Interpret URLs as paths to text files containing URLs separated by newlines  | `false`                                        |
 | `--config-path` / -                                             | Path to config file.                                                         | `<home>/.gamdl/config.ini`                     |
 | `--log-level` / `log_level`                                     | Log level.                                                                   | `INFO`                                         |
+| `--log-file` / `log_file`                                       | Path to log file.                                                            | `null`                                         |
 | `--no-exceptions` / `no_exceptions`                             | Don't print exceptions.                                                      | `false`                                        |
 | `--cookies-path`, `-c` / `cookies_path`                         | Path to .txt cookies file.                                                   | `./cookies.txt`                                |
 | `--language`, `-l` / `language`                                 | Metadata language as an ISO-2A language code (don't always work for videos). | `en-US`                                        |
 | `--output-path`, `-o` / `output_path`                           | Path to output directory.                                                    | `./Apple Music`                                |
-| `--temp-path` / `temp_path`                                     | Path to temporary directory.                                                 | `./temp`                                       |
+| `--temp-path` / `temp_path`                                     | Path to temporary directory.                                                 | `.`                                            |
 | `--wvd-path` / `wvd_path`                                       | Path to .wvd file.                                                           | `null`                                         |
 | `--overwrite` / `overwrite`                                     | Overwrite existing files.                                                    | `false`                                        |
 | `--save-cover`, `-s` / `save_cover`                             | Save cover as a separate file.                                               | `false`                                        |
 | `--save-playlist` / `save_playlist`                             | Save a M3U8 playlist file when downloading a playlist.                       | `false`                                        |
-| `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                                        |
-| `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                             | `false`                                        |
 | `--nm3u8dlre-path` / `nm3u8dlre_path`                           | Path to N_m3u8DL-RE binary.                                                  | `N_m3u8DL-RE`                                  |
 | `--mp4decrypt-path` / `mp4decrypt_path`                         | Path to mp4decrypt binary.                                                   | `mp4decrypt`                                   |
 | `--ffmpeg-path` / `ffmpeg_path`                                 | Path to FFmpeg binary.                                                       | `ffmpeg`                                       |
@@ -118,24 +116,25 @@ Config file values can be overridden using command-line arguments.
 | `--download-mode` / `download_mode`                             | Download mode.                                                               | `ytdlp`                                        |
 | `--remux-mode` / `remux_mode`                                   | Remux mode.                                                                  | `ffmpeg`                                       |
 | `--cover-format` / `cover_format`                               | Cover format.                                                                | `jpg`                                          |
-| `--template-folder-album` / `template_folder_album`             | Template folder for tracks that are part of an album.                        | `{album_artist}/{album}`                       |
-| `--template-folder-compilation` / `template_folder_compilation` | Template folder for tracks that are part of a compilation album.             | `Compilations/{album}`                         |
-| `--template-file-single-disc` / `template_file_single_disc`     | Template file for the tracks that are part of a single-disc album.           | `{track:02d} {title}`                          |
-| `--template-file-multi-disc` / `template_file_multi_disc`       | Template file for the tracks that are part of a multi-disc album.            | `{disc}-{track:02d} {title}`                   |
-| `--template-folder-no-album` / `template_folder_no_album`       | Template folder for the tracks that are not part of an album.                | `{artist}/Unknown Album`                       |
-| `--template-file-no-album` / `template_file_no_album`           | Template file for the tracks that are not part of an album.                  | `{title}`                                      |
-| `--template-file-playlist` / `template_file_playlist`           | Template file for the M3U8 playlist.                                         | `Playlists/{playlist_artist}/{playlist_title}` |
-| `--template-date` / `template_date`                             | Date tag template.                                                           | `%Y-%m-%dT%H:%M:%SZ`                           |
+| `--album-folder-template` / `album_folder_template`             | Template folder for tracks that are part of an album.                        | `{album_artist}/{album}`                       |
+| `--compilation-folder-template` / `compilation_folder_template` | Template folder for tracks that are part of a compilation album.             | `Compilations/{album}`                         |
+| `--single-disc-folder-template` / `single_disc_folder_template` | Template file for the tracks that are part of a single-disc album.           | `{track:02d} {title}`                          |
+| `--multi-disc-folder-template` / `multi_disc_folder_template`   | Template file for the tracks that are part of a multi-disc album.            | `{disc}-{track:02d} {title}`                   |
+| `--no-album-folder-template` / `no_album_folder_template`       | Template folder for the tracks that are not part of an album.                | `{artist}/Unknown Album`                       |
+| `--no-album-file-template` / `no_album_file_template`           | Template file for the tracks that are not part of an album.                  | `{title}`                                      |
+| `--playlist-file-template` / `playlist_file_template`           | Template file for the M3U8 playlist.                                         | `Playlists/{playlist_artist}/{playlist_title}` |
+| `--date-tag-template` / `date_tag_template`                     | Date tag template.                                                           | `%Y-%m-%dT%H:%M:%SZ`                           |
 | `--exclude-tags` / `exclude_tags`                               | Comma-separated tags to exclude.                                             | `null`                                         |
 | `--cover-size` / `cover_size`                                   | Cover size.                                                                  | `1200`                                         |
 | `--truncate` / `truncate`                                       | Maximum length of the file/folder names.                                     | `null`                                         |
-| `--database-path` / `database_path`                             | Path to the downloaded media database file.                                  | `null`                                         |
 | `--codec-song` / `codec_song`                                   | Song codec.                                                                  | `aac-legacy`                                   |
 | `--synced-lyrics-format` / `synced_lyrics_format`               | Synced lyrics format.                                                        | `lrc`                                          |
-| `--codec-music-video` / `codec_music_video`                     | Comma-separated music video codec priority.                                  | `h264,h265`                                    |
-| `--remux-format-music-video` / `remux_format_music_video`       | Music video remux format.                                                    | `m4v`                                          |
-| `--quality-post` / `quality_post`                               | Post video quality.                                                          | `best`                                         |
-| `--resolution` / `resolution`                                   | Target video resolution for music videos.                                    | `1080p`                                        |
+| `--no-synced-lyrics` / `no_synced_lyrics`                       | Don't download the synced lyrics.                                            | `false`                                        |
+| `--synced-lyrics-only` / `synced_lyrics_only`                   | Download only the synced lyrics.                                             | `false`                                        |
+| `--music-video-codec-priority` / `music_video_codec_priority`   | Comma-separated music video codec priority.                                  | `h265,h264`                                    |
+| `--music-video-remux-format` / `music_video_remux_format`       | Music video remux format.                                                    | `m4v`                                          |
+| `--music-video-resolution` / `music_video_resolution`           | Target video resolution for music videos.                                    | `1080p`                                        |
+| `--uploaded-video-quality` / `uploaded_video_quality`           | Upload videos quality.                                                       | `best`                                         |
 | `--no-config-file`, `-n` / -                                    | Do not use a config file.                                                    | `false`                                        |
 
 ### Tags variables
@@ -246,33 +245,63 @@ The following variables can be used in the template folders/files and/or in the 
 - `png`: Lossless format.
 - `raw`: Raw cover without processing (requires `save_cover` to save separately).
 
-### Database path
-
-You can specify any path for storing a database file of downloaded media.
-This is useful if you want to avoid waiting for Gamdl to fetch metadata for checking if a media item has already been downloaded.
-
 ## Embedding
 
-Gamdl can be used as a library in Python scripts. Here's a basic example of downloading a song by its ID:
+Gamdl can be used as an async library in Python scripts. Here's a basic example of downloading a song by its URL:
 
 ```python
-from gamdl import AppleMusicApi, ItunesApi, Downloader, DownloaderSong
+import asyncio
 
-
-apple_music_api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
-itunes_api = ItunesApi(
-    storefront=apple_music_api.storefront,
-    language=apple_music_api.language,
+from gamdl.api import AppleMusicApi
+from gamdl.downloader import (
+    AppleMusicBaseDownloader,
+    AppleMusicDownloader,
+    AppleMusicMusicVideoDownloader,
+    AppleMusicSongDownloader,
+    AppleMusicUploadedVideoDownloader,
 )
 
-downloader = Downloader(
-    apple_music_api=apple_music_api,
-    itunes_api=itunes_api,
-)
-downloader.set_cdm()
-downloader_song = DownloaderSong(downloader=downloader)
 
-for download_info in downloader_song.download(media_id="1624945512"):
-    # Process download_info as needed
-    pass
+async def main():
+    # Initialize the Apple Music API
+    api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
+    await api.setup()
+
+    # Initialize the base downloader
+    base_downloader = AppleMusicBaseDownloader(apple_music_api=api)
+    base_downloader.setup()
+
+    # Initialize the song downloader
+    song_downloader = AppleMusicSongDownloader(base_downloader)
+    song_downloader.setup()
+
+    # Initialize the music video downloader
+    music_video_downloader = AppleMusicMusicVideoDownloader(base_downloader)
+    music_video_downloader.setup()
+
+    # Initialize the uploaded video downloader
+    uploaded_video_downloader = AppleMusicUploadedVideoDownloader(base_downloader)
+    uploaded_video_downloader.setup()
+
+    # Initialize the main downloader
+    downloader = AppleMusicDownloader(
+        base_downloader,
+        song_downloader,
+        music_video_downloader,
+        uploaded_video_downloader,
+    )
+
+    # Download a song by URL
+    url_info = downloader.get_url_info(
+        "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
+    )
+    if url_info:
+        download_queue = await downloader.get_download_queue(url_info)
+        if download_queue:
+            for download_item in download_queue:
+                await downloader.download(download_item)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```

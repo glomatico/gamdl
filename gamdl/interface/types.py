@@ -1,63 +1,13 @@
-from __future__ import annotations
-
 import datetime
-import typing
 from dataclasses import dataclass
-from pathlib import Path
 
 from .enums import MediaFileFormat, MediaRating, MediaType
-
-
-@dataclass
-class UrlInfo:
-    storefront: str = None
-    type: str = None
-    slug: str = None
-    id: str = None
-    sub_id: str = None
-    library_storefront: str = None
-    library_type: str = None
-    library_id: str = None
-
-
-@dataclass
-class DownloadQueue:
-    playlist_attributes: dict = None
-    medias_metadata: list[dict] = None
 
 
 @dataclass
 class Lyrics:
     synced: str = None
     unsynced: str = None
-
-
-@dataclass
-class StreamInfo:
-    stream_url: str = None
-    widevine_pssh: str = None
-    playready_pssh: str = None
-    fairplay_key: str = None
-    codec: str = None
-
-
-@dataclass
-class StreamInfoAv:
-    video_track: StreamInfo = None
-    audio_track: StreamInfo = None
-    file_format: MediaFileFormat = None
-
-
-@dataclass
-class DecryptionKey:
-    kid: str = None
-    key: str = None
-
-
-@dataclass
-class DecryptionKeyAv:
-    video_track: DecryptionKey = None
-    audio_track: DecryptionKey = None
 
 
 @dataclass
@@ -92,7 +42,7 @@ class MediaTags:
     track_total: int = None
     xid: str = None
 
-    def to_mp4_tags(self, date_format: str = None) -> dict[str, typing.Any]:
+    def as_mp4_tags(self, date_format: str = None) -> dict:
         disc_mp4 = [
             [
                 self.disc if self.disc is not None else 0,
@@ -162,18 +112,29 @@ class PlaylistTags:
 
 
 @dataclass
-class DownloadInfo:
-    media_metadata: dict = None
+class StreamInfo:
+    stream_url: str = None
+    widevine_pssh: str = None
+    playready_pssh: str = None
+    fairplay_key: str = None
+    codec: str = None
+
+
+@dataclass
+class StreamInfoAv:
     media_id: str = None
-    alt_media_id: str = None
-    playlist_tags: PlaylistTags = None
-    lyrics: Lyrics = None
-    tags: MediaTags = None
-    final_path: Path = None
-    cover_url: str = None
-    cover_format: str = None
-    cover_path: Path = None
-    stream_info: StreamInfoAv = None
-    decryption_key: DecryptionKeyAv = None
-    staged_path: Path = None
-    synced_lyrics_path: Path = None
+    video_track: StreamInfo = None
+    audio_track: StreamInfo = None
+    file_format: MediaFileFormat = None
+
+
+@dataclass
+class DecryptionKey:
+    kid: str = None
+    key: str = None
+
+
+@dataclass
+class DecryptionKeyAv:
+    video_track: DecryptionKey = None
+    audio_track: DecryptionKey = None

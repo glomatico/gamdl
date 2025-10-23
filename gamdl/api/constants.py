@@ -1,3 +1,15 @@
+APPLE_MUSIC_HOMEPAGE_URL = "https://music.apple.com"
+APPLE_MUSIC_COOKIE_DOMAIN = ".music.apple.com"
+AMP_API_URL = "https://amp-api.music.apple.com"
+WEBPLAYBACK_API_URL = (
+    "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
+)
+LICENSE_API_URL = (
+    "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/acquireWebPlaybackLicense"
+)
+
+ITUNES_LOOKUP_API_URL = "https://itunes.apple.com/lookup"
+ITUNES_PAGE_API_URL = "https://music.apple.com"
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
     "AG": "143540-2,32",
@@ -155,15 +167,3 @@ STOREFRONT_IDS = {
     "ZA": "143472-2,32",
     "ZW": "143605-2,32",
 }
-
-
-EXCLUDED_CONFIG_FILE_PARAMS = (
-    "urls",
-    "config_path",
-    "read_urls_as_txt",
-    "no_config_file",
-    "version",
-    "help",
-)
-
-X_NOT_FOUND_STRING = '{} not found at "{}"'

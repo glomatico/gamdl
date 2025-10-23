@@ -1,17 +1,17 @@
-from __future__ import annotations
-
 import configparser
+import typing
 from enum import Enum
 from pathlib import Path
 
 import click
-import typing
+
+from .constants import EXCLUDED_CONFIG_FILE_PARAMS
 
 
 class ConfigFile:
     def __init__(
         self,
-        config_path: Path,
+        config_path: str,
         section_name: str = "gamdl",
     ) -> None:
         self.config_path = config_path
@@ -22,16 +22,16 @@ class ConfigFile:
     def _read_config_file(self) -> None:
         self.config = configparser.ConfigParser(interpolation=None)
 
-        if self.config_path.exists():
+        if Path(self.config_path).exists():
             self.config.read(self.config_path, encoding="utf-8")
         else:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            Path(self.config_path).parent.mkdir(parents=True, exist_ok=True)
 
         if not self.config.has_section(self.section_name):
             self.config.add_section(self.section_name)
 
     def _write_config_file(self) -> None:
-        with self.config_path.open("w", encoding="utf-8") as config_file:
+        with open(self.config_path, "w", encoding="utf-8") as config_file:
             self.config.write(config_file)
 
     def _serialize_param_default(self, param: click.Parameter) -> str:
@@ -84,6 +84,9 @@ class ConfigFile:
         has_changes = False
 
         for param in params:
+            if param.name in EXCLUDED_CONFIG_FILE_PARAMS:
+                continue
+
             has_changes = self._add_param_default_to_config(param) or has_changes
 
         if has_changes:

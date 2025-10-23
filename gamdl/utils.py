@@ -1,46 +1,71 @@
-from pathlib import Path
+import json
+import typing
+import subprocess
+import asyncio
 
-import click
-import colorama
-import requests
-
-from .constants import X_NOT_FOUND_STRING
-
-
-def color_text(text: str, color) -> str:
-    return color + text + colorama.Style.RESET_ALL
+import httpx
 
 
-def raise_response_exception(response: requests.Response):
-    raise Exception(
-        f"Request failed with status code {response.status_code}: {response.text}"
+def raise_for_status(httpx_response: httpx.Response, valid_responses: set[int] = {200}):
+    if httpx_response.status_code not in valid_responses:
+        raise httpx._exceptions.HTTPError(
+            f"HTTP error {httpx_response.status_code}: {httpx_response.text}"
+        )
+
+
+def safe_json(httpx_response: httpx.Response) -> dict:
+    try:
+        return httpx_response.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+
+
+async def get_response_text(url: str) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        raise_for_status(response)
+        return response.text
+
+
+async def async_subprocess(*args: str, silent: bool = False) -> None:
+    if silent:
+        additional_args = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+    else:
+        additional_args = {}
+
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        **additional_args,
     )
+    await proc.communicate()
+
+    if proc.returncode != 0:
+        raise Exception(f'"{args[0]}" exited with code {proc.returncode}')
 
 
-def prompt_path(is_file: bool, initial_path: Path, description: str) -> Path:
-    path_validator = click.Path(
-        exists=True,
-        file_okay=is_file,
-        dir_okay=not is_file,
-        path_type=Path,
+async def safe_gather(
+    *tasks: typing.Awaitable[typing.Any],
+    limit: int = 5,
+    retries: int = 3,
+) -> list[typing.Any]:
+    semaphore = asyncio.Semaphore(limit)
+
+    async def bounded_task(task: typing.Awaitable[typing.Any]) -> typing.Any:
+        async with semaphore:
+            last_exception = None
+            for attempt in range(retries + 1):
+                try:
+                    return await task
+                except Exception as e:
+                    last_exception = e
+                    if attempt < retries:
+                        await asyncio.sleep(2**attempt)
+            return last_exception
+
+    return await asyncio.gather(
+        *(bounded_task(task) for task in tasks),
+        return_exceptions=True,
     )
-    path_type = "file" if is_file else "folder"
-    while True:
-        try:
-            path_obj = path_validator.convert(initial_path, None, None)
-            break
-        except click.BadParameter as e:
-            path_str = click.prompt(
-                (
-                    f"{X_NOT_FOUND_STRING.format(description, initial_path.absolute())} or "
-                    "the specified path is not valid. "
-                    f"Move the {path_type} to that location, type a new path "
-                    f"or drag and drop the {path_type} here. "
-                    "Then, press enter to continue"
-                ),
-                default=str(initial_path),
-                show_default=False,
-            )
-            path_str = path_str.strip('"')
-            initial_path = Path(path_str)
-    return path_obj

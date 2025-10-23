@@ -34,9 +34,9 @@ Add these tools to your system PATH for additional features:
 
 ## 📦 Installation
 
-**Install gamdl via pipx:**
+**Install Gamdl via pipx:**
 
-[pipx](https://pypa.github.io/pipx/) is recommended for installing gamdl to avoid dependency conflicts, but you can also use pip.
+[pipx](https://pipx.pypa.io/stable/installation/) is recommended for installing Gamdl to avoid dependency conflicts, but you can also use pip.
 
 ```bash
 pipx install gamdl
@@ -93,7 +93,7 @@ gamdl "https://music.apple.com/us/artist/rick-astley/669771"
 
 ## ⚙️ Configuration
 
-Configure gamdl using command-line arguments or a config file.
+Configure Gamdl using command-line arguments or a config file.
 
 **Config file location:**
 
@@ -220,7 +220,7 @@ Use these variables in folder/file templates or `--exclude-tags`:
 
 ## 🐍 Embedding
 
-Use gamdl as a library in your Python projects:
+Use Gamdl as a library in your Python projects:
 
 ```python
 import asyncio

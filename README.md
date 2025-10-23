@@ -1,6 +1,6 @@
 # Glomatico's Apple Music Downloader
 
-A command-line tool for downloading Apple Music songs, music videos, and post videos with high quality and rich metadata.
+A command-line app for downloading Apple Music songs, music videos and post videos.
 
 **Join our Discord Server:** <https://discord.gg/aBjMEZ9tnq>
 

@@ -8,25 +8,23 @@ from pathlib import Path
 import click
 
 from .. import __version__
-from ..api.apple_music_api import AppleMusicApi
-from ..downloader.downloader import AppleMusicDownloader
-from ..downloader.downloader_base import AppleMusicBaseDownloader
-from ..downloader.downloader_music_video import AppleMusicMusicVideoDownloader
-from ..downloader.downloader_song import AppleMusicSongDownloader
-from ..downloader.downloader_uploaded_video import AppleMusicUploadedVideoDownloader
-from ..downloader.enums import (
+from ..api import AppleMusicApi
+from ..downloader import (
+    AppleMusicBaseDownloader,
+    AppleMusicDownloader,
+    AppleMusicMusicVideoDownloader,
+    AppleMusicSongDownloader,
+    AppleMusicUploadedVideoDownloader,
     CoverFormat,
+    DownloadItem,
     DownloadMode,
+    MediaDownloadConfigurationError,
+    MediaFormatNotAvailableError,
+    MediaNotStreamableError,
     RemuxFormatMusicVideo,
     RemuxMode,
 )
-from ..downloader.exceptions import (
-    MediaFormatNotAvailableError,
-    MediaNotStreamableError,
-    MediaDownloadConfigurationError,
-)
-from ..downloader.types import DownloadItem
-from ..interface.enums import (
+from ..interface import (
     MusicVideoCodec,
     MusicVideoResolution,
     SongCodec,

@@ -355,12 +355,6 @@ def make_sync(func):
     default=base_downloader_sig.parameters["truncate"].default,
     help="Maximum length of the file/folder names.",
 )
-@click.option(
-    "--database-path",
-    type=click.Path(file_okay=True, dir_okay=False, writable=True, resolve_path=True),
-    default=base_downloader_sig.parameters["database_path"].default,
-    help="Path to the downloaded media database file.",
-)
 # DownloaderSong specific options
 @click.option(
     "--codec-song",
@@ -454,7 +448,6 @@ async def main(
     exclude_tags: list[str],
     cover_size: int,
     truncate: int,
-    database_path: str,
     codec_song: SongCodec,
     synced_lyrics_format: SyncedLyricsFormat,
     no_synced_lyrics: bool,
@@ -525,7 +518,6 @@ async def main(
         exclude_tags=exclude_tags,
         cover_size=cover_size,
         truncate=truncate,
-        database_path=database_path,
     )
     base_downloader.setup()
 

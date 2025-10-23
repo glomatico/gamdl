@@ -55,7 +55,6 @@ class AppleMusicBaseDownloader:
         exclude_tags: list[str] = None,
         cover_size: int = 1200,
         truncate: int = None,
-        database_path: str = None,
         silent: bool = False,
         skip_processing: bool = False,
     ):
@@ -84,7 +83,6 @@ class AppleMusicBaseDownloader:
         self.exclude_tags = exclude_tags
         self.cover_size = cover_size
         self.truncate = truncate
-        self.database_path = database_path
         self.silent = silent
         self.skip_processing = skip_processing
 

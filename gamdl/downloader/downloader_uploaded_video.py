@@ -23,8 +23,8 @@ class AppleMusicUploadedVideoDownloader:
             self.downloader.interface,
         )
 
-    def get_cover_path(self, final_path: str, cover_file_extension: str) -> str:
-        return str(Path(final_path).with_suffix(cover_file_extension))
+    def get_cover_path(self, final_path: str, file_extension: str) -> str:
+        return str(Path(final_path).with_suffix(file_extension))
 
     async def get_download_item(
         self,

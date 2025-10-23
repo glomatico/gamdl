@@ -2,6 +2,7 @@ import logging
 import urllib.parse
 
 import m3u8
+from async_lru import alru_cache
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from pywidevine import Cdm
@@ -63,6 +64,16 @@ class AppleMusicMusicVideoInterface:
 
         return alt_id
 
+    @alru_cache()
+    async def get_album(
+        self,
+        collection_id: int,
+    ) -> dict | None:
+        album_response = await self.interface.apple_music_api.get_album(collection_id)
+        if not album_response:
+            return None
+        return album_response["data"][0]
+
     async def get_tags(
         self,
         metadata: dict,
@@ -96,12 +107,9 @@ class AppleMusicMusicVideoInterface:
         )
 
         if len(lookup_metadata) > 1:
-            album_response = await self.interface.apple_music_api.get_album(
-                itunes_page_metadata["collectionId"]
-            )
-            if not album_response:
+            album = await self.get_album(itunes_page_metadata["collectionId"])
+            if not album:
                 return tags
-            album = album_response["data"][0]
 
             tags.album = lookup_metadata[1]["collectionCensoredName"]
             tags.album_artist = lookup_metadata[1]["artistName"]

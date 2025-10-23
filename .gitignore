@@ -2,6 +2,6 @@
 __pycache__
 !gamdl
 !.gitignore
+!.python-version
 !pyproject.toml
-!README.md
-!requirements.txt
+!README.mds

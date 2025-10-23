@@ -1,4 +1,4 @@
-# Glomatico's Apple Music Downloader
+# Gamdl (Glomatico's Apple Music Downloader)
 
 [![PyPI version](https://img.shields.io/pypi/v/gamdl?color=blue)](https://pypi.org/project/gamdl/)
 [![Python versions](https://img.shields.io/pypi/pyversions/gamdl)](https://pypi.org/project/gamdl/)

@@ -352,6 +352,29 @@ class AppleMusicDownloader:
         download_item: DownloadItem,
     ) -> None:
         if (
+            self.song_downloader.synced_lyrics_only
+            and download_item.media_metadata["type"] not in SONG_MEDIA_TYPE
+        ) or (
+            self.skip_music_videos
+            and download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+        ):
+            raise MediaDownloadConfigurationError(download_item.media_metadata["id"])
+
+        if self.song_downloader.synced_lyrics_only:
+            return
+
+        if download_item.media_metadata["type"] in {
+            *SONG_MEDIA_TYPE,
+            *MUSIC_VIDEO_MEDIA_TYPE,
+        } and (
+            not download_item.stream_info
+            or not download_item.stream_info.audio_track.widevine_pssh
+        ):
+            raise MediaFormatNotAvailableError(
+                download_item.media_metadata["id"],
+            )
+
+        if (
             Path(download_item.final_path).exists()
             and not self.base_downloader.overwrite
         ):
@@ -366,32 +389,13 @@ class AppleMusicDownloader:
                 download_item.media_metadata["id"],
             )
 
-        if download_item.media_metadata["type"] in {
-            *SONG_MEDIA_TYPE,
-            *MUSIC_VIDEO_MEDIA_TYPE,
-        } and (
-            not download_item.stream_info
-            or not download_item.stream_info.audio_track.widevine_pssh
-        ):
-            raise MediaFormatNotAvailableError(
-                download_item.media_metadata["id"],
-            )
-
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
             await self.song_downloader.download(download_item)
 
         if download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
-            if self.skip_music_videos or self.song_downloader.synced_lyrics_only:
-                raise MediaDownloadConfigurationError(
-                    download_item.media_metadata["id"]
-                )
             await self.music_video_downloader.download(download_item)
 
         if download_item.media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
-            if self.song_downloader.synced_lyrics_only:
-                raise MediaDownloadConfigurationError(
-                    download_item.media_metadata["id"]
-                )
             await self.uploaded_video_downloader.download(download_item)
 
     async def _initial_processing(

@@ -115,13 +115,13 @@ The file is created automatically on first run. Command-line arguments override 
 | **General Options**             |                                           |                                                |
 | `--read-urls-as-txt`, `-r`      | Read URLs from text files                 | `false`                                        |
 | `--config-path`                 | Config file path                          | `<home>/.gamdl/config.ini`                     |
-| `--log-level`                   | Logging level (DEBUG/INFO/WARNING/ERROR)  | `INFO`                                         |
+| `--log-level`                   | Logging level                             | `INFO`                                         |
 | `--log-file`                    | Log file path                             | -                                              |
 | `--no-exceptions`               | Don't print exceptions                    | `false`                                        |
 | `--no-config-file`, `-n`        | Don't use a config file                   | `false`                                        |
 | **Apple Music Options**         |                                           |                                                |
 | `--cookies-path`, `-c`          | Cookies file path                         | `./cookies.txt`                                |
-| `--language`, `-l`              | Metadata language (ISO-2A code)           | `en-US`                                        |
+| `--language`, `-l`              | Metadata language                         | `en-US`                                        |
 | **Output Options**              |                                           |                                                |
 | `--output-path`, `-o`           | Output directory path                     | `./Apple Music`                                |
 | `--temp-path`                   | Temporary directory path                  | `.`                                            |
@@ -129,9 +129,9 @@ The file is created automatically on first run. Command-line arguments override 
 | `--save-cover`, `-s`            | Save cover as separate file               | `false`                                        |
 | `--save-playlist`               | Save M3U8 playlist file                   | `false`                                        |
 | **Download Options**            |                                           |                                                |
-| `--download-mode`               | Download mode (`ytdlp`/`nm3u8dlre`)       | `ytdlp`                                        |
-| `--remux-mode`                  | Remux mode (`ffmpeg`/`mp4box`)            | `ffmpeg`                                       |
-| `--cover-format`                | Cover format (`jpg`/`png`/`raw`)          | `jpg`                                          |
+| `--download-mode`               | Download mode                             | `ytdlp`                                        |
+| `--remux-mode`                  | Remux mode                                | `ffmpeg`                                       |
+| `--cover-format`                | Cover format                              | `jpg`                                          |
 | `--cover-size`                  | Cover size in pixels                      | `1200`                                         |
 | `--truncate`                    | Max filename length                       | -                                              |
 | **Binary Paths**                |                                           |                                                |
@@ -181,6 +181,29 @@ Use these variables in folder/file templates or `--exclude-tags`:
 | `{media_type}`, `{storefront}`, `{xid}`                                      | Technical info                                |
 | `all`                                                                        | Special: Skip all tagging                     |
 
+### Logging Level
+
+- `DEBUG`, `INFO`, `WARNING`, `ERROR`
+
+### Download Mode
+
+- `ytdlp`, `nm3u8dlre`
+
+### Remux Mode
+
+- `ffmpeg`
+- `mp4box` - Preserve the original closed caption track in music videos and some other minor metadata
+
+### Cover Format
+
+- `jpg`
+- `png`
+- `raw` - Raw format as provided by the artist (requires `save_cover` to be enabled as it doesn't embed covers into files)
+
+### Metadata Language
+
+Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't always work for music videos.
+
 ### Song Codecs
 
 **Stable:**
@@ -201,6 +224,12 @@ Use these variables in folder/file templates or `--exclude-tags`:
 - `alac` - ALAC up to 24-bit/192kHz
 - `ask` - Interactive experimental codec selection
 
+### Synced Lyrics Format
+
+- `lrc`
+- `srt` - SubRip subtitle format (more accurate timing)
+- `ttml` - Native Apple Music format (not compatible with most media players)
+
 ### Music Video Options
 
 **Codecs:**
@@ -216,8 +245,7 @@ Use these variables in folder/file templates or `--exclude-tags`:
 
 **Formats:**
 
-- `m4v`
-- `mp4`
+- `m4v`, `mp4`
 
 ### Post Video Quality
 

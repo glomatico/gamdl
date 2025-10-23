@@ -276,4 +276,4 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+Contributions are welcome! Feel free to open issues or submit pull requests, but you may discuss major changes first on our Discord server.

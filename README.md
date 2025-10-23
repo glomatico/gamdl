@@ -34,8 +34,12 @@ Add these tools to your system PATH for additional features:
 
 ## 📦 Installation
 
+**Install gamdl via pipx:**
+
+[pipx](https://pypa.github.io/pipx/) is recommended for installing gamdl to avoid dependency conflicts, but you can also use pip.
+
 ```bash
-pip install gamdl
+pipx install gamdl
 ```
 
 **Setup cookies:**
@@ -78,7 +82,7 @@ gamdl "https://music.apple.com/us/album/whenever-you-need-somebody-2022-remaster
 gamdl "https://music.apple.com/us/artist/rick-astley/669771"
 ```
 
-### Interactive Prompt Controls
+**Interactive Prompt Controls:**
 
 | Key            | Action            |
 | -------------- | ----------------- |
@@ -98,7 +102,7 @@ Configure gamdl using command-line arguments or a config file.
 
 The file is created automatically on first run. Command-line arguments override config values.
 
-### 📝 Configuration Options
+### Configuration Options
 
 | Option                          | Description                               | Default                                        |
 | ------------------------------- | ----------------------------------------- | ---------------------------------------------- |
@@ -152,7 +156,7 @@ The file is created automatically on first run. Command-line arguments override 
 | **Post Video Options**          |                                           |                                                |
 | `--uploaded-video-quality`      | Post video quality (`best`/`ask`)         | `best`                                         |
 
-### 🏷️ Template Variables
+### Template Variables
 
 Use these variables in folder/file templates or `--exclude-tags`:
 
@@ -171,7 +175,7 @@ Use these variables in folder/file templates or `--exclude-tags`:
 | `{media_type}`, `{storefront}`, `{xid}`                                      | Technical info                                |
 | `all`                                                                        | Special: Skip all tagging                     |
 
-### 🎵 Song Codecs
+### Song Codecs
 
 **Stable:**
 
@@ -191,7 +195,7 @@ Use these variables in folder/file templates or `--exclude-tags`:
 - `alac` - ALAC up to 24-bit/192kHz
 - `ask` - Interactive experimental codec selection
 
-### 🎬 Music Video Options
+### Music Video Options
 
 **Codecs:**
 
@@ -209,7 +213,7 @@ Use these variables in folder/file templates or `--exclude-tags`:
 - `m4v`
 - `mp4`
 
-### 📺 Post Video Quality
+### Post Video Quality
 
 - `best` - Up to 1080p with AAC 256kbps
 - `ask` - Interactive quality selection

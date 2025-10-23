@@ -4,4 +4,5 @@ __pycache__
 !.gitignore
 !.python-version
 !pyproject.toml
-!README.mds
+!README.md
+!uv.lock

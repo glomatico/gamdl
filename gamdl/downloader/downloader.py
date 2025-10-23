@@ -337,6 +337,9 @@ class AppleMusicDownloader:
 
     async def download(self, download_item: DownloadItem | Exception) -> None:
         try:
+            if isinstance(download_item, Exception):
+                return download_item
+
             exception = await self._download(download_item)
             await self._final_processing(download_item)
             if exception:
@@ -347,11 +350,8 @@ class AppleMusicDownloader:
 
     async def _download(
         self,
-        download_item: DownloadItem | Exception,
+        download_item: DownloadItem,
     ) -> Exception | None:
-        if isinstance(download_item, Exception):
-            return download_item
-
         if self.song_downloader.synced_lyrics_only:
             return
 

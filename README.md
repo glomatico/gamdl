@@ -9,6 +9,7 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 - 🎵 **High-Quality Songs** - Download songs in AAC 256kbps and other codecs
 - 🎬 **High-Quality Music Videos** - Download music videos in resolutions up to 4K
 - 📝 **Synced Lyrics** - Download synced lyrics in LRC, SRT, or TTML formats
+- 🏷️ **Rich Metadata** - Automatic tagging with comprehensive metadata
 - 🎤 **Artist Support** - Download all albums or music videos from an artist
 - ⚙️ **Highly Customizable** - Extensive configuration options for advanced users
 

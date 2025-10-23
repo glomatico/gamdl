@@ -337,9 +337,10 @@ class AppleMusicDownloader:
 
     async def download(self, download_item: DownloadItem | Exception) -> None:
         try:
-            await self._download(download_item)
-            if not self.base_downloader.skip_processing:
-                await self._final_processing(download_item)
+            exception = await self._download(download_item)
+            await self._final_processing(download_item)
+            if exception:
+                raise exception
         finally:
             if isinstance(download_item, DownloadItem):
                 self.base_downloader.cleanup_temp(download_item.random_uuid)
@@ -347,9 +348,10 @@ class AppleMusicDownloader:
     async def _download(
         self,
         download_item: DownloadItem | Exception,
-    ) -> None:
+    ) -> Exception | None:
         if isinstance(download_item, Exception):
-            raise download_item
+            return download_item
+
         if self.song_downloader.synced_lyrics_only:
             return
 
@@ -357,15 +359,17 @@ class AppleMusicDownloader:
             Path(download_item.final_path).exists()
             and not self.base_downloader.overwrite
         ):
-            raise FileExistsError(
+            return FileExistsError(
                 f'Media file already exists at "{download_item.final_path}"'
             )
+
         if not self.base_downloader.is_media_streamable(
             download_item.media_metadata,
         ):
-            raise MediaNotStreamableError(
+            return MediaNotStreamableError(
                 download_item.media_metadata["id"],
             )
+
         if download_item.media_metadata["type"] in {
             *SONG_MEDIA_TYPE,
             *MUSIC_VIDEO_MEDIA_TYPE,
@@ -373,7 +377,7 @@ class AppleMusicDownloader:
             not download_item.stream_info
             or not download_item.stream_info.audio_track.widevine_pssh
         ):
-            raise MediaFormatNotAvailableError(
+            return MediaFormatNotAvailableError(
                 download_item.media_metadata["id"],
             )
 
@@ -382,14 +386,14 @@ class AppleMusicDownloader:
 
         if download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
             if self.skip_music_videos or self.song_downloader.synced_lyrics_only:
-                raise MediaDownloadConfigurationError(
+                return MediaDownloadConfigurationError(
                     download_item.media_metadata["id"]
                 )
             await self.music_video_downloader.download(download_item)
 
         if download_item.media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
             if self.song_downloader.synced_lyrics_only:
-                raise MediaDownloadConfigurationError(
+                return MediaDownloadConfigurationError(
                     download_item.media_metadata["id"]
                 )
             await self.uploaded_video_downloader.download(download_item)
@@ -409,7 +413,10 @@ class AppleMusicDownloader:
                 download_item.cover_url_template,
             )
             cover_bytes = await self.base_downloader.get_cover_bytes(cover_url)
-            if cover_bytes:
+            if cover_bytes and (
+                self.base_downloader.overwrite
+                or not Path(download_item.cover_path).exists()
+            ):
                 self.base_downloader.write_cover_image(
                     cover_bytes,
                     download_item.cover_path,
@@ -419,6 +426,10 @@ class AppleMusicDownloader:
             download_item.lyrics
             and download_item.lyrics.synced
             and not self.song_downloader.no_synced_lyrics
+            and (
+                self.base_downloader.overwrite
+                or not Path(download_item.synced_lyrics_path).exists()
+            )
         ):
             self.song_downloader.write_synced_lyrics(
                 download_item.lyrics.synced,

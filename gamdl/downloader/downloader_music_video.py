@@ -14,8 +14,8 @@ class AppleMusicMusicVideoDownloader:
         self,
         downloader: AppleMusicBaseDownloader,
         codec_priority: list[MusicVideoCodec] = [
-            MusicVideoCodec.H265,
             MusicVideoCodec.H264,
+            MusicVideoCodec.H265,
         ],
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
         resolution: MusicVideoResolution = MusicVideoResolution.R1080P,

@@ -23,6 +23,7 @@ from ..downloader.enums import (
 from ..downloader.exceptions import (
     MediaFormatNotAvailableError,
     MediaNotStreamableError,
+    MediaDownloadConfigurationError,
 )
 from ..downloader.types import DownloadItem
 from ..interface.enums import (
@@ -33,6 +34,7 @@ from ..interface.enums import (
     UploadedVideoQuality,
 )
 from .config_file import ConfigFile
+from .constants import X_NOT_IN_PATH
 from .custom_logger_formatter import CustomLoggerFormatter
 
 logger = logging.getLogger(__name__)
@@ -557,6 +559,52 @@ async def main(
         uploaded_video_downloader,
     )
 
+    if not synced_lyrics_only:
+        if not base_downloader.full_ffmpeg_path and (
+            remux_mode == RemuxMode.FFMPEG or download_mode == DownloadMode.NM3U8DLRE
+        ):
+            logger.critical(X_NOT_IN_PATH.format("ffmpeg", ffmpeg_path))
+            return
+
+        if not base_downloader.full_mp4box_path and remux_mode == RemuxMode.MP4BOX:
+            logger.critical(X_NOT_IN_PATH.format("MP4Box", mp4box_path))
+            return
+
+        if (
+            not base_downloader.full_mp4decrypt_path
+            and codec_song
+            not in (
+                SongCodec.AAC_LEGACY,
+                SongCodec.AAC_HE_LEGACY,
+            )
+            or (
+                remux_mode == RemuxMode.MP4BOX
+                and not base_downloader.full_mp4decrypt_path
+            )
+        ):
+            logger.critical(X_NOT_IN_PATH.format("mp4decrypt", mp4decrypt_path))
+            return
+
+        if (
+            download_mode == DownloadMode.NM3U8DLRE
+            and not base_downloader.full_nm3u8dlre_path
+        ):
+            logger.critical(X_NOT_IN_PATH.format("N_m3u8DL-RE", nm3u8dlre_path))
+            return
+
+        if not base_downloader.full_mp4decrypt_path:
+            logger.warning(
+                X_NOT_IN_PATH.format("mp4decrypt", mp4decrypt_path)
+                + ", music videos will not be downloaded"
+            )
+            downloader.skip_music_videos = True
+
+        if not codec_song.is_legacy():
+            logger.warning(
+                "You have chosen an experimental song codec. "
+                "They're not guaranteed to work due to API limitations."
+            )
+
     if read_urls_as_txt:
         urls_from_file = []
         for url in urls:
@@ -623,6 +671,7 @@ async def main(
                 FileExistsError,
                 MediaNotStreamableError,
                 MediaFormatNotAvailableError,
+                MediaDownloadConfigurationError,
             ) as e:
                 logger.warning(
                     download_queue_progress + f' Skipping "{media_title}": {e}'

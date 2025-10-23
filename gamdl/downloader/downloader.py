@@ -18,7 +18,11 @@ from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
-from .exceptions import MediaFormatNotAvailableError, MediaNotStreamableError
+from .exceptions import (
+    MediaFormatNotAvailableError,
+    MediaNotStreamableError,
+    MediaDownloadConfigurationError,
+)
 from .types import DownloadItem, UrlInfo
 
 
@@ -29,11 +33,13 @@ class AppleMusicDownloader:
         song_downloader: AppleMusicSongDownloader,
         music_video_downloader: AppleMusicMusicVideoDownloader,
         uploaded_video_downloader: AppleMusicUploadedVideoDownloader,
+        skip_music_videos: bool = False,
     ):
         self.base_downloader = base_downloader
         self.song_downloader = song_downloader
         self.music_video_downloader = music_video_downloader
         self.uploaded_video_downloader = uploaded_video_downloader
+        self.skip_music_videos = skip_music_videos
 
     async def get_single_download_item(
         self,
@@ -373,9 +379,17 @@ class AppleMusicDownloader:
             await self.song_downloader.download(download_item)
 
         if download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
+            if self.skip_music_videos or self.song_downloader.synced_lyrics_only:
+                raise MediaDownloadConfigurationError(
+                    download_item.media_metadata["id"]
+                )
             await self.music_video_downloader.download(download_item)
 
         if download_item.media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
+            if self.song_downloader.synced_lyrics_only:
+                raise MediaDownloadConfigurationError(
+                    download_item.media_metadata["id"]
+                )
             await self.uploaded_video_downloader.download(download_item)
 
     async def _final_processing(

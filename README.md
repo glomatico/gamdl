@@ -247,26 +247,61 @@ The following variables can be used in the template folders/files and/or in the 
 
 ## Embedding
 
-Gamdl can be used as a library in Python scripts. Here's a basic example of downloading a song by its ID:
+Gamdl can be used as an async library in Python scripts. Here's a basic example of downloading a song by its URL:
 
 ```python
-from gamdl import AppleMusicApi, ItunesApi, Downloader, DownloaderSong
+import asyncio
 
-
-apple_music_api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
-itunes_api = ItunesApi(
-    storefront=apple_music_api.storefront,
-    language=apple_music_api.language,
+from gamdl.api import AppleMusicApi
+from gamdl.downloader import (
+    AppleMusicBaseDownloader,
+    AppleMusicDownloader,
+    AppleMusicMusicVideoDownloader,
+    AppleMusicSongDownloader,
+    AppleMusicUploadedVideoDownloader,
 )
 
-downloader = Downloader(
-    apple_music_api=apple_music_api,
-    itunes_api=itunes_api,
-)
-downloader.set_cdm()
-downloader_song = DownloaderSong(downloader=downloader)
 
-for download_info in downloader_song.download(media_id="1624945512"):
-    # Process download_info as needed
-    pass
+async def main():
+    # Initialize the Apple Music API
+    api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
+    await api.setup()
+
+    # Initialize the base downloader
+    base_downloader = AppleMusicBaseDownloader(apple_music_api=api)
+    base_downloader.setup()
+
+    # Initialize the song downloader
+    song_downloader = AppleMusicSongDownloader(base_downloader)
+    song_downloader.setup()
+
+    # Initialize the music video downloader
+    music_video_downloader = AppleMusicMusicVideoDownloader(base_downloader)
+    music_video_downloader.setup()
+
+    # Initialize the uploaded video downloader
+    uploaded_video_downloader = AppleMusicUploadedVideoDownloader(base_downloader)
+    uploaded_video_downloader.setup()
+
+    # Initialize the main downloader
+    downloader = AppleMusicDownloader(
+        base_downloader,
+        song_downloader,
+        music_video_downloader,
+        uploaded_video_downloader,
+    )
+
+    # Download a song by URL
+    url_info = downloader.get_url_info(
+        "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
+    )
+    if url_info:
+        download_queue = await downloader.get_download_queue(url_info)
+        if download_queue:
+            for download_item in download_queue:
+                await downloader.download(download_item)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```

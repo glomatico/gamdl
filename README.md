@@ -1,5 +1,10 @@
 # Glomatico's Apple Music Downloader
 
+[![PyPI version](https://img.shields.io/pypi/v/gamdl?color=blue)](https://pypi.org/project/gamdl/)
+[![Python versions](https://img.shields.io/pypi/pyversions/gamdl)](https://pypi.org/project/gamdl/)
+[![License](https://img.shields.io/github/license/glomatico/gamdl)](https://github.com/glomatico/gamdl/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/gamdl)](https://pypi.org/project/gamdl/)
+
 A command-line app for downloading Apple Music songs, music videos and post videos.
 
 **Join our Discord Server:** <https://discord.gg/aBjMEZ9tnq>

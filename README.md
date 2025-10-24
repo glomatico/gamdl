@@ -158,7 +158,7 @@ The file is created automatically on first run. Command-line arguments override 
 | **Music Video Options**         |                                        |                                                |
 | `--music-video-codec-priority`  | Comma-separated codec priority         | `h264,h265`                                    |
 | `--music-video-remux-format`    | Music video remux format               | `m4v`                                          |
-| `--music-video-resolution`      | Max music video resolution (see below) | `1080p`                                        |
+| `--music-video-resolution`      | Max music video resolution             | `1080p`                                        |
 | **Post Video Options**          |                                        |                                                |
 | `--uploaded-video-quality`      | Post video quality                     | `best`                                         |
 

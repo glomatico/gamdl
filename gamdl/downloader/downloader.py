@@ -240,7 +240,7 @@ class AppleMusicDownloader:
         url_info: UrlInfo,
     ) -> list[DownloadItem | Exception] | None:
         return await self._get_download_queue(
-            "song" if url_info.sub_id else url_info.type,
+            "song" if url_info.sub_id else url_info.type or url_info.library_type,
             url_info.sub_id or url_info.id or url_info.library_id,
             url_info.library_id is not None,
         )

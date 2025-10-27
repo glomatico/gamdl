@@ -114,7 +114,7 @@ uploaded_video_downloader_sig = inspect.signature(
     "--wvd-path",
     type=click.Path(file_okay=False, dir_okay=True, writable=True, resolve_path=True),
     default=base_downloader_sig.parameters["wvd_path"].default,
-    help=".wvd file executable path",
+    help=".wvd file path",
 )
 @click.option(
     "--overwrite",

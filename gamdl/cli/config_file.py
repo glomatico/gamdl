@@ -92,6 +92,21 @@ class ConfigFile:
         if has_changes:
             self._write_config_file()
 
+    def cleanup_unknown_params(
+        self,
+        params: list[click.Parameter],
+    ) -> None:
+        param_names = {param.name for param in params}
+        has_changes = False
+
+        for key in list(self.config[self.section_name].keys()):
+            if key not in param_names:
+                self.config.remove_option(self.section_name, key)
+                has_changes = True
+
+        if has_changes:
+            self._write_config_file()
+
     def parse_params_from_config(
         self,
         params: list[click.Parameter],

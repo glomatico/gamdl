@@ -118,6 +118,7 @@ def load_config_file(
         return ctx
 
     config_file = ConfigFile(ctx.params["config_path"])
+    config_file.cleanup_unknown_params(ctx.command.params)
     config_file.add_params_default_to_config(
         ctx.command.params,
     )

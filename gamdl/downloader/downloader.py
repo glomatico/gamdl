@@ -345,6 +345,9 @@ class AppleMusicDownloader:
             await self._final_processing(download_item)
         finally:
             if isinstance(download_item, DownloadItem):
+                if self.base_downloader.skip_processing:
+                    return
+
                 self.base_downloader.cleanup_temp(download_item.random_uuid)
 
     async def _download(
@@ -402,6 +405,9 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
+        if self.base_downloader.skip_processing:
+            return
+
         if download_item.cover_path and self.base_downloader.save_cover:
             cover_url = self.base_downloader.get_cover_url(
                 download_item.cover_url_template,
@@ -441,6 +447,9 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
+        if self.base_downloader.skip_processing:
+            return
+
         if download_item.staged_path and Path(download_item.staged_path).exists():
             self.base_downloader.move_to_final_path(
                 download_item.staged_path,

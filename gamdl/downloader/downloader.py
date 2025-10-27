@@ -344,10 +344,10 @@ class AppleMusicDownloader:
             await self._download(download_item)
             await self._final_processing(download_item)
         finally:
-            if isinstance(download_item, DownloadItem):
-                if self.base_downloader.skip_processing:
-                    return
-
+            if (
+                isinstance(download_item, DownloadItem)
+                and not self.base_downloader.skip_processing
+            ):
                 self.base_downloader.cleanup_temp(download_item.random_uuid)
 
     async def _download(

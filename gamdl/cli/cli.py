@@ -190,16 +190,16 @@ uploaded_video_downloader_sig = inspect.signature(
     help="Compilation folder template",
 )
 @click.option(
-    "--single-disc-folder-template",
+    "--single-disc-file-template",
     type=str,
-    default=base_downloader_sig.parameters["single_disc_folder_template"].default,
-    help="Single disc template",
+    default=base_downloader_sig.parameters["single_disc_file_template"].default,
+    help="Single disc file template",
 )
 @click.option(
-    "--multi-disc-folder-template",
+    "--multi-disc-file-template",
     type=str,
-    default=base_downloader_sig.parameters["multi_disc_folder_template"].default,
-    help="Multi disc template",
+    default=base_downloader_sig.parameters["multi_disc_file_template"].default,
+    help="Multi disc file template",
 )
 @click.option(
     "--no-album-folder-template",
@@ -217,7 +217,7 @@ uploaded_video_downloader_sig = inspect.signature(
     "--playlist-file-template",
     type=str,
     default=base_downloader_sig.parameters["playlist_file_template"].default,
-    help="Playlist template",
+    help="Playlist file template",
 )
 @click.option(
     "--date-tag-template",
@@ -327,8 +327,8 @@ async def main(
     cover_format: CoverFormat,
     album_folder_template: str,
     compilation_folder_template: str,
-    single_disc_folder_template: str,
-    multi_disc_folder_template: str,
+    single_disc_file_template: str,
+    multi_disc_file_template: str,
     no_album_folder_template: str,
     no_album_file_template: str,
     playlist_file_template: str,
@@ -397,8 +397,8 @@ async def main(
         cover_format=cover_format,
         album_folder_template=album_folder_template,
         compilation_folder_template=compilation_folder_template,
-        single_disc_folder_template=single_disc_folder_template,
-        multi_disc_folder_template=multi_disc_folder_template,
+        single_disc_file_template=single_disc_file_template,
+        multi_disc_file_template=multi_disc_file_template,
         no_album_folder_template=no_album_folder_template,
         no_album_file_template=no_album_file_template,
         playlist_file_template=playlist_file_template,

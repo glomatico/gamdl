@@ -46,8 +46,8 @@ class AppleMusicBaseDownloader:
         cover_format: CoverFormat = CoverFormat.JPG,
         album_folder_template: str = "{album_artist}/{album}",
         compilation_folder_template: str = "Compilations/{album}",
-        single_disc_folder_template: str = "{track:02d} {title}",
-        multi_disc_folder_template: str = "{disc}-{track:02d} {title}",
+        single_disc_file_template: str = "{track:02d} {title}",
+        multi_disc_file_template: str = "{disc}-{track:02d} {title}",
         no_album_folder_template: str = "{artist}/Unknown Album",
         no_album_file_template: str = "{title}",
         playlist_file_template: str = "Playlists/{playlist_artist}/{playlist_title}",
@@ -74,8 +74,8 @@ class AppleMusicBaseDownloader:
         self.cover_format = cover_format
         self.album_folder_template = album_folder_template
         self.compilation_folder_template = compilation_folder_template
-        self.single_disc_folder_template = single_disc_folder_template
-        self.multi_disc_folder_template = multi_disc_folder_template
+        self.single_disc_file_template = single_disc_file_template
+        self.multi_disc_file_template = multi_disc_file_template
         self.no_album_folder_template = no_album_folder_template
         self.no_album_file_template = no_album_file_template
         self.playlist_file_template = playlist_file_template
@@ -207,9 +207,9 @@ class AppleMusicBaseDownloader:
                 else self.album_folder_template.split("/")
             )
             template_file = (
-                self.multi_disc_folder_template.split("/")
+                self.multi_disc_file_template.split("/")
                 if tags.disc_total > 1
-                else self.single_disc_folder_template.split("/")
+                else self.single_disc_file_template.split("/")
             )
         else:
             template_folder = self.no_album_folder_template.split("/")

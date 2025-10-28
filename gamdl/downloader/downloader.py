@@ -1,9 +1,11 @@
 import asyncio
+import typing
 from pathlib import Path
 
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
+from ..interface import AppleMusicInterface
 from ..utils import safe_gather
 from .constants import (
     ALBUM_MEDIA_TYPE,
@@ -19,11 +21,10 @@ from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
 from .exceptions import (
+    MediaDownloadConfigurationError,
     MediaFormatNotAvailableError,
     MediaNotStreamableError,
-    MediaDownloadConfigurationError,
 )
-from ..interface import AppleMusicInterface
 from .types import DownloadItem, UrlInfo
 
 
@@ -37,6 +38,7 @@ class AppleMusicDownloader:
         uploaded_video_downloader: AppleMusicUploadedVideoDownloader,
         skip_music_videos: bool = False,
         skip_processing: bool = False,
+        flat_filter: typing.Callable = None,
     ):
         self.interface = interface
         self.base_downloader = base_downloader
@@ -45,8 +47,31 @@ class AppleMusicDownloader:
         self.uploaded_video_downloader = uploaded_video_downloader
         self.skip_music_videos = skip_music_videos
         self.skip_processing = skip_processing
+        self.flat_filter = flat_filter
 
     async def get_single_download_item(
+        self,
+        media_metadata: dict,
+        playlist_metadata: dict = None,
+    ) -> DownloadItem:
+        if self.flat_filter:
+            flat = self.flat_filter(media_metadata)
+            if asyncio.iscoroutine(flat):
+                flat = await flat
+
+            if flat:
+                return DownloadItem(
+                    media_metadata=media_metadata,
+                    playlist_metadata=playlist_metadata,
+                    flat=True,
+                )
+
+        return await self.get_single_download_item_no_filter(
+            media_metadata,
+            playlist_metadata,
+        )
+
+    async def get_single_download_item_no_filter(
         self,
         media_metadata: dict,
         playlist_metadata: dict = None,
@@ -340,6 +365,12 @@ class AppleMusicDownloader:
         try:
             if isinstance(download_item, Exception):
                 raise download_item
+
+            if download_item.flat:
+                download_item = await self.get_single_download_item_no_filter(
+                    download_item.media_metadata,
+                    download_item.playlist_metadata,
+                )
 
             await self._initial_processing(download_item)
             await self._download(download_item)

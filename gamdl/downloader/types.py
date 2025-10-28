@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 from ..interface.types import (
     DecryptionKeyAv,
@@ -25,7 +26,7 @@ class DownloadItem:
     playlist_file_path: str = None
     synced_lyrics_path: str = None
     cover_path: str = None
-    flat: bool = False
+    flat_filter_result: Any = None
 
 
 @dataclass

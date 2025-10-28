@@ -55,15 +55,15 @@ class AppleMusicDownloader:
         playlist_metadata: dict = None,
     ) -> DownloadItem:
         if self.flat_filter:
-            flat = self.flat_filter(media_metadata)
-            if asyncio.iscoroutine(flat):
-                flat = await flat
+            flat_filter_result = self.flat_filter(media_metadata)
+            if asyncio.iscoroutine(flat_filter_result):
+                flat_filter_result = await flat_filter_result
 
-            if flat:
+            if flat_filter_result:
                 return DownloadItem(
                     media_metadata=media_metadata,
                     playlist_metadata=playlist_metadata,
-                    flat=True,
+                    flat_filter_result=flat_filter_result,
                 )
 
         return await self.get_single_download_item_no_filter(
@@ -366,7 +366,7 @@ class AppleMusicDownloader:
             if isinstance(download_item, Exception):
                 raise download_item
 
-            if download_item.flat:
+            if download_item.flat_filter_result:
                 download_item = await self.get_single_download_item_no_filter(
                     download_item.media_metadata,
                     download_item.playlist_metadata,

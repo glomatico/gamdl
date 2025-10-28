@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 
 from .. import __version__
-from ..api import AppleMusicApi
+from ..api import AppleMusicApi, ItunesApi
 from ..downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
@@ -22,6 +22,10 @@ from ..downloader import (
     RemuxMode,
 )
 from ..interface import (
+    AppleMusicInterface,
+    AppleMusicMusicVideoInterface,
+    AppleMusicSongInterface,
+    AppleMusicUploadedVideoInterface,
     MusicVideoCodec,
     MusicVideoResolution,
     SongCodec,
@@ -362,26 +366,39 @@ async def main(
 
     logger.info(f"Starting Gamdl {__version__}")
 
-    api = AppleMusicApi.from_netscape_cookies(
+    apple_music_api = AppleMusicApi.from_netscape_cookies(
         cookies_path=cookies_path,
         language=language,
     )
-    await api.setup()
+    await apple_music_api.setup()
 
-    if not api.account_info["meta"]["subscription"]["active"]:
+    itunes_api = ItunesApi(
+        apple_music_api.storefront,
+        apple_music_api.language,
+    )
+    itunes_api.setup()
+
+    if not apple_music_api.account_info["meta"]["subscription"]["active"]:
         logger.critical(
             "No active Apple Music subscription found, you won't be able to download"
             " anything"
         )
         return
-    if api.account_info["data"][0]["attributes"].get("restrictions"):
+    if apple_music_api.account_info["data"][0]["attributes"].get("restrictions"):
         logger.warning(
             "Your account has content restrictions enabled, some content may not be"
             " downloadable"
         )
 
+    interface = AppleMusicInterface(
+        apple_music_api,
+        itunes_api,
+    )
+    song_interface = AppleMusicSongInterface(interface)
+    music_video_interface = AppleMusicMusicVideoInterface(interface)
+    uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
+
     base_downloader = AppleMusicBaseDownloader(
-        apple_music_api=api,
         output_path=output_path,
         temp_path=temp_path,
         wvd_path=wvd_path,
@@ -408,35 +425,32 @@ async def main(
         truncate=truncate,
     )
     base_downloader.setup()
-
     song_downloader = AppleMusicSongDownloader(
-        base_downloader,
+        base_downloader=base_downloader,
+        interface=song_interface,
         codec=codec_song,
         synced_lyrics_format=synced_lyrics_format,
         no_synced_lyrics=no_synced_lyrics,
         synced_lyrics_only=synced_lyrics_only,
     )
-    song_downloader.setup()
-
     music_video_downloader = AppleMusicMusicVideoDownloader(
-        base_downloader,
+        base_downloader=base_downloader,
+        interface=music_video_interface,
         codec_priority=music_video_codec_priority,
         remux_format=music_video_remux_format,
         resolution=music_video_resolution,
     )
-    music_video_downloader.setup()
-
     uploaded_video_downloader = AppleMusicUploadedVideoDownloader(
-        base_downloader,
+        base_downloader=base_downloader,
+        interface=uploaded_video_interface,
         quality=uploaded_video_quality,
     )
-    uploaded_video_downloader.setup()
-
     downloader = AppleMusicDownloader(
-        base_downloader,
-        song_downloader,
-        music_video_downloader,
-        uploaded_video_downloader,
+        interface=interface,
+        base_downloader=base_downloader,
+        song_downloader=song_downloader,
+        music_video_downloader=music_video_downloader,
+        uploaded_video_downloader=uploaded_video_downloader,
     )
 
     if not synced_lyrics_only:

@@ -16,19 +16,16 @@ from .types import DecryptionKeyAv, MediaFileFormat, MediaTags, StreamInfo, Stre
 logger = logging.getLogger(__name__)
 
 
-class AppleMusicMusicVideoInterface:
-    def __init__(
-        self,
-        interface: AppleMusicInterface,
-    ):
-        self.interface = interface
+class AppleMusicMusicVideoInterface(AppleMusicInterface):
+    def __init__(self, interface: AppleMusicInterface):
+        self.__dict__.update(interface.__dict__)
 
     async def get_itunes_page_metadata(
         self,
         music_video_metadata: dict,
     ) -> dict:
         alt_id = self.get_alt_id(music_video_metadata)
-        itunes_page = await self.interface.itunes_api.get_itunes_page(
+        itunes_page = await self.itunes_api.get_itunes_page(
             "music-video",
             alt_id,
         )
@@ -69,7 +66,7 @@ class AppleMusicMusicVideoInterface:
         self,
         collection_id: int,
     ) -> dict | None:
-        album_response = await self.interface.apple_music_api.get_album(collection_id)
+        album_response = await self.apple_music_api.get_album(collection_id)
         if not album_response:
             return None
         return album_response["data"][0]
@@ -80,9 +77,7 @@ class AppleMusicMusicVideoInterface:
         itunes_page_metadata: dict,
     ) -> MediaTags:
         alt_id = self.get_alt_id(metadata)
-        lookup_metadata = (await self.interface.itunes_api.get_lookup_result(alt_id))[
-            "results"
-        ]
+        lookup_metadata = (await self.itunes_api.get_lookup_result(alt_id))["results"]
 
         explicitness = lookup_metadata[0]["trackExplicitness"]
         if explicitness == "notExplicit":
@@ -96,11 +91,11 @@ class AppleMusicMusicVideoInterface:
             artist=lookup_metadata[0]["artistName"],
             artist_id=int(lookup_metadata[0]["artistId"]),
             copyright=itunes_page_metadata.get("copyright"),
-            date=self.interface.parse_date(lookup_metadata[0]["releaseDate"]),
+            date=self.parse_date(lookup_metadata[0]["releaseDate"]),
             genre=lookup_metadata[0]["primaryGenreName"],
             genre_id=int(itunes_page_metadata["genres"][0]["genreId"]),
             media_type=MediaType.MUSIC_VIDEO,
-            storefront=int(self.interface.itunes_api.storefront_id.split("-")[0]),
+            storefront=int(self.itunes_api.storefront_id.split("-")[0]),
             title=lookup_metadata[0]["trackCensoredName"],
             title_id=int(metadata["id"]),
             rating=rating,
@@ -137,7 +132,7 @@ class AppleMusicMusicVideoInterface:
                 itunes_page_metadata,
             )
         else:
-            webplayback_response = await self.interface.apple_music_api.get_webplayback(
+            webplayback_response = await self.apple_music_api.get_webplayback(
                 metadata["id"]
             )
             m3u8_master_url = self.get_m3u8_master_url_from_webplayback(
@@ -334,12 +329,14 @@ class AppleMusicMusicVideoInterface:
         stream_info: StreamInfoAv,
         cdm: Cdm,
     ) -> DecryptionKeyAv:
-        decryption_key_video = await self.interface.get_decryption_key(
+        decryption_key_video = await AppleMusicInterface.get_decryption_key(
+            self,
             stream_info.video_track.widevine_pssh,
             stream_info.media_id,
             cdm,
         )
-        decryption_key_audio = await self.interface.get_decryption_key(
+        decryption_key_audio = await AppleMusicInterface.get_decryption_key(
+            self,
             stream_info.audio_track.widevine_pssh,
             stream_info.media_id,
             cdm,

@@ -7,14 +7,14 @@ from ..interface.enums import UploadedVideoQuality
 from ..interface.types import MediaTags
 from .constants import UPLOADED_VIDEO_QUALITY_RANK
 from .interface import AppleMusicInterface
-from .types import StreamInfo, StreamInfoAv, MediaFileFormat
+from .types import MediaFileFormat, StreamInfo, StreamInfoAv
 
 logger = logging.getLogger(__name__)
 
 
-class AppleMusicUploadedVideoInterface:
+class AppleMusicUploadedVideoInterface(AppleMusicInterface):
     def __init__(self, interface: AppleMusicInterface):
-        self.interface = interface
+        self.__dict__.update(interface.__dict__)
 
     def get_stream_url_best(self, metadata: dict) -> str:
         best_quality = next(
@@ -76,10 +76,10 @@ class AppleMusicUploadedVideoInterface:
 
         tags = MediaTags(
             artist=attributes.get("artistName"),
-            date=self.interface.parse_date(upload_date) if upload_date else None,
+            date=self.parse_date(upload_date) if upload_date else None,
             title=attributes.get("name"),
             title_id=int(metadata["id"]),
-            storefront=int(self.interface.itunes_api.storefront_id.split("-")[0]),
+            storefront=int(self.itunes_api.storefront_id.split("-")[0]),
         )
         logger.debug(f"Tags: {tags}")
 

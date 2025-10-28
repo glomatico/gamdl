@@ -29,12 +29,9 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
-class AppleMusicSongInterface:
-    def __init__(
-        self,
-        interface: AppleMusicInterface,
-    ) -> None:
-        self.interface = interface
+class AppleMusicSongInterface(AppleMusicInterface):
+    def __init__(self, interface: AppleMusicInterface):
+        self.__dict__.update(interface.__dict__)
 
     async def get_lyrics(
         self,
@@ -49,8 +46,8 @@ class AppleMusicSongInterface:
             or "lyrics" not in song_metadata["relationships"]
         ):
             song_metadata = (
-                await self.interface.apple_music_api.get_song(
-                    self.interface.get_media_id_of_library_media(song_metadata)
+                await self.apple_music_api.get_song(
+                    self.get_media_id_of_library_media(song_metadata)
                 )
             )["data"][0]
 
@@ -194,7 +191,7 @@ class AppleMusicSongInterface:
             composer_sort=webplayback_metadata.get("sort-composer"),
             copyright=webplayback_metadata.get("copyright"),
             date=(
-                self.interface.parse_date(webplayback_metadata["releaseDate"])
+                self.parse_date(webplayback_metadata["releaseDate"])
                 if webplayback_metadata.get("releaseDate")
                 else None
             ),
@@ -416,12 +413,10 @@ class AppleMusicSongInterface:
             challenge = base64.b64encode(
                 cdm.get_license_challenge(cdm_session, pssh_obj)
             ).decode()
-            license_response = (
-                await self.interface.apple_music_api.get_license_exchange(
-                    stream_info.media_id,
-                    stream_info.audio_track.widevine_pssh,
-                    challenge,
-                )
+            license_response = await self.apple_music_api.get_license_exchange(
+                stream_info.media_id,
+                stream_info.audio_track.widevine_pssh,
+                challenge,
             )
 
             cdm.parse_license(cdm_session, license_response["license"])
@@ -448,7 +443,8 @@ class AppleMusicSongInterface:
         cdm: Cdm,
     ) -> DecryptionKeyAv:
         return DecryptionKeyAv(
-            audio_track=await self.interface.get_decryption_key(
+            audio_track=await AppleMusicInterface.get_decryption_key(
+                self,
                 stream_info.audio_track.widevine_pssh,
                 stream_info.media_id,
                 cdm,

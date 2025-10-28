@@ -175,31 +175,37 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
     def get_video_playlist_from_resolution(
         self,
         video_playlists: list[m3u8.Playlist],
-        codec: MusicVideoCodec,
+        codec_priority: list[MusicVideoCodec],
         resolution: MusicVideoResolution,
     ) -> m3u8.Playlist | None:
-        playlists_filtered = [
-            playlist
-            for playlist in video_playlists
-            if playlist.stream_info.codecs.startswith(codec.fourcc())
-        ]
-        if not playlists_filtered:
+        playlist_results = []
+        for codec_index, codec in enumerate(codec_priority):
+            for playlist in video_playlists:
+                if playlist.stream_info.codecs.startswith(codec.fourcc()):
+                    playlist_results.append((codec_index, playlist))
+
+        if not playlist_results:
             return None
 
-        def sort_key(playlist: m3u8.Playlist) -> tuple[int, int, int, int]:
+        def sort_key(
+            item: tuple[int, m3u8.Playlist],
+        ) -> tuple[bool, int, int, int, int]:
+            codec_index, playlist = item
             playlist_resolution = playlist.stream_info.resolution[-1]
-            resolution_difference = abs(playlist_resolution - int(resolution))
             bandwidth = playlist.stream_info.bandwidth
+            exceeds_resolution = playlist_resolution > int(resolution)
+            resolution_difference = abs(playlist_resolution - int(resolution))
 
             return (
+                exceeds_resolution,
                 resolution_difference,
+                codec_index,
                 -playlist_resolution,
                 -bandwidth,
             )
 
-        playlists_filtered.sort(key=sort_key)
-
-        return playlists_filtered[0]
+        playlist_results.sort(key=sort_key)
+        return playlist_results[0][1]
 
     def get_best_stereo_audio_playlist(
         self,
@@ -277,14 +283,11 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
         stream_info = StreamInfo()
 
         if MusicVideoCodec.ASK not in codec_priority:
-            for codec in codec_priority:
-                playlist = self.get_video_playlist_from_resolution(
-                    playlist_master_m3u8_obj.playlists,
-                    codec,
-                    resolution,
-                )
-                if playlist:
-                    break
+            playlist = self.get_video_playlist_from_resolution(
+                playlist_master_m3u8_obj.playlists,
+                codec_priority,
+                resolution,
+            )
         else:
             playlist = await self.get_video_playlist_from_user(
                 playlist_master_m3u8_obj.playlists

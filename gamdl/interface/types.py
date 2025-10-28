@@ -118,6 +118,8 @@ class StreamInfo:
     playready_pssh: str = None
     fairplay_key: str = None
     codec: str = None
+    width: int = None
+    height: int = None
 
 
 @dataclass

@@ -12,9 +12,6 @@ from PIL import Image
 from pywidevine import Cdm, Device
 from yt_dlp import YoutubeDL
 
-from ..api.apple_music_api import AppleMusicApi
-from ..api.itunes_api import ItunesApi
-from ..interface.interface import AppleMusicInterface
 from ..interface.types import MediaTags, PlaylistTags
 from ..utils import async_subprocess, raise_for_status
 from .constants import (
@@ -30,7 +27,6 @@ from .hardcoded_wvd import HARDCODED_WVD
 class AppleMusicBaseDownloader:
     def __init__(
         self,
-        apple_music_api: AppleMusicApi,
         output_path: str = "./Apple Music",
         temp_path: str = ".",
         wvd_path: str = None,
@@ -56,9 +52,7 @@ class AppleMusicBaseDownloader:
         cover_size: int = 1200,
         truncate: int = None,
         silent: bool = False,
-        skip_processing: bool = False,
     ):
-        self.apple_music_api = apple_music_api
         self.output_path = output_path
         self.temp_path = temp_path
         self.wvd_path = wvd_path
@@ -84,12 +78,10 @@ class AppleMusicBaseDownloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
-        self.skip_processing = skip_processing
 
     def setup(self):
         self._setup_binary_paths()
         self._setup_cdm()
-        self._setup_interface()
 
     def _setup_binary_paths(self):
         self.full_nm3u8dlre_path = shutil.which(self.nm3u8dlre_path)
@@ -103,14 +95,6 @@ class AppleMusicBaseDownloader:
         else:
             self.cdm = Cdm.from_device(Device.loads(HARDCODED_WVD))
         self.cdm.MAX_NUM_OF_SESSIONS = float("inf")
-
-    def _setup_interface(self):
-        self.itunes_api = ItunesApi(
-            self.apple_music_api.storefront,
-            self.apple_music_api.language,
-        )
-        self.itunes_api.setup()
-        self.interface = AppleMusicInterface(self.apple_music_api, self.itunes_api)
 
     def get_random_uuid(self) -> str:
         return uuid.uuid4().hex[:8]

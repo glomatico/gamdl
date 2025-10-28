@@ -10,26 +10,22 @@ from .enums import RemuxMode
 from .types import DownloadItem
 
 
-class AppleMusicSongDownloader:
+class AppleMusicSongDownloader(AppleMusicBaseDownloader):
     def __init__(
         self,
-        downloader: AppleMusicBaseDownloader,
+        base_downloader: AppleMusicBaseDownloader,
+        interface: AppleMusicSongInterface,
         codec: SongCodec = SongCodec.AAC_LEGACY,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
     ):
-        self.downloader = downloader
+        self.__dict__.update(base_downloader.__dict__)
+        self.interface = interface
         self.codec = codec
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
-
-    def setup(self):
-        self._setup_interface()
-
-    def _setup_interface(self):
-        self.song_interface = AppleMusicSongInterface(self.downloader.interface)
 
     async def get_download_item(
         self,
@@ -40,29 +36,29 @@ class AppleMusicSongDownloader:
 
         download_item.media_metadata = song_metadata
 
-        song_id = self.downloader.interface.get_media_id_of_library_media(song_metadata)
+        song_id = self.interface.get_media_id_of_library_media(song_metadata)
 
-        download_item.lyrics = await self.song_interface.get_lyrics(
+        download_item.lyrics = await self.interface.get_lyrics(
             song_metadata,
             self.synced_lyrics_format,
         )
 
-        webplayback = await self.downloader.apple_music_api.get_webplayback(song_id)
-        download_item.media_tags = self.song_interface.get_tags(
+        webplayback = await self.interface.apple_music_api.get_webplayback(song_id)
+        download_item.media_tags = self.interface.get_tags(
             webplayback,
             download_item.lyrics.unsynced if download_item.lyrics else None,
         )
 
         if playlist_metadata:
-            download_item.playlist_tags = self.downloader.get_playlist_tags(
+            download_item.playlist_tags = self.get_playlist_tags(
                 playlist_metadata,
                 song_metadata,
             )
-            download_item.playlist_file_path = self.downloader.get_playlist_file_path(
+            download_item.playlist_file_path = self.get_playlist_file_path(
                 download_item.playlist_tags,
             )
 
-        download_item.final_path = self.downloader.get_final_path(
+        download_item.final_path = self.get_final_path(
             download_item.media_tags,
             ".m4a",
             download_item.playlist_tags,
@@ -75,20 +71,18 @@ class AppleMusicSongDownloader:
             return download_item
 
         if self.codec.is_legacy():
-            download_item.stream_info = (
-                await self.song_interface.get_stream_info_legacy(
-                    webplayback,
-                    self.codec,
-                )
+            download_item.stream_info = await self.interface.get_stream_info_legacy(
+                webplayback,
+                self.codec,
             )
             download_item.decryption_key = (
-                await self.song_interface.get_decryption_key_legacy(
+                await self.interface.get_decryption_key_legacy(
                     download_item.stream_info,
-                    self.downloader.cdm,
+                    self.cdm,
                 )
             )
         else:
-            download_item.stream_info = await self.song_interface.get_stream_info(
+            download_item.stream_info = await self.interface.get_stream_info(
                 song_metadata,
                 self.codec,
             )
@@ -96,27 +90,23 @@ class AppleMusicSongDownloader:
                 download_item.stream_info
                 and download_item.stream_info.audio_track.widevine_pssh
             ):
-                download_item.decryption_key = (
-                    await self.song_interface.get_decryption_key(
-                        download_item.stream_info,
-                        self.downloader.cdm,
-                    )
+                download_item.decryption_key = await self.interface.get_decryption_key(
+                    download_item.stream_info,
+                    self.cdm,
                 )
             else:
                 download_item.decryption_key = None
 
-        download_item.cover_url_template = self.downloader.get_cover_url_template(
-            song_metadata
-        )
+        download_item.cover_url_template = self.get_cover_url_template(song_metadata)
 
-        download_item.random_uuid = self.downloader.get_random_uuid()
-        download_item.staged_path = self.downloader.get_temp_path(
+        download_item.random_uuid = self.get_random_uuid()
+        download_item.staged_path = self.get_temp_path(
             song_id,
             download_item.random_uuid,
             "staged",
             "." + download_item.stream_info.file_format.value,
         )
-        cover_file_extension = await self.downloader.get_cover_file_extension(
+        cover_file_extension = await self.get_cover_file_extension(
             download_item.cover_url_template,
         )
         if cover_file_extension:
@@ -143,7 +133,7 @@ class AppleMusicSongDownloader:
 
     async def remux_mp4box(self, input_path: str, output_path: str):
         await async_subprocess(
-            self.downloader.full_mp4box_path,
+            self.full_mp4box_path,
             "-quiet",
             "-add",
             input_path,
@@ -152,7 +142,7 @@ class AppleMusicSongDownloader:
             "-keep-utc",
             "-new",
             output_path,
-            silent=self.downloader.silent,
+            silent=self.silent,
         )
 
     async def remux_ffmpeg(
@@ -170,7 +160,7 @@ class AppleMusicSongDownloader:
             key = []
 
         await async_subprocess(
-            self.downloader.full_ffmpeg_path,
+            self.full_ffmpeg_path,
             "-loglevel",
             "error",
             "-y",
@@ -182,7 +172,7 @@ class AppleMusicSongDownloader:
             "-movflags",
             "+faststart",
             output_path,
-            silent=self.downloader.silent,
+            silent=self.silent,
         )
 
     async def decrypt_mp4decrypt(
@@ -207,11 +197,11 @@ class AppleMusicSongDownloader:
             ]
 
         await async_subprocess(
-            self.downloader.full_mp4decrypt_path,
+            self.full_mp4decrypt_path,
             *keys,
             input_path,
             output_path,
-            silent=self.downloader.silent,
+            silent=self.silent,
         )
 
     async def stage(
@@ -222,7 +212,7 @@ class AppleMusicSongDownloader:
         decryption_key: DecryptionKeyAv,
         codec: SongCodec,
     ):
-        if codec.is_legacy() and self.downloader.remux_mode == RemuxMode.FFMPEG:
+        if codec.is_legacy() and self.remux_mode == RemuxMode.FFMPEG:
             await self.remux_ffmpeg(
                 encrypted_path,
                 staged_path,
@@ -235,7 +225,7 @@ class AppleMusicSongDownloader:
                 decryption_key.audio_track.key,
                 codec.is_legacy(),
             )
-            if self.downloader.remux_mode == RemuxMode.FFMPEG:
+            if self.remux_mode == RemuxMode.FFMPEG:
                 await self.remux_ffmpeg(
                     decrypted_path,
                     staged_path,
@@ -271,18 +261,18 @@ class AppleMusicSongDownloader:
         if self.synced_lyrics_only:
             return
 
-        encrypted_path = self.downloader.get_temp_path(
+        encrypted_path = self.get_temp_path(
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "encrypted",
             ".m4a",
         )
-        await self.downloader.download_stream(
+        await self.download_stream(
             download_item.stream_info.audio_track.stream_url,
             encrypted_path,
         )
 
-        decrypted_path = self.downloader.get_temp_path(
+        decrypted_path = self.get_temp_path(
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "decrypted",
@@ -296,7 +286,7 @@ class AppleMusicSongDownloader:
             self.codec,
         )
 
-        await self.downloader.apply_tags(
+        await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
             download_item.cover_url_template,

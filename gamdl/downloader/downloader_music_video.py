@@ -9,10 +9,11 @@ from .enums import RemuxFormatMusicVideo, RemuxMode
 from .types import DownloadItem
 
 
-class AppleMusicMusicVideoDownloader:
+class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
     def __init__(
         self,
-        downloader: AppleMusicBaseDownloader,
+        base_downloader: AppleMusicBaseDownloader,
+        interface: AppleMusicMusicVideoInterface,
         codec_priority: list[MusicVideoCodec] = [
             MusicVideoCodec.H264,
             MusicVideoCodec.H265,
@@ -20,18 +21,11 @@ class AppleMusicMusicVideoDownloader:
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
         resolution: MusicVideoResolution = MusicVideoResolution.R1080P,
     ):
-        self.downloader = downloader
+        self.__dict__.update(base_downloader.__dict__)
+        self.interface = interface
         self.codec_priority = codec_priority
         self.remux_format = remux_format
         self.resolution = resolution
-
-    def setup(self):
-        self._setup_interface()
-
-    def _setup_interface(self):
-        self.music_video_interface = AppleMusicMusicVideoInterface(
-            self.downloader.interface,
-        )
 
     async def remux_mp4box(
         self,
@@ -40,7 +34,7 @@ class AppleMusicMusicVideoDownloader:
         output_path: str,
     ):
         await async_subprocess(
-            self.downloader.full_mp4box_path,
+            self.full_mp4box_path,
             "-quiet",
             "-add",
             input_path_audio,
@@ -51,7 +45,7 @@ class AppleMusicMusicVideoDownloader:
             "-keep-utc",
             "-new",
             output_path,
-            silent=self.downloader.silent,
+            silent=self.silent,
         )
 
     async def remux_ffmpeg(
@@ -70,7 +64,7 @@ class AppleMusicMusicVideoDownloader:
             key = []
 
         await async_subprocess(
-            self.downloader.full_ffmpeg_path,
+            self.full_ffmpeg_path,
             "-loglevel",
             "error",
             "-y",
@@ -86,7 +80,7 @@ class AppleMusicMusicVideoDownloader:
             "-movflags",
             "+faststart",
             output_path,
-            silent=self.downloader.silent,
+            silent=self.silent,
         )
 
     async def decrypt_mp4decrypt(
@@ -96,12 +90,12 @@ class AppleMusicMusicVideoDownloader:
         decryption_key: str,
     ):
         await async_subprocess(
-            self.downloader.full_mp4decrypt_path,
+            self.full_mp4decrypt_path,
             "--key",
             f"1:{decryption_key}",
             input_path,
             output_path,
-            silent=self.downloader.silent,
+            silent=self.silent,
         )
 
     async def stage(
@@ -124,7 +118,7 @@ class AppleMusicMusicVideoDownloader:
             decryption_key.audio_track.key,
         )
 
-        if self.downloader.remux_mode == RemuxMode.MP4BOX:
+        if self.remux_mode == RemuxMode.MP4BOX:
             await self.remux_mp4box(
                 decrypted_path_video,
                 decrypted_path_audio,
@@ -153,30 +147,28 @@ class AppleMusicMusicVideoDownloader:
 
         download_item.media_metadata = music_video_metadata
 
-        music_video_id = self.downloader.interface.get_media_id_of_library_media(
+        music_video_id = self.interface.get_media_id_of_library_media(
             music_video_metadata,
         )
 
-        itunes_page_metadata = (
-            await self.music_video_interface.get_itunes_page_metadata(
-                music_video_metadata,
-            )
+        itunes_page_metadata = await self.interface.get_itunes_page_metadata(
+            music_video_metadata,
         )
-        download_item.media_tags = await self.music_video_interface.get_tags(
+        download_item.media_tags = await self.interface.get_tags(
             music_video_metadata,
             itunes_page_metadata,
         )
 
         if playlist_metadata:
-            download_item.playlist_tags = self.downloader.get_playlist_tags(
+            download_item.playlist_tags = self.get_playlist_tags(
                 playlist_metadata,
                 music_video_metadata,
             )
-            download_item.playlist_file_path = self.downloader.get_playlist_file_path(
+            download_item.playlist_file_path = self.get_playlist_file_path(
                 download_item.playlist_tags,
             )
 
-        stream_info = await self.music_video_interface.get_stream_info(
+        stream_info = await self.interface.get_stream_info(
             music_video_metadata,
             itunes_page_metadata,
             self.codec_priority,
@@ -184,14 +176,14 @@ class AppleMusicMusicVideoDownloader:
         )
         download_item.stream_info = stream_info
 
-        decryption_key = await self.music_video_interface.get_decryption_key(
+        decryption_key = await self.interface.get_decryption_key(
             stream_info,
-            self.downloader.cdm,
+            self.cdm,
         )
         download_item.decryption_key = decryption_key
 
-        download_item.random_uuid = self.downloader.get_random_uuid()
-        download_item.staged_path = self.downloader.get_temp_path(
+        download_item.random_uuid = self.get_random_uuid()
+        download_item.staged_path = self.get_temp_path(
             music_video_id,
             download_item.random_uuid,
             "staged",
@@ -204,16 +196,16 @@ class AppleMusicMusicVideoDownloader:
                 )
             ),
         )
-        download_item.final_path = self.downloader.get_final_path(
+        download_item.final_path = self.get_final_path(
             download_item.media_tags,
             Path(download_item.staged_path).suffix,
             playlist_metadata,
         )
 
-        download_item.cover_url_template = self.downloader.get_cover_url_template(
+        download_item.cover_url_template = self.get_cover_url_template(
             music_video_metadata,
         )
-        cover_file_extension = await self.downloader.get_cover_file_extension(
+        cover_file_extension = await self.get_cover_file_extension(
             download_item.cover_url_template,
         )
         if cover_file_extension:
@@ -228,35 +220,35 @@ class AppleMusicMusicVideoDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        encrypted_path_video = self.downloader.get_temp_path(
+        encrypted_path_video = self.get_temp_path(
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "encrypted_video",
             ".mp4",
         )
-        encrypted_path_audio = self.downloader.get_temp_path(
+        encrypted_path_audio = self.get_temp_path(
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "encrypted_audio",
             ".m4a",
         )
 
-        await self.downloader.download_stream(
+        await self.download_stream(
             download_item.stream_info.video_track.stream_url,
             encrypted_path_video,
         )
-        await self.downloader.download_stream(
+        await self.download_stream(
             download_item.stream_info.audio_track.stream_url,
             encrypted_path_audio,
         )
 
-        decrypted_path_video = self.downloader.get_temp_path(
+        decrypted_path_video = self.get_temp_path(
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "decrypted_video",
             ".mp4",
         )
-        decrypted_path_audio = self.downloader.get_temp_path(
+        decrypted_path_audio = self.get_temp_path(
             download_item.media_metadata["id"],
             download_item.random_uuid,
             "decrypted_audio",
@@ -272,7 +264,7 @@ class AppleMusicMusicVideoDownloader:
             download_item.decryption_key,
         )
 
-        await self.downloader.apply_tags(
+        await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
             download_item.cover_url_template,

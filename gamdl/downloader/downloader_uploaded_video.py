@@ -6,22 +6,16 @@ from .downloader_base import AppleMusicBaseDownloader
 from .types import DownloadItem
 
 
-class AppleMusicUploadedVideoDownloader:
+class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
     def __init__(
         self,
-        downloader: AppleMusicBaseDownloader,
+        base_downloader: AppleMusicBaseDownloader,
+        interface: AppleMusicUploadedVideoInterface,
         quality: UploadedVideoQuality = UploadedVideoQuality.BEST,
     ):
-        self.downloader = downloader
+        self.__dict__.update(base_downloader.__dict__)
+        self.interface = interface
         self.quality = quality
-
-    def setup(self):
-        self._setup_interface()
-
-    def _setup_interface(self):
-        self.uploaded_video_interface = AppleMusicUploadedVideoInterface(
-            self.downloader.interface,
-        )
 
     def get_cover_path(self, final_path: str, file_extension: str) -> str:
         return str(Path(final_path).with_suffix(file_extension))
@@ -34,32 +28,32 @@ class AppleMusicUploadedVideoDownloader:
 
         download_item.media_metadata = uploaded_video_metadata
 
-        download_item.media_tags = self.uploaded_video_interface.get_tags(
+        download_item.media_tags = self.interface.get_tags(
             uploaded_video_metadata,
         )
 
-        download_item.stream_info = await self.uploaded_video_interface.get_stream_info(
+        download_item.stream_info = await self.interface.get_stream_info(
             uploaded_video_metadata,
             self.quality,
         )
 
-        download_item.random_uuid = self.downloader.get_random_uuid()
-        download_item.staged_path = self.downloader.get_temp_path(
+        download_item.random_uuid = self.get_random_uuid()
+        download_item.staged_path = self.get_temp_path(
             uploaded_video_metadata["id"],
             download_item.random_uuid,
             "staged",
             "." + download_item.stream_info.file_format.value,
         )
-        download_item.final_path = self.downloader.get_final_path(
+        download_item.final_path = self.get_final_path(
             download_item.media_tags,
             Path(download_item.staged_path).suffix,
             None,
         )
 
-        download_item.cover_url_template = self.downloader.get_cover_url_template(
+        download_item.cover_url_template = self.get_cover_url_template(
             uploaded_video_metadata,
         )
-        cover_file_extension = await self.downloader.get_cover_file_extension(
+        cover_file_extension = await self.get_cover_file_extension(
             download_item.cover_url_template,
         )
         if cover_file_extension:
@@ -74,11 +68,11 @@ class AppleMusicUploadedVideoDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        await self.downloader.download_ytdlp(
+        await self.download_ytdlp(
             download_item.stream_info.video_track.stream_url,
             download_item.staged_path,
         )
-        await self.downloader.apply_tags(
+        await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
             download_item.cover_url_template,

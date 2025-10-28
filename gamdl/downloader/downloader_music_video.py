@@ -146,6 +146,7 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
         download_item = DownloadItem()
 
         download_item.media_metadata = music_video_metadata
+        download_item.playlist_metadata = playlist_metadata
 
         music_video_id = self.interface.get_media_id_of_library_media(
             music_video_metadata,

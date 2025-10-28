@@ -35,6 +35,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         download_item = DownloadItem()
 
         download_item.media_metadata = song_metadata
+        download_item.playlist_metadata = playlist_metadata
 
         song_id = self.interface.get_media_id_of_library_media(song_metadata)
 

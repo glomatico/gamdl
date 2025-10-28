@@ -295,6 +295,7 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
 
         stream_info.stream_url = playlist.uri
         stream_info.codec = playlist.stream_info.codecs
+        stream_info.width, stream_info.height = playlist.stream_info.resolution
 
         playlist_m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
         stream_info.widevine_pssh = self.get_pssh(playlist_m3u8_obj)

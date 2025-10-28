@@ -23,23 +23,28 @@ from .exceptions import (
     MediaNotStreamableError,
     MediaDownloadConfigurationError,
 )
+from ..interface import AppleMusicInterface
 from .types import DownloadItem, UrlInfo
 
 
 class AppleMusicDownloader:
     def __init__(
         self,
+        interface: AppleMusicInterface,
         base_downloader: AppleMusicBaseDownloader,
         song_downloader: AppleMusicSongDownloader,
         music_video_downloader: AppleMusicMusicVideoDownloader,
         uploaded_video_downloader: AppleMusicUploadedVideoDownloader,
         skip_music_videos: bool = False,
+        skip_processing: bool = False,
     ):
+        self.interface = interface
         self.base_downloader = base_downloader
         self.song_downloader = song_downloader
         self.music_video_downloader = music_video_downloader
         self.uploaded_video_downloader = uploaded_video_downloader
         self.skip_music_videos = skip_music_videos
+        self.skip_processing = skip_processing
 
     async def get_single_download_item(
         self,
@@ -74,7 +79,7 @@ class AppleMusicDownloader:
         collection_metadata["relationships"]["tracks"]["data"].extend(
             [
                 extended_data
-                async for extended_data in self.base_downloader.apple_music_api.extend_api_data(
+                async for extended_data in self.interface.apple_music_api.extend_api_data(
                     collection_metadata["relationships"]["tracks"],
                 )
             ]
@@ -105,7 +110,7 @@ class AppleMusicDownloader:
             artist_metadata["relationships"][relationship]["data"].extend(
                 [
                     extended_data
-                    async for extended_data in self.base_downloader.apple_music_api.extend_api_data(
+                    async for extended_data in self.interface.apple_music_api.extend_api_data(
                         artist_metadata["relationships"][relationship],
                     )
                 ]
@@ -166,7 +171,7 @@ class AppleMusicDownloader:
 
         album_tasks = [
             asyncio.create_task(
-                self.base_downloader.apple_music_api.get_album(album_metadata["id"])
+                self.interface.apple_music_api.get_album(album_metadata["id"])
             )
             for album_metadata in selected
         ]
@@ -254,7 +259,7 @@ class AppleMusicDownloader:
         download_items = []
 
         if url_type in ARTIST_MEDIA_TYPE:
-            artist_response = await self.base_downloader.apple_music_api.get_artist(
+            artist_response = await self.interface.apple_music_api.get_artist(
                 id,
             )
 
@@ -266,7 +271,7 @@ class AppleMusicDownloader:
             )
 
         if url_type in SONG_MEDIA_TYPE:
-            song_respose = await self.base_downloader.apple_music_api.get_song(id)
+            song_respose = await self.interface.apple_music_api.get_song(id)
 
             if song_respose is None:
                 return None
@@ -277,13 +282,11 @@ class AppleMusicDownloader:
 
         if url_type in ALBUM_MEDIA_TYPE:
             if is_library:
-                album_response = (
-                    await self.base_downloader.apple_music_api.get_library_album(id)
-                )
-            else:
-                album_response = await self.base_downloader.apple_music_api.get_album(
+                album_response = await self.interface.apple_music_api.get_library_album(
                     id
                 )
+            else:
+                album_response = await self.interface.apple_music_api.get_album(id)
 
             if album_response is None:
                 return None
@@ -295,11 +298,11 @@ class AppleMusicDownloader:
         if url_type in PLAYLIST_MEDIA_TYPE:
             if is_library:
                 playlist_response = (
-                    await self.base_downloader.apple_music_api.get_library_playlist(id)
+                    await self.interface.apple_music_api.get_library_playlist(id)
                 )
             else:
-                playlist_response = (
-                    await self.base_downloader.apple_music_api.get_playlist(id)
+                playlist_response = await self.interface.apple_music_api.get_playlist(
+                    id
                 )
 
             if playlist_response is None:
@@ -310,8 +313,8 @@ class AppleMusicDownloader:
             )
 
         if url_type in MUSIC_VIDEO_MEDIA_TYPE:
-            music_video_response = (
-                await self.base_downloader.apple_music_api.get_music_video(id)
+            music_video_response = await self.interface.apple_music_api.get_music_video(
+                id
             )
 
             if music_video_response is None:
@@ -322,9 +325,7 @@ class AppleMusicDownloader:
             )
 
         if url_type in UPLOADED_VIDEO_MEDIA_TYPE:
-            uploaded_video = (
-                await self.base_downloader.apple_music_api.get_uploaded_video(id)
-            )
+            uploaded_video = await self.interface.apple_music_api.get_uploaded_video(id)
 
             if uploaded_video is None:
                 return None
@@ -344,10 +345,7 @@ class AppleMusicDownloader:
             await self._download(download_item)
             await self._final_processing(download_item)
         finally:
-            if (
-                isinstance(download_item, DownloadItem)
-                and not self.base_downloader.skip_processing
-            ):
+            if isinstance(download_item, DownloadItem) and not self.skip_processing:
                 self.base_downloader.cleanup_temp(download_item.random_uuid)
 
     async def _download(
@@ -405,7 +403,7 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        if self.base_downloader.skip_processing:
+        if self.skip_processing:
             return
 
         if download_item.cover_path and self.base_downloader.save_cover:
@@ -447,7 +445,7 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        if self.base_downloader.skip_processing:
+        if self.skip_processing:
             return
 
         if download_item.staged_path and Path(download_item.staged_path).exists():

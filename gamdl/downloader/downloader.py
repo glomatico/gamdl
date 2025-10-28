@@ -361,7 +361,10 @@ class AppleMusicDownloader:
 
         return download_items
 
-    async def download(self, download_item: DownloadItem | Exception) -> None:
+    async def download(
+        self,
+        download_item: DownloadItem | Exception,
+    ) -> DownloadItem:
         try:
             if isinstance(download_item, Exception):
                 raise download_item
@@ -375,6 +378,8 @@ class AppleMusicDownloader:
             await self._initial_processing(download_item)
             await self._download(download_item)
             await self._final_processing(download_item)
+
+            return download_item
         finally:
             if isinstance(download_item, DownloadItem) and not self.skip_processing:
                 self.base_downloader.cleanup_temp(download_item.random_uuid)

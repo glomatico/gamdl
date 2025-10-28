@@ -12,6 +12,7 @@ from ..interface.types import (
 @dataclass
 class DownloadItem:
     media_metadata: dict = None
+    playlist_metadata: dict = None
     random_uuid: str = None
     lyrics: Lyrics = None
     media_tags: MediaTags = None
@@ -24,6 +25,7 @@ class DownloadItem:
     playlist_file_path: str = None
     synced_lyrics_path: str = None
     cover_path: str = None
+    flat: bool = False
 
 
 @dataclass

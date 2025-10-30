@@ -32,6 +32,23 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         song_metadata: dict,
         playlist_metadata: dict = None,
     ) -> DownloadItem:
+        try:
+            return await self._get_download_item(
+                song_metadata,
+                playlist_metadata,
+            )
+        except Exception as e:
+            return DownloadItem(
+                media_metadata=song_metadata,
+                playlist_metadata=playlist_metadata,
+                error=e,
+            )
+
+    async def _get_download_item(
+        self,
+        song_metadata: dict,
+        playlist_metadata: dict = None,
+    ) -> DownloadItem:
         download_item = DownloadItem()
 
         download_item.media_metadata = song_metadata

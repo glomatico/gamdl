@@ -143,6 +143,23 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
         music_video_metadata: dict,
         playlist_metadata: dict = None,
     ) -> DownloadItem:
+        try:
+            return await self._get_download_item(
+                music_video_metadata,
+                playlist_metadata,
+            )
+        except Exception as e:
+            return DownloadItem(
+                media_metadata=music_video_metadata,
+                playlist_metadata=playlist_metadata,
+                error=e,
+            )
+
+    async def _get_download_item(
+        self,
+        music_video_metadata: dict,
+        playlist_metadata: dict = None,
+    ) -> DownloadItem:
         download_item = DownloadItem()
 
         download_item.media_metadata = music_video_metadata
@@ -169,19 +186,17 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
                 download_item.playlist_tags,
             )
 
-        stream_info = await self.interface.get_stream_info(
+        download_item.stream_info = await self.interface.get_stream_info(
             music_video_metadata,
             itunes_page_metadata,
             self.codec_priority,
             self.resolution,
         )
-        download_item.stream_info = stream_info
 
-        decryption_key = await self.interface.get_decryption_key(
-            stream_info,
+        download_item.decryption_key = await self.interface.get_decryption_key(
+            download_item.stream_info,
             self.cdm,
         )
-        download_item.decryption_key = decryption_key
 
         download_item.random_uuid = self.get_random_uuid()
         download_item.staged_path = self.get_temp_path(

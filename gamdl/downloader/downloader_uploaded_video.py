@@ -24,6 +24,20 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
         self,
         uploaded_video_metadata: dict,
     ) -> DownloadItem:
+        try:
+            return await self._get_download_item(
+                uploaded_video_metadata,
+            )
+        except Exception as e:
+            return DownloadItem(
+                media_metadata=uploaded_video_metadata,
+                error=e,
+            )
+
+    async def _get_download_item(
+        self,
+        uploaded_video_metadata: dict,
+    ) -> DownloadItem:
         download_item = DownloadItem()
 
         download_item.media_metadata = uploaded_video_metadata

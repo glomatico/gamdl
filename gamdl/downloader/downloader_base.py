@@ -327,15 +327,43 @@ class AppleMusicBaseDownloader:
             }
         )
         mp4_tags = filtered_tags.as_mp4_tags(self.date_tag_template)
+
+        cover_url = self.get_cover_url(cover_url_template)
+        cover_bytes = await self.get_cover_bytes(cover_url)
+
         skip_tagging = "all" in exclude_tags
 
+        await asyncio.to_thread(
+            self.apply_mp4_tags,
+            media_path,
+            mp4_tags,
+            cover_bytes,
+            skip_tagging,
+        )
+
+    def apply_mp4_tags(
+        self,
+        media_path: Path,
+        tags: dict,
+        cover_bytes: bytes | None,
+        skip_tagging: bool,
+    ):
         mp4 = MP4(media_path)
         mp4.clear()
 
         if not skip_tagging:
-            if "cover" not in exclude_tags and self.cover_format != CoverFormat.RAW:
-                await self._apply_cover(mp4, cover_url_template)
-            mp4.update(mp4_tags)
+            if cover_bytes is not None:
+                mp4["covr"] = [
+                    MP4Cover(
+                        data=cover_bytes,
+                        imageformat=(
+                            MP4Cover.FORMAT_JPEG
+                            if self.cover_format == CoverFormat.JPG
+                            else MP4Cover.FORMAT_PNG
+                        ),
+                    )
+                ]
+            mp4.update(tags)
 
         mp4.save()
 

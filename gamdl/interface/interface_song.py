@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import datetime
 import json
@@ -411,7 +412,9 @@ class AppleMusicSongInterface(AppleMusicInterface):
             pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
 
             challenge = base64.b64encode(
-                cdm.get_license_challenge(cdm_session, pssh_obj)
+                await asyncio.to_thread(
+                    cdm.get_license_challenge, cdm_session, pssh_obj
+                )
             ).decode()
             license_response = await self.apple_music_api.get_license_exchange(
                 stream_info.media_id,
@@ -419,7 +422,9 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 challenge,
             )
 
-            cdm.parse_license(cdm_session, license_response["license"])
+            await asyncio.to_thread(
+                cdm.parse_license, cdm_session, license_response["license"]
+            )
 
             decryption_key = next(
                 i for i in cdm.get_keys(cdm_session) if i.type == "CONTENT"

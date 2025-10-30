@@ -42,7 +42,9 @@ class AppleMusicInterface:
             pssh_obj = PSSH(track_uri.split(",")[-1])
 
             challenge = base64.b64encode(
-                cdm.get_license_challenge(cdm_session, pssh_obj)
+                await asyncio.to_thread(
+                    cdm.get_license_challenge, cdm_session, pssh_obj
+                )
             ).decode()
             license = await self.apple_music_api.get_license_exchange(
                 track_id,

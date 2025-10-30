@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import datetime
 import logging
@@ -49,7 +50,7 @@ class AppleMusicInterface:
                 challenge,
             )
 
-            cdm.parse_license(cdm_session, license["license"])
+            await asyncio.to_thread(cdm.parse_license, cdm_session, license["license"])
             decryption_key_info = next(
                 i for i in cdm.get_keys(cdm_session) if i.type == "CONTENT"
             )

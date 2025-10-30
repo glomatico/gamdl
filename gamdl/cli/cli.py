@@ -16,8 +16,8 @@ from ..downloader import (
     DownloadItem,
     DownloadMode,
     MediaDownloadConfigurationError,
-    MediaFormatNotAvailableError,
-    MediaNotStreamableError,
+    GamdlFormatNotAvailableError,
+    GamdlNotStreamableError,
     RemuxFormatMusicVideo,
     RemuxMode,
 )
@@ -566,8 +566,8 @@ async def main(
                 await downloader.download(download_item)
             except (
                 FileExistsError,
-                MediaNotStreamableError,
-                MediaFormatNotAvailableError,
+                GamdlNotStreamableError,
+                GamdlFormatNotAvailableError,
                 MediaDownloadConfigurationError,
             ) as e:
                 logger.warning(

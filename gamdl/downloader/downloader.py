@@ -20,10 +20,12 @@ from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
+from .enums import DownloadMode, RemuxMode
 from .exceptions import (
-    MediaDownloadConfigurationError,
-    MediaFormatNotAvailableError,
-    MediaNotStreamableError,
+    GamdlBinaryNotFoundError,
+    GamdlFormatNotAvailableError,
+    GamdlNotStreamableError,
+    GamdlSyncedLyricsOnlyError,
 )
 from .types import DownloadItem, UrlInfo
 
@@ -366,9 +368,6 @@ class AppleMusicDownloader:
         download_item: DownloadItem,
     ) -> DownloadItem:
         try:
-            if download_item.error:
-                raise download_item.error
-
             if download_item.flat_filter_result:
                 download_item = await self.get_single_download_item_no_filter(
                     download_item.media_metadata,
@@ -388,28 +387,22 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
+        if download_item.error:
+            raise download_item.error
+
         if (
             self.song_downloader.synced_lyrics_only
             and download_item.media_metadata["type"] not in SONG_MEDIA_TYPE
-        ) or (
-            self.skip_music_videos
-            and download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
         ):
-            raise MediaDownloadConfigurationError(download_item.media_metadata["id"])
+            raise GamdlSyncedLyricsOnlyError()
 
         if self.song_downloader.synced_lyrics_only:
             return
 
-        if download_item.media_metadata["type"] in {
-            *SONG_MEDIA_TYPE,
-            *MUSIC_VIDEO_MEDIA_TYPE,
-        } and (
-            not download_item.stream_info
-            or not download_item.stream_info.audio_track.widevine_pssh
+        if not self.base_downloader.is_media_streamable(
+            download_item.media_metadata,
         ):
-            raise MediaFormatNotAvailableError(
-                download_item.media_metadata["id"],
-            )
+            raise GamdlNotStreamableError()
 
         if (
             Path(download_item.final_path).exists()
@@ -419,12 +412,39 @@ class AppleMusicDownloader:
                 f'Media file already exists at "{download_item.final_path}"'
             )
 
-        if not self.base_downloader.is_media_streamable(
-            download_item.media_metadata,
-        ):
-            raise MediaNotStreamableError(
-                download_item.media_metadata["id"],
-            )
+        if download_item.media_metadata["type"] in {
+            *SONG_MEDIA_TYPE,
+            *MUSIC_VIDEO_MEDIA_TYPE,
+        }:
+            if (
+                self.base_downloader.remux_mode == RemuxMode.FFMPEG
+                and not self.base_downloader.full_ffmpeg_path
+            ):
+                raise GamdlBinaryNotFoundError("ffmpeg")
+
+            if (
+                self.base_downloader.remux_mode == RemuxMode.MP4BOX
+                and not self.base_downloader.full_mp4box_path
+            ):
+                raise GamdlBinaryNotFoundError("MP4Box")
+
+            if (
+                download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+                or self.base_downloader.remux_mode == RemuxMode.MP4BOX
+            ) and not self.base_downloader.full_mp4decrypt_path:
+                raise GamdlBinaryNotFoundError("mp4decrypt")
+
+            if (
+                self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
+                and not self.base_downloader.full_nm3u8dlre_path
+            ):
+                raise GamdlBinaryNotFoundError("N_m3u8DL-RE")
+
+            if (
+                not download_item.stream_info
+                or not download_item.stream_info.audio_track.widevine_pssh
+            ):
+                raise GamdlFormatNotAvailableError()
 
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
             await self.song_downloader.download(download_item)

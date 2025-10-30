@@ -100,7 +100,7 @@ class AppleMusicDownloader:
     async def get_collection_download_items(
         self,
         collection_metadata: dict,
-    ) -> list[DownloadItem | Exception]:
+    ) -> list[DownloadItem]:
         collection_metadata["relationships"]["tracks"]["data"].extend(
             [
                 extended_data
@@ -130,7 +130,7 @@ class AppleMusicDownloader:
     async def get_artist_download_items(
         self,
         artist_metadata: dict,
-    ) -> list[DownloadItem | Exception]:
+    ) -> list[DownloadItem]:
         for relationship in artist_metadata["relationships"].keys():
             artist_metadata["relationships"][relationship]["data"].extend(
                 [
@@ -171,7 +171,7 @@ class AppleMusicDownloader:
     async def get_artist_albums_download_items(
         self,
         albums_metadata: list[dict],
-    ) -> list[DownloadItem | Exception]:
+    ) -> list[DownloadItem]:
         choices = [
             Choice(
                 name=" | ".join(
@@ -218,7 +218,7 @@ class AppleMusicDownloader:
     async def get_artist_music_videos_download_items(
         self,
         music_videos_metadata: list[dict],
-    ) -> list[DownloadItem | Exception]:
+    ) -> list[DownloadItem]:
         choices = [
             Choice(
                 name=" | ".join(
@@ -268,7 +268,7 @@ class AppleMusicDownloader:
     async def get_download_queue(
         self,
         url_info: UrlInfo,
-    ) -> list[DownloadItem | Exception] | None:
+    ) -> list[DownloadItem] | None:
         return await self._get_download_queue(
             "song" if url_info.sub_id else url_info.type or url_info.library_type,
             url_info.sub_id or url_info.id or url_info.library_id,
@@ -280,7 +280,7 @@ class AppleMusicDownloader:
         url_type: str,
         id: str,
         is_library: bool,
-    ) -> list[DownloadItem | Exception] | None:
+    ) -> list[DownloadItem] | None:
         download_items = []
 
         if url_type in ARTIST_MEDIA_TYPE:
@@ -363,11 +363,11 @@ class AppleMusicDownloader:
 
     async def download(
         self,
-        download_item: DownloadItem | Exception,
+        download_item: DownloadItem,
     ) -> DownloadItem:
         try:
-            if isinstance(download_item, Exception):
-                raise download_item
+            if download_item.error:
+                raise download_item.error
 
             if download_item.flat_filter_result:
                 download_item = await self.get_single_download_item_no_filter(

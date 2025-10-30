@@ -8,9 +8,9 @@ class GamdlFormatNotAvailableError(Exception):
         super().__init__("Media is not available in the requested format")
 
 
-class GamdlBinaryNotFoundError(Exception):
-    def __init__(self, binary: str):
-        super().__init__(f"{binary} was not found in system PATH")
+class GamdlExecutableNotFoundError(Exception):
+    def __init__(self, executable: str):
+        super().__init__(f"{executable} was not found in system PATH")
 
 
 class GamdlSyncedLyricsOnlyError(Exception):

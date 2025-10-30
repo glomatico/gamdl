@@ -22,7 +22,7 @@ from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
 from .enums import DownloadMode, RemuxMode
 from .exceptions import (
-    GamdlBinaryNotFoundError,
+    GamdlExecutableNotFoundError,
     GamdlFormatNotAvailableError,
     GamdlNotStreamableError,
     GamdlSyncedLyricsOnlyError,
@@ -420,25 +420,25 @@ class AppleMusicDownloader:
                 self.base_downloader.remux_mode == RemuxMode.FFMPEG
                 and not self.base_downloader.full_ffmpeg_path
             ):
-                raise GamdlBinaryNotFoundError("ffmpeg")
+                raise GamdlExecutableNotFoundError("ffmpeg")
 
             if (
                 self.base_downloader.remux_mode == RemuxMode.MP4BOX
                 and not self.base_downloader.full_mp4box_path
             ):
-                raise GamdlBinaryNotFoundError("MP4Box")
+                raise GamdlExecutableNotFoundError("MP4Box")
 
             if (
                 download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
                 or self.base_downloader.remux_mode == RemuxMode.MP4BOX
             ) and not self.base_downloader.full_mp4decrypt_path:
-                raise GamdlBinaryNotFoundError("mp4decrypt")
+                raise GamdlExecutableNotFoundError("mp4decrypt")
 
             if (
                 self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
                 and not self.base_downloader.full_nm3u8dlre_path
             ):
-                raise GamdlBinaryNotFoundError("N_m3u8DL-RE")
+                raise GamdlExecutableNotFoundError("N_m3u8DL-RE")
 
             if (
                 not download_item.stream_info

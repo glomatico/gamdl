@@ -27,6 +27,7 @@ class DownloadItem:
     synced_lyrics_path: str = None
     cover_path: str = None
     flat_filter_result: Any = None
+    error: Exception = None
 
 
 @dataclass

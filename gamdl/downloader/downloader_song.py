@@ -107,6 +107,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             if (
                 download_item.stream_info
                 and download_item.stream_info.audio_track.widevine_pssh
+                and self.codec != SongCodec.ALAC
             ):
                 download_item.decryption_key = await self.interface.get_decryption_key(
                     download_item.stream_info,

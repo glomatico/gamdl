@@ -255,40 +255,69 @@ Use Gamdl as a library in your Python projects:
 
 ```python
 import asyncio
-from gamdl.api import AppleMusicApi
+
+from gamdl.api import AppleMusicApi, ItunesApi
 from gamdl.downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
+    DownloadMode,
+    RemuxMode,
+    SongCodec,
+)
+from gamdl.interface import (
+    AppleMusicInterface,
+    AppleMusicMusicVideoInterface,
+    AppleMusicSongInterface,
+    AppleMusicUploadedVideoInterface,
 )
 
 
 async def main():
-    # Initialize API
-    api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
-    await api.setup()
+    # Initialize APIs
+    apple_music_api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
+    await apple_music_api.setup()
 
-    # Initialize downloaders
-    base_downloader = AppleMusicBaseDownloader(apple_music_api=api)
+    itunes_api = ItunesApi(
+        apple_music_api.storefront,
+        apple_music_api.language,
+    )
+    itunes_api.setup()
+
+    # Initialize interfaces
+    interface = AppleMusicInterface(apple_music_api, itunes_api)
+    song_interface = AppleMusicSongInterface(interface)
+    music_video_interface = AppleMusicMusicVideoInterface(interface)
+    uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
+
+    # Initialize base downloader
+    base_downloader = AppleMusicBaseDownloader()
     base_downloader.setup()
 
-    song_downloader = AppleMusicSongDownloader(base_downloader)
-    song_downloader.setup()
-
-    music_video_downloader = AppleMusicMusicVideoDownloader(base_downloader)
-    music_video_downloader.setup()
-
-    uploaded_video_downloader = AppleMusicUploadedVideoDownloader(base_downloader)
-    uploaded_video_downloader.setup()
+    # Initialize specialized downloaders
+    song_downloader = AppleMusicSongDownloader(
+        base_downloader=base_downloader,
+        interface=song_interface,
+        codec=SongCodec.AAC_LEGACY,
+    )
+    music_video_downloader = AppleMusicMusicVideoDownloader(
+        base_downloader=base_downloader,
+        interface=music_video_interface,
+    )
+    uploaded_video_downloader = AppleMusicUploadedVideoDownloader(
+        base_downloader=base_downloader,
+        interface=uploaded_video_interface,
+    )
 
     # Create main downloader
     downloader = AppleMusicDownloader(
-        base_downloader,
-        song_downloader,
-        music_video_downloader,
-        uploaded_video_downloader,
+        interface=interface,
+        base_downloader=base_downloader,
+        song_downloader=song_downloader,
+        music_video_downloader=music_video_downloader,
+        uploaded_video_downloader=uploaded_video_downloader,
     )
 
     # Download a song

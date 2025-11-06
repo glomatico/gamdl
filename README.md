@@ -150,7 +150,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--cover-size`                  | Cover size in pixels            | `1200`                                         |
 | `--truncate`                    | Max filename length             | -                                              |
 | **Song Options**                |                                 |                                                |
-| `--codec-song`                  | Song codec                      | `aac-legacy`                                   |
+| `--song-codec`                  | Song codec                      | `aac-legacy`                                   |
 | `--synced-lyrics-format`        | Synced lyrics format            | `lrc`                                          |
 | `--no-synced-lyrics`            | Don't download synced lyrics    | `false`                                        |
 | `--synced-lyrics-only`          | Download only synced lyrics     | `false`                                        |

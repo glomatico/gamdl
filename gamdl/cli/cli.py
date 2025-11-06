@@ -286,7 +286,7 @@ def make_sync(func):
 )
 # DownloaderSong specific options
 @click.option(
-    "--codec-song",
+    "--song-codec",
     type=SongCodec,
     default=song_downloader_sig.parameters["codec"].default,
     help="Song codec",
@@ -377,7 +377,7 @@ async def main(
     exclude_tags: list[str],
     cover_size: int,
     truncate: int,
-    codec_song: SongCodec,
+    song_codec: SongCodec,
     synced_lyrics_format: SyncedLyricsFormat,
     no_synced_lyrics: bool,
     synced_lyrics_only: bool,
@@ -465,7 +465,7 @@ async def main(
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
         interface=song_interface,
-        codec=codec_song,
+        codec=song_codec,
         synced_lyrics_format=synced_lyrics_format,
         no_synced_lyrics=no_synced_lyrics,
         synced_lyrics_only=synced_lyrics_only,
@@ -503,7 +503,7 @@ async def main(
 
         if (
             not base_downloader.full_mp4decrypt_path
-            and codec_song
+            and song_codec
             not in (
                 SongCodec.AAC_LEGACY,
                 SongCodec.AAC_HE_LEGACY,
@@ -530,7 +530,7 @@ async def main(
             )
             downloader.skip_music_videos = True
 
-        if not codec_song.is_legacy():
+        if not song_codec.is_legacy():
             logger.warning(
                 "You have chosen an experimental song codec. "
                 "They're not guaranteed to work due to API limitations."

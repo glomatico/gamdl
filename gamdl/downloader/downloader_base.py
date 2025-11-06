@@ -42,9 +42,9 @@ class AppleMusicBaseDownloader:
         cover_format: CoverFormat = CoverFormat.JPG,
         album_folder_template: str = "{album_artist}/{album}",
         compilation_folder_template: str = "Compilations/{album}",
+        no_album_folder_template: str = "{artist}/Unknown Album",
         single_disc_file_template: str = "{track:02d} {title}",
         multi_disc_file_template: str = "{disc}-{track:02d} {title}",
-        no_album_folder_template: str = "{artist}/Unknown Album",
         no_album_file_template: str = "{title}",
         playlist_file_template: str = "Playlists/{playlist_artist}/{playlist_title}",
         date_tag_template: str = "%Y-%m-%dT%H:%M:%SZ",
@@ -68,9 +68,9 @@ class AppleMusicBaseDownloader:
         self.cover_format = cover_format
         self.album_folder_template = album_folder_template
         self.compilation_folder_template = compilation_folder_template
+        self.no_album_folder_template = no_album_folder_template
         self.single_disc_file_template = single_disc_file_template
         self.multi_disc_file_template = multi_disc_file_template
-        self.no_album_folder_template = no_album_folder_template
         self.no_album_file_template = no_album_file_template
         self.playlist_file_template = playlist_file_template
         self.date_tag_template = date_tag_template

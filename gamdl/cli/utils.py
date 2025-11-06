@@ -1,12 +1,8 @@
-import asyncio
 import logging
 from enum import Enum
-from functools import wraps
 from pathlib import Path
 
 import click
-
-from .config_file import ConfigFile
 
 
 class Csv(click.ParamType):
@@ -107,37 +103,3 @@ class CustomLoggerFormatter(logging.Formatter):
             + " %(message)s",
             datefmt=self.date_format,
         ).format(record)
-
-
-def load_config_file(
-    ctx: click.Context,
-    param: click.Parameter,
-    no_config_file: bool,
-) -> click.Context:
-    if no_config_file:
-        return ctx
-
-    config_file = ConfigFile(ctx.params["config_path"])
-    config_file.cleanup_unknown_params(ctx.command.params)
-    config_file.add_params_default_to_config(
-        ctx.command.params,
-    )
-    parsed_params = config_file.parse_params_from_config(
-        [
-            param
-            for param in ctx.command.params
-            if ctx.get_parameter_source(param.name)
-            != click.core.ParameterSource.COMMANDLINE
-        ]
-    )
-    ctx.params.update(parsed_params)
-
-    return ctx
-
-
-def make_sync(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return asyncio.run(func(*args, **kwargs))
-
-    return wrapper

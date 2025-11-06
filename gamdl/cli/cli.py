@@ -1,5 +1,7 @@
+import asyncio
 import inspect
 import logging
+from functools import wraps
 from pathlib import Path
 
 import click
@@ -15,9 +17,9 @@ from ..downloader import (
     CoverFormat,
     DownloadItem,
     DownloadMode,
-    GamdlSyncedLyricsOnlyError,
     GamdlFormatNotAvailableError,
     GamdlNotStreamableError,
+    GamdlSyncedLyricsOnlyError,
     RemuxFormatMusicVideo,
     RemuxMode,
 )
@@ -32,8 +34,9 @@ from ..interface import (
     SyncedLyricsFormat,
     UploadedVideoQuality,
 )
+from .config_file import ConfigFile
 from .constants import X_NOT_IN_PATH
-from .utils import Csv, CustomLoggerFormatter, PathPrompt, load_config_file, make_sync
+from .utils import Csv, CustomLoggerFormatter, PathPrompt
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,41 @@ song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
 uploaded_video_downloader_sig = inspect.signature(
     AppleMusicUploadedVideoDownloader.__init__
 )
+
+
+def load_config_file(
+    ctx: click.Context,
+    param: click.Parameter,
+    no_config_file: bool,
+) -> click.Context:
+    if no_config_file:
+        return ctx
+
+    config_file = ConfigFile(ctx.params["config_path"])
+    config_file.cleanup_unknown_params(ctx.command.params)
+    config_file.add_params_default_to_config(
+        ctx.command.params,
+    )
+    parsed_params = config_file.parse_params_from_config(
+        [
+            param
+            for param in ctx.command.params
+            if ctx.get_parameter_source(param.name)
+            != click.core.ParameterSource.COMMANDLINE
+        ]
+    )
+    print(parsed_params)
+    ctx.params.update(parsed_params)
+
+    return ctx
+
+
+def make_sync(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return asyncio.run(func(*args, **kwargs))
+
+    return wrapper
 
 
 @click.command()

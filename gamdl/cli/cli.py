@@ -70,7 +70,6 @@ def load_config_file(
             != click.core.ParameterSource.COMMANDLINE
         ]
     )
-    print(parsed_params)
     ctx.params.update(parsed_params)
 
     return ctx

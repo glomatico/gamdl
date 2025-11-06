@@ -140,9 +140,9 @@ The file is created automatically on first run. Command-line arguments override 
 | **Template Options**            |                                 |                                                |
 | `--album-folder-template`       | Album folder template           | `{album_artist}/{album}`                       |
 | `--compilation-folder-template` | Compilation folder template     | `Compilations/{album}`                         |
+| `--no-album-folder-template`    | No album folder template        | `{artist}/Unknown Album`                       |
 | `--single-disc-file-template`   | Single disc file template       | `{track:02d} {title}`                          |
 | `--multi-disc-file-template`    | Multi disc file template        | `{disc}-{track:02d} {title}`                   |
-| `--no-album-folder-template`    | No album folder template        | `{artist}/Unknown Album`                       |
 | `--no-album-file-template`      | No album file template          | `{title}`                                      |
 | `--playlist-file-template`      | Playlist file template          | `Playlists/{playlist_artist}/{playlist_title}` |
 | `--date-tag-template`           | Date tag template               | `%Y-%m-%dT%H:%M:%SZ`                           |

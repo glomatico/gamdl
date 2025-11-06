@@ -1,11 +1,12 @@
 import configparser
 import typing
-from enum import Enum
 from pathlib import Path
 
 import click
+from click.types import BoolParamType, FuncParamType
 
 from .constants import EXCLUDED_CONFIG_FILE_PARAMS
+from .utils import Csv
 
 
 class ConfigFile:
@@ -35,34 +36,29 @@ class ConfigFile:
             self.config.write(config_file)
 
     def _serialize_param_default(self, param: click.Parameter) -> str:
-        if not isinstance(param.default, (list, tuple)):
-            param_default = [param.default]
-        else:
-            param_default = param.default
-
-        if not param_default:
-            return ""
-
-        first = param_default[0]
-
-        if isinstance(first, Enum):
-            return ",".join(str(item.value) for item in param_default)
-        if isinstance(first, bool):
-            return ",".join(str(item).lower() for item in param_default)
-        if first is None:
+        if param.default is None:
             return "null"
 
-        return ",".join(str(item) for item in param_default)
+        if isinstance(param.type, Csv):
+            return ",".join(item.value for item in param.default)
+
+        if isinstance(param.type, BoolParamType):
+            return str(param.default).lower()
+
+        if isinstance(param.type, FuncParamType):
+            return param.default.value
+
+        return str(param.default)
 
     def _add_param_default_to_config(
         self,
         param: click.Parameter,
     ) -> bool:
-        if self.config[self.section_name].get(param.name):
+        if self.config.has_option(self.section_name, param.name):
             return False
 
         value = self._serialize_param_default(param)
-        self.config[self.section_name][param.name] = value
+        self.config.set(self.section_name, param.name, value)
 
         return True
 

@@ -263,9 +263,6 @@ from gamdl.downloader import (
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
-    DownloadMode,
-    RemuxMode,
-    SongCodec,
 )
 from gamdl.interface import (
     AppleMusicInterface,
@@ -300,7 +297,6 @@ async def main():
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
         interface=song_interface,
-        codec=SongCodec.AAC_LEGACY,
     )
     music_video_downloader = AppleMusicMusicVideoDownloader(
         base_downloader=base_downloader,

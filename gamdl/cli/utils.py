@@ -50,7 +50,7 @@ class PathPrompt(click.ParamType):
 
     def convert(
         self,
-        value: str | typing.Any,
+        value: str,
         param: click.Parameter,
         ctx: click.Context,
     ) -> str:

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import typing
+from enum import Enum
 from functools import wraps
 from pathlib import Path
 
@@ -14,16 +14,16 @@ class Csv(click.ParamType):
 
     def __init__(
         self,
-        subtype: typing.Any,
+        subtype: Enum,
     ) -> None:
         self.subtype = subtype
 
     def convert(
         self,
-        value: str | typing.Any,
+        value: str,
         param: click.Parameter,
         ctx: click.Context,
-    ) -> list[typing.Any]:
+    ) -> list[Enum]:
         if not isinstance(value, str):
             return value
 

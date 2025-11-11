@@ -36,7 +36,7 @@ from ..interface import (
 )
 from .config_file import ConfigFile
 from .constants import X_NOT_IN_PATH
-from .utils import Csv, CustomLoggerFormatter, PathPrompt
+from .utils import Csv, CustomLoggerFormatter, prompt_path
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def make_sync(func):
 @click.option(
     "--cookies-path",
     "-c",
-    type=PathPrompt(is_file=True),
+    type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True),
     default=api_sig.parameters["cookies_path"].default,
     help="Cookies file path",
 )
@@ -400,6 +400,8 @@ async def main(
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(CustomLoggerFormatter(use_colors=False))
         root_logger.addHandler(file_handler)
+
+    cookies_path = prompt_path(cookies_path)
 
     logger.info(f"Starting Gamdl {__version__}")
 

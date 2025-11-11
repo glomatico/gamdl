@@ -38,46 +38,6 @@ class Csv(click.ParamType):
         return result
 
 
-class PathPrompt(click.ParamType):
-    name = "path"
-
-    def __init__(self, is_file: bool = False) -> None:
-        self.is_file = is_file
-
-    def convert(
-        self,
-        value: str,
-        param: click.Parameter,
-        ctx: click.Context,
-    ) -> str:
-        if not isinstance(value, str):
-            return value
-
-        path_validator = click.Path(
-            exists=True,
-            file_okay=self.is_file,
-            dir_okay=not self.is_file,
-        )
-        path_type = "file" if self.is_file else "directory"
-        while True:
-            try:
-                result = path_validator.convert(value, None, None)
-                break
-            except click.BadParameter as e:
-                value = click.prompt(
-                    (
-                        f'{path_type.capitalize()} "{Path(value).absolute()}" does not exist. '
-                        f"Create the {path_type} at the specified path, "
-                        f"type a new path or drag and drop the {path_type} here. "
-                        "Then, press enter to continue"
-                    ),
-                    default=value,
-                    show_default=False,
-                )
-                value = value.strip('"')
-        return result
-
-
 class CustomLoggerFormatter(logging.Formatter):
     base_format = "[%(levelname)-8s %(asctime)s]"
     format_colors = {
@@ -103,3 +63,34 @@ class CustomLoggerFormatter(logging.Formatter):
             + " %(message)s",
             datefmt=self.date_format,
         ).format(record)
+
+
+def prompt_path(
+    input_path: str,
+    is_dir: bool = False,
+) -> str:
+    path_validator = click.Path(
+        exists=True,
+        file_okay=not is_dir,
+        dir_okay=is_dir,
+    )
+    path_type = "directory" if is_dir else "file"
+
+    while True:
+        try:
+            result_path = path_validator.convert(input_path, None, None)
+            break
+        except click.BadParameter as e:
+            input_path = click.prompt(
+                (
+                    f'{path_type.capitalize()} "{Path(input_path).absolute()}" does not exist. '
+                    f"Create the {path_type} at the specified path, "
+                    f"type a new path or drag and drop the {path_type} here. "
+                    "Then, press enter to continue"
+                ),
+                default=input_path,
+                show_default=False,
+            )
+            input_path = input_path.strip('"')
+
+    return result_path

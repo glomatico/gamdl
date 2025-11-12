@@ -220,7 +220,7 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `aac-he-downmix` - AAC-HE 64kbps downmix
 - `atmos` - Dolby Atmos 768kbps
 - `ac3` - AC3 640kbps
-- `alac` - ALAC up to 24-bit/192kHz
+- `alac` - ALAC up to 24-bit/192kHz (unsupported)
 - `ask` - Interactive experimental codec selection
 
 ### Synced Lyrics Format

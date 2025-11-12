@@ -107,9 +107,11 @@ class AppleMusicSongInterface(AppleMusicInterface):
                     index += 1
 
         return Lyrics(
-            synced="\n".join(synced_lyrics + ["\n"]),
-            unsynced="\n\n".join(
-                ["\n".join(lyric_group) for lyric_group in unsynced_lyrics]
+            synced="\n".join(synced_lyrics + ["\n"]) if synced_lyrics else None,
+            unsynced=(
+                "\n\n".join(["\n".join(lyric_group) for lyric_group in unsynced_lyrics])
+                if unsynced_lyrics
+                else None
             ),
         )
 

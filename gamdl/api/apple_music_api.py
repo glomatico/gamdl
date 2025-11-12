@@ -86,7 +86,7 @@ class AppleMusicApi:
             },
             follow_redirects=True,
             transport=httpx.AsyncHTTPTransport(retries=10),
-            timeout=30.0,
+            timeout=60.0,
         )
 
     async def _setup_token(self) -> None:

@@ -103,14 +103,11 @@ class AppleMusicDownloader:
         self,
         collection_metadata: dict,
     ) -> list[DownloadItem]:
-        collection_metadata["relationships"]["tracks"]["data"].extend(
-            [
-                extended_data
-                async for extended_data in self.interface.apple_music_api.extend_api_data(
-                    collection_metadata["relationships"]["tracks"],
-                )
-            ]
-        )
+        tracks_metadata = collection_metadata["relationships"]["tracks"]["data"]
+        async for extended_data in self.interface.apple_music_api.extend_api_data(
+            collection_metadata["relationships"]["tracks"],
+        ):
+            tracks_metadata.extend(extended_data["data"])
 
         tasks = [
             asyncio.create_task(
@@ -123,7 +120,7 @@ class AppleMusicDownloader:
                     ),
                 )
             )
-            for media_metadata in collection_metadata["relationships"]["tracks"]["data"]
+            for media_metadata in tracks_metadata
         ]
 
         download_items = await safe_gather(*tasks)

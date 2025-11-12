@@ -184,6 +184,7 @@ class AppleMusicDownloader:
                 value=album,
             )
             for album in albums_metadata
+            if album.get("attributes")
         ]
         selected = await inquirer.select(
             message="Select which albums to download: (Track Count | Release Date | Rating | Title)",
@@ -232,6 +233,7 @@ class AppleMusicDownloader:
                 value=music_video,
             )
             for music_video in music_videos_metadata
+            if music_video.get("attributes")
         ]
         selected = await inquirer.select(
             message="Select which music videos to download: (Duration | Rating | Title)",

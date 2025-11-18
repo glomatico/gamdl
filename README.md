@@ -338,4 +338,5 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests, but you may discuss major changes first on our Discord server.
+Currently, I'm not interested in reviewing pull requests that change or add features. Only critical bug fixes will be considered. However, feel free to open issues for bugs or feature requests.
+

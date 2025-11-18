@@ -276,6 +276,30 @@ class AppleMusicDownloader:
             url_info.library_id is not None,
         )
 
+    async def get_download_queue_library(self) -> list[DownloadItem]:
+        library_songs = await self.interface.apple_music_api.get_library_songs()
+
+        playable_songs = [
+            song
+            for song in library_songs
+            if song.get("attributes", {})
+            .get("playParams", {})
+            .get("catalogId")
+        ]
+
+        tasks = [
+            asyncio.create_task(self.get_single_download_item(song))
+            for song in playable_songs
+        ]
+
+        if not tasks:
+            return []
+
+        download_items = await safe_gather(*tasks)
+        return [
+            item for item in download_items if isinstance(item, DownloadItem)
+        ]
+
     async def _get_download_queue(
         self,
         url_type: str,

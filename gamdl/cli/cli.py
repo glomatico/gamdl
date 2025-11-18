@@ -553,30 +553,40 @@ async def main(
 
     error_count = 0
     for url_index, url in enumerate(urls, 1):
+        url_value = url.strip()
         url_progress = click.style(f"[URL {url_index}/{len(urls)}]", dim=True)
-        logger.info(url_progress + f' Processing "{url}"')
+        logger.info(url_progress + f' Processing "{url_value}"')
         download_queue = None
         try:
-            url_info = downloader.get_url_info(url)
-            if not url_info:
-                logger.warning(
-                    url_progress + f' Could not parse "{url}", skipping.',
-                )
-                continue
+            if url_value.lower() == "library":
+                download_queue = await downloader.get_download_queue_library()
+                if not download_queue:
+                    logger.warning(
+                        url_progress
+                        + ' No downloadable media found for "library", skipping.',
+                    )
+                    continue
+            else:
+                url_info = downloader.get_url_info(url_value)
+                if not url_info:
+                    logger.warning(
+                        url_progress + f' Could not parse "{url_value}", skipping.',
+                    )
+                    continue
 
-            download_queue = await downloader.get_download_queue(url_info)
-            if not download_queue:
-                logger.warning(
-                    url_progress
-                    + f' No downloadable media found for "{url}", skipping.',
-                )
-                continue
+                download_queue = await downloader.get_download_queue(url_info)
+                if not download_queue:
+                    logger.warning(
+                        url_progress
+                        + f' No downloadable media found for "{url_value}", skipping.',
+                    )
+                    continue
         except KeyboardInterrupt:
             exit(1)
         except Exception as e:
             error_count += 1
             logger.error(
-                url_progress + f' Error processing "{url}"',
+                url_progress + f' Error processing "{url_value}"',
                 exc_info=not no_exceptions,
             )
 

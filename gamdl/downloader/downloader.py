@@ -367,6 +367,9 @@ class AppleMusicDownloader:
         download_item: DownloadItem,
     ) -> DownloadItem:
         try:
+            if download_item.error:
+                raise download_item.error
+
             if download_item.flat_filter_result:
                 download_item = await self.get_single_download_item_no_filter(
                     download_item.media_metadata,
@@ -386,9 +389,6 @@ class AppleMusicDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        if download_item.error:
-            raise download_item.error
-
         if (
             self.song_downloader.synced_lyrics_only
             and download_item.media_metadata["type"] not in SONG_MEDIA_TYPE

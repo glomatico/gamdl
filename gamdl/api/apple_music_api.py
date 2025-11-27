@@ -23,10 +23,12 @@ class AppleMusicApi:
         self,
         storefront: str = "us",
         media_user_token: str | None = None,
+        token: str | None = None,
         language: str = "en-US",
     ) -> None:
         self.storefront = storefront
         self.media_user_token = media_user_token
+        self.token = token
         self.language = language
 
     @classmethod
@@ -62,7 +64,8 @@ class AppleMusicApi:
 
     async def setup(self) -> None:
         await self._setup_client()
-        await self._setup_token()
+        if not self.token:
+            await self._setup_token()
         await self._setup_account_info()
 
     async def _setup_client(self) -> None:

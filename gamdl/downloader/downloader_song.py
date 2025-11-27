@@ -105,7 +105,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 self.codec,
             )
             if (
-                not self.enable_wrapper_decrypt
+                not self.use_wrapper_decrypt
                 and download_item.stream_info
                 and download_item.stream_info.audio_track.widevine_pssh
             ):
@@ -260,7 +260,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 staged_path,
                 decryption_key.audio_track.key,
             )
-        elif codec.is_legacy() or not self.enable_wrapper_decrypt:
+        elif codec.is_legacy() or not self.use_wrapper_decrypt:
             await self.decrypt_mp4decrypt(
                 encrypted_path,
                 decrypted_path,

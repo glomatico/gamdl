@@ -212,9 +212,9 @@ def make_sync(func):
     help="amdecrypt executable path",
 )
 @click.option(
-    "--enable-wrapper-decrypt",
+    "--use-wrapper-decrypt",
     is_flag=True,
-    help="Enable decryption using wrapper decryption method",
+    help="Use wrapper and amdecrypt for decrypting songs",
     default=False,
 )
 @click.option(
@@ -388,7 +388,7 @@ async def main(
     ffmpeg_path: str,
     mp4box_path: str,
     amdecrypt_path: str,
-    enable_wrapper_decrypt: bool,
+    use_wrapper_decrypt: bool,
     wrapper_decrypt_ip: str,
     download_mode: DownloadMode,
     remux_mode: RemuxMode,
@@ -430,7 +430,7 @@ async def main(
 
     logger.info(f"Starting Gamdl {__version__}")
 
-    if enable_wrapper_decrypt:
+    if use_wrapper_decrypt:
         apple_music_api = AppleMusicApi.from_wrapper(
             wrapper_account_url=wrapper_account_url,
             language=language,
@@ -481,7 +481,7 @@ async def main(
         ffmpeg_path=ffmpeg_path,
         mp4box_path=mp4box_path,
         amdecrypt_path=amdecrypt_path,
-        enable_wrapper_decrypt=enable_wrapper_decrypt,
+        use_wrapper_decrypt=use_wrapper_decrypt,
         wrapper_decrypt_ip=wrapper_decrypt_ip,
         download_mode=download_mode,
         remux_mode=remux_mode,
@@ -567,7 +567,7 @@ async def main(
             )
             downloader.skip_music_videos = True
 
-        if not song_codec.is_legacy() and not enable_wrapper_decrypt:
+        if not song_codec.is_legacy() and not use_wrapper_decrypt:
             logger.warning(
                 "You have chosen an experimental song codec"
                 " without enabling wrapper."

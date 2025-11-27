@@ -567,9 +567,10 @@ async def main(
             )
             downloader.skip_music_videos = True
 
-        if not song_codec.is_legacy():
+        if not song_codec.is_legacy() and not enable_wrapper_decrypt:
             logger.warning(
-                "You have chosen an experimental song codec. "
+                "You have chosen an experimental song codec"
+                " without enabling wrapper."
                 "They're not guaranteed to work due to API limitations."
             )
 

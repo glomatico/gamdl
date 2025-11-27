@@ -38,6 +38,7 @@ class AppleMusicBaseDownloader:
         ffmpeg_path: str = "ffmpeg",
         mp4box_path: str = "MP4Box",
         amdecrypt_path: str = "amdecrypt",
+        enable_wrapper_decrypt: bool = False,
         download_mode: DownloadMode = DownloadMode.YTDLP,
         remux_mode: RemuxMode = RemuxMode.FFMPEG,
         cover_format: CoverFormat = CoverFormat.JPG,
@@ -65,6 +66,7 @@ class AppleMusicBaseDownloader:
         self.ffmpeg_path = ffmpeg_path
         self.mp4box_path = mp4box_path
         self.amdecrypt_path = amdecrypt_path
+        self.enable_wrapper_decrypt = enable_wrapper_decrypt
         self.download_mode = download_mode
         self.remux_mode = remux_mode
         self.cover_format = cover_format

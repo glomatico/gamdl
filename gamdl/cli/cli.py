@@ -38,7 +38,8 @@ from .utils import Csv, CustomLoggerFormatter, prompt_path
 
 logger = logging.getLogger(__name__)
 
-api_sig = inspect.signature(AppleMusicApi.from_netscape_cookies)
+api_from_cookies_sig = inspect.signature(AppleMusicApi.from_netscape_cookies)
+api_from_wrapper_sig = inspect.signature(AppleMusicApi.from_wrapper)
 base_downloader_sig = inspect.signature(AppleMusicBaseDownloader.__init__)
 music_video_downloader_sig = inspect.signature(AppleMusicMusicVideoDownloader.__init__)
 song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
@@ -125,14 +126,20 @@ def make_sync(func):
     "--cookies-path",
     "-c",
     type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True),
-    default=api_sig.parameters["cookies_path"].default,
+    default=api_from_cookies_sig.parameters["cookies_path"].default,
     help="Cookies file path",
+)
+@click.option(
+    "--wrapper-account-url",
+    type=str,
+    default=api_from_wrapper_sig.parameters["wrapper_account_url"].default,
+    help="Wrapper account URL",
 )
 @click.option(
     "--language",
     "-l",
     type=str,
-    default=api_sig.parameters["language"].default,
+    default=api_from_cookies_sig.parameters["language"].default,
     help="Metadata language",
 )
 # Base Downloader specific options
@@ -197,6 +204,24 @@ def make_sync(func):
     type=str,
     default=base_downloader_sig.parameters["mp4box_path"].default,
     help="MP4Box executable path",
+)
+@click.option(
+    "--amdecrypt-path",
+    type=str,
+    default=base_downloader_sig.parameters["amdecrypt_path"].default,
+    help="amdecrypt executable path",
+)
+@click.option(
+    "--enable-wrapper-decrypt",
+    is_flag=True,
+    help="Enable decryption using wrapper decryption method",
+    default=False,
+)
+@click.option(
+    "--wrapper-decrypt-ip",
+    type=str,
+    default=base_downloader_sig.parameters["wrapper_decrypt_ip"].default,
+    help="IP address and port for wrapper decryption",
 )
 @click.option(
     "--download-mode",
@@ -350,6 +375,7 @@ async def main(
     log_file: str,
     no_exceptions: bool,
     cookies_path: str,
+    wrapper_account_url: str,
     language: str,
     output_path: str,
     temp_path: str,
@@ -361,6 +387,9 @@ async def main(
     mp4decrypt_path: str,
     ffmpeg_path: str,
     mp4box_path: str,
+    amdecrypt_path: str,
+    enable_wrapper_decrypt: bool,
+    wrapper_decrypt_ip: str,
     download_mode: DownloadMode,
     remux_mode: RemuxMode,
     cover_format: CoverFormat,
@@ -399,14 +428,19 @@ async def main(
         file_handler.setFormatter(CustomLoggerFormatter(use_colors=False))
         root_logger.addHandler(file_handler)
 
-    cookies_path = prompt_path(cookies_path)
-
     logger.info(f"Starting Gamdl {__version__}")
 
-    apple_music_api = AppleMusicApi.from_netscape_cookies(
-        cookies_path=cookies_path,
-        language=language,
-    )
+    if enable_wrapper_decrypt:
+        apple_music_api = AppleMusicApi.from_wrapper(
+            wrapper_account_url=wrapper_account_url,
+            language=language,
+        )
+    else:
+        cookies_path = prompt_path(cookies_path)
+        apple_music_api = AppleMusicApi.from_netscape_cookies(
+            cookies_path=cookies_path,
+            language=language,
+        )
     await apple_music_api.setup()
 
     itunes_api = ItunesApi(
@@ -446,6 +480,9 @@ async def main(
         mp4decrypt_path=mp4decrypt_path,
         ffmpeg_path=ffmpeg_path,
         mp4box_path=mp4box_path,
+        amdecrypt_path=amdecrypt_path,
+        enable_wrapper_decrypt=enable_wrapper_decrypt,
+        wrapper_decrypt_ip=wrapper_decrypt_ip,
         download_mode=download_mode,
         remux_mode=remux_mode,
         cover_format=cover_format,

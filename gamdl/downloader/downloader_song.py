@@ -19,6 +19,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
+        wrapper_decrypt_ip: str = "127.0.0.1:10020",
+        enable_wrapper_decrypt: bool = False,
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
@@ -26,6 +28,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
+        self.wrapper_decrypt_ip = wrapper_decrypt_ip
+        self.enable_wrapper_decrypt = enable_wrapper_decrypt
 
     async def get_download_item(
         self,
@@ -105,9 +109,9 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 self.codec,
             )
             if (
-                download_item.stream_info
+                not self.enable_wrapper_decrypt
+                and download_item.stream_info
                 and download_item.stream_info.audio_track.widevine_pssh
-                and self.codec != SongCodec.ALAC
             ):
                 download_item.decryption_key = await self.interface.get_decryption_key(
                     download_item.stream_info,
@@ -227,6 +231,23 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             silent=self.silent,
         )
 
+    async def decrypt_amdecrypt(
+        self,
+        input_path: str,
+        output_path: str,
+        media_id: str,
+        fairplay_key: str,
+    ) -> None:
+        await async_subprocess(
+            self.amdecrypt_path,
+            self.wrapper_decrypt_ip,
+            self.full_mp4decrypt_path,
+            media_id,
+            fairplay_key,
+            input_path,
+            output_path,
+        )
+
     async def stage(
         self,
         encrypted_path: str,
@@ -234,6 +255,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         staged_path: str,
         decryption_key: DecryptionKeyAv,
         codec: SongCodec,
+        media_id: str,
+        fairplay_key: str,
     ):
         if codec.is_legacy() and self.remux_mode == RemuxMode.FFMPEG:
             await self.remux_ffmpeg(
@@ -241,7 +264,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 staged_path,
                 decryption_key.audio_track.key,
             )
-        else:
+        elif codec.is_legacy() or not self.enable_wrapper_decrypt:
             await self.decrypt_mp4decrypt(
                 encrypted_path,
                 decrypted_path,
@@ -258,6 +281,13 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                     decrypted_path,
                     staged_path,
                 )
+        else:
+            await self.decrypt_amdecrypt(
+                encrypted_path,
+                staged_path,
+                media_id,
+                fairplay_key,
+            )
 
     def get_lyrics_synced_path(self, final_path: str) -> str:
         return str(Path(final_path).with_suffix("." + self.synced_lyrics_format.value))
@@ -307,6 +337,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             download_item.staged_path,
             download_item.decryption_key,
             self.codec,
+            download_item.media_metadata["id"],
+            download_item.stream_info.audio_track.fairplay_key,
         )
 
         await self.apply_tags(

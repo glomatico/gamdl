@@ -37,6 +37,7 @@ class AppleMusicBaseDownloader:
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
         mp4box_path: str = "MP4Box",
+        amdecrypt_path: str = "amdecrypt",
         download_mode: DownloadMode = DownloadMode.YTDLP,
         remux_mode: RemuxMode = RemuxMode.FFMPEG,
         cover_format: CoverFormat = CoverFormat.JPG,
@@ -63,6 +64,7 @@ class AppleMusicBaseDownloader:
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
         self.mp4box_path = mp4box_path
+        self.amdecrypt_path = amdecrypt_path
         self.download_mode = download_mode
         self.remux_mode = remux_mode
         self.cover_format = cover_format
@@ -88,6 +90,7 @@ class AppleMusicBaseDownloader:
         self.full_mp4decrypt_path = shutil.which(self.mp4decrypt_path)
         self.full_ffmpeg_path = shutil.which(self.ffmpeg_path)
         self.full_mp4box_path = shutil.which(self.mp4box_path)
+        self.full_amdecrypt_path = shutil.which(self.amdecrypt_path)
 
     def _setup_cdm(self):
         if self.wvd_path:

@@ -451,7 +451,7 @@ class AppleMusicDownloader:
                 not download_item.decryption_key
                 or not download_item.decryption_key.audio_track
                 or not download_item.decryption_key.audio_track.key
-            ):
+            ) and not self.base_downloader.enable_wrapper_decrypt:
                 raise FormatNotAvailable(download_item.media_metadata["id"])
 
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:

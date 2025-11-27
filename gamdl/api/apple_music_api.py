@@ -13,6 +13,7 @@ from .constants import (
     APPLE_MUSIC_HOMEPAGE_URL,
     LICENSE_API_URL,
     WEBPLAYBACK_API_URL,
+    STOREFRONT_IDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,23 @@ class AppleMusicApi:
         return cls(
             storefront=None,
             media_user_token=media_user_token,
+            language=language,
+        )
+
+    @classmethod
+    def from_wrapper(
+        cls,
+        wrapper_account_url: str = "http://127.0.0.1:30020/",
+        language: str = "en-US",
+    ) -> "AppleMusicApi":
+        wrapper_account_response = httpx.get(wrapper_account_url)
+        raise_for_status(wrapper_account_response)
+        wrapper_account_info = safe_json(wrapper_account_response)
+
+        return cls(
+            storefront=None,
+            media_user_token=wrapper_account_info["music_token"],
+            token=None,
             language=language,
         )
 
@@ -112,10 +130,10 @@ class AppleMusicApi:
         token_match = re.search('(?=eyJh)(.*?)(?=")', index_js_page)
         if not token_match:
             raise Exception("Token not found in index.js page")
-        token = token_match.group(1)
+        self.token = token_match.group(1)
 
-        logger.debug(f"Token: {token}")
-        self.client.headers.update({"authorization": f"Bearer {token}"})
+        logger.debug(f"Token: {self.token}")
+        self.client.headers.update({"authorization": f"Bearer {self.token}"})
 
     async def _setup_account_info(self) -> None:
         if not self.media_user_token:

@@ -1,21 +1,27 @@
-class GamdlNotStreamableError(Exception):
-    def __init__(self):
-        super().__init__("Media is not streamable")
+class GamdlError(Exception):
+    pass
 
 
-class GamdlFormatNotAvailableError(Exception):
-    def __init__(self):
-        super().__init__("Media is not available in the requested format")
+class MediaFileExists(GamdlError):
+    def __init__(self, media_path: str):
+        super().__init__(f"Media file already exists at path: {media_path}")
 
 
-class GamdlExecutableNotFoundError(Exception):
+class NotStreamable(GamdlError):
+    def __init__(self, media_id: str):
+        super().__init__(f"Media ID is not streamable: {media_id}")
+
+
+class FormatNotAvailable(GamdlError):
+    def __init__(self, media_id: str):
+        super().__init__(f"Requested format is not available for media ID: {media_id}")
+
+
+class ExecutableNotFound(GamdlError):
     def __init__(self, executable: str):
-        super().__init__(f"{executable} was not found in system PATH")
+        super().__init__(f"Executable not found: {executable}")
 
 
-class GamdlSyncedLyricsOnlyError(Exception):
+class SyncedLyricsOnly(GamdlError):
     def __init__(self):
-        super().__init__(
-            "Cannot download media because downloader is configured to download "
-            "synced lyrics only"
-        )
+        super().__init__("Only downloading synced lyrics is supported")

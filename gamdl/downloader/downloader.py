@@ -22,10 +22,11 @@ from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
 from .enums import DownloadMode, RemuxMode
 from .exceptions import (
-    GamdlExecutableNotFoundError,
-    GamdlFormatNotAvailableError,
-    GamdlNotStreamableError,
-    GamdlSyncedLyricsOnlyError,
+    ExecutableNotFound,
+    FormatNotAvailable,
+    NotStreamable,
+    SyncedLyricsOnly,
+    MediaFileExists,
 )
 from .types import DownloadItem, UrlInfo
 
@@ -393,7 +394,7 @@ class AppleMusicDownloader:
             self.song_downloader.synced_lyrics_only
             and download_item.media_metadata["type"] not in SONG_MEDIA_TYPE
         ):
-            raise GamdlSyncedLyricsOnlyError()
+            raise SyncedLyricsOnly()
 
         if self.song_downloader.synced_lyrics_only:
             return
@@ -401,15 +402,13 @@ class AppleMusicDownloader:
         if not self.base_downloader.is_media_streamable(
             download_item.media_metadata,
         ):
-            raise GamdlNotStreamableError()
+            raise NotStreamable(download_item.media_metadata["id"])
 
         if (
             Path(download_item.final_path).exists()
             and not self.base_downloader.overwrite
         ):
-            raise FileExistsError(
-                f'Media file already exists at "{download_item.final_path}"'
-            )
+            raise MediaFileExists(download_item.final_path)
 
         if download_item.media_metadata["type"] in {
             *SONG_MEDIA_TYPE,
@@ -419,31 +418,31 @@ class AppleMusicDownloader:
                 self.base_downloader.remux_mode == RemuxMode.FFMPEG
                 and not self.base_downloader.full_ffmpeg_path
             ):
-                raise GamdlExecutableNotFoundError("ffmpeg")
+                raise ExecutableNotFound("ffmpeg")
 
             if (
                 self.base_downloader.remux_mode == RemuxMode.MP4BOX
                 and not self.base_downloader.full_mp4box_path
             ):
-                raise GamdlExecutableNotFoundError("MP4Box")
+                raise ExecutableNotFound("MP4Box")
 
             if (
                 download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
                 or self.base_downloader.remux_mode == RemuxMode.MP4BOX
             ) and not self.base_downloader.full_mp4decrypt_path:
-                raise GamdlExecutableNotFoundError("mp4decrypt")
+                raise ExecutableNotFound("mp4decrypt")
 
             if (
                 self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
                 and not self.base_downloader.full_nm3u8dlre_path
             ):
-                raise GamdlExecutableNotFoundError("N_m3u8DL-RE")
+                raise ExecutableNotFound("N_m3u8DL-RE")
 
             if (
                 not download_item.stream_info
-                or not download_item.stream_info.audio_track.widevine_pssh
+                or not download_item.stream_info.audio_track
             ):
-                raise GamdlFormatNotAvailableError()
+                raise FormatNotAvailable(download_item.media_metadata["id"])
 
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
             await self.song_downloader.download(download_item)

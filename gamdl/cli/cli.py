@@ -17,9 +17,7 @@ from ..downloader import (
     CoverFormat,
     DownloadItem,
     DownloadMode,
-    FormatNotAvailable,
-    NotStreamable,
-    SyncedLyricsOnly,
+    GamdlError,
     RemuxFormatMusicVideo,
     RemuxMode,
 )
@@ -603,12 +601,7 @@ async def main(
 
             try:
                 await downloader.download(download_item)
-            except (
-                FileExistsError,
-                NotStreamable,
-                FormatNotAvailable,
-                SyncedLyricsOnly,
-            ) as e:
+            except GamdlError as e:
                 logger.warning(
                     download_queue_progress + f' Skipping "{media_title}": {e}'
                 )

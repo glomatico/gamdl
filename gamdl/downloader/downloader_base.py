@@ -39,6 +39,7 @@ class AppleMusicBaseDownloader:
         mp4box_path: str = "MP4Box",
         amdecrypt_path: str = "amdecrypt",
         enable_wrapper_decrypt: bool = False,
+        wrapper_decrypt_ip: str = "127.0.0.1:10020",
         download_mode: DownloadMode = DownloadMode.YTDLP,
         remux_mode: RemuxMode = RemuxMode.FFMPEG,
         cover_format: CoverFormat = CoverFormat.JPG,
@@ -67,6 +68,7 @@ class AppleMusicBaseDownloader:
         self.mp4box_path = mp4box_path
         self.amdecrypt_path = amdecrypt_path
         self.enable_wrapper_decrypt = enable_wrapper_decrypt
+        self.wrapper_decrypt_ip = wrapper_decrypt_ip
         self.download_mode = download_mode
         self.remux_mode = remux_mode
         self.cover_format = cover_format

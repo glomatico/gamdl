@@ -19,7 +19,6 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
-        wrapper_decrypt_ip: str = "127.0.0.1:10020",
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
@@ -27,7 +26,6 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
-        self.wrapper_decrypt_ip = wrapper_decrypt_ip
 
     async def get_download_item(
         self,

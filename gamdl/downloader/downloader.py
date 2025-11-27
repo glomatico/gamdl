@@ -442,6 +442,9 @@ class AppleMusicDownloader:
                 not download_item.stream_info
                 or not download_item.stream_info.audio_track
                 or not download_item.stream_info.audio_track.widevine_pssh
+                or not download_item.decryption_key
+                or not download_item.decryption_key.audio_track
+                or not download_item.decryption_key.audio_track.key
             ):
                 raise FormatNotAvailable(download_item.media_metadata["id"])
 

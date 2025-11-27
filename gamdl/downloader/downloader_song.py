@@ -119,12 +119,16 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         download_item.cover_url_template = self.get_cover_url_template(song_metadata)
 
         download_item.random_uuid = self.get_random_uuid()
-        download_item.staged_path = self.get_temp_path(
-            song_id,
-            download_item.random_uuid,
-            "staged",
-            "." + download_item.stream_info.file_format.value,
-        )
+        if download_item.stream_info and download_item.stream_info.file_format:
+            download_item.staged_path = self.get_temp_path(
+                song_id,
+                download_item.random_uuid,
+                "staged",
+                "." + download_item.stream_info.file_format.value,
+            )
+        else:
+            download_item.staged_path = None
+
         cover_file_extension = await self.get_cover_file_extension(
             download_item.cover_url_template,
         )

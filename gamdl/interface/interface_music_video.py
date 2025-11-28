@@ -264,15 +264,33 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
 
         return selected
 
-    def get_pssh(self, m3u8_obj: m3u8.M3U8) -> str:
+    def _get_key_by_format(
+        self,
+        m3u8_obj: m3u8.M3U8,
+        key_format: str,
+    ) -> str:
         return next(
-            (
-                key
-                for key in m3u8_obj.keys
-                if key.keyformat == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
-            ),
+            (key for key in m3u8_obj.keys if key.keyformat == key_format),
             None,
         ).uri
+
+    def get_widevine_pssh(self, m3u8_obj: m3u8.M3U8) -> str:
+        return self._get_key_by_format(
+            m3u8_obj,
+            "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed",
+        )
+
+    def get_playready_pssh(self, m3u8_obj: m3u8.M3U8) -> str:
+        return self._get_key_by_format(
+            m3u8_obj,
+            "com.microsoft.playready",
+        )
+
+    def get_fairplay_key(self, m3u8_obj: m3u8.M3U8) -> str:
+        return self._get_key_by_format(
+            m3u8_obj,
+            "com.apple.streamingkeydelivery",
+        )
 
     async def get_stream_info_video(
         self,
@@ -301,7 +319,9 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
         stream_info.width, stream_info.height = playlist.stream_info.resolution
 
         playlist_m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
-        stream_info.widevine_pssh = self.get_pssh(playlist_m3u8_obj)
+        stream_info.widevine_pssh = self.get_widevine_pssh(playlist_m3u8_obj)
+        stream_info.fairplay_key = self.get_fairplay_key(playlist_m3u8_obj)
+        stream_info.playready_pssh = self.get_playready_pssh(playlist_m3u8_obj)
 
         return stream_info
 
@@ -324,7 +344,9 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
         stream_info.codec = playlist["group_id"]
 
         playlist_m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
-        stream_info.widevine_pssh = self.get_pssh(playlist_m3u8_obj)
+        stream_info.widevine_pssh = self.get_widevine_pssh(playlist_m3u8_obj)
+        stream_info.fairplay_key = self.get_fairplay_key(playlist_m3u8_obj)
+        stream_info.playready_pssh = self.get_playready_pssh(playlist_m3u8_obj)
 
         return stream_info
 

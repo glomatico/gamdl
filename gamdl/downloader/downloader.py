@@ -427,10 +427,19 @@ class AppleMusicDownloader:
                 raise ExecutableNotFound("MP4Box")
 
             if (
-                download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
-                or self.base_downloader.remux_mode == RemuxMode.MP4BOX
+                self.song_downloader.use_wrapper
+                or (
+                    download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+                    or self.base_downloader.remux_mode == RemuxMode.MP4BOX
+                )
             ) and not self.base_downloader.full_mp4decrypt_path:
                 raise ExecutableNotFound("mp4decrypt")
+
+            if (
+                self.song_downloader.use_wrapper
+                and not self.base_downloader.full_amdecrypt_path
+            ):
+                raise ExecutableNotFound("amdecrypt")
 
             if (
                 self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
@@ -442,7 +451,7 @@ class AppleMusicDownloader:
                 not download_item.decryption_key
                 or not download_item.decryption_key.audio_track
                 or not download_item.decryption_key.audio_track.key
-            ):
+            ) and not self.base_downloader.use_wrapper:
                 raise FormatNotAvailable(download_item.media_metadata["id"])
 
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:

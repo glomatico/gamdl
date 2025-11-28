@@ -62,10 +62,26 @@ class AppleMusicApi:
             language=language,
         )
 
+    @classmethod
+    def from_wrapper(
+        cls,
+        wrapper_account_url: str = "http://127.0.0.1:30020/",
+        language: str = "en-US",
+    ) -> "AppleMusicApi":
+        wrapper_account_response = httpx.get(wrapper_account_url)
+        raise_for_status(wrapper_account_response)
+        wrapper_account_info = safe_json(wrapper_account_response)
+
+        return cls(
+            storefront=None,
+            media_user_token=wrapper_account_info["music_token"],
+            token=wrapper_account_info["dev_token"],
+            language=language,
+        )
+
     async def setup(self) -> None:
         await self._setup_client()
-        if not self.token:
-            await self._setup_token()
+        await self._setup_token()
         await self._setup_account_info()
 
     async def _setup_client(self) -> None:
@@ -92,7 +108,7 @@ class AppleMusicApi:
             timeout=60.0,
         )
 
-    async def _setup_token(self) -> None:
+    async def _get_token(self) -> str:
         response = await self.client.get(APPLE_MUSIC_HOMEPAGE_URL)
         raise_for_status(response)
         home_page = response.text
@@ -115,7 +131,11 @@ class AppleMusicApi:
         token = token_match.group(1)
 
         logger.debug(f"Token: {token}")
-        self.client.headers.update({"authorization": f"Bearer {token}"})
+        return token
+
+    async def _setup_token(self) -> None:
+        self.token = self.token or await self._get_token()
+        self.client.headers.update({"authorization": f"Bearer {self.token}"})
 
     async def _setup_account_info(self) -> None:
         if not self.media_user_token:

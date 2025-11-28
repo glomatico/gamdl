@@ -76,14 +76,13 @@ class AppleMusicApi:
         return cls(
             storefront=None,
             media_user_token=wrapper_account_info["music_token"],
-            token=None,
+            token=wrapper_account_info["dev_token"],
             language=language,
         )
 
     async def setup(self) -> None:
         await self._setup_client()
-        if not self.token:
-            await self._setup_token()
+        await self._setup_token()
         await self._setup_account_info()
 
     async def _setup_client(self) -> None:
@@ -110,7 +109,7 @@ class AppleMusicApi:
             timeout=60.0,
         )
 
-    async def _setup_token(self) -> None:
+    async def _get_token(self) -> str:
         response = await self.client.get(APPLE_MUSIC_HOMEPAGE_URL)
         raise_for_status(response)
         home_page = response.text
@@ -130,9 +129,13 @@ class AppleMusicApi:
         token_match = re.search('(?=eyJh)(.*?)(?=")', index_js_page)
         if not token_match:
             raise Exception("Token not found in index.js page")
-        self.token = token_match.group(1)
+        token = token_match.group(1)
 
-        logger.debug(f"Token: {self.token}")
+        logger.debug(f"Token: {token}")
+        return token
+
+    async def _setup_token(self) -> None:
+        self.token = self.token or await self._get_token()
         self.client.headers.update({"authorization": f"Bearer {self.token}"})
 
     async def _setup_account_info(self) -> None:

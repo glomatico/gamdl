@@ -13,7 +13,6 @@ from .constants import (
     APPLE_MUSIC_HOMEPAGE_URL,
     LICENSE_API_URL,
     WEBPLAYBACK_API_URL,
-    STOREFRONT_IDS,
 )
 
 logger = logging.getLogger(__name__)

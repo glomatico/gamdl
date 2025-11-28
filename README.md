@@ -37,6 +37,7 @@ Add these tools to your system PATH for additional features:
 - **[mp4decrypt](https://www.bento4.com/downloads/)** - Required for `mp4box` remux mode, music videos, and experimental codecs
 - **[MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)** - Required for `mp4box` remux mode
 - **[N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)** - Required for `nm3u8dlre` download mode, which is faster than the default downloader
+- **[Wrapper & amdecrypt](#️-wrapper--amdecrypt)** - For downloading songs in ALAC and other experimental codecs without API limitations
 
 ## 📦 Installation
 
@@ -121,6 +122,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--no-config-file`, `-n`        | Don't use a config file         | `false`                                        |
 | **Apple Music Options**         |                                 |                                                |
 | `--cookies-path`, `-c`          | Cookies file path               | `./cookies.txt`                                |
+| `--wrapper-account-url`         | Wrapper account URL             | `http://127.0.0.1:30020`                       |
 | `--language`, `-l`              | Metadata language               | `en-US`                                        |
 | **Output Options**              |                                 |                                                |
 | `--output-path`, `-o`           | Output directory path           | `./Apple Music`                                |
@@ -134,6 +136,9 @@ The file is created automatically on first run. Command-line arguments override 
 | `--mp4decrypt-path`             | mp4decrypt executable path      | `mp4decrypt`                                   |
 | `--ffmpeg-path`                 | FFmpeg executable path          | `ffmpeg`                                       |
 | `--mp4box-path`                 | MP4Box executable path          | `MP4Box`                                       |
+| `--amdecrypt-path`              | amdecrypt executable path       | `amdecrypt`                                    |
+| `--use-wrapper`                 | Use wrapper and amdecrypt       | `false`                                        |
+| `--wrapper-decrypt-ip`          | Wrapper decryption server IP    | `127.0.0.1:10020`                              |
 | `--download-mode`               | Download mode                   | `ytdlp`                                        |
 | `--remux-mode`                  | Remux mode                      | `ffmpeg`                                       |
 | `--cover-format`                | Cover format                    | `jpg`                                          |
@@ -248,6 +253,22 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 
 - `best` - Up to 1080p with AAC 256kbps
 - `ask` - Interactive quality selection
+
+## ⚙️ Wrapper & amdecrypt
+
+Use the [wrapper](https://github.com/WorldObservationLog/wrapper) and [amdecrypt](https://github.com/glomatico/amdecrypt) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.
+
+### Prerequisites
+
+- **[wrapper](https://github.com/WorldObservationLog/wrapper)** - Refer to the repository for installation
+- **[amdecrypt](https://github.com/glomatico/amdecrypt)** - Refer to the repository for installation
+- **[mp4decrypt](https://www.bento4.com/downloads/)** - Required by amdecrypt to decrypt protected files
+
+### Setup Instructions
+
+1. **Start the wrapper server** - Run the wrapper server
+2. **Enable wrapper in Gamdl** - Use `--use-wrapper` flag or set `use_wrapper = true` in config
+3. **Run Gamdl** - Download as usual with the wrapper enabled
 
 ## 🐍 Embedding
 

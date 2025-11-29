@@ -538,17 +538,9 @@ async def main(
             logger.critical(X_NOT_IN_PATH.format("MP4Box", mp4box_path))
             return
 
-        if (
-            not base_downloader.full_mp4decrypt_path
-            and song_codec
-            not in (
-                SongCodec.AAC_LEGACY,
-                SongCodec.AAC_HE_LEGACY,
-            )
-            or (
-                remux_mode == RemuxMode.MP4BOX
-                and not base_downloader.full_mp4decrypt_path
-            )
+        if not base_downloader.full_mp4decrypt_path and (
+            song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
+            or remux_mode == RemuxMode.MP4BOX
         ):
             logger.critical(X_NOT_IN_PATH.format("mp4decrypt", mp4decrypt_path))
             return
@@ -560,12 +552,9 @@ async def main(
             logger.critical(X_NOT_IN_PATH.format("N_m3u8DL-RE", nm3u8dlre_path))
             return
 
-        if not base_downloader.full_mp4decrypt_path:
-            logger.warning(
-                X_NOT_IN_PATH.format("mp4decrypt", mp4decrypt_path)
-                + ", music videos will not be downloaded"
-            )
-            downloader.skip_music_videos = True
+        if use_wrapper and not base_downloader.full_amdecrypt_path:
+            logger.critical(X_NOT_IN_PATH.format("amdecrypt", amdecrypt_path))
+            return
 
         if not song_codec.is_legacy() and not use_wrapper:
             logger.warning(

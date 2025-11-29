@@ -49,7 +49,7 @@ async def async_subprocess(*args: str, silent: bool = False) -> None:
 async def safe_gather(
     *tasks: typing.Awaitable[typing.Any],
     limit: int = 3,
-    retries: int = 10,
+    retries: int = 5,
 ) -> list[typing.Any]:
     semaphore = asyncio.Semaphore(limit)
 

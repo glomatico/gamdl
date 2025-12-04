@@ -11,24 +11,12 @@ logger = logging.getLogger(__name__)
 class ItunesApi:
     def __init__(
         self,
-        storefront: str,
-        language: str,
+        storefront: str = "us",
+        language: str = "en-US",
     ) -> None:
         self.storefront = storefront
         self.language = language
-
-    @classmethod
-    def create(
-        cls,
-        storefront: str = "us",
-        language: str = "en-US",
-    ) -> "ItunesApi":
-        api = cls(
-            storefront=storefront,
-            language=language,
-        )
-        api.initialize()
-        return api
+        self.initialize()
 
     def initialize(self) -> None:
         self._initialize_storefront_id()

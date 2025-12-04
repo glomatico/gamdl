@@ -6,7 +6,7 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from ..interface import AppleMusicInterface
-from ..utils import safe_gather
+from ..utils import sequential_gather
 from .constants import (
     ALBUM_MEDIA_TYPE,
     ARTIST_MEDIA_TYPE,
@@ -124,7 +124,7 @@ class AppleMusicDownloader:
             for media_metadata in tracks_metadata
         ]
 
-        download_items = await safe_gather(*tasks)
+        download_items = await sequential_gather(*tasks)
         return download_items
 
     async def get_artist_download_items(
@@ -201,7 +201,7 @@ class AppleMusicDownloader:
             )
             for album_metadata in selected
         ]
-        album_responses = await safe_gather(*album_tasks)
+        album_responses = await sequential_gather(*album_tasks)
 
         track_tasks = [
             asyncio.create_task(
@@ -209,7 +209,7 @@ class AppleMusicDownloader:
             )
             for album_response in album_responses
         ]
-        track_results = await safe_gather(*track_tasks)
+        track_results = await sequential_gather(*track_tasks)
 
         for track_result in track_results:
             download_items.extend(track_result)
@@ -250,7 +250,7 @@ class AppleMusicDownloader:
             )
             for music_video_metadata in selected
         ]
-        download_items = await safe_gather(*music_video_tasks)
+        download_items = await sequential_gather(*music_video_tasks)
 
         return download_items
 

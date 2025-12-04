@@ -69,3 +69,19 @@ async def safe_gather(
         *(bounded_task(task) for task in tasks),
         return_exceptions=True,
     )
+
+
+async def sequential_gather(
+    *tasks: typing.Awaitable[typing.Any],
+    interval: float = 0.5,
+) -> list[typing.Any]:
+    results = []
+    for i, task in enumerate(tasks):
+        try:
+            result = await task
+            results.append(result)
+        except Exception as e:
+            results.append(e)
+        if interval > 0 and i < len(tasks) - 1:
+            await asyncio.sleep(interval)
+    return results

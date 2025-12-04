@@ -11,23 +11,36 @@ logger = logging.getLogger(__name__)
 class ItunesApi:
     def __init__(
         self,
-        storefront: str = "us",
-        language: str = "en-US",
+        storefront: str,
+        language: str,
     ) -> None:
         self.storefront = storefront
         self.language = language
 
-    def setup(self) -> None:
-        self._setup_storefront_id()
-        self._setup_session()
+    @classmethod
+    def create(
+        cls,
+        storefront: str = "us",
+        language: str = "en-US",
+    ) -> "ItunesApi":
+        api = cls(
+            storefront=storefront,
+            language=language,
+        )
+        api.initialize()
+        return api
 
-    def _setup_storefront_id(self) -> None:
+    def initialize(self) -> None:
+        self._initialize_storefront_id()
+        self._initialize_client()
+
+    def _initialize_storefront_id(self) -> None:
         try:
             self.storefront_id = STOREFRONT_IDS[self.storefront.upper()]
         except KeyError:
             raise Exception(f"No storefront id for {self.storefront}")
 
-    def _setup_session(self) -> None:
+    def _initialize_client(self) -> None:
         self.client = httpx.AsyncClient(
             params={
                 "country": self.storefront,

@@ -21,18 +21,18 @@ logger = logging.getLogger(__name__)
 class AppleMusicApi:
     def __init__(
         self,
-        storefront: str = "us",
-        media_user_token: str | None = None,
-        token: str | None = None,
-        language: str = "en-US",
+        storefront: str,
+        language: str,
+        media_user_token: str,
+        developer_token: str,
     ) -> None:
         self.storefront = storefront
-        self.media_user_token = media_user_token
-        self.token = token
         self.language = language
+        self.media_user_token = media_user_token
+        self.token = developer_token
 
     @classmethod
-    def from_netscape_cookies(
+    async def create_from_netscape_cookies(
         cls,
         cookies_path: str = "./cookies.txt",
         language: str = "en-US",
@@ -56,35 +56,54 @@ class AppleMusicApi:
                 "and are logged in with an active subscription."
             )
 
-        return cls(
+        return await cls.create(
             storefront=None,
-            media_user_token=media_user_token,
             language=language,
+            media_user_token=media_user_token,
+            developer_token=None,
         )
 
     @classmethod
-    def from_wrapper(
+    async def create_from_wrapper(
         cls,
         wrapper_account_url: str = "http://127.0.0.1:30020/",
         language: str = "en-US",
     ) -> "AppleMusicApi":
-        wrapper_account_response = httpx.get(wrapper_account_url)
+        async with httpx.AsyncClient() as client:
+            wrapper_account_response = await client.get(wrapper_account_url)
         raise_for_status(wrapper_account_response)
         wrapper_account_info = safe_json(wrapper_account_response)
 
-        return cls(
+        return await cls.create(
             storefront=None,
-            media_user_token=wrapper_account_info["music_token"],
-            token=wrapper_account_info["dev_token"],
             language=language,
+            media_user_token=wrapper_account_info["music_token"],
+            developer_token=wrapper_account_info["dev_token"],
         )
 
-    async def setup(self) -> None:
-        await self._setup_client()
-        await self._setup_token()
-        await self._setup_account_info()
+    @classmethod
+    async def create(
+        cls,
+        storefront: str | None = "us",
+        language: str = "en-US",
+        media_user_token: str | None = None,
+        developer_token: str | None = None,
+    ) -> "AppleMusicApi":
+        api = cls(
+            storefront=storefront,
+            language=language,
+            media_user_token=media_user_token,
+            developer_token=developer_token,
+        )
+        await api.initialize()
+        return api
 
-    async def _setup_client(self) -> None:
+    async def initialize(self) -> None:
+        await self._initialize_client()
+        await self._initialize_token()
+        await self._initialize_account_info()
+
+    async def _initialize_client(self) -> None:
         self.client = httpx.AsyncClient(
             headers={
                 "accept": "*/*",
@@ -133,11 +152,11 @@ class AppleMusicApi:
         logger.debug(f"Token: {token}")
         return token
 
-    async def _setup_token(self) -> None:
+    async def _initialize_token(self) -> None:
         self.token = self.token or await self._get_token()
         self.client.headers.update({"authorization": f"Bearer {self.token}"})
 
-    async def _setup_account_info(self) -> None:
+    async def _initialize_account_info(self) -> None:
         if not self.media_user_token:
             return
 
@@ -149,6 +168,22 @@ class AppleMusicApi:
 
         self.account_info = await self.get_account_info()
         self.storefront = self.account_info["meta"]["subscription"]["storefront"]
+
+    @property
+    def active_subscription(self) -> bool:
+        return (
+            getattr(self, "account_info", {})
+            .get("meta", {})
+            .get("subscription", {})
+            .get("active", False)
+        )
+
+    @property
+    def account_restrictions(self) -> dict | None:
+        data = getattr(self, "account_info", {}).get("data", [])
+        if not data:
+            return None
+        return data[0].get("attributes", {}).get("restrictions")
 
     async def get_account_info(self, meta: str | None = "subscription") -> dict:
         response = await self.client.get(

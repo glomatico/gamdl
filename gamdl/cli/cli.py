@@ -38,8 +38,8 @@ from .utils import Csv, CustomLoggerFormatter, prompt_path
 
 logger = logging.getLogger(__name__)
 
-api_from_cookies_sig = inspect.signature(AppleMusicApi.from_netscape_cookies)
-api_from_wrapper_sig = inspect.signature(AppleMusicApi.from_wrapper)
+api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
+api_from_wrapper_sig = inspect.signature(AppleMusicApi.create_from_wrapper)
 base_downloader_sig = inspect.signature(AppleMusicBaseDownloader.__init__)
 music_video_downloader_sig = inspect.signature(AppleMusicMusicVideoDownloader.__init__)
 song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
@@ -431,31 +431,29 @@ async def main(
     logger.info(f"Starting Gamdl {__version__}")
 
     if use_wrapper:
-        apple_music_api = AppleMusicApi.from_wrapper(
+        apple_music_api = await AppleMusicApi.create_from_wrapper(
             wrapper_account_url=wrapper_account_url,
             language=language,
         )
     else:
         cookies_path = prompt_path(cookies_path)
-        apple_music_api = AppleMusicApi.from_netscape_cookies(
+        apple_music_api = await AppleMusicApi.create_from_netscape_cookies(
             cookies_path=cookies_path,
             language=language,
         )
-    await apple_music_api.setup()
 
-    itunes_api = ItunesApi(
+    itunes_api = await ItunesApi.create(
         apple_music_api.storefront,
         apple_music_api.language,
     )
-    itunes_api.setup()
 
-    if not apple_music_api.account_info["meta"]["subscription"]["active"]:
+    if not apple_music_api.active_subscription:
         logger.critical(
             "No active Apple Music subscription found, you won't be able to download"
             " anything"
         )
         return
-    if apple_music_api.account_info["data"][0]["attributes"].get("restrictions"):
+    if apple_music_api.account_restrictions:
         logger.warning(
             "Your account has content restrictions enabled, some content may not be"
             " downloadable"

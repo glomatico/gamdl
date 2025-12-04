@@ -496,7 +496,6 @@ async def main(
         cover_size=cover_size,
         truncate=truncate,
     )
-    base_downloader.setup()
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
         interface=song_interface,

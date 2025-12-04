@@ -84,19 +84,20 @@ class AppleMusicBaseDownloader:
         self.cover_size = cover_size
         self.truncate = truncate
         self.silent = silent
+        self.initialize()
 
-    def setup(self):
-        self._setup_binary_paths()
-        self._setup_cdm()
+    def initialize(self):
+        self._initialize_binary_paths()
+        self._initialize_cdm()
 
-    def _setup_binary_paths(self):
+    def _initialize_binary_paths(self):
         self.full_nm3u8dlre_path = shutil.which(self.nm3u8dlre_path)
         self.full_mp4decrypt_path = shutil.which(self.mp4decrypt_path)
         self.full_ffmpeg_path = shutil.which(self.ffmpeg_path)
         self.full_mp4box_path = shutil.which(self.mp4box_path)
         self.full_amdecrypt_path = shutil.which(self.amdecrypt_path)
 
-    def _setup_cdm(self):
+    def _initialize_cdm(self):
         if self.wvd_path:
             self.cdm = Cdm.from_device(Device.load(self.wvd_path))
         else:

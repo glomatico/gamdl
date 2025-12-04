@@ -442,7 +442,7 @@ async def main(
             language=language,
         )
 
-    itunes_api = ItunesApi.create(
+    itunes_api = ItunesApi(
         apple_music_api.storefront,
         apple_music_api.language,
     )

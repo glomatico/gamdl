@@ -447,13 +447,18 @@ class AppleMusicDownloader:
             ):
                 raise ExecutableNotFound("N_m3u8DL-RE")
 
-            if not download_item.stream_info.audio_track or (
-                (
-                    not download_item.decryption_key
-                    or not download_item.decryption_key.audio_track
-                    or not download_item.decryption_key.audio_track.key
+            if (
+                not download_item.stream_info
+                or not download_item.stream_info.audio_track
+                or not download_item.stream_info.audio_track.stream_url
+                or (
+                    (
+                        not download_item.decryption_key
+                        or not download_item.decryption_key.audio_track
+                        or not download_item.decryption_key.audio_track.key
+                    )
+                    and not self.base_downloader.use_wrapper
                 )
-                and not self.base_downloader.use_wrapper
             ):
                 raise FormatNotAvailable(download_item.media_metadata["id"])
 

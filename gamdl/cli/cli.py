@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
 api_from_wrapper_sig = inspect.signature(AppleMusicApi.create_from_wrapper)
+api_sig = inspect.signature(AppleMusicApi.__init__)
 base_downloader_sig = inspect.signature(AppleMusicBaseDownloader.__init__)
 music_video_downloader_sig = inspect.signature(AppleMusicMusicVideoDownloader.__init__)
 song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
@@ -139,7 +140,7 @@ def make_sync(func):
     "--language",
     "-l",
     type=str,
-    default=api_from_cookies_sig.parameters["language"].default,
+    default=api_sig.parameters["language"].default,
     help="Metadata language",
 )
 # Base Downloader specific options

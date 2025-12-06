@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 class AppleMusicApi:
     def __init__(
         self,
-        storefront: str,
-        language: str,
-        media_user_token: str,
-        developer_token: str,
+        storefront: str = "us",
+        language: str = "en-US",
+        media_user_token: str | None = None,
+        developer_token: str | None = None,
     ) -> None:
         self.storefront = storefront
         self.language = language
@@ -35,7 +35,8 @@ class AppleMusicApi:
     async def create_from_netscape_cookies(
         cls,
         cookies_path: str = "./cookies.txt",
-        language: str = "en-US",
+        *args,
+        **kwargs,
     ) -> "AppleMusicApi":
         cookies = MozillaCookieJar(cookies_path)
         cookies.load(ignore_discard=True, ignore_expires=True)
@@ -58,16 +59,18 @@ class AppleMusicApi:
 
         return await cls.create(
             storefront=None,
-            language=language,
             media_user_token=media_user_token,
             developer_token=None,
+            *args,
+            **kwargs,
         )
 
     @classmethod
     async def create_from_wrapper(
         cls,
         wrapper_account_url: str = "http://127.0.0.1:30020/",
-        language: str = "en-US",
+        *args,
+        **kwargs,
     ) -> "AppleMusicApi":
         async with httpx.AsyncClient() as client:
             wrapper_account_response = await client.get(wrapper_account_url)
@@ -76,9 +79,10 @@ class AppleMusicApi:
 
         return await cls.create(
             storefront=None,
-            language=language,
             media_user_token=wrapper_account_info["music_token"],
             developer_token=wrapper_account_info["dev_token"],
+            *args,
+            **kwargs,
         )
 
     @classmethod

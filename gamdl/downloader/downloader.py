@@ -377,14 +377,14 @@ class AppleMusicDownloader:
         download_item: DownloadItem,
     ) -> DownloadItem:
         try:
-            if download_item.error:
-                raise download_item.error
-
             if download_item.flat_filter_result:
                 download_item = await self.get_single_download_item_no_filter(
                     download_item.media_metadata,
                     download_item.playlist_metadata,
                 )
+
+            if download_item.error:
+                raise download_item.error
 
             await self._initial_processing(download_item)
             await self._download(download_item)

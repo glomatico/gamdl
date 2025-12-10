@@ -81,6 +81,15 @@ class AppleMusicDownloader:
     ) -> DownloadItem:
         download_item = None
 
+        if not self.base_downloader.is_media_streamable(
+            media_metadata,
+        ):
+            return DownloadItem(
+                media_metadata=media_metadata,
+                playlist_metadata=playlist_metadata,
+                error=NotStreamable(media_metadata["id"]),
+            )
+
         if media_metadata["type"] in SONG_MEDIA_TYPE:
             download_item = await self.song_downloader.get_download_item(
                 media_metadata,
@@ -398,11 +407,6 @@ class AppleMusicDownloader:
 
         if self.song_downloader.synced_lyrics_only:
             return
-
-        if not self.base_downloader.is_media_streamable(
-            download_item.media_metadata,
-        ):
-            raise NotStreamable(download_item.media_metadata["id"])
 
         if (
             Path(download_item.final_path).exists()

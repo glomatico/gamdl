@@ -292,29 +292,27 @@ from gamdl.interface import (
     AppleMusicUploadedVideoInterface,
 )
 
-
 async def main():
-    # Initialize APIs
-    apple_music_api = AppleMusicApi.from_netscape_cookies(cookies_path="cookies.txt")
-    await apple_music_api.setup()
-
+    # Create AppleMusicApi instance (from cookies or wrapper)
+    apple_music_api = await AppleMusicApi.create_from_netscape_cookies(
+        cookies_path="cookies.txt",
+    )
     itunes_api = ItunesApi(
         apple_music_api.storefront,
         apple_music_api.language,
     )
-    itunes_api.setup()
 
-    # Initialize interfaces
+    # Check subscription
+    assert apple_music_api.active_subscription
+
+    # Set up interfaces
     interface = AppleMusicInterface(apple_music_api, itunes_api)
     song_interface = AppleMusicSongInterface(interface)
     music_video_interface = AppleMusicMusicVideoInterface(interface)
     uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
 
-    # Initialize base downloader
+    # Set up base downloader and specialized downloaders
     base_downloader = AppleMusicBaseDownloader()
-    base_downloader.setup()
-
-    # Initialize specialized downloaders
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
         interface=song_interface,
@@ -328,7 +326,7 @@ async def main():
         interface=uploaded_video_interface,
     )
 
-    # Create main downloader
+    # Main downloader
     downloader = AppleMusicDownloader(
         interface=interface,
         base_downloader=base_downloader,
@@ -338,10 +336,8 @@ async def main():
     )
 
     # Download a song
-    url_info = downloader.get_url_info(
-        "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
-    )
-
+    url = "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
+    url_info = downloader.get_url_info(url)
     if url_info:
         download_queue = await downloader.get_download_queue(url_info)
         if download_queue:
@@ -360,4 +356,3 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## 🤝 Contributing
 
 Currently, I'm not interested in reviewing pull requests that change or add features. Only critical bug fixes will be considered. However, feel free to open issues for bugs or feature requests.
-

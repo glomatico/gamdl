@@ -207,6 +207,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "async-lru" },
     { name = "click" },
+    { name = "colorama" },
     { name = "httpx" },
     { name = "inquirerpy" },
     { name = "m3u8" },
@@ -220,6 +221,7 @@ dependencies = [
 requires-dist = [
     { name = "async-lru", specifier = ">=2.0.5" },
     { name = "click", specifier = ">=8.3.0" },
+    { name = "colorama", specifier = ">=0.4.6" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "inquirerpy", specifier = ">=0.3.4" },
     { name = "m3u8", specifier = ">=6.0.0" },

@@ -8,6 +8,7 @@ requires-python = ">=3.10"
 dependencies = [
     "async-lru>=2.0.5",
     "click>=8.3.0",
+    "colorama>=0.4.6",
     "httpx>=0.28.1",
     "inquirerpy>=0.3.4",
     "m3u8>=6.0.0",

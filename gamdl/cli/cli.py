@@ -5,6 +5,7 @@ from functools import wraps
 from pathlib import Path
 
 import click
+import colorama
 
 from .. import __version__
 from ..api import AppleMusicApi, ItunesApi
@@ -416,6 +417,8 @@ async def main(
     *args,
     **kwargs,
 ):
+    colorama.just_fix_windows_console()
+
     root_logger = logging.getLogger(__name__.split(".")[0])
     root_logger.setLevel(log_level)
     root_logger.propagate = False

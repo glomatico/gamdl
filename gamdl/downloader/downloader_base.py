@@ -163,7 +163,7 @@ class AppleMusicBaseDownloader:
 
     @alru_cache()
     async def get_cover_bytes(self, cover_url: str) -> bytes | None:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(cover_url)
             raise_for_status(response, {200, 404})
 

@@ -21,7 +21,7 @@ def safe_json(httpx_response: httpx.Response) -> dict:
 
 
 async def get_response_text(url: str) -> str:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.get(url)
         raise_for_status(response)
         return response.text

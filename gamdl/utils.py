@@ -51,22 +51,13 @@ async def async_subprocess(*args: str, silent: bool = False) -> None:
 
 async def safe_gather(
     *tasks: typing.Awaitable[typing.Any],
-    limit: int = 3,
-    retries: int = 5,
+    limit: int = 5,
 ) -> list[typing.Any]:
     semaphore = asyncio.Semaphore(limit)
 
     async def bounded_task(task: typing.Awaitable[typing.Any]) -> typing.Any:
         async with semaphore:
-            last_exception = None
-            for attempt in range(retries + 1):
-                try:
-                    return await task
-                except Exception as e:
-                    last_exception = e
-                    if attempt < retries:
-                        await asyncio.sleep(2**attempt)
-            return last_exception
+            return await task
 
     return await asyncio.gather(
         *(bounded_task(task) for task in tasks),

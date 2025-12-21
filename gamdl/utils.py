@@ -20,11 +20,14 @@ def safe_json(httpx_response: httpx.Response) -> dict:
         return {}
 
 
-async def get_response_text(url: str) -> str:
+async def get_response(
+    url: str,
+    valid_responses: set[int] = {200},
+) -> httpx.Response:
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.get(url)
-        raise_for_status(response)
-        return response.text
+        raise_for_status(response, valid_responses)
+        return response
 
 
 async def async_subprocess(*args: str, silent: bool = False) -> None:

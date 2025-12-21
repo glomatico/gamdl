@@ -13,7 +13,7 @@ from InquirerPy.base.control import Choice
 from pywidevine import PSSH, Cdm
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 
-from ..utils import get_response_text
+from ..utils import get_response
 from .constants import DRM_DEFAULT_KEY_MAPPING, MP4_FORMAT_CODECS, SONG_CODEC_REGEX_MAP
 from .enums import MediaRating, MediaType, SongCodec, SyncedLyricsFormat
 from .interface import AppleMusicInterface
@@ -229,7 +229,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
         if not m3u8_master_url:
             return None
 
-        m3u8_master_obj = m3u8.loads(await get_response_text(m3u8_master_url))
+        m3u8_master_obj = m3u8.loads((await get_response(m3u8_master_url)).text)
         m3u8_master_data = m3u8_master_obj.data
 
         if codec == SongCodec.ASK:
@@ -273,7 +273,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 "com.apple.streamingkeydelivery",
             )
         else:
-            m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
+            m3u8_obj = m3u8.loads((await get_response(stream_info.stream_url)).text)
 
             stream_info.widevine_pssh = self._get_drm_uri_from_m3u8_keys(
                 m3u8_obj,
@@ -384,7 +384,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
             i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor
         )["URL"]
 
-        m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
+        m3u8_obj = m3u8.loads((await get_response(stream_info.stream_url)).text)
         stream_info.widevine_pssh = m3u8_obj.keys[0].uri
 
         stream_info_av = StreamInfoAv(

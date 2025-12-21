@@ -13,7 +13,7 @@ from pywidevine import Cdm, Device
 from yt_dlp import YoutubeDL
 
 from ..interface.types import MediaTags, PlaylistTags
-from ..utils import async_subprocess, raise_for_status
+from ..utils import async_subprocess, get_response
 from .constants import (
     ILLEGAL_CHAR_REPLACEMENT,
     ILLEGAL_CHARS_RE,
@@ -163,13 +163,10 @@ class AppleMusicBaseDownloader:
 
     @alru_cache()
     async def get_cover_bytes(self, cover_url: str) -> bytes | None:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(cover_url)
-            raise_for_status(response, {200, 404})
-
-            if response.status_code == 200:
-                return response.content
-            return None
+        response = await get_response(cover_url, {200, 404})
+        if response.status_code == 200:
+            return response.content
+        return None
 
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(

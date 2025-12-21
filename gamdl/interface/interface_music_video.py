@@ -7,7 +7,7 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from pywidevine import Cdm
 
-from ..utils import get_response_text
+from ..utils import get_response
 from .constants import MP4_FORMAT_CODECS
 from .enums import MediaRating, MediaType, MusicVideoCodec, MusicVideoResolution
 from .interface import AppleMusicInterface
@@ -139,7 +139,9 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
                 webplayback_response["songList"][0],
             )
 
-        playlist_master_m3u8_obj = m3u8.loads(await get_response_text(m3u8_master_url))
+        playlist_master_m3u8_obj = m3u8.loads(
+            (await get_response(m3u8_master_url)).text
+        )
         playlist_master_m3u8_obj.base_uri = m3u8_master_url.rpartition("/")[0]
         stream_info_video = await self.get_stream_info_video(
             playlist_master_m3u8_obj,
@@ -318,7 +320,9 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
         stream_info.codec = playlist.stream_info.codecs
         stream_info.width, stream_info.height = playlist.stream_info.resolution
 
-        playlist_m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
+        playlist_m3u8_obj = m3u8.loads(
+            (await get_response(stream_info.stream_url)).text
+        )
         stream_info.widevine_pssh = self.get_widevine_pssh(playlist_m3u8_obj)
         stream_info.fairplay_key = self.get_fairplay_key(playlist_m3u8_obj)
         stream_info.playready_pssh = self.get_playready_pssh(playlist_m3u8_obj)
@@ -343,7 +347,9 @@ class AppleMusicMusicVideoInterface(AppleMusicInterface):
         stream_info.stream_url = playlist["uri"]
         stream_info.codec = playlist["group_id"]
 
-        playlist_m3u8_obj = m3u8.loads(await get_response_text(stream_info.stream_url))
+        playlist_m3u8_obj = m3u8.loads(
+            (await get_response(stream_info.stream_url)).text
+        )
         stream_info.widevine_pssh = self.get_widevine_pssh(playlist_m3u8_obj)
         stream_info.fairplay_key = self.get_fairplay_key(playlist_m3u8_obj)
         stream_info.playready_pssh = self.get_playready_pssh(playlist_m3u8_obj)

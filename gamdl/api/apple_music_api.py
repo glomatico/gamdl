@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from ..utils import raise_for_status, safe_json
+from ..utils import get_response, raise_for_status, safe_json
 from .constants import (
     AMP_API_URL,
     APPLE_MUSIC_COOKIE_DOMAIN,
@@ -72,9 +72,7 @@ class AppleMusicApi:
         *args,
         **kwargs,
     ) -> "AppleMusicApi":
-        async with httpx.AsyncClient() as client:
-            wrapper_account_response = await client.get(wrapper_account_url)
-        raise_for_status(wrapper_account_response)
+        wrapper_account_response = await get_response(wrapper_account_url)
         wrapper_account_info = safe_json(wrapper_account_response)
 
         return await cls.create(

@@ -125,7 +125,6 @@ class AppleMusicApi:
                 "l": self.language,
             },
             follow_redirects=True,
-            transport=httpx.AsyncHTTPTransport(retries=10),
             timeout=60.0,
         )
 

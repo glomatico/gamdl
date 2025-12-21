@@ -6,7 +6,7 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from ..interface import AppleMusicInterface
-from ..utils import sequential_gather
+from ..utils import safe_gather
 from .constants import (
     ALBUM_MEDIA_TYPE,
     ARTIST_MEDIA_TYPE,
@@ -24,9 +24,9 @@ from .enums import DownloadMode, RemuxMode
 from .exceptions import (
     ExecutableNotFound,
     FormatNotAvailable,
+    MediaFileExists,
     NotStreamable,
     SyncedLyricsOnly,
-    MediaFileExists,
 )
 from .types import DownloadItem, UrlInfo
 
@@ -120,20 +120,18 @@ class AppleMusicDownloader:
             tracks_metadata.extend(extended_data["data"])
 
         tasks = [
-            asyncio.create_task(
-                self.get_single_download_item(
-                    media_metadata,
-                    (
-                        collection_metadata
-                        if collection_metadata["type"] in PLAYLIST_MEDIA_TYPE
-                        else None
-                    ),
-                )
+            self.get_single_download_item(
+                media_metadata,
+                (
+                    collection_metadata
+                    if collection_metadata["type"] in PLAYLIST_MEDIA_TYPE
+                    else None
+                ),
             )
             for media_metadata in tracks_metadata
         ]
 
-        download_items = await sequential_gather(*tasks)
+        download_items = await safe_gather(*tasks)
         return download_items
 
     async def get_artist_download_items(
@@ -205,20 +203,16 @@ class AppleMusicDownloader:
         download_items = []
 
         album_tasks = [
-            asyncio.create_task(
-                self.interface.apple_music_api.get_album(album_metadata["id"])
-            )
+            self.interface.apple_music_api.get_album(album_metadata["id"])
             for album_metadata in selected
         ]
-        album_responses = await sequential_gather(*album_tasks)
+        album_responses = await safe_gather(*album_tasks)
 
         track_tasks = [
-            asyncio.create_task(
-                self.get_collection_download_items(album_response["data"][0])
-            )
+            self.get_collection_download_items(album_response["data"][0])
             for album_response in album_responses
         ]
-        track_results = await sequential_gather(*track_tasks)
+        track_results = await safe_gather(*track_tasks)
 
         for track_result in track_results:
             download_items.extend(track_result)
@@ -252,14 +246,12 @@ class AppleMusicDownloader:
         ).execute_async()
 
         music_video_tasks = [
-            asyncio.create_task(
-                self.get_single_download_item(
-                    music_video_metadata,
-                )
+            self.get_single_download_item(
+                music_video_metadata,
             )
             for music_video_metadata in selected
         ]
-        download_items = await sequential_gather(*music_video_tasks)
+        download_items = await safe_gather(*music_video_tasks)
 
         return download_items
 

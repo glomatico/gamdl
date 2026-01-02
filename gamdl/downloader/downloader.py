@@ -27,6 +27,7 @@ from .exceptions import (
     MediaFileExists,
     NotStreamable,
     SyncedLyricsOnly,
+    UnsupportedMediaType,
 )
 from .types import DownloadItem, UrlInfo
 
@@ -86,18 +87,27 @@ class AppleMusicDownloader:
                 raise NotStreamable(media_metadata["id"])
 
             if media_metadata["type"] in SONG_MEDIA_TYPE:
+                if not self.song_downloader:
+                    raise UnsupportedMediaType(media_metadata["type"])
+
                 download_item = await self.song_downloader.get_download_item(
                     media_metadata,
                     playlist_metadata,
                 )
 
             if media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
+                if not self.music_video_downloader:
+                    raise UnsupportedMediaType(media_metadata["type"])
+
                 download_item = await self.music_video_downloader.get_download_item(
                     media_metadata,
                     playlist_metadata,
                 )
 
             if media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
+                if not self.uploaded_video_downloader:
+                    raise UnsupportedMediaType(media_metadata["type"])
+
                 download_item = await self.uploaded_video_downloader.get_download_item(
                     media_metadata,
                 )

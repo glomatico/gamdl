@@ -143,23 +143,6 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
         music_video_metadata: dict,
         playlist_metadata: dict = None,
     ) -> DownloadItem:
-        try:
-            return await self._get_download_item(
-                music_video_metadata,
-                playlist_metadata,
-            )
-        except Exception as e:
-            return DownloadItem(
-                media_metadata=music_video_metadata,
-                playlist_metadata=playlist_metadata,
-                error=e,
-            )
-
-    async def _get_download_item(
-        self,
-        music_video_metadata: dict,
-        playlist_metadata: dict = None,
-    ) -> DownloadItem:
         download_item = DownloadItem()
 
         download_item.media_metadata = music_video_metadata

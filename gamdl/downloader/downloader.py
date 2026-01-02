@@ -79,32 +79,33 @@ class AppleMusicDownloader:
         media_metadata: dict,
         playlist_metadata: dict = None,
     ) -> DownloadItem:
-        download_item = None
+        try:
+            if not self.base_downloader.is_media_streamable(
+                media_metadata,
+            ):
+                raise NotStreamable(media_metadata["id"])
 
-        if not self.base_downloader.is_media_streamable(
-            media_metadata,
-        ):
-            return DownloadItem(
+            if media_metadata["type"] in SONG_MEDIA_TYPE:
+                download_item = await self.song_downloader.get_download_item(
+                    media_metadata,
+                    playlist_metadata,
+                )
+
+            if media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
+                download_item = await self.music_video_downloader.get_download_item(
+                    media_metadata,
+                    playlist_metadata,
+                )
+
+            if media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
+                download_item = await self.uploaded_video_downloader.get_download_item(
+                    media_metadata,
+                )
+        except Exception as e:
+            download_item = DownloadItem(
                 media_metadata=media_metadata,
                 playlist_metadata=playlist_metadata,
-                error=NotStreamable(media_metadata["id"]),
-            )
-
-        if media_metadata["type"] in SONG_MEDIA_TYPE:
-            download_item = await self.song_downloader.get_download_item(
-                media_metadata,
-                playlist_metadata,
-            )
-
-        if media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
-            download_item = await self.music_video_downloader.get_download_item(
-                media_metadata,
-                playlist_metadata,
-            )
-
-        if media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
-            download_item = await self.uploaded_video_downloader.get_download_item(
-                media_metadata,
+                error=e,
             )
 
         return download_item

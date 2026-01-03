@@ -334,6 +334,12 @@ def make_sync(func):
     help="Download only synced lyrics",
     default=song_downloader_sig.parameters["synced_lyrics_only"].default,
 )
+@click.option(
+    "--use-album-date",
+    is_flag=True,
+    help="Use album release date for songs",
+    default=song_downloader_sig.parameters["use_album_date"].default,
+)
 # DownloaderMusicVideo specific options
 @click.option(
     "--music-video-codec-priority",
@@ -410,6 +416,7 @@ async def main(
     synced_lyrics_format: SyncedLyricsFormat,
     no_synced_lyrics: bool,
     synced_lyrics_only: bool,
+    use_album_date: bool,
     music_video_codec_priority: list[MusicVideoCodec],
     music_video_remux_format: RemuxFormatMusicVideo,
     music_video_resolution: MusicVideoResolution,
@@ -507,6 +514,7 @@ async def main(
         synced_lyrics_format=synced_lyrics_format,
         no_synced_lyrics=no_synced_lyrics,
         synced_lyrics_only=synced_lyrics_only,
+        use_album_date=use_album_date,
     )
     music_video_downloader = AppleMusicMusicVideoDownloader(
         base_downloader=base_downloader,

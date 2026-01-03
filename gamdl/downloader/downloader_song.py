@@ -19,6 +19,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
+        use_album_date: bool = False,
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
@@ -26,6 +27,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
+        self.use_album_date = use_album_date
 
     async def get_download_item(
         self,
@@ -45,9 +47,10 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         )
 
         webplayback = await self.interface.apple_music_api.get_webplayback(song_id)
-        download_item.media_tags = self.interface.get_tags(
+        download_item.media_tags = await self.interface.get_tags(
             webplayback,
             download_item.lyrics.unsynced if download_item.lyrics else None,
+            self.use_album_date,
         )
 
         if playlist_metadata:

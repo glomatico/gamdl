@@ -3,6 +3,7 @@ import base64
 import datetime
 import logging
 
+from async_lru import alru_cache
 from pywidevine import PSSH, Cdm
 
 from ..api.apple_music_api import AppleMusicApi
@@ -66,3 +67,21 @@ class AppleMusicInterface:
         logger.debug(f"Decryption key: {decryption_key}")
 
         return decryption_key
+
+    @alru_cache()
+    async def get_media_date(
+        self,
+        media_id: str,
+    ) -> datetime.datetime | None:
+        lookup_result = await self.itunes_api.get_lookup_result(media_id)
+        if not lookup_result["results"]:
+            return None
+
+        release_date = lookup_result["results"][0].get("releaseDate")
+        if not release_date:
+            return None
+
+        parsed_date = self.parse_date(release_date)
+        logger.debug(f"Parsed media date: {parsed_date}")
+
+        return parsed_date

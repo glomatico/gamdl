@@ -168,10 +168,11 @@ class AppleMusicSongInterface(AppleMusicInterface):
 
         return f"[{timestamp.strftime('%M:%S.%f')[:-4]}]{text}"
 
-    def get_tags(
+    async def get_tags(
         self,
         webplayback: dict,
         lyrics: str | None = None,
+        use_album_date: bool = False,
     ) -> MediaTags:
         webplayback_metadata = webplayback["songList"][0]["assets"][0]["metadata"]
 
@@ -194,9 +195,13 @@ class AppleMusicSongInterface(AppleMusicInterface):
             composer_sort=webplayback_metadata.get("sort-composer"),
             copyright=webplayback_metadata.get("copyright"),
             date=(
-                self.parse_date(webplayback_metadata["releaseDate"])
-                if webplayback_metadata.get("releaseDate")
-                else None
+                await self.get_media_date(webplayback_metadata["playlistId"])
+                if use_album_date
+                else (
+                    self.parse_date(webplayback_metadata["releaseDate"])
+                    if webplayback_metadata.get("releaseDate")
+                    else None
+                )
             ),
             disc=webplayback_metadata["discNumber"],
             disc_total=webplayback_metadata["discCount"],

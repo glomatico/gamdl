@@ -5,7 +5,6 @@ import uuid
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 from async_lru import alru_cache
 from mutagen.mp4 import MP4, MP4Cover
 from PIL import Image

@@ -102,7 +102,15 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             else:
                 download_item.decryption_key = None
 
-        download_item.cover_url_template = self.get_cover_url_template(song_metadata)
+        download_item.cover_url_template = self.interface.get_cover_url_template(
+            song_metadata,
+            self.cover_format,
+        )
+        download_item.cover_url = self.interface.get_cover_url(
+            download_item.cover_url_template,
+            self.cover_size,
+            self.cover_format,
+        )
 
         download_item.random_uuid = self.get_random_uuid()
         if download_item.stream_info and download_item.stream_info.file_format:
@@ -115,8 +123,9 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         else:
             download_item.staged_path = None
 
-        cover_file_extension = await self.get_cover_file_extension(
-            download_item.cover_url_template,
+        cover_file_extension = await self.interface.get_cover_file_extension(
+            download_item.cover_url,
+            self.cover_format,
         )
         if cover_file_extension:
             download_item.cover_path = self.get_cover_path(
@@ -323,8 +332,9 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             download_item.stream_info.audio_track.fairplay_key,
         )
 
+        cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
         await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
-            download_item.cover_url_template,
+            cover_bytes,
         )

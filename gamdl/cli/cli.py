@@ -15,7 +15,6 @@ from ..downloader import (
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
-    CoverFormat,
     DownloadItem,
     DownloadMode,
     GamdlError,
@@ -32,6 +31,7 @@ from ..interface import (
     SongCodec,
     SyncedLyricsFormat,
     UploadedVideoQuality,
+    CoverFormat,
 )
 from .config_file import ConfigFile
 from .constants import X_NOT_IN_PATH

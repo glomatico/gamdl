@@ -21,6 +21,7 @@ class DownloadItem:
     stream_info: StreamInfoAv = None
     decryption_key: DecryptionKeyAv = None
     cover_url_template: str = None
+    cover_url: str = None
     staged_path: str = None
     final_path: str = None
     playlist_file_path: str = None

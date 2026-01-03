@@ -486,10 +486,7 @@ class AppleMusicDownloader:
             return
 
         if download_item.cover_path and self.base_downloader.save_cover:
-            cover_url = self.base_downloader.get_cover_url(
-                download_item.cover_url_template,
-            )
-            cover_bytes = await self.base_downloader.get_cover_bytes(cover_url)
+            cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
             if cover_bytes and (
                 self.base_downloader.overwrite
                 or not Path(download_item.cover_path).exists()

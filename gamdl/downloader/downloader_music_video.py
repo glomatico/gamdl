@@ -201,11 +201,19 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             playlist_metadata,
         )
 
-        download_item.cover_url_template = self.get_cover_url_template(
+        download_item.cover_url_template = self.interface.get_cover_url_template(
             music_video_metadata,
+            self.cover_format,
         )
-        cover_file_extension = await self.get_cover_file_extension(
+        download_item.cover_url = self.interface.get_cover_url(
             download_item.cover_url_template,
+            self.cover_size,
+            self.cover_format,
+        )
+
+        cover_file_extension = await self.interface.get_cover_file_extension(
+            download_item.cover_url,
+            self.cover_format,
         )
         if cover_file_extension:
             download_item.cover_path = self.get_cover_path(
@@ -263,8 +271,9 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             download_item.decryption_key,
         )
 
+        cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
         await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
-            download_item.cover_url_template,
+            cover_bytes,
         )

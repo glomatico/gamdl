@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import datetime
+import io
 import json
 import logging
 import re
@@ -10,6 +11,7 @@ from xml.etree import ElementTree
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
+from mutagen.mp4 import MP4
 from pywidevine import PSSH, Cdm
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 
@@ -168,10 +170,11 @@ class AppleMusicSongInterface(AppleMusicInterface):
 
         return f"[{timestamp.strftime('%M:%S.%f')[:-4]}]{text}"
 
-    def get_tags(
+    async def get_tags(
         self,
         webplayback: dict,
         lyrics: str | None = None,
+        use_album_date: bool = False,
     ) -> MediaTags:
         webplayback_metadata = webplayback["songList"][0]["assets"][0]["metadata"]
 
@@ -194,9 +197,13 @@ class AppleMusicSongInterface(AppleMusicInterface):
             composer_sort=webplayback_metadata.get("sort-composer"),
             copyright=webplayback_metadata.get("copyright"),
             date=(
-                self.parse_date(webplayback_metadata["releaseDate"])
-                if webplayback_metadata.get("releaseDate")
-                else None
+                await self.get_media_date(webplayback_metadata["playlistId"])
+                if use_album_date
+                else (
+                    self.parse_date(webplayback_metadata["releaseDate"])
+                    if webplayback_metadata.get("releaseDate")
+                    else None
+                )
             ),
             disc=webplayback_metadata["discNumber"],
             disc_total=webplayback_metadata["discCount"],
@@ -457,3 +464,19 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 cdm,
             )
         )
+
+    async def get_extra_tags(
+        self,
+        song_metadata: dict,
+    ) -> dict:
+        previews = song_metadata["attributes"].get("previews", [])
+        if not previews:
+            return {}
+
+        preview_url = previews[0]["url"]
+        preview_response = await get_response(preview_url)
+        preview_bytes = preview_response.content
+        preview_tags = dict(MP4(io.BytesIO(preview_bytes)).tags)
+
+        logger.debug(f"Extra tags: {preview_tags.keys()}")
+        return preview_tags

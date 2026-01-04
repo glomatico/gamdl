@@ -2,25 +2,17 @@ import asyncio
 import re
 import shutil
 import uuid
-from io import BytesIO
 from pathlib import Path
 
-import httpx
-from async_lru import alru_cache
 from mutagen.mp4 import MP4, MP4Cover
-from PIL import Image
 from pywidevine import Cdm, Device
 from yt_dlp import YoutubeDL
 
+from ..interface.enums import CoverFormat
 from ..interface.types import MediaTags, PlaylistTags
-from ..utils import async_subprocess, get_response
-from .constants import (
-    ILLEGAL_CHAR_REPLACEMENT,
-    ILLEGAL_CHARS_RE,
-    IMAGE_FILE_EXTENSION_MAP,
-    TEMP_PATH_TEMPLATE,
-)
-from .enums import CoverFormat, DownloadMode, RemuxMode
+from ..utils import async_subprocess
+from .constants import ILLEGAL_CHAR_REPLACEMENT, ILLEGAL_CHARS_RE, TEMP_PATH_TEMPLATE
+from .enums import DownloadMode, RemuxMode
 from .hardcoded_wvd import HARDCODED_WVD
 
 
@@ -113,22 +105,6 @@ class AppleMusicBaseDownloader:
     ) -> bool:
         return bool(media_metadata["attributes"].get("playParams"))
 
-    async def get_cover_file_extension(self, cover_url_template: str) -> str | None:
-        if self.cover_format != CoverFormat.RAW:
-            return f".{self.cover_format.value}"
-
-        cover_url = self.get_cover_url(cover_url_template)
-        cover_bytes = await self.get_cover_bytes(cover_url)
-        if cover_bytes is None:
-            return None
-
-        image_obj = Image.open(BytesIO(self.get_cover_bytes(cover_url)))
-        image_format = image_obj.format.lower()
-        return IMAGE_FILE_EXTENSION_MAP.get(
-            image_format,
-            f".{image_format.lower()}",
-        )
-
     def get_playlist_tags(
         self,
         playlist_metadata: dict,
@@ -160,13 +136,6 @@ class AppleMusicBaseDownloader:
             / TEMP_PATH_TEMPLATE.format(folder_tag)
             / (f"{media_id}_{file_tag}" + file_extension)
         )
-
-    @alru_cache()
-    async def get_cover_bytes(self, cover_url: str) -> bytes | None:
-        response = await get_response(cover_url, {200, 404})
-        if response.status_code == 200:
-            return response.content
-        return None
 
     def get_sanitized_string(self, dirty_string: str, is_folder: bool) -> str:
         dirty_string = re.sub(
@@ -226,45 +195,6 @@ class AppleMusicBaseDownloader:
             )
         )
 
-    def get_cover_url_template(self, metadata: dict) -> str:
-        if self.cover_format == CoverFormat.RAW:
-            return self._get_raw_cover_url(metadata["attributes"]["artwork"]["url"])
-        return metadata["attributes"]["artwork"]["url"]
-
-    def _get_raw_cover_url(self, cover_url_template: str) -> str:
-        return re.sub(
-            r"image/thumb/",
-            "",
-            re.sub(
-                r"is1-ssl",
-                "a1",
-                cover_url_template,
-            ),
-        )
-
-    def get_cover_url(self, cover_url_template: str) -> str:
-        return self.format_cover_url(
-            cover_url_template,
-            self.cover_size,
-            self.cover_format.value,
-        )
-
-    def format_cover_url(
-        self,
-        cover_url_template: str,
-        cover_size: int,
-        cover_format: str,
-    ) -> str:
-        return re.sub(
-            r"\{w\}x\{h\}([a-z]{2})\.jpg",
-            (
-                f"{cover_size}x{cover_size}bb.{cover_format}"
-                if self.cover_format != CoverFormat.RAW
-                else ""
-            ),
-            cover_url_template,
-        )
-
     async def download_stream(self, stream_url: str, download_path: str):
         if self.download_mode == DownloadMode.YTDLP:
             await self.download_ytdlp(stream_url, download_path)
@@ -320,7 +250,8 @@ class AppleMusicBaseDownloader:
         self,
         media_path: Path,
         tags: MediaTags,
-        cover_url_template: str,
+        cover_bytes: bytes | None,
+        extra_tags: dict | None = None,
     ):
         exclude_tags = self.exclude_tags or []
 
@@ -333,9 +264,6 @@ class AppleMusicBaseDownloader:
         )
         mp4_tags = filtered_tags.as_mp4_tags(self.date_tag_template)
 
-        cover_url = self.get_cover_url(cover_url_template)
-        cover_bytes = await self.get_cover_bytes(cover_url)
-
         skip_tagging = "all" in exclude_tags
 
         await asyncio.to_thread(
@@ -344,6 +272,7 @@ class AppleMusicBaseDownloader:
             mp4_tags,
             cover_bytes,
             skip_tagging,
+            extra_tags,
         )
 
     def apply_mp4_tags(
@@ -352,6 +281,7 @@ class AppleMusicBaseDownloader:
         tags: dict,
         cover_bytes: bytes | None,
         skip_tagging: bool,
+        extra_tags: dict | None,
     ):
         mp4 = MP4(media_path)
         mp4.clear()
@@ -369,16 +299,16 @@ class AppleMusicBaseDownloader:
                     )
                 ]
             mp4.update(tags)
+            if extra_tags:
+                mp4.update(extra_tags)
 
         mp4.save()
 
     async def _apply_cover(
         self,
         mp4: MP4,
-        cover_url_template: str,
+        cover_bytes: bytes | None,
     ) -> None:
-        cover_url = self.get_cover_url(cover_url_template)
-        cover_bytes = await self.get_cover_bytes(cover_url)
         if cover_bytes is None:
             return
 

@@ -55,3 +55,8 @@ UPLOADED_VIDEO_QUALITY_RANK = [
     "sd480pVideo",
     "provisionalUploadVideo",
 ]
+
+IMAGE_FILE_EXTENSION_MAP = {
+    "jpeg": ".jpg",
+    "tiff": ".tif",
+}

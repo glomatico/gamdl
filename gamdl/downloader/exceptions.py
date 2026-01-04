@@ -25,3 +25,8 @@ class ExecutableNotFound(GamdlError):
 class SyncedLyricsOnly(GamdlError):
     def __init__(self):
         super().__init__("Only downloading synced lyrics is supported")
+
+
+class UnsupportedMediaType(GamdlError):
+    def __init__(self, media_type: str):
+        super().__init__(f"Unsupported media type: {media_type}")

@@ -143,23 +143,6 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
         music_video_metadata: dict,
         playlist_metadata: dict = None,
     ) -> DownloadItem:
-        try:
-            return await self._get_download_item(
-                music_video_metadata,
-                playlist_metadata,
-            )
-        except Exception as e:
-            return DownloadItem(
-                media_metadata=music_video_metadata,
-                playlist_metadata=playlist_metadata,
-                error=e,
-            )
-
-    async def _get_download_item(
-        self,
-        music_video_metadata: dict,
-        playlist_metadata: dict = None,
-    ) -> DownloadItem:
         download_item = DownloadItem()
 
         download_item.media_metadata = music_video_metadata
@@ -218,11 +201,19 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             playlist_metadata,
         )
 
-        download_item.cover_url_template = self.get_cover_url_template(
+        download_item.cover_url_template = self.interface.get_cover_url_template(
             music_video_metadata,
+            self.cover_format,
         )
-        cover_file_extension = await self.get_cover_file_extension(
+        download_item.cover_url = self.interface.get_cover_url(
             download_item.cover_url_template,
+            self.cover_size,
+            self.cover_format,
+        )
+
+        cover_file_extension = await self.interface.get_cover_file_extension(
+            download_item.cover_url,
+            self.cover_format,
         )
         if cover_file_extension:
             download_item.cover_path = self.get_cover_path(
@@ -280,8 +271,9 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             download_item.decryption_key,
         )
 
+        cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
         await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
-            download_item.cover_url_template,
+            cover_bytes,
         )

@@ -19,6 +19,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
+        use_album_date: bool = False,
+        fetch_extra_tags: bool = False,
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
@@ -26,25 +28,10 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
+        self.use_album_date = use_album_date
+        self.fetch_extra_tags = fetch_extra_tags
 
     async def get_download_item(
-        self,
-        song_metadata: dict,
-        playlist_metadata: dict = None,
-    ) -> DownloadItem:
-        try:
-            return await self._get_download_item(
-                song_metadata,
-                playlist_metadata,
-            )
-        except Exception as e:
-            return DownloadItem(
-                media_metadata=song_metadata,
-                playlist_metadata=playlist_metadata,
-                error=e,
-            )
-
-    async def _get_download_item(
         self,
         song_metadata: dict,
         playlist_metadata: dict = None,
@@ -62,10 +49,15 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         )
 
         webplayback = await self.interface.apple_music_api.get_webplayback(song_id)
-        download_item.media_tags = self.interface.get_tags(
+        download_item.media_tags = await self.interface.get_tags(
             webplayback,
             download_item.lyrics.unsynced if download_item.lyrics else None,
+            self.use_album_date,
         )
+        if self.fetch_extra_tags:
+            download_item.extra_tags = await self.interface.get_extra_tags(
+                song_metadata,
+            )
 
         if playlist_metadata:
             download_item.playlist_tags = self.get_playlist_tags(
@@ -116,7 +108,15 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             else:
                 download_item.decryption_key = None
 
-        download_item.cover_url_template = self.get_cover_url_template(song_metadata)
+        download_item.cover_url_template = self.interface.get_cover_url_template(
+            song_metadata,
+            self.cover_format,
+        )
+        download_item.cover_url = self.interface.get_cover_url(
+            download_item.cover_url_template,
+            self.cover_size,
+            self.cover_format,
+        )
 
         download_item.random_uuid = self.get_random_uuid()
         if download_item.stream_info and download_item.stream_info.file_format:
@@ -129,8 +129,9 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         else:
             download_item.staged_path = None
 
-        cover_file_extension = await self.get_cover_file_extension(
-            download_item.cover_url_template,
+        cover_file_extension = await self.interface.get_cover_file_extension(
+            download_item.cover_url,
+            self.cover_format,
         )
         if cover_file_extension:
             download_item.cover_path = self.get_cover_path(
@@ -337,8 +338,10 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             download_item.stream_info.audio_track.fairplay_key,
         )
 
+        cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
         await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,
-            download_item.cover_url_template,
+            cover_bytes,
+            download_item.extra_tags,
         )

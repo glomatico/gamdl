@@ -87,3 +87,9 @@ class MusicVideoResolution(Enum):
 class UploadedVideoQuality(Enum):
     BEST = "best"
     ASK = "ask"
+
+
+class CoverFormat(Enum):
+    JPG = "jpg"
+    PNG = "png"
+    RAW = "raw"

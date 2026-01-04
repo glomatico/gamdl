@@ -159,6 +159,8 @@ The file is created automatically on first run. Command-line arguments override 
 | `--synced-lyrics-format`        | Synced lyrics format            | `lrc`                                          |
 | `--no-synced-lyrics`            | Don't download synced lyrics    | `false`                                        |
 | `--synced-lyrics-only`          | Download only synced lyrics     | `false`                                        |
+| `--use-album-date`              | Use album release date for songs | `false`                                        |
+| `--fetch-extra-tags`            | Fetch extra tags from preview (normalization and smooth playback) | `false`                                        |
 | **Music Video Options**         |                                 |                                                |
 | `--music-video-codec-priority`  | Comma-separated codec priority  | `h264,h265`                                    |
 | `--music-video-remux-format`    | Music video remux format        | `m4v`                                          |

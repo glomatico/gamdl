@@ -20,6 +20,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
         use_album_date: bool = False,
+        fetch_extra_tags: bool = False,
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
@@ -28,6 +29,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
         self.use_album_date = use_album_date
+        self.fetch_extra_tags = fetch_extra_tags
 
     async def get_download_item(
         self,
@@ -52,6 +54,10 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             download_item.lyrics.unsynced if download_item.lyrics else None,
             self.use_album_date,
         )
+        if self.fetch_extra_tags:
+            download_item.extra_tags = await self.interface.get_extra_tags(
+                song_metadata,
+            )
 
         if playlist_metadata:
             download_item.playlist_tags = self.get_playlist_tags(
@@ -337,4 +343,5 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             download_item.staged_path,
             download_item.media_tags,
             cover_bytes,
+            download_item.extra_tags,
         )

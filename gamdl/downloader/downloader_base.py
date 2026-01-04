@@ -251,6 +251,7 @@ class AppleMusicBaseDownloader:
         media_path: Path,
         tags: MediaTags,
         cover_bytes: bytes | None,
+        extra_tags: dict | None = None,
     ):
         exclude_tags = self.exclude_tags or []
 
@@ -271,6 +272,7 @@ class AppleMusicBaseDownloader:
             mp4_tags,
             cover_bytes,
             skip_tagging,
+            extra_tags,
         )
 
     def apply_mp4_tags(
@@ -279,6 +281,7 @@ class AppleMusicBaseDownloader:
         tags: dict,
         cover_bytes: bytes | None,
         skip_tagging: bool,
+        extra_tags: dict | None,
     ):
         mp4 = MP4(media_path)
         mp4.clear()
@@ -296,6 +299,8 @@ class AppleMusicBaseDownloader:
                     )
                 ]
             mp4.update(tags)
+            if extra_tags:
+                mp4.update(extra_tags)
 
         mp4.save()
 

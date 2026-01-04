@@ -340,6 +340,12 @@ def make_sync(func):
     help="Use album release date for songs",
     default=song_downloader_sig.parameters["use_album_date"].default,
 )
+@click.option(
+    "--fetch-extra-tags",
+    is_flag=True,
+    help="Fetch extra tags from preview (normalization and smooth playback)",
+    default=song_downloader_sig.parameters["fetch_extra_tags"].default,
+)
 # DownloaderMusicVideo specific options
 @click.option(
     "--music-video-codec-priority",
@@ -417,6 +423,7 @@ async def main(
     no_synced_lyrics: bool,
     synced_lyrics_only: bool,
     use_album_date: bool,
+    fetch_extra_tags: bool,
     music_video_codec_priority: list[MusicVideoCodec],
     music_video_remux_format: RemuxFormatMusicVideo,
     music_video_resolution: MusicVideoResolution,
@@ -515,6 +522,7 @@ async def main(
         no_synced_lyrics=no_synced_lyrics,
         synced_lyrics_only=synced_lyrics_only,
         use_album_date=use_album_date,
+        fetch_extra_tags=fetch_extra_tags,
     )
     music_video_downloader = AppleMusicMusicVideoDownloader(
         base_downloader=base_downloader,

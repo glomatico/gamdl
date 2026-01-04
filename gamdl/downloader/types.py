@@ -17,6 +17,7 @@ class DownloadItem:
     random_uuid: str = None
     lyrics: Lyrics = None
     media_tags: MediaTags = None
+    extra_tags: dict = None
     playlist_tags: PlaylistTags = None
     stream_info: StreamInfoAv = None
     decryption_key: DecryptionKeyAv = None

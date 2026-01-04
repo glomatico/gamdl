@@ -82,9 +82,11 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
         self,
         download_item: DownloadItem,
     ) -> None:
+        progress_hook = getattr(download_item, '_progress_hook', None)
         await self.download_ytdlp(
             download_item.stream_info.video_track.stream_url,
             download_item.staged_path,
+            progress_hook,
         )
         await self.apply_tags(
             download_item.staged_path,

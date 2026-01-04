@@ -1,6 +1,9 @@
 import asyncio
+import csv
 import inspect
 import logging
+import os
+import re
 from functools import wraps
 from pathlib import Path
 
@@ -34,8 +37,9 @@ from ..interface import (
     UploadedVideoQuality,
 )
 from .config_file import ConfigFile
-from .constants import X_NOT_IN_PATH
+from .constants import X_NOT_IN_PATH, CSV_BATCH_SIZE, CSV_BATCH_DELAY_SECONDS, CSV_RATE_LIMIT_RETRY_SECONDS, CSV_MAX_RETRIES
 from .utils import Csv, CustomLoggerFormatter, prompt_path
+from ..utils import safe_gather
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +96,7 @@ def make_sync(func):
     "urls",
     nargs=-1,
     type=str,
-    required=True,
+    required=False,
 )
 @click.option(
     "--read-urls-as-txt",
@@ -360,6 +364,39 @@ def make_sync(func):
     default=uploaded_video_downloader_sig.parameters["quality"].default,
     help="Post video quality",
 )
+@click.option(
+    "--concurrent-downloads",
+    type=int,
+    default=None,
+    help="Number of concurrent downloads (default: CPU count)",
+)
+@click.option(
+    "--search",
+    is_flag=True,
+    help="Search mode (uses iTunes API)",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=10,
+    help="Number of search results",
+)
+@click.option(
+    "--download",
+    is_flag=True,
+    help="Download search results (interactive)",
+)
+@click.option(
+    "--json",
+    is_flag=True,
+    help="Output search results as JSON",
+)
+@click.option(
+    "--input-csv",
+    type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True),
+    default=None,
+    help="Path to CSV file with title and artist columns",
+)
 # This option should always be last
 @click.option(
     "--no-config-file",
@@ -414,6 +451,12 @@ async def main(
     music_video_remux_format: RemuxFormatMusicVideo,
     music_video_resolution: MusicVideoResolution,
     uploaded_video_quality: UploadedVideoQuality,
+    concurrent_downloads: int,
+    search: bool,
+    limit: int,
+    download: bool,
+    json: bool,
+    input_csv: str,
     *args,
     **kwargs,
 ):
@@ -433,6 +476,109 @@ async def main(
         root_logger.addHandler(file_handler)
 
     logger.info(f"Starting Gamdl {__version__}")
+
+    # Set default concurrent downloads to CPU count if not specified
+    if concurrent_downloads is None:
+        concurrent_downloads = os.cpu_count() or 4
+    logger.info(f"Using {concurrent_downloads} concurrent download(s)")
+
+    if search:
+        from rich.console import Console
+        from InquirerPy import inquirer
+        from InquirerPy.base.control import Choice
+        import json as json_lib
+
+        console = Console()
+        itunes_api = ItunesApi(storefront="us", language=language)
+        query = " ".join(urls)
+        
+        logger.info(f'Searching for "{query}"...')
+        results = await itunes_api.search(query, limit=limit)
+        
+        # Add constructed song URL to results
+        if results.get("results"):
+            for item in results["results"]:
+                track_id = item.get("trackId")
+                collection_view_url = item.get("collectionViewUrl")
+                song_url = ""
+                
+                if track_id and item.get("kind") == "song" and collection_view_url:
+                    try:
+                        base_url = collection_view_url.split("?")[0]
+                        base_url = base_url.replace("/album/", "/song/")
+                        parts = base_url.split("/")
+                        if parts and parts[-1].isdigit():
+                            parts[-1] = str(track_id)
+                            song_url = "/".join(parts)
+                    except Exception:
+                        pass
+                
+                if not song_url:
+                    if track_id and item.get("kind") == "song":
+                        song_url = f"https://music.apple.com/{itunes_api.storefront}/song/{track_id}"
+                    else:
+                        song_url = item.get("trackViewUrl", item.get("collectionViewUrl", ""))
+                
+                item["songUrl"] = song_url
+
+        if json:
+            print(json_lib.dumps(results, indent=4))
+            return
+
+        if not results.get("results"):
+            logger.info("No results found.")
+            return
+
+        choices = []
+        for i, item in enumerate(results["results"], 1):
+            kind = item.get("kind", "unknown")
+            artist = item.get("artistName", "Unknown")
+            title = item.get("trackName", item.get("collectionName", "Unknown"))
+            album = item.get("collectionName", "")
+            
+            url = item.get("songUrl")
+            
+            console.print(f"\n[bold cyan]{i}. {title}[/bold cyan]")
+            console.print(f"   Artist: [green]{artist}[/green]")
+            console.print(f"   Album:  [yellow]{album}[/yellow]")
+            console.print(f"   Type:   {kind}")
+            console.print(f"   URL:    [blue]{url}[/blue]")
+
+            choices.append(
+                Choice(
+                    value=url,
+                    name=f"{artist} - {title} ({kind})",
+                    enabled=False,
+                )
+            )
+
+        if not download:
+            return
+            
+        selected_urls = await inquirer.checkbox(
+            message="Select items to download:",
+            choices=choices,
+            validate=lambda result: len(result) >= 1,
+            invalid_message="should be at least 1 selection",
+            instruction="(Space to select, Enter to confirm)",
+        ).execute_async()
+        
+        urls = selected_urls
+
+    # Read CSV rows for later processing (after downloader init)
+    csv_rows_to_process = []
+    if input_csv:
+        logger.info(f'Reading songs from "{input_csv}"...')
+        with open(input_csv, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames:
+                reader.fieldnames = [name.strip() for name in reader.fieldnames]
+            for row in reader:
+                title = row.get("title", "").strip()
+                artist = row.get("artist", "").strip()
+                if title and artist:
+                    csv_rows_to_process.append((title, artist))
+        logger.info(f"Found {len(csv_rows_to_process)} songs to process (batch size: {CSV_BATCH_SIZE})")
 
     if use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(
@@ -609,38 +755,510 @@ async def main(
         if not download_queue:
             continue
 
-        for download_index, download_item in enumerate(
-            download_queue,
-            1,
-        ):
-            download_queue_progress = click.style(
-                f"[Track {download_index}/{len(download_queue)}]",
+        # Progress display manager
+        class ProgressDisplay:
+            """Manages structured progress display for concurrent downloads."""
+            
+            def __init__(self, total: int, max_workers: int):
+                self.total = total
+                self.max_workers = max_workers
+                self.worker_colors = [
+                    "cyan",
+                    "magenta",
+                    "blue",
+                    "yellow",
+                    "green",
+                    "red",
+                    "white",
+                    "bright_blue",
+                    "bright_magenta",
+                    "bright_cyan",
+                ]
+                self.worker_status = {}  # worker_id -> (status, track_index, title, progress)
+                self.completed_count = 0
+                self.lock = asyncio.Lock()
+                self.last_line_count = 0
+                self.last_update_time = 0
+                self.update_interval = 0.3  # Update display at most every 300ms
+                self.needs_redraw = False
+                self.redraw_task = None
+                import sys
+                import time
+                self.is_tty = sys.stdout.isatty()
+                self.time = time
+                
+            async def _periodic_redraw(self):
+                """Periodically redraw display if updates are pending."""
+                while True:
+                    await asyncio.sleep(self.update_interval)
+                    async with self.lock:
+                        if self.needs_redraw:
+                            self.needs_redraw = False
+                            self.last_update_time = self.time.time()
+                            self._display()
+                
+            def get_worker_color(self, worker_id: int) -> str:
+                """Get color for a worker ID."""
+                return self.worker_colors[worker_id % len(self.worker_colors)]
+            
+            async def update_worker(
+                self,
+                worker_id: int,
+                status: str,
+                track_index: int,
+                title: str,
+                progress: str = "",
+            ):
+                """Update worker status and redraw display with throttling."""
+                async with self.lock:
+                    if status == "completed":
+                        self.completed_count += 1
+                        # Remove completed threads immediately to keep display clean
+                        if worker_id in self.worker_status:
+                            del self.worker_status[worker_id]
+                        # Always redraw on completion
+                        self._display()
+                    else:
+                        self.worker_status[worker_id] = (status, track_index, title, progress)
+                        # Throttle progress updates - only redraw if enough time has passed
+                        current_time = self.time.time()
+                        time_since_last_update = current_time - self.last_update_time
+                        
+                        if time_since_last_update >= self.update_interval:
+                            # Enough time has passed, update immediately
+                            self.last_update_time = current_time
+                            self.needs_redraw = False
+                            self._display()
+                        else:
+                            # Mark that we need a redraw, periodic task will handle it
+                            self.needs_redraw = True
+            
+            def _clear_lines(self, count: int):
+                """Clear the specified number of lines."""
+                if not self.is_tty or count == 0:
+                    return
+                import sys
+                # Move cursor up
+                for _ in range(count):
+                    sys.stdout.write("\033[F")  # Move up one line
+                # Clear from cursor to end of screen
+                sys.stdout.write("\033[J")
+                sys.stdout.flush()
+            
+            def _display(self):
+                """Display the current progress."""
+                import sys
+                
+                # Clear previous display
+                if self.last_line_count > 0:
+                    self._clear_lines(self.last_line_count)
+                
+                # Build display lines
+                lines = []
+                
+                # Header
+                header = click.style(
+                    f"Downloading [{self.completed_count}/{self.total}]",
+                    fg="bright_white",
+                    bold=True,
+                )
+                lines.append(header)
+                
+                # Show only active (non-completed) workers
+                active_threads = []
+                for worker_id in sorted(self.worker_status.keys()):
+                    status, track_index, title, progress = self.worker_status[worker_id]
+                    
+                    # Skip completed threads to keep display clean
+                    if status == "completed":
+                        continue
+                    
+                    worker_color = self.get_worker_color(worker_id)
+                    
+                    # Status indicator
+                    if status == "starting":
+                        status_indicator = click.style("→", fg=worker_color, bold=True)
+                    elif status == "downloading":
+                        status_indicator = click.style("↓", fg=worker_color, bold=True)
+                    elif status == "error":
+                        status_indicator = click.style("✗", fg="red", bold=True)
+                    elif status == "skipped":
+                        status_indicator = click.style("⊘", fg="yellow", bold=True)
+                    else:
+                        status_indicator = "•"
+                    
+                    worker_tag = click.style(
+                        f"Thread {worker_id + 1}",
+                        fg=worker_color,
+                        bold=True,
+                    )
+                    track_tag = click.style(
+                        f"[{track_index}/{self.total}]",
                 dim=True,
             )
+                    
+                    # Truncate title if too long
+                    max_title_len = 50
+                    display_title = (
+                        title[:max_title_len] + "..."
+                        if len(title) > max_title_len
+                        else title
+                    )
+                    
+                    # Build the line - just track name and progress (no "Downloading:" text)
+                    if status == "downloading" and progress:
+                        # Show track name and progress on same line
+                        progress_text = click.style(progress, dim=True)
+                        line = f"    {status_indicator} {worker_tag} {track_tag} \"{display_title}\" {progress_text}"
+                    else:
+                        # For other statuses, just show track name
+                        line = f"    {status_indicator} {worker_tag} {track_tag} \"{display_title}\""
+                    
+                    active_threads.append(line)
+                
+                # Add thread lines
+                lines.extend(active_threads)
+                
+                # Print all lines
+                for line in lines:
+                    print(line)
+                
+                # Track line count for next clear
+                self.last_line_count = len(lines)
+                
+                # Flush to ensure immediate display
+                sys.stdout.flush()
+        
+        progress_display = ProgressDisplay(
+            len(download_queue),
+            concurrent_downloads,
+        )
+
+        # Create download tasks for parallel execution
+        async def download_with_error_handling(
+            download_item: DownloadItem,
+            download_index: int,
+            total: int,
+            worker_id: int,
+        ) -> tuple[DownloadItem, int, int]:
+            """Download a single item with error handling and progress reporting."""
             media_title = (
                 download_item.media_metadata["attributes"]["name"]
-                if isinstance(
-                    download_item,
-                    DownloadItem,
-                )
+                if isinstance(download_item, DownloadItem)
                 else "Unknown Title"
             )
-            logger.info(download_queue_progress + f' Downloading "{media_title}"')
+
+            # Update status: starting
+            await progress_display.update_worker(
+                worker_id,
+                "starting",
+                download_index,
+                media_title,
+            )
 
             try:
-                await downloader.download(download_item)
-            except GamdlError as e:
-                logger.warning(
-                    download_queue_progress + f' Skipping "{media_title}": {e}'
+                # Update status: downloading
+                await progress_display.update_worker(
+                    worker_id,
+                    "downloading",
+                    download_index,
+                    media_title,
+                    "",  # Progress will be updated via hook
                 )
-                continue
+                
+                # Suppress yt-dlp output during concurrent downloads and create progress hook
+                original_silent = downloader.base_downloader.silent
+                if concurrent_downloads > 1:
+                    downloader.base_downloader.silent = True
+                    
+                    # Create progress hook to capture yt-dlp progress
+                    def create_progress_hook(worker_id, progress_display, loop):
+                        def progress_hook(d):
+                            if d.get('status') == 'downloading':
+                                # Format progress like yt-dlp does
+                                percent = d.get('_percent_str', '')
+                                total = d.get('_total_bytes_str', '') or d.get('_total_bytes_estimate_str', '')
+                                speed = d.get('_speed_str', '')
+                                eta = d.get('_eta_str', '')
+                                
+                                # Build progress string
+                                progress_parts = []
+                                if percent:
+                                    progress_parts.append(percent.strip())
+                                if total:
+                                    progress_parts.append(f"of {total}")
+                                if speed:
+                                    progress_parts.append(f"at {speed}")
+                                if eta:
+                                    progress_parts.append(f"ETA {eta}")
+                                
+                                progress_str = " ".join(progress_parts)
+                                
+                                # Update display asynchronously
+                                if loop.is_running():
+                                    asyncio.run_coroutine_threadsafe(
+                                        progress_display.update_worker(
+                                            worker_id,
+                                            "downloading",
+                                            download_index,
+                                            media_title,
+                                            progress_str,
+                                        ),
+                                        loop,
+                                    )
+                        return progress_hook
+                    
+                    # Get event loop and create hook
+                    loop = asyncio.get_event_loop()
+                    progress_hook = create_progress_hook(worker_id, progress_display, loop)
+                    
+                    # Store progress hook in download_item for use by downloader
+                    download_item._progress_hook = progress_hook
+                else:
+                    download_item._progress_hook = None
+                
+                try:
+                    result = await downloader.download(download_item)
+                finally:
+                    downloader.base_downloader.silent = original_silent
+                    if hasattr(download_item, '_progress_hook'):
+                        delattr(download_item, '_progress_hook')
+                
+                # Update status: completed
+                await progress_display.update_worker(
+                    worker_id,
+                    "completed",
+                    download_index,
+                    media_title,
+                )
+                return (result, download_index, 0)  # 0 = no error
+            except GamdlError as e:
+                await progress_display.update_worker(
+                    worker_id,
+                    "skipped",
+                    download_index,
+                    media_title,
+                )
+                return (download_item, download_index, 0)  # 0 = handled warning
             except KeyboardInterrupt:
                 exit(1)
             except Exception as e:
-                error_count += 1
-                logger.error(
-                    download_queue_progress + f' Error downloading "{media_title}"',
-                    exc_info=not no_exceptions,
+                await progress_display.update_worker(
+                    worker_id,
+                    "error",
+                    download_index,
+                    media_title,
                 )
+                return (download_item, download_index, 1)  # 1 = error occurred
+
+        # Use a lock to assign sequential worker IDs as tasks start
+        worker_lock = asyncio.Lock()
+        worker_counter = 0
+
+        async def get_worker_id() -> int:
+            """Get a unique worker ID when task starts executing."""
+            nonlocal worker_counter
+            async with worker_lock:
+                current_id = worker_counter
+                worker_counter = (worker_counter + 1) % concurrent_downloads
+                return current_id
+
+        # Wrapper to assign worker IDs when tasks actually start
+        async def download_with_worker_id(
+            download_item: DownloadItem,
+            download_index: int,
+            total: int,
+        ) -> tuple[DownloadItem, int, int]:
+            """Wrapper that assigns worker ID when task starts executing."""
+            worker_id = await get_worker_id()
+            return await download_with_error_handling(
+                download_item,
+                download_index,
+                total,
+                worker_id,
+            )
+
+        # Create all download tasks
+        download_tasks = [
+            download_with_worker_id(item, idx + 1, len(download_queue))
+            for idx, item in enumerate(download_queue)
+        ]
+
+        # Execute downloads in parallel with concurrency limit
+        download_results = await safe_gather(
+            *download_tasks,
+            limit=concurrent_downloads,
+        )
+
+        # Stop periodic redraw task
+        if progress_display.redraw_task:
+            progress_display.redraw_task.cancel()
+            try:
+                await progress_display.redraw_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Count errors from results
+        for result in download_results:
+            if isinstance(result, Exception):
+                error_count += 1
+            elif isinstance(result, tuple) and len(result) == 3:
+                _, _, error_flag = result
+                error_count += error_flag
+
+    # Process CSV in batches: search batch -> download batch -> repeat
+    if csv_rows_to_process:
+        csv_itunes_api = ItunesApi(storefront="us", language=language)
+        total_rows = len(csv_rows_to_process)
+        total_batches = (total_rows + CSV_BATCH_SIZE - 1) // CSV_BATCH_SIZE
+        total_csv_found = 0
+        
+        for batch_start in range(0, total_rows, CSV_BATCH_SIZE):
+            batch_end = min(batch_start + CSV_BATCH_SIZE, total_rows)
+            batch_num = (batch_start // CSV_BATCH_SIZE) + 1
+            
+            logger.info(f"[CSV Batch {batch_num}/{total_batches}] Searching songs {batch_start + 1}-{batch_end}...")
+            
+            batch_urls = []
+            for idx in range(batch_start, batch_end):
+                title, artist = csv_rows_to_process[idx]
+                query = f"{title} {artist}"
+                logger.debug(f'Searching for "{query}"...')
+                
+                # Search with rate limit retry logic
+                results = None
+                for retry in range(CSV_MAX_RETRIES):
+                    try:
+                        results = await csv_itunes_api.search(query, limit=limit)
+                        break
+                    except Exception as e:
+                        error_str = str(e)
+                        if "429" in error_str or "rate limit" in error_str.lower():
+                            if retry < CSV_MAX_RETRIES - 1:
+                                logger.warning(
+                                    f"Rate limited. Waiting {CSV_RATE_LIMIT_RETRY_SECONDS}s before retry "
+                                    f"({retry + 1}/{CSV_MAX_RETRIES})..."
+                                )
+                                await asyncio.sleep(CSV_RATE_LIMIT_RETRY_SECONDS)
+                            else:
+                                logger.error(f"Rate limit exceeded after {CSV_MAX_RETRIES} retries for {title} - {artist}")
+                        else:
+                            logger.error(f"Error searching for {title} - {artist}: {e}")
+                            break
+                
+                if not results:
+                    continue
+                
+                match = None
+                for item in results.get("results", []):
+                    item_title = item.get("trackName", "").strip()
+                    item_artist = item.get("artistName", "").strip()
+                    
+                    # Title match (flexible)
+                    csv_title_lower = title.lower()
+                    api_title_lower = item_title.lower()
+                    title_match = (
+                        api_title_lower == csv_title_lower or
+                        api_title_lower.startswith(csv_title_lower + " (") or
+                        api_title_lower.startswith(csv_title_lower + " [") or
+                        csv_title_lower.startswith(api_title_lower + " (") or
+                        csv_title_lower.startswith(api_title_lower + " [")
+                    )
+                    if not title_match:
+                        continue
+
+                    # Artist match (flexible)
+                    csv_artist_lower = artist.lower()
+                    api_artist_lower = item_artist.lower()
+                    artist_match = False
+                    split_pattern = r'[,&]|\s+(?:featuring|feat\.?|ft\.?)\s+'
+                    
+                    if api_artist_lower == csv_artist_lower:
+                        artist_match = True
+                    else:
+                        csv_parts = [p.strip() for p in re.split(split_pattern, csv_artist_lower, flags=re.IGNORECASE) if p.strip()]
+                        if api_artist_lower in csv_parts:
+                            artist_match = True
+                        if not artist_match:
+                            api_parts = [p.strip() for p in re.split(split_pattern, api_artist_lower, flags=re.IGNORECASE) if p.strip()]
+                            if csv_artist_lower in api_parts:
+                                artist_match = True
+                        if not artist_match and len(csv_parts) > 1:
+                            api_parts = [p.strip() for p in re.split(split_pattern, api_artist_lower, flags=re.IGNORECASE) if p.strip()]
+                            if any(csv_part in api_parts for csv_part in csv_parts):
+                                artist_match = True
+                    
+                    if artist_match:
+                        match = item
+                        break
+                
+                if match:
+                    track_id = match.get("trackId")
+                    collection_view_url = match.get("collectionViewUrl")
+                    track_url = ""
+
+                    if track_id:
+                        if match.get("kind") == "song" and collection_view_url:
+                            try:
+                                base_url = collection_view_url.split("?")[0]
+                                base_url = base_url.replace("/album/", "/song/")
+                                parts = base_url.split("/")
+                                if parts and parts[-1].isdigit():
+                                    parts[-1] = str(track_id)
+                                    track_url = "/".join(parts)
+                            except Exception:
+                                pass
+                        
+                        if not track_url:
+                            track_url = f"https://music.apple.com/{csv_itunes_api.storefront}/song/{track_id}"
+                            
+                        logger.info(f"Found match: {title} - {artist}")
+                        batch_urls.append(track_url)
+                        total_csv_found += 1
+                    else:
+                        logger.warning(f"Match found but no ID for {title} - {artist}")
+                else:
+                    logger.warning(f"No exact match found for {title} - {artist}")
+            
+            # Download this batch immediately
+            if batch_urls:
+                logger.info(f"[CSV Batch {batch_num}/{total_batches}] Downloading {len(batch_urls)} songs...")
+                for url_index, url in enumerate(batch_urls, 1):
+                    url_progress = click.style(f"[CSV {batch_num}/{total_batches} - {url_index}/{len(batch_urls)}]", dim=True)
+                    logger.info(url_progress + f' Processing "{url}"')
+                    download_queue = None
+                    try:
+                        url_info = downloader.get_url_info(url)
+                        if not url_info:
+                            logger.warning(url_progress + f' Could not parse "{url}", skipping.')
+                            continue
+                        download_queue = await downloader.get_download_queue(url_info)
+                        if not download_queue:
+                            logger.warning(url_progress + f' No downloadable media found for "{url}", skipping.')
+                            continue
+                    except KeyboardInterrupt:
+                        exit(1)
+                    except Exception as e:
+                        error_count += 1
+                        logger.error(url_progress + f' Error processing "{url}"', exc_info=not no_exceptions)
+
+                    if download_queue:
+                        for item in download_queue:
+                            try:
+                                await downloader.download(item)
+                            except GamdlError:
+                                pass
+                            except KeyboardInterrupt:
+                                exit(1)
+                            except Exception:
+                                error_count += 1
+                                logger.error(url_progress + " Error downloading", exc_info=not no_exceptions)
+            
+            # Delay between batches (except after last batch)
+            if batch_end < total_rows:
+                logger.debug(f"Batch complete. Waiting {CSV_BATCH_DELAY_SECONDS}s before next batch...")
+                await asyncio.sleep(CSV_BATCH_DELAY_SECONDS)
+        
+        logger.info(f"CSV processing complete. Found and downloaded {total_csv_found} of {total_rows} songs.")
 
     logger.info(f"Finished with {error_count} error(s)")

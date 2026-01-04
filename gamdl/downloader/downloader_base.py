@@ -209,6 +209,14 @@ class AppleMusicBaseDownloader:
         tags_dict = tags.__dict__.copy()
         if playlist_tags:
             tags_dict.update(playlist_tags.__dict__)
+        else:
+            tags_dict.update(PlaylistTags(
+                playlist_title="Unknown Playlist",
+                playlist_track=tags_dict.get("track"),
+                playlist_artist=tags_dict.get("artist"),
+                playlist_id=0,
+            ).__dict__)
+            
 
         return str(
             Path(
@@ -265,33 +273,51 @@ class AppleMusicBaseDownloader:
             cover_url_template,
         )
 
-    async def download_stream(self, stream_url: str, download_path: str):
+    async def download_stream(
+        self,
+        stream_url: str,
+        download_path: str,
+        progress_hook=None,
+    ):
         if self.download_mode == DownloadMode.YTDLP:
-            await self.download_ytdlp(stream_url, download_path)
+            await self.download_ytdlp(stream_url, download_path, progress_hook)
 
         if self.download_mode == DownloadMode.NM3U8DLRE:
             await self.download_nm3u8dlre(stream_url, download_path)
 
-    async def download_ytdlp(self, stream_url: str, download_path: str) -> None:
+    async def download_ytdlp(
+        self,
+        stream_url: str,
+        download_path: str,
+        progress_hook=None,
+    ) -> None:
         await asyncio.to_thread(
             self._download_ytdlp,
             stream_url,
             download_path,
+            progress_hook,
         )
 
-    def _download_ytdlp(self, stream_url: str, download_path: str) -> None:
-        with YoutubeDL(
-            {
-                "quiet": True,
-                "no_warnings": True,
-                "outtmpl": download_path,
-                "allow_unplayable_formats": True,
-                "overwrites": True,
-                "fixup": "never",
-                "noprogress": self.silent,
-                "allowed_extractors": ["generic"],
-            }
-        ) as ydl:
+    def _download_ytdlp(
+        self,
+        stream_url: str,
+        download_path: str,
+        progress_hook=None,
+    ) -> None:
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "outtmpl": download_path,
+            "allow_unplayable_formats": True,
+            "overwrites": True,
+            "fixup": "never",
+            "noprogress": self.silent and not progress_hook,  # Allow progress if we have a hook
+            "allowed_extractors": ["generic"],
+        }
+        if progress_hook:
+            ydl_opts["progress_hooks"] = [progress_hook]
+        
+        with YoutubeDL(ydl_opts) as ydl:
             ydl.download(stream_url)
 
     async def download_nm3u8dlre(self, stream_url: str, download_path: str):

@@ -27,6 +27,7 @@ from .exceptions import (
     MediaFileExists,
     NotStreamable,
     SyncedLyricsOnly,
+    UnsupportedMediaType,
 )
 from .types import DownloadItem, UrlInfo
 
@@ -79,32 +80,42 @@ class AppleMusicDownloader:
         media_metadata: dict,
         playlist_metadata: dict = None,
     ) -> DownloadItem:
-        download_item = None
+        try:
+            if not self.base_downloader.is_media_streamable(
+                media_metadata,
+            ):
+                raise NotStreamable(media_metadata["id"])
 
-        if not self.base_downloader.is_media_streamable(
-            media_metadata,
-        ):
-            return DownloadItem(
+            if media_metadata["type"] in SONG_MEDIA_TYPE:
+                if not self.song_downloader:
+                    raise UnsupportedMediaType(media_metadata["type"])
+
+                download_item = await self.song_downloader.get_download_item(
+                    media_metadata,
+                    playlist_metadata,
+                )
+
+            if media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
+                if not self.music_video_downloader:
+                    raise UnsupportedMediaType(media_metadata["type"])
+
+                download_item = await self.music_video_downloader.get_download_item(
+                    media_metadata,
+                    playlist_metadata,
+                )
+
+            if media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
+                if not self.uploaded_video_downloader:
+                    raise UnsupportedMediaType(media_metadata["type"])
+
+                download_item = await self.uploaded_video_downloader.get_download_item(
+                    media_metadata,
+                )
+        except Exception as e:
+            download_item = DownloadItem(
                 media_metadata=media_metadata,
                 playlist_metadata=playlist_metadata,
-                error=NotStreamable(media_metadata["id"]),
-            )
-
-        if media_metadata["type"] in SONG_MEDIA_TYPE:
-            download_item = await self.song_downloader.get_download_item(
-                media_metadata,
-                playlist_metadata,
-            )
-
-        if media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
-            download_item = await self.music_video_downloader.get_download_item(
-                media_metadata,
-                playlist_metadata,
-            )
-
-        if media_metadata["type"] in UPLOADED_VIDEO_MEDIA_TYPE:
-            download_item = await self.uploaded_video_downloader.get_download_item(
-                media_metadata,
+                error=e,
             )
 
         return download_item
@@ -475,10 +486,7 @@ class AppleMusicDownloader:
             return
 
         if download_item.cover_path and self.base_downloader.save_cover:
-            cover_url = self.base_downloader.get_cover_url(
-                download_item.cover_url_template,
-            )
-            cover_bytes = await self.base_downloader.get_cover_bytes(cover_url)
+            cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
             if cover_bytes and (
                 self.base_downloader.overwrite
                 or not Path(download_item.cover_path).exists()

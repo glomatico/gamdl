@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import datetime
+import io
 import json
 import logging
 import re
@@ -10,6 +11,7 @@ from xml.etree import ElementTree
 import m3u8
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
+from mutagen.mp4 import MP4
 from pywidevine import PSSH, Cdm
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 
@@ -462,3 +464,19 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 cdm,
             )
         )
+
+    async def get_extra_tags(
+        self,
+        song_metadata: dict,
+    ) -> dict:
+        previews = song_metadata["attributes"].get("previews", [])
+        if not previews:
+            return {}
+
+        preview_url = previews[0]["url"]
+        preview_response = await get_response(preview_url)
+        preview_bytes = preview_response.content
+        preview_tags = dict(MP4(io.BytesIO(preview_bytes)).tags)
+
+        logger.debug(f"Extra tags: {preview_tags.keys()}")
+        return preview_tags

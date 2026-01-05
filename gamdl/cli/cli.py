@@ -566,21 +566,6 @@ async def main(
         
         urls = selected_urls
 
-    # Read CSV rows for later processing (after downloader init)
-    csv_rows_to_process = []
-    if input_csv:
-        logger.info(f'Reading songs from "{input_csv}"...')
-        with open(input_csv, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames:
-                reader.fieldnames = [name.strip() for name in reader.fieldnames]
-            for row in reader:
-                title = row.get("title", "").strip()
-                artist = row.get("artist", "").strip()
-                if title and artist:
-                    csv_rows_to_process.append((title, artist))
-        logger.info(f"Found {len(csv_rows_to_process)} songs to process (batch size: {CSV_BATCH_SIZE})")
-
     if use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(
             wrapper_account_url=wrapper_account_url,
@@ -793,7 +778,21 @@ async def main(
                 )
                 continue
 
-    # Process CSV in batches: search batch -> download batch -> repeat
+    # Read CSV rows and process in batches: search batch -> download batch -> repeat
+    csv_rows_to_process = []
+    if input_csv:
+        logger.info(f'Reading songs from "{input_csv}"...')
+        with open(input_csv, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames:
+                reader.fieldnames = [name.strip() for name in reader.fieldnames]
+            for row in reader:
+                title = row.get("title", "").strip()
+                artist = row.get("artist", "").strip()
+                if title and artist:
+                    csv_rows_to_process.append((title, artist))
+        logger.info(f"Found {len(csv_rows_to_process)} songs to process (batch size: {CSV_BATCH_SIZE})")
+
     if csv_rows_to_process:
         csv_itunes_api = ItunesApi(storefront="us", language=language)
         total_rows = len(csv_rows_to_process)

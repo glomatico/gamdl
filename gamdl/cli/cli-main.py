@@ -1,9 +1,6 @@
 import asyncio
-import csv
 import inspect
 import logging
-import os
-import re
 from functools import wraps
 from pathlib import Path
 
@@ -37,7 +34,7 @@ from ..interface import (
     CoverFormat,
 )
 from .config_file import ConfigFile
-from .constants import X_NOT_IN_PATH, CSV_BATCH_SIZE, CSV_BATCH_DELAY_SECONDS, CSV_RATE_LIMIT_RETRY_SECONDS, CSV_MAX_RETRIES
+from .constants import X_NOT_IN_PATH
 from .utils import Csv, CustomLoggerFormatter, prompt_path
 
 logger = logging.getLogger(__name__)
@@ -95,7 +92,7 @@ def make_sync(func):
     "urls",
     nargs=-1,
     type=str,
-    required=False,
+    required=True,
 )
 @click.option(
     "--read-urls-as-txt",
@@ -375,33 +372,6 @@ def make_sync(func):
     default=uploaded_video_downloader_sig.parameters["quality"].default,
     help="Post video quality",
 )
-@click.option(
-    "--search",
-    is_flag=True,
-    help="Search mode (uses iTunes API)",
-)
-@click.option(
-    "--limit",
-    type=int,
-    default=10,
-    help="Number of search results",
-)
-@click.option(
-    "--download",
-    is_flag=True,
-    help="Download search results (interactive)",
-)
-@click.option(
-    "--json",
-    is_flag=True,
-    help="Output search results as JSON",
-)
-@click.option(
-    "--input-csv",
-    type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True),
-    default=None,
-    help="Path to CSV file with title and artist columns",
-)
 # This option should always be last
 @click.option(
     "--no-config-file",
@@ -458,11 +428,6 @@ async def main(
     music_video_remux_format: RemuxFormatMusicVideo,
     music_video_resolution: MusicVideoResolution,
     uploaded_video_quality: UploadedVideoQuality,
-    search: bool,
-    limit: int,
-    download: bool,
-    json: bool,
-    input_csv: str,
     *args,
     **kwargs,
 ):
@@ -482,104 +447,6 @@ async def main(
         root_logger.addHandler(file_handler)
 
     logger.info(f"Starting Gamdl {__version__}")
-
-    if search:
-        from rich.console import Console
-        from InquirerPy import inquirer
-        from InquirerPy.base.control import Choice
-        import json as json_lib
-
-        console = Console()
-        itunes_api = ItunesApi(storefront="us", language=language)
-        query = " ".join(urls)
-        
-        logger.info(f'Searching for "{query}"...')
-        results = await itunes_api.search(query, limit=limit)
-        
-        # Add constructed song URL to results
-        if results.get("results"):
-            for item in results["results"]:
-                track_id = item.get("trackId")
-                collection_view_url = item.get("collectionViewUrl")
-                song_url = ""
-                
-                if track_id and item.get("kind") == "song" and collection_view_url:
-                    try:
-                        base_url = collection_view_url.split("?")[0]
-                        base_url = base_url.replace("/album/", "/song/")
-                        parts = base_url.split("/")
-                        if parts and parts[-1].isdigit():
-                            parts[-1] = str(track_id)
-                            song_url = "/".join(parts)
-                    except Exception:
-                        pass
-                
-                if not song_url:
-                    if track_id and item.get("kind") == "song":
-                        song_url = f"https://music.apple.com/{itunes_api.storefront}/song/{track_id}"
-                    else:
-                        song_url = item.get("trackViewUrl", item.get("collectionViewUrl", ""))
-                
-                item["songUrl"] = song_url
-
-        if json:
-            print(json_lib.dumps(results, indent=4))
-            return
-
-        if not results.get("results"):
-            logger.info("No results found.")
-            return
-
-        choices = []
-        for i, item in enumerate(results["results"], 1):
-            kind = item.get("kind", "unknown")
-            artist = item.get("artistName", "Unknown")
-            title = item.get("trackName", item.get("collectionName", "Unknown"))
-            album = item.get("collectionName", "")
-            
-            url = item.get("songUrl")
-            
-            console.print(f"\n[bold cyan]{i}. {title}[/bold cyan]")
-            console.print(f"   Artist: [green]{artist}[/green]")
-            console.print(f"   Album:  [yellow]{album}[/yellow]")
-            console.print(f"   Type:   {kind}")
-            console.print(f"   URL:    [blue]{url}[/blue]")
-
-            choices.append(
-                Choice(
-                    value=url,
-                    name=f"{artist} - {title} ({kind})",
-                    enabled=False,
-                )
-            )
-
-        if not download:
-            return
-            
-        selected_urls = await inquirer.checkbox(
-            message="Select items to download:",
-            choices=choices,
-            validate=lambda result: len(result) >= 1,
-            invalid_message="should be at least 1 selection",
-            instruction="(Space to select, Enter to confirm)",
-        ).execute_async()
-        
-        urls = selected_urls
-
-    # Read CSV rows for later processing (after downloader init)
-    csv_rows_to_process = []
-    if input_csv:
-        logger.info(f'Reading songs from "{input_csv}"...')
-        with open(input_csv, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames:
-                reader.fieldnames = [name.strip() for name in reader.fieldnames]
-            for row in reader:
-                title = row.get("title", "").strip()
-                artist = row.get("artist", "").strip()
-                if title and artist:
-                    csv_rows_to_process.append((title, artist))
-        logger.info(f"Found {len(csv_rows_to_process)} songs to process (batch size: {CSV_BATCH_SIZE})")
 
     if use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(
@@ -791,161 +658,5 @@ async def main(
                     download_queue_progress + f' Error downloading "{media_title}"',
                     exc_info=not no_exceptions,
                 )
-                continue
-
-    # Process CSV in batches: search batch -> download batch -> repeat
-    if csv_rows_to_process:
-        csv_itunes_api = ItunesApi(storefront="us", language=language)
-        total_rows = len(csv_rows_to_process)
-        total_batches = (total_rows + CSV_BATCH_SIZE - 1) // CSV_BATCH_SIZE
-        total_csv_found = 0
-        
-        for batch_start in range(0, total_rows, CSV_BATCH_SIZE):
-            batch_end = min(batch_start + CSV_BATCH_SIZE, total_rows)
-            batch_num = (batch_start // CSV_BATCH_SIZE) + 1
-            
-            logger.info(f"[CSV Batch {batch_num}/{total_batches}] Searching songs {batch_start + 1}-{batch_end}...")
-            
-            batch_urls = []
-            for idx in range(batch_start, batch_end):
-                title, artist = csv_rows_to_process[idx]
-                query = f"{title} {artist}"
-                logger.debug(f'Searching for "{query}"...')
-                
-                # Search with rate limit retry logic
-                results = None
-                for retry in range(CSV_MAX_RETRIES):
-                    try:
-                        results = await csv_itunes_api.search(query, limit=limit)
-                        break
-                    except Exception as e:
-                        error_str = str(e)
-                        if "429" in error_str or "rate limit" in error_str.lower():
-                            if retry < CSV_MAX_RETRIES - 1:
-                                logger.warning(
-                                    f"Rate limited. Waiting {CSV_RATE_LIMIT_RETRY_SECONDS}s before retry "
-                                    f"({retry + 1}/{CSV_MAX_RETRIES})..."
-                                )
-                                await asyncio.sleep(CSV_RATE_LIMIT_RETRY_SECONDS)
-                            else:
-                                logger.error(f"Rate limit exceeded after {CSV_MAX_RETRIES} retries for {title} - {artist}")
-                        else:
-                            logger.error(f"Error searching for {title} - {artist}: {e}")
-                            break
-                
-                if not results:
-                    continue
-                
-                match = None
-                for item in results.get("results", []):
-                    item_title = item.get("trackName", "").strip()
-                    item_artist = item.get("artistName", "").strip()
-                    
-                    # Title match (flexible)
-                    csv_title_lower = title.lower()
-                    api_title_lower = item_title.lower()
-                    title_match = (
-                        api_title_lower == csv_title_lower or
-                        api_title_lower.startswith(csv_title_lower + " (") or
-                        api_title_lower.startswith(csv_title_lower + " [") or
-                        csv_title_lower.startswith(api_title_lower + " (") or
-                        csv_title_lower.startswith(api_title_lower + " [")
-                    )
-                    if not title_match:
-                        continue
-
-                    # Artist match (flexible)
-                    csv_artist_lower = artist.lower()
-                    api_artist_lower = item_artist.lower()
-                    artist_match = False
-                    split_pattern = r'[,&]|\s+(?:featuring|feat\.?|ft\.?)\s+'
-                    
-                    if api_artist_lower == csv_artist_lower:
-                        artist_match = True
-                    else:
-                        csv_parts = [p.strip() for p in re.split(split_pattern, csv_artist_lower, flags=re.IGNORECASE) if p.strip()]
-                        if api_artist_lower in csv_parts:
-                            artist_match = True
-                        if not artist_match:
-                            api_parts = [p.strip() for p in re.split(split_pattern, api_artist_lower, flags=re.IGNORECASE) if p.strip()]
-                            if csv_artist_lower in api_parts:
-                                artist_match = True
-                        if not artist_match and len(csv_parts) > 1:
-                            api_parts = [p.strip() for p in re.split(split_pattern, api_artist_lower, flags=re.IGNORECASE) if p.strip()]
-                            if any(csv_part in api_parts for csv_part in csv_parts):
-                                artist_match = True
-                    
-                    if artist_match:
-                        match = item
-                        break
-                
-                if match:
-                    track_id = match.get("trackId")
-                    collection_view_url = match.get("collectionViewUrl")
-                    track_url = ""
-
-                    if track_id:
-                        if match.get("kind") == "song" and collection_view_url:
-                            try:
-                                base_url = collection_view_url.split("?")[0]
-                                base_url = base_url.replace("/album/", "/song/")
-                                parts = base_url.split("/")
-                                if parts and parts[-1].isdigit():
-                                    parts[-1] = str(track_id)
-                                    track_url = "/".join(parts)
-                            except Exception:
-                                pass
-                        
-                        if not track_url:
-                            track_url = f"https://music.apple.com/{csv_itunes_api.storefront}/song/{track_id}"
-                            
-                        logger.info(f"Found match: {title} - {artist}")
-                        batch_urls.append(track_url)
-                        total_csv_found += 1
-                    else:
-                        logger.warning(f"Match found but no ID for {title} - {artist}")
-                else:
-                    logger.warning(f"No exact match found for {title} - {artist}")
-            
-            # Download this batch immediately
-            if batch_urls:
-                logger.info(f"[CSV Batch {batch_num}/{total_batches}] Downloading {len(batch_urls)} songs...")
-                for url_index, url in enumerate(batch_urls, 1):
-                    url_progress = click.style(f"[CSV {batch_num}/{total_batches} - {url_index}/{len(batch_urls)}]", dim=True)
-                    logger.info(url_progress + f' Processing "{url}"')
-                    download_queue = None
-                    try:
-                        url_info = downloader.get_url_info(url)
-                        if not url_info:
-                            logger.warning(url_progress + f' Could not parse "{url}", skipping.')
-                            continue
-                        download_queue = await downloader.get_download_queue(url_info)
-                        if not download_queue:
-                            logger.warning(url_progress + f' No downloadable media found for "{url}", skipping.')
-                            continue
-                    except KeyboardInterrupt:
-                        exit(1)
-                    except Exception as e:
-                        error_count += 1
-                        logger.error(url_progress + f' Error processing "{url}"', exc_info=not no_exceptions)
-
-                    if download_queue:
-                        for item in download_queue:
-                            try:
-                                await downloader.download(item)
-                            except GamdlError:
-                                pass
-                            except KeyboardInterrupt:
-                                exit(1)
-                            except Exception:
-                                error_count += 1
-                                logger.error(url_progress + " Error downloading", exc_info=not no_exceptions)
-            
-            # Delay between batches (except after last batch)
-            if batch_end < total_rows:
-                logger.debug(f"Batch complete. Waiting {CSV_BATCH_DELAY_SECONDS}s before next batch...")
-                await asyncio.sleep(CSV_BATCH_DELAY_SECONDS)
-        
-        logger.info(f"CSV processing complete. Found and downloaded {total_csv_found} of {total_rows} songs.")
 
     logger.info(f"Finished with {error_count} error(s)")

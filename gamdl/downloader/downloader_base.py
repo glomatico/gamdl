@@ -205,7 +205,7 @@ class AppleMusicBaseDownloader:
 
     async def download_stream(self, stream_url: str, download_path: str):
         if self.download_mode == DownloadMode.YTDLP:
-            await self.download_ytdlp(stream_url, download_path, progress_hook)
+            await self.download_ytdlp(stream_url, download_path)
 
         if self.download_mode == DownloadMode.NM3U8DLRE:
             await self.download_nm3u8dlre(stream_url, download_path)
@@ -213,21 +213,18 @@ class AppleMusicBaseDownloader:
     async def download_ytdlp(
         self,
         stream_url: str,
-        download_path: str,
-        progress_hook=None,
+        download_path: str
     ) -> None:
         await asyncio.to_thread(
             self._download_ytdlp,
             stream_url,
-            download_path,
-            progress_hook,
+            download_path
         )
 
     def _download_ytdlp(
         self,
         stream_url: str,
-        download_path: str,
-        progress_hook=None,
+        download_path: str
     ) -> None:
         ydl_opts = {
             "quiet": True,
@@ -236,11 +233,9 @@ class AppleMusicBaseDownloader:
             "allow_unplayable_formats": True,
             "overwrites": True,
             "fixup": "never",
-            "noprogress": self.silent and not progress_hook,  # Allow progress if we have a hook
+            "noprogress": self.silent,
             "allowed_extractors": ["generic"],
         }
-        if progress_hook:
-            ydl_opts["progress_hooks"] = [progress_hook]
         
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download(stream_url)

@@ -318,11 +318,9 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             "encrypted",
             ".m4a",
         )
-        progress_hook = getattr(download_item, '_progress_hook', None)
         await self.download_stream(
             download_item.stream_info.audio_track.stream_url,
-            encrypted_path,
-            progress_hook,
+            encrypted_path
         )
 
         decrypted_path = self.get_temp_path(

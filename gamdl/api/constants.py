@@ -9,6 +9,7 @@ LICENSE_API_URL = (
 )
 
 ITUNES_LOOKUP_API_URL = "https://itunes.apple.com/lookup"
+ITUNES_SEARCH_API_URL = "https://itunes.apple.com/search"
 ITUNES_PAGE_API_URL = "https://music.apple.com"
 STOREFRONT_IDS = {
     "AE": "143481-2,32",
@@ -168,3 +169,9 @@ STOREFRONT_IDS = {
     "ZA": "143472-2,32",
     "ZW": "143605-2,32",
 }
+
+# CSV batch processing configuration
+CSV_BATCH_SIZE = 20  # Number of songs to search before pausing, to avoid search rate limits
+CSV_BATCH_DELAY_SECONDS = 2.0  # Delay between batches to avoid rate limits
+CSV_RATE_LIMIT_RETRY_SECONDS = 60  # Wait time when rate limited (429 error)
+CSV_MAX_RETRIES = 3  # Max retries for rate-limited requests

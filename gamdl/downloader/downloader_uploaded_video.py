@@ -92,7 +92,7 @@ class AppleMusicUploadedVideoDownloader(AppleMusicBaseDownloader):
     ) -> None:
         await self.download_ytdlp(
             download_item.stream_info.video_track.stream_url,
-            download_item.staged_path,
+            download_item.staged_path
         )
 
         cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)

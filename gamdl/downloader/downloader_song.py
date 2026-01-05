@@ -68,6 +68,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 download_item.playlist_tags,
             )
 
+        
         download_item.final_path = self.get_final_path(
             download_item.media_tags,
             ".m4a",
@@ -319,7 +320,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         )
         await self.download_stream(
             download_item.stream_info.audio_track.stream_url,
-            encrypted_path,
+            encrypted_path
         )
 
         decrypted_path = self.get_temp_path(

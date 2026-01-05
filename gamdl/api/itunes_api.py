@@ -3,7 +3,12 @@ import logging
 import httpx
 
 from ..utils import raise_for_status, safe_json
-from .constants import ITUNES_LOOKUP_API_URL, ITUNES_PAGE_API_URL, STOREFRONT_IDS
+from .constants import (
+    ITUNES_LOOKUP_API_URL,
+    ITUNES_PAGE_API_URL,
+    ITUNES_SEARCH_API_URL,
+    STOREFRONT_IDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +82,26 @@ class ItunesApi:
         logger.debug(f"iTunes page: {itunes_page}")
 
         return itunes_page
+
+    async def search(
+        self,
+        term: str,
+        entity: str = "song",
+        limit: int = 10,
+    ) -> dict:
+        response = await self.client.get(
+            ITUNES_SEARCH_API_URL,
+            params={
+                "term": term,
+                "entity": entity,
+                "limit": limit,
+            },
+        )
+        raise_for_status(response)
+
+        search_results = safe_json(response)
+        if "results" not in search_results:
+            raise Exception("Error searching:", response.text)
+        logger.debug(f"Search results: {search_results}")
+
+        return search_results

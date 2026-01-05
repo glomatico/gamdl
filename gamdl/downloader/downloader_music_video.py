@@ -239,14 +239,13 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             "encrypted_audio",
             ".m4a",
         )
-
         await self.download_stream(
             download_item.stream_info.video_track.stream_url,
-            encrypted_path_video,
+            encrypted_path_video
         )
         await self.download_stream(
             download_item.stream_info.audio_track.stream_url,
-            encrypted_path_audio,
+            encrypted_path_audio
         )
 
         decrypted_path_video = self.get_temp_path(

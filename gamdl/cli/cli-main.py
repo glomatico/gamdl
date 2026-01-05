@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import logging
-import os
 from functools import wraps
 from pathlib import Path
 
@@ -36,8 +35,6 @@ from ..interface import (
 )
 from .config_file import ConfigFile
 from .constants import X_NOT_IN_PATH
-from .csv_processor import CSVProcessor
-from .song_search import ItunesSearch
 from .utils import Csv, CustomLoggerFormatter, prompt_path
 
 logger = logging.getLogger(__name__)
@@ -95,7 +92,7 @@ def make_sync(func):
     "urls",
     nargs=-1,
     type=str,
-    required=False,
+    required=True,
 )
 @click.option(
     "--read-urls-as-txt",
@@ -375,33 +372,6 @@ def make_sync(func):
     default=uploaded_video_downloader_sig.parameters["quality"].default,
     help="Post video quality",
 )
-@click.option(
-    "--search",
-    is_flag=True,
-    help="Search mode (uses iTunes API)",
-)
-@click.option(
-    "--limit",
-    type=int,
-    default=10,
-    help="Number of search results",
-)
-@click.option(
-    "--download",
-    is_flag=True,
-    help="Download search results (interactive)",
-)
-@click.option(
-    "--json",
-    is_flag=True,
-    help="Output search results as JSON",
-)
-@click.option(
-    "--input-csv",
-    type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True),
-    default=None,
-    help="Path to CSV file with title and artist columns",
-)
 # This option should always be last
 @click.option(
     "--no-config-file",
@@ -458,11 +428,6 @@ async def main(
     music_video_remux_format: RemuxFormatMusicVideo,
     music_video_resolution: MusicVideoResolution,
     uploaded_video_quality: UploadedVideoQuality,
-    search: bool,
-    limit: int,
-    download: bool,
-    json: bool,
-    input_csv: str,
     *args,
     **kwargs,
 ):
@@ -482,64 +447,6 @@ async def main(
         root_logger.addHandler(file_handler)
 
     logger.info(f"Starting Gamdl {__version__}")
-
-    if search:
-        from rich.console import Console
-        from InquirerPy import inquirer
-        from InquirerPy.base.control import Choice
-        import json as json_lib
-
-        console = Console()
-        itunes_api = ItunesApi(storefront="us", language=language)
-        itunes_search = ItunesSearch(itunes_api)
-        query = " ".join(urls)  # here the URLs are used as search terms not really URLs
-        
-        logger.info(f'Searching for "{query}"...')
-        results = await itunes_search.search(query, limit=limit)
-
-        if json:
-            print(json_lib.dumps(results, indent=4))
-            return
-
-        if not results.get("results"):
-            logger.info("No results found.")
-            return
-
-        choices = []
-        for i, item in enumerate(results["results"], 1):
-            kind = item.get("kind", "unknown")
-            artist = item.get("artistName", "Unknown")
-            title = item.get("trackName", item.get("collectionName", "Unknown"))
-            album = item.get("collectionName", "")
-            
-            url = item.get("songUrl")
-            
-            console.print(f"\n[bold cyan]{i}. {title}[/bold cyan]")
-            console.print(f"   Artist: [green]{artist}[/green]")
-            console.print(f"   Album:  [yellow]{album}[/yellow]")
-            console.print(f"   Type:   {kind}")
-            console.print(f"   URL:    [blue]{url}[/blue]")
-
-            choices.append(
-                Choice(
-                    value=url,
-                    name=f"{artist} - {title} ({kind})",
-                    enabled=False,
-                )
-            )
-
-        if not download:
-            return
-            
-        selected_urls = await inquirer.checkbox(
-            message="Select items to download:",
-            choices=choices,
-            validate=lambda result: len(result) >= 1,
-            invalid_message="should be at least 1 selection",
-            instruction="(Space to select, Enter to confirm)",
-        ).execute_async()
-        
-        urls = selected_urls
 
     if use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(
@@ -751,19 +658,5 @@ async def main(
                     download_queue_progress + f' Error downloading "{media_title}"',
                     exc_info=not no_exceptions,
                 )
-                continue
-
-    # Process CSV in batches: search batch -> download batch -> repeat
-    if input_csv:
-        csv_itunes_api = ItunesApi(storefront="us", language=language)
-        csv_itunes_search = ItunesSearch(csv_itunes_api)
-        csv_processor = CSVProcessor(
-            itunes_search=csv_itunes_search,
-            downloader=downloader,
-            limit=limit,
-            no_exceptions=no_exceptions,
-        )
-        total_csv_found, csv_error_count = await csv_processor.process_csv(input_csv)
-        error_count += csv_error_count
 
     logger.info(f"Finished with {error_count} error(s)")

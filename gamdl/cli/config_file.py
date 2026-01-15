@@ -1,12 +1,21 @@
 import configparser
 import typing
+from dataclasses import dataclass
 from pathlib import Path
+from typing import get_type_hints
 
-import click
-from click.types import BoolParamType, FuncParamType
+import click.types as click_types
+from dataclass_click.dataclass_click import _DelayedCall
 
 from .constants import EXCLUDED_CONFIG_FILE_PARAMS
-from .utils import Csv
+from .utils import CliConfig, Csv
+
+
+@dataclass
+class ParameterInfo:
+    name: str
+    default: typing.Any
+    type: typing.Any
 
 
 class ConfigFile:
@@ -17,8 +26,33 @@ class ConfigFile:
     ) -> None:
         self.config_path = config_path
         self.section_name = section_name
+        self.parameters = self._extract_parameters_from_cli_config()
 
         self._read_config_file()
+
+    def _extract_parameters_from_cli_config(self) -> dict[str, ParameterInfo]:
+        parameters = {}
+        hints = get_type_hints(CliConfig, include_extras=True)
+
+        for field_name, hint in hints.items():
+            if hasattr(hint, "__metadata__"):
+                for metadata in hint.__metadata__:
+                    if isinstance(metadata, _DelayedCall):
+                        param_type = metadata.kwargs.get("type")
+                        if param_type is None:
+                            raise ValueError(
+                                f"Parameter type for field '{field_name}' "
+                                "could not be determined."
+                            )
+
+                        parameters[field_name] = ParameterInfo(
+                            name=field_name,
+                            default=metadata.kwargs.get("default"),
+                            type=param_type,
+                        )
+                        break
+
+        return parameters
 
     def _read_config_file(self) -> None:
         self.config = configparser.ConfigParser(interpolation=None)
@@ -35,64 +69,81 @@ class ConfigFile:
         with open(self.config_path, "w", encoding="utf-8") as config_file:
             self.config.write(config_file)
 
-    def _serialize_param_default(self, param: click.Parameter) -> str:
-        if param.default is None:
+    def _serialize_param_default(self, param_info: ParameterInfo) -> str:
+        if param_info.default is None:
             return "null"
 
-        if isinstance(param.type, Csv):
-            return ",".join(item.value for item in param.default)
+        if isinstance(param_info.type, Csv):
+            return ",".join(
+                item.value if hasattr(item, "value") else str(item)
+                for item in param_info.default
+            )
 
-        if isinstance(param.type, BoolParamType):
-            return str(param.default).lower()
+        if isinstance(param_info.type, click_types.FuncParamType):
+            return param_info.default.value
 
-        if isinstance(param.type, FuncParamType):
-            return param.default.value
+        if isinstance(param_info.type, click_types.BoolParamType):
+            return "true" if param_info.default else "false"
 
-        return str(param.default)
+        if isinstance(
+            param_info.type,
+            click_types.Choice
+            | click_types.Path
+            | click_types.StringParamType
+            | click_types.IntParamType,
+        ):
+            return str(param_info.default)
+
+        raise NotImplementedError(
+            f"Serialization for parameter '{param_info.name}' of type "
+            f"'{type(param_info.type)}' is not implemented."
+        )
 
     def _add_param_default_to_config(
         self,
-        param: click.Parameter,
+        param_info: ParameterInfo,
     ) -> bool:
-        if self.config.has_option(self.section_name, param.name):
+        if self.config.has_option(self.section_name, param_info.name):
             return False
 
-        value = self._serialize_param_default(param)
-        self.config.set(self.section_name, param.name, value)
+        value = self._serialize_param_default(param_info)
+        self.config.set(self.section_name, param_info.name, value)
 
         return True
 
     def _parse_param_from_config(
         self,
-        param: click.Parameter,
+        param_info: ParameterInfo,
     ) -> typing.Any:
-        value = self.config[self.section_name].get(param.name)
+        value = self.config[self.section_name].get(param_info.name)
+        if not value:
+            return param_info.default
 
         if value == "null":
             return None
 
-        return param.type_cast_value(None, value)
+        if not isinstance(param_info.type, click_types.ParamType):
+            raise NotImplementedError(
+                f"Parsing for parameter '{param_info.name}' of type "
+                f"'{type(param_info.type)}' is not implemented."
+            )
 
-    def add_params_default_to_config(
-        self,
-        params: list[click.Parameter],
-    ) -> None:
+        return param_info.type.convert(value, None, None)
+
+    def add_params_default_to_config(self) -> None:
         has_changes = False
 
-        for param in params:
-            if param.name in EXCLUDED_CONFIG_FILE_PARAMS:
+        for param_info in self.parameters.values():
+            if param_info.name in EXCLUDED_CONFIG_FILE_PARAMS:
                 continue
 
-            has_changes = self._add_param_default_to_config(param) or has_changes
+            has_changes = self._add_param_default_to_config(param_info) or has_changes
 
         if has_changes:
             self._write_config_file()
 
-    def cleanup_unknown_params(
-        self,
-        params: list[click.Parameter],
-    ) -> None:
-        param_names = {param.name for param in params}
+    def cleanup_unknown_params(self) -> None:
+        param_names = {info.name for info in self.parameters.values()}
         has_changes = False
 
         for key in list(self.config[self.section_name].keys()):
@@ -103,13 +154,12 @@ class ConfigFile:
         if has_changes:
             self._write_config_file()
 
-    def parse_params_from_config(
-        self,
-        params: list[click.Parameter],
-    ) -> dict[str, typing.Any]:
-        parsed_params = {}
+    def update_params_from_config(self, config: CliConfig) -> CliConfig:
+        updates = {}
+        for param_info in self.parameters.values():
+            if self.config.has_option(self.section_name, param_info.name):
+                updates[param_info.name] = self._parse_param_from_config(param_info)
 
-        for param in params:
-            parsed_params[param.name] = self._parse_param_from_config(param)
-
-        return parsed_params
+        config_dict = config.__dict__.copy()
+        config_dict.update(updates)
+        return CliConfig(**config_dict)

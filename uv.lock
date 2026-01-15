@@ -189,6 +189,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b6/2c/66bab4fef920ef8caa3e180ea601475b2cbbe196255b18f1c58215940607/construct-2.8.8.tar.gz", hash = "sha256:1b84b8147f6fd15bcf64b737c3e8ac5100811ad80c830cb4b2545140511c4157", size = 717694, upload-time = "2016-10-20T22:29:12.563Z" }
 
 [[package]]
+name = "dataclass-click"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/89/82/5b6035efd90621771fa039960eab3e1ec7ff2a8625033272856843e8bd27/dataclass_click-1.0.4.tar.gz", hash = "sha256:10e7de638dd9e68ae9abd5086f61d8ddee42b1873a70f5fd9fd2167856afac11", size = 7580, upload-time = "2025-10-10T21:11:31.956Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/dc/38a94a2eb5f756724a6dc87a7aea38f7b747fe7b2e9daabc34a65e6cd9ac/dataclass_click-1.0.4-py3-none-any.whl", hash = "sha256:a225d30c04e4abbdba411cc3d5ec0a2ea829e1dca6500afe5f87cc243e5ead72", size = 8553, upload-time = "2025-10-10T21:11:30.514Z" },
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -208,6 +220,7 @@ dependencies = [
     { name = "async-lru" },
     { name = "click" },
     { name = "colorama" },
+    { name = "dataclass-click" },
     { name = "httpx" },
     { name = "inquirerpy" },
     { name = "m3u8" },
@@ -222,6 +235,7 @@ requires-dist = [
     { name = "async-lru", specifier = ">=2.0.5" },
     { name = "click", specifier = ">=8.3.0" },
     { name = "colorama", specifier = ">=0.4.6" },
+    { name = "dataclass-click", specifier = ">=1.0.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "inquirerpy", specifier = ">=0.3.4" },
     { name = "m3u8", specifier = ">=6.0.0" },

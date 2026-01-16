@@ -165,28 +165,6 @@ class AppleMusicBaseDownloader:
         file_extension: str,
         playlist_tags: PlaylistTags | None,
     ) -> str:
-        """
-        Available tags:
-        album
-        album_artist
-        album_id
-        artist
-        artist_id
-        title
-        title_id
-        composer
-        composer_id
-        track
-        track_total
-        disc
-        disc_total
-        date
-        playlist_artist
-        playlist_id
-        playlist_title
-        playlist_track
-        media_type
-        """
         if tags.album:
             template_folder = (
                 self.compilation_folder_template.split("/")
@@ -196,11 +174,15 @@ class AppleMusicBaseDownloader:
         else:
             template_folder = self.no_album_folder_template.split("/")
 
-        template_file = (
-            self.multi_disc_file_template.split("/")
-            if isinstance(tags.disc_total, int) and tags.disc_total > 1
-            else self.single_disc_file_template.split("/")
-        )
+        if tags.album:
+            template_file = (
+                self.multi_disc_file_template.split("/")
+                if isinstance(tags.disc_total, int) and tags.disc_total > 1
+                else self.single_disc_file_template.split("/")
+            )
+        else:
+            template_file = self.no_album_file_template.split("/")
+
         template_parts = template_folder + template_file
         formatted_parts = []
 

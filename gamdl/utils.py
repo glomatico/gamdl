@@ -1,7 +1,8 @@
-import json
-import typing
-import subprocess
 import asyncio
+import json
+import string
+import subprocess
+import typing
 
 import httpx
 
@@ -79,3 +80,18 @@ async def sequential_gather(
         if interval > 0 and i < len(tasks) - 1:
             await asyncio.sleep(interval)
     return results
+
+
+class CustomStringFormatter(string.Formatter):
+    def format_field(self, value: typing.Any, format_spec: str) -> str:
+        if isinstance(value, tuple) and len(value) == 2:
+            actual_value, fallback_value = value
+            if actual_value is None:
+                return fallback_value
+
+            try:
+                return super().format_field(actual_value, format_spec)
+            except Exception:
+                return fallback_value
+
+        return super().format_field(value, format_spec)

@@ -27,9 +27,10 @@ from ..interface import (
     AppleMusicUploadedVideoInterface,
     SongCodec,
 )
-from .constants import X_NOT_IN_PATH
+from .cli_config import CliConfig
 from .config_file import ConfigFile
-from .utils import CliConfig, CustomLoggerFormatter, prompt_path
+from .constants import X_NOT_IN_PATH
+from .utils import CustomLoggerFormatter, prompt_path
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,7 @@ def make_sync(func):
 @click.version_option(__version__, "-v", "--version")
 @dataclass_click(CliConfig)
 @make_sync
-async def main(
-    config: CliConfig,
-):
+async def main(config: CliConfig):
     colorama.just_fix_windows_console()
 
     root_logger = logging.getLogger(__name__.split(".")[0])

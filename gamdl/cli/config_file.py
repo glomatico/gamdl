@@ -8,8 +8,9 @@ import click
 import click.types as click_types
 from dataclass_click.dataclass_click import _DelayedCall
 
+from .cli_config import CliConfig
 from .constants import EXCLUDED_CONFIG_FILE_PARAMS
-from .utils import CliConfig, Csv
+from .utils import Csv
 
 
 @dataclass

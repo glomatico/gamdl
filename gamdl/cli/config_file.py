@@ -117,7 +117,7 @@ class ConfigFile:
         param_info: ParameterInfo,
     ) -> typing.Any:
         value = self.config[self.section_name].get(param_info.name)
-        if not value:
+        if value is None:
             return param_info.default
 
         if value == "null":

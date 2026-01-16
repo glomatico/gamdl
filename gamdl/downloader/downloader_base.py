@@ -166,24 +166,24 @@ class AppleMusicBaseDownloader:
         playlist_tags: PlaylistTags | None,
     ) -> str:
         if tags.album:
-            template_folder = (
+            template_folder_parts = (
                 self.compilation_folder_template.split("/")
                 if tags.compilation
                 else self.album_folder_template.split("/")
             )
         else:
-            template_folder = self.no_album_folder_template.split("/")
+            template_folder_parts = self.no_album_folder_template.split("/")
 
         if tags.album:
-            template_file = (
+            template_file_parts = (
                 self.multi_disc_file_template.split("/")
                 if isinstance(tags.disc_total, int) and tags.disc_total > 1
                 else self.single_disc_file_template.split("/")
             )
         else:
-            template_file = self.no_album_file_template.split("/")
+            template_file_parts = self.no_album_file_template.split("/")
 
-        template_parts = template_folder + template_file
+        template_parts = template_folder_parts + template_file_parts
         formatted_parts = []
 
         for i, part in enumerate(template_parts):

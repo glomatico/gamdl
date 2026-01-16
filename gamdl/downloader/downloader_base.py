@@ -374,22 +374,26 @@ class AppleMusicBaseDownloader:
         self,
         tags: PlaylistTags,
     ) -> str:
-        template_file = self.playlist_file_template.split("/")
-        tags_dict = tags.__dict__.copy()
+        template_file_parts = self.playlist_file_template.split("/")
+        formatted_parts = []
 
-        return str(
-            Path(
-                self.output_path,
-                *[
-                    self.sanitize_string(i.format(**tags_dict), True)
-                    for i in template_file[0:-1]
-                ],
-                *[
-                    self.sanitize_string(template_file[-1].format(**tags_dict), False)
-                    + ".m3u8"
-                ],
+        for i, part in enumerate(template_file_parts):
+            is_folder = i < len(template_file_parts) - 1
+            formatted_part = CustomStringFormatter().format(
+                part,
+                playlist_artist=(tags.playlist_artist, "Unknown Playlist Artist"),
+                playlist_id=(tags.playlist_id, "Unknown Playlist ID"),
+                playlist_title=(tags.playlist_title, "Unknown Playlist Title"),
+                playlist_track=(tags.playlist_track, ""),
             )
-        )
+            file_ext = None if is_folder else ".m3u8"
+            sanitized_formatted_part = self.sanitize_string(
+                formatted_part,
+                file_ext,
+            )
+            formatted_parts.append(sanitized_formatted_part)
+
+        return str(Path(self.output_path, *formatted_parts))
 
     def update_playlist_file(
         self,

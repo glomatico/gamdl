@@ -24,6 +24,3 @@ Repository = "https://github.com/glomatico/gamdl"
 
 [project.scripts]
 gamdl = "gamdl.cli.cli:main"
-
-[tool.setuptools]
-packages = ["gamdl"]

@@ -146,7 +146,7 @@ class AppleMusicBaseDownloader:
             ILLEGAL_CHARS_RE,
             ILLEGAL_CHAR_REPLACEMENT,
             dirty_string,
-        ).strip()
+        )
 
         if file_ext is None:
             sanitized_string = sanitized_string[: self.truncate]

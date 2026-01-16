@@ -41,12 +41,10 @@ Add these tools to your system PATH for additional features:
 
 ## 📦 Installation
 
-**Install Gamdl via pipx:**
-
-[pipx](https://pipx.pypa.io/stable/installation/) is recommended for installing Gamdl to avoid dependency conflicts, but you can also use pip.
+**Install Gamdl via pip:**
 
 ```bash
-pipx install gamdl
+pip install gamdl
 ```
 
 **Setup cookies:**

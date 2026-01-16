@@ -170,22 +170,23 @@ The file is created automatically on first run. Command-line arguments override 
 
 ### Template Variables
 
-Use these variables in folder/file templates or `--exclude-tags`:
+**Tags for templates and exclude-tags:**
 
-| Variable                                                                     | Description                                   |
-| ---------------------------------------------------------------------------- | --------------------------------------------- |
-| `{album}`, `{album_artist}`, `{album_id}`, `{album_sort}`                    | Album info                                    |
-| `{artist}`, `{artist_id}`, `{artist_sort}`                                   | Artist info                                   |
-| `{title}`, `{title_id}`, `{title_sort}`                                      | Title info                                    |
-| `{composer}`, `{composer_id}`, `{composer_sort}`                             | Composer info                                 |
-| `{track}`, `{track_total}`, `{disc}`, `{disc_total}`                         | Track numbers                                 |
-| `{genre}`, `{genre_id}`                                                      | Genre info                                    |
-| `{date}`                                                                     | Release date (supports strftime: `{date:%Y}`) |
-| `{playlist_artist}`, `{playlist_id}`, `{playlist_title}`, `{playlist_track}` | Playlist info                                 |
-| `{compilation}`, `{gapless}`, `{rating}`                                     | Media properties                              |
-| `{comment}`, `{copyright}`, `{lyrics}`, `{cover}`                            | Additional metadata                           |
-| `{media_type}`, `{storefront}`, `{xid}`                                      | Technical info                                |
-| `all`                                                                        | Special: Skip all tagging                     |
+- `album`, `album_artist`, `album_id`
+- `artist`, `artist_id`
+- `composer`, `composer_id`
+- `date` (supports strftime format: `{date:%Y}`)
+- `disc`, `disc_total`
+- `media_type`
+- `playlist_artist`, `playlist_id`, `playlist_title`, `playlist_track`
+- `title`, `title_id`
+- `track`, `track_total`
+
+**Tags for exclude-tags only:**
+
+- `album_sort`, `artist_sort`, `composer_sort`, `title_sort`
+- `comment`, `compilation`, `copyright`, `cover`, `gapless`, `genre`, `genre_id`, `lyrics`, `rating`, `storefront`, `xid`
+- `all` (special: skip all tagging)
 
 ### Logging Level
 

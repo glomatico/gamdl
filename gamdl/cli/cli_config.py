@@ -1,5 +1,6 @@
 import inspect
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated
 
 import click
@@ -24,6 +25,7 @@ from ..interface import (
     SyncedLyricsFormat,
     UploadedVideoQuality,
 )
+from .utils import Csv
 
 api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
 api_from_wrapper_sig = inspect.signature(AppleMusicApi.create_from_wrapper)

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import get_type_hints
 
+import click
 import click.types as click_types
 from dataclass_click.dataclass_click import _DelayedCall
 
@@ -156,7 +157,14 @@ class ConfigFile:
 
     def update_params_from_config(self, config: CliConfig) -> CliConfig:
         updates = {}
+        click_context = click.get_current_context()
         for param_info in self.parameters.values():
+            if (
+                click_context.get_parameter_source(param_info.name)
+                == click.core.ParameterSource.COMMANDLINE
+            ):
+                continue
+
             if self.config.has_option(self.section_name, param_info.name):
                 updates[param_info.name] = self._parse_param_from_config(param_info)
 

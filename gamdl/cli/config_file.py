@@ -1,5 +1,6 @@
 import configparser
 import typing
+from functools import wraps
 from pathlib import Path
 
 import click
@@ -151,3 +152,16 @@ class ConfigFile:
         self.add_params_default_to_config()
         self.update_params_from_config()
         return self.get_cli_config()
+
+    @staticmethod
+    def loader(func):
+        @wraps(func)
+        def wrapper(cli_config: CliConfig):
+            ctx = click.get_current_context()
+            config_path = ctx.params.get("config_path")
+            no_config_file = ctx.params.get("no_config_file")
+            if config_path and not no_config_file:
+                cli_config = ConfigFile(config_path).load()
+            return func(cli_config)
+
+        return wrapper

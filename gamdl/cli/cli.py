@@ -47,6 +47,7 @@ def make_sync(func):
 @click.help_option("-h", "--help")
 @click.version_option(__version__, "-v", "--version")
 @dataclass_click(CliConfig)
+@ConfigFile.loader
 @make_sync
 async def main(config: CliConfig):
     colorama.just_fix_windows_console()
@@ -65,10 +66,6 @@ async def main(config: CliConfig):
         root_logger.addHandler(file_handler)
 
     logger.info(f"Starting Gamdl {__version__}")
-
-    if not config.no_config_file:
-        config_file = ConfigFile(config.config_path)
-        config = config_file.load()
 
     if config.use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(

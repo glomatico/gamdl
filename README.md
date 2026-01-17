@@ -52,6 +52,50 @@ pip install gamdl
 1. Place your cookies file in the working directory as `cookies.txt`, or
 2. Specify the path using `--cookies-path` or in the config file
 
+## 🐳 Docker
+
+Run gamdl via Docker with all external binaries pre-installed (FFmpeg, mp4decrypt, MP4Box, N_m3u8DL-RE).
+
+**Build the image:**
+
+```bash
+docker build -t gamdl .
+```
+
+**Basic usage:**
+
+```bash
+docker run --rm \
+  -v /path/to/cookies.txt:/app/cookies.txt:ro \
+  -v /path/to/output:/app/music \
+  gamdl --cookies-path /app/cookies.txt --output-path /app/music "https://music.apple.com/..."
+```
+
+**With config persistence:**
+
+```bash
+docker run --rm \
+  -v /path/to/cookies.txt:/app/cookies.txt:ro \
+  -v /path/to/output:/app/music \
+  -v /path/to/config:/root/.gamdl \
+  gamdl --cookies-path /app/cookies.txt --output-path /app/music "https://music.apple.com/..."
+```
+
+**Using N_m3u8DL-RE downloader:**
+
+```bash
+docker run --rm \
+  -v ./cookies.txt:/app/cookies.txt:ro \
+  -v ./music:/app/music \
+  gamdl --cookies-path /app/cookies.txt --output-path /app/music --download-mode nm3u8dlre "https://music.apple.com/..."
+```
+
+| Volume Mount | Purpose | Mode |
+|--------------|---------|------|
+| `/app/cookies.txt` | Apple Music cookies | read-only |
+| `/app/music` | Download output | read-write |
+| `/root/.gamdl` | Config persistence (optional) | read-write |
+
 ## 🚀 Usage
 
 ```bash

@@ -138,6 +138,9 @@ class ConfigFile:
     def get_cli_config(self) -> CliConfig:
         config_dict = {}
         for param in self.click_context.command.params:
+            if param.name in {"help", "version"}:
+                continue
+
             config_dict[param.name] = self.click_context.params.get(
                 param.name, param.default
             )

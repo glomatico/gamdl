@@ -68,9 +68,7 @@ async def main(config: CliConfig):
 
     if not config.no_config_file:
         config_file = ConfigFile(config.config_path)
-        config_file.cleanup_unknown_params()
-        config_file.add_params_default_to_config()
-        config = config_file.update_params_from_config(config)
+        config = config_file.load()
 
     if config.use_wrapper:
         apple_music_api = await AppleMusicApi.create_from_wrapper(

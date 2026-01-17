@@ -122,9 +122,7 @@ class ConfigFile:
         if has_changes:
             self._write_config_file()
 
-    def update_params_from_config(self, config: CliConfig) -> CliConfig:
-        updates = {}
-
+    def update_params_from_config(self) -> None:
         for param in self.click_context.command.params:
             if (
                 self.click_context.get_parameter_source(param.name)
@@ -133,8 +131,20 @@ class ConfigFile:
                 continue
 
             if self.config.has_option(self.section_name, param.name):
-                updates[param.name] = self._parse_param_from_config(param)
+                self.click_context.params[param.name] = self._parse_param_from_config(
+                    param
+                )
 
-        config_dict = config.__dict__.copy()
-        config_dict.update(updates)
+    def get_cli_config(self) -> CliConfig:
+        config_dict = {}
+        for param in self.click_context.command.params:
+            config_dict[param.name] = self.click_context.params.get(
+                param.name, param.default
+            )
         return CliConfig(**config_dict)
+
+    def load(self) -> CliConfig:
+        self.cleanup_unknown_params()
+        self.add_params_default_to_config()
+        self.update_params_from_config()
+        return self.get_cli_config()

@@ -321,13 +321,18 @@ class AppleMusicApi:
         self,
         artist_id: str,
         include: str = "albums,music-videos",
+        views: str = "full-albums,compilation-albums,singles,top-songs",
         limit: int = 100,
     ) -> dict | None:
         response = await self.client.get(
             f"{AMP_API_URL}/v1/catalog/{self.storefront}/artists/{artist_id}",
             params={
                 "include": include,
-                **{f"limit[{_include}]": limit for _include in include.split(",")},
+                "views": views,
+                **{
+                    f"limit[{_include}]": limit
+                    for _include in [*include.split(","), *views.split(",")]
+                },
             },
         )
         raise_for_status(response, {200, 404})

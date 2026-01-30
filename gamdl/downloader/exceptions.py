@@ -1,4 +1,4 @@
-from gamdl.utils import GamdlError
+from ..utils import GamdlError
 
 
 class MediaFileExists(GamdlError):

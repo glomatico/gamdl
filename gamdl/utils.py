@@ -95,3 +95,7 @@ class CustomStringFormatter(string.Formatter):
                 return fallback_value
 
         return super().format_field(value, format_spec)
+
+
+class GamdlError(Exception):
+    pass

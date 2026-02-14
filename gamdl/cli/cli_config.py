@@ -7,23 +7,13 @@ import click
 from dataclass_click import argument, option
 
 from ..api import AppleMusicApi
-from ..downloader import (
-    AppleMusicBaseDownloader,
-    AppleMusicMusicVideoDownloader,
-    AppleMusicSongDownloader,
-    AppleMusicUploadedVideoDownloader,
-    DownloadMode,
-    RemuxFormatMusicVideo,
-    RemuxMode,
-)
-from ..interface import (
-    CoverFormat,
-    MusicVideoCodec,
-    MusicVideoResolution,
-    SongCodec,
-    SyncedLyricsFormat,
-    UploadedVideoQuality,
-)
+from ..downloader import (AppleMusicBaseDownloader,
+                          AppleMusicMusicVideoDownloader,
+                          AppleMusicSongDownloader,
+                          AppleMusicUploadedVideoDownloader, DownloadMode,
+                          RemuxFormatMusicVideo, RemuxMode)
+from ..interface import (CoverFormat, MusicVideoCodec, MusicVideoResolution,
+                         SongCodec, SyncedLyricsFormat, UploadedVideoQuality)
 from .utils import Csv
 
 api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
@@ -465,6 +455,22 @@ class CliConfig:
             help="Post video quality",
             default=uploaded_video_downloader_sig.parameters["quality"].default,
             type=UploadedVideoQuality,
+        ),
+    ]
+    download_artist_albums: Annotated[
+        bool,
+        option(
+            "--download-artist-albums",
+            help="Download all albums from artist",
+            is_flag=True,
+        ),
+    ]
+    download_artist_music_videos: Annotated[
+        bool,
+        option(
+            "--download-artist-music-videos",
+            help="Download all music videos from artist",
+            is_flag=True,
         ),
     ]
     no_config_file: Annotated[

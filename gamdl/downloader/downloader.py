@@ -7,28 +7,18 @@ from InquirerPy.base.control import Choice
 
 from ..interface import AppleMusicInterface
 from ..utils import safe_gather
-from .constants import (
-    ALBUM_MEDIA_TYPE,
-    ARTIST_MEDIA_TYPE,
-    MUSIC_VIDEO_MEDIA_TYPE,
-    PLAYLIST_MEDIA_TYPE,
-    SONG_MEDIA_TYPE,
-    UPLOADED_VIDEO_MEDIA_TYPE,
-    VALID_URL_PATTERN,
-)
+from .constants import (ALBUM_MEDIA_TYPE, ARTIST_MEDIA_TYPE,
+                        MUSIC_VIDEO_MEDIA_TYPE, PLAYLIST_MEDIA_TYPE,
+                        SONG_MEDIA_TYPE, UPLOADED_VIDEO_MEDIA_TYPE,
+                        VALID_URL_PATTERN)
 from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
 from .enums import DownloadMode, RemuxMode
-from .exceptions import (
-    ExecutableNotFound,
-    FormatNotAvailable,
-    MediaFileExists,
-    NotStreamable,
-    SyncedLyricsOnly,
-    UnsupportedMediaType,
-)
+from .exceptions import (ExecutableNotFound, FormatNotAvailable,
+                         MediaFileExists, NotStreamable, SyncedLyricsOnly,
+                         UnsupportedMediaType)
 from .types import DownloadItem, UrlInfo
 
 
@@ -43,6 +33,8 @@ class AppleMusicDownloader:
         skip_music_videos: bool = False,
         skip_processing: bool = False,
         flat_filter: typing.Callable = None,
+        download_artist_albums: bool = False,
+        download_artist_music_videos: bool = False,
     ):
         self.interface = interface
         self.base_downloader = base_downloader
@@ -52,6 +44,8 @@ class AppleMusicDownloader:
         self.skip_music_videos = skip_music_videos
         self.skip_processing = skip_processing
         self.flat_filter = flat_filter
+        self.download_artist_albums = download_artist_albums
+        self.download_artist_music_videos = download_artist_music_videos
 
     async def get_single_download_item(
         self,
@@ -159,23 +153,37 @@ class AppleMusicDownloader:
                 ]
             )
 
-        media_type = await inquirer.select(
-            message=f'Select which type to download for artist "{artist_metadata["attributes"]["name"]}":',
-            choices=[
-                Choice(
-                    name="Albums",
-                    value="albums",
+        if self.download_artist_albums and self.download_artist_music_videos:
+            return [
+                *await self.get_artist_albums_download_items(
+                    artist_metadata["relationships"]["albums"]["data"]
                 ),
-                Choice(
-                    name="Music Videos",
-                    value="music-videos",
+                *await self.get_artist_music_videos_download_items(
+                    artist_metadata["relationships"]["music-videos"]["data"]
                 ),
-            ],
-            validate=lambda result: artist_metadata["relationships"]
-            .get(result, {})
-            .get("data"),
-            invalid_message="The artist doesn't have any items of this type",
-        ).execute_async()
+            ]
+        elif self.download_artist_albums:
+            media_type = "albums"
+        elif self.download_artist_music_videos:
+            media_type = "music-videos"
+        else:
+            media_type = await inquirer.select(
+                message=f'Select which type to download for artist "{artist_metadata["attributes"]["name"]}":',
+                choices=[
+                    Choice(
+                        name="Albums",
+                        value="albums",
+                    ),
+                    Choice(
+                        name="Music Videos",
+                        value="music-videos",
+                    ),
+                ],
+                validate=lambda result: artist_metadata["relationships"]
+                .get(result, {})
+                .get("data"),
+                invalid_message="The artist doesn't have any items of this type",
+            ).execute_async()
 
         if media_type == "albums":
             return await self.get_artist_albums_download_items(
@@ -190,26 +198,29 @@ class AppleMusicDownloader:
         self,
         albums_metadata: list[dict],
     ) -> list[DownloadItem]:
-        choices = [
-            Choice(
-                name=" | ".join(
-                    [
-                        f'{album["attributes"]["trackCount"]:03d}',
-                        f'{album["attributes"]["releaseDate"]:<10}',
-                        f'{album["attributes"].get("contentRating", "None").title():<8}',
-                        f'{album["attributes"]["name"]}',
-                    ]
-                ),
-                value=album,
-            )
-            for album in albums_metadata
-            if album.get("attributes")
-        ]
-        selected = await inquirer.select(
-            message="Select which albums to download: (Track Count | Release Date | Rating | Title)",
-            choices=choices,
-            multiselect=True,
-        ).execute_async()
+        if self.download_artist_albums:
+            selected = albums_metadata
+        else:
+            choices = [
+                Choice(
+                    name=" | ".join(
+                        [
+                            f'{album["attributes"]["trackCount"]:03d}',
+                            f'{album["attributes"]["releaseDate"]:<10}',
+                            f'{album["attributes"].get("contentRating", "None").title():<8}',
+                            f'{album["attributes"]["name"]}',
+                        ]
+                    ),
+                    value=album,
+                )
+                for album in albums_metadata
+                if album.get("attributes")
+            ]
+            selected = await inquirer.select(
+                message="Select which albums to download: (Track Count | Release Date | Rating | Title)",
+                choices=choices,
+                multiselect=True,
+            ).execute_async()
 
         download_items = []
 
@@ -234,27 +245,30 @@ class AppleMusicDownloader:
         self,
         music_videos_metadata: list[dict],
     ) -> list[DownloadItem]:
-        choices = [
-            Choice(
-                name=" | ".join(
-                    [
-                        self.millis_to_min_sec(
-                            music_video["attributes"]["durationInMillis"]
-                        ),
-                        f'{music_video["attributes"].get("contentRating", "None").title():<8}',
-                        music_video["attributes"]["name"],
-                    ],
-                ),
-                value=music_video,
-            )
-            for music_video in music_videos_metadata
-            if music_video.get("attributes")
-        ]
-        selected = await inquirer.select(
-            message="Select which music videos to download: (Duration | Rating | Title)",
-            choices=choices,
-            multiselect=True,
-        ).execute_async()
+        if self.download_artist_music_videos:
+            selected = music_videos_metadata
+        else:
+            choices = [
+                Choice(
+                    name=" | ".join(
+                        [
+                            self.millis_to_min_sec(
+                                music_video["attributes"]["durationInMillis"]
+                            ),
+                            f'{music_video["attributes"].get("contentRating", "None").title():<8}',
+                            music_video["attributes"]["name"],
+                        ],
+                    ),
+                    value=music_video,
+                )
+                for music_video in music_videos_metadata
+                if music_video.get("attributes")
+            ]
+            selected = await inquirer.select(
+                message="Select which music videos to download: (Duration | Rating | Title)",
+                choices=choices,
+                multiselect=True,
+            ).execute_async()
 
         music_video_tasks = [
             self.get_single_download_item(

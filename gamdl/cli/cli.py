@@ -9,24 +9,14 @@ from dataclass_click import dataclass_click
 
 from .. import __version__
 from ..api import AppleMusicApi, ItunesApi
-from ..downloader import (
-    AppleMusicBaseDownloader,
-    AppleMusicDownloader,
-    AppleMusicMusicVideoDownloader,
-    AppleMusicSongDownloader,
-    AppleMusicUploadedVideoDownloader,
-    DownloadItem,
-    DownloadMode,
-    GamdlError,
-    RemuxMode,
-)
-from ..interface import (
-    AppleMusicInterface,
-    AppleMusicMusicVideoInterface,
-    AppleMusicSongInterface,
-    AppleMusicUploadedVideoInterface,
-    SongCodec,
-)
+from ..downloader import (AppleMusicBaseDownloader, AppleMusicDownloader,
+                          AppleMusicMusicVideoDownloader,
+                          AppleMusicSongDownloader,
+                          AppleMusicUploadedVideoDownloader, DownloadItem,
+                          DownloadMode, GamdlError, RemuxMode)
+from ..interface import (AppleMusicInterface, AppleMusicMusicVideoInterface,
+                         AppleMusicSongInterface,
+                         AppleMusicUploadedVideoInterface, SongCodec)
 from .cli_config import CliConfig
 from .config_file import ConfigFile
 from .constants import X_NOT_IN_PATH
@@ -161,6 +151,8 @@ async def main(config: CliConfig):
         song_downloader=song_downloader,
         music_video_downloader=music_video_downloader,
         uploaded_video_downloader=uploaded_video_downloader,
+        download_artist_albums=config.download_artist_albums,
+        download_artist_music_videos=config.download_artist_music_videos,
     )
 
     if not config.synced_lyrics_only:

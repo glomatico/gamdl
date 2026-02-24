@@ -161,6 +161,10 @@ class AppleMusicDownloader:
                     value=["views", "compilation-albums"],
                 ),
                 Choice(
+                    name="Live Albums",
+                    value=["views", "live-albums"],
+                ),
+                Choice(
                     name="Singles & EPs",
                     value=["views", "singles"],
                 ),
@@ -197,6 +201,7 @@ class AppleMusicDownloader:
         if media_type_key in {
             "full-albums",
             "compilation-albums",
+            "live-albums",
             "singles",
             "albums",
         }:

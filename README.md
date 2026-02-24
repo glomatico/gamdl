@@ -37,7 +37,7 @@ Add these tools to your system PATH for additional features:
 - **[mp4decrypt](https://www.bento4.com/downloads/)** - Required for `mp4box` remux mode, music videos, and experimental codecs
 - **[MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)** - Required for `mp4box` remux mode
 - **[N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)** - Required for `nm3u8dlre` download mode, which is faster than the default downloader
-- **[Wrapper & amdecrypt](#️-wrapper--amdecrypt)** - For downloading songs in ALAC and other experimental codecs without API limitations
+- **[Wrapper](#️-wrapper)** - For downloading songs in ALAC and other experimental codecs without API limitations
 
 ## 📦 Installation
 
@@ -134,8 +134,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--mp4decrypt-path`             | mp4decrypt executable path      | `mp4decrypt`                                   |
 | `--ffmpeg-path`                 | FFmpeg executable path          | `ffmpeg`                                       |
 | `--mp4box-path`                 | MP4Box executable path          | `MP4Box`                                       |
-| `--amdecrypt-path`              | amdecrypt executable path       | `amdecrypt`                                    |
-| `--use-wrapper`                 | Use wrapper and amdecrypt       | `false`                                        |
+| `--use-wrapper`                 | Use wrapper                     | `false`                                        |
 | `--wrapper-decrypt-ip`          | Wrapper decryption server IP    | `127.0.0.1:10020`                              |
 | `--download-mode`               | Download mode                   | `ytdlp`                                        |
 | `--remux-mode`                  | Remux mode                      | `ffmpeg`                                       |
@@ -255,15 +254,9 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `best` - Up to 1080p with AAC 256kbps
 - `ask` - Interactive quality selection
 
-## ⚙️ Wrapper & amdecrypt
+## ⚙️ Wrapper
 
-Use the [wrapper](https://github.com/WorldObservationLog/wrapper) and [amdecrypt](https://github.com/glomatico/amdecrypt) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.
-
-### Prerequisites
-
-- **[wrapper](https://github.com/WorldObservationLog/wrapper)** - Refer to the repository for installation
-- **[amdecrypt](https://github.com/glomatico/amdecrypt)** - Refer to the repository for installation
-- **[mp4decrypt](https://www.bento4.com/downloads/)** - Required by amdecrypt to decrypt protected files
+Use the [wrapper](https://github.com/WorldObservationLog/wrapper) to download songs in ALAC and other experimental codecs without API limitations. Cookies, FFmpeg, MP4Box, or mp4decrypt are not required when using the wrapper.
 
 ### Setup Instructions
 

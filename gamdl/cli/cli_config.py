@@ -236,14 +236,6 @@ class CliConfig:
             default=base_downloader_sig.parameters["mp4box_path"].default,
         ),
     ]
-    amdecrypt_path: Annotated[
-        str,
-        option(
-            "--amdecrypt-path",
-            help="amdecrypt executable path",
-            default=base_downloader_sig.parameters["amdecrypt_path"].default,
-        ),
-    ]
     use_wrapper: Annotated[
         bool,
         option(

@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 import colorama
 from dataclass_click import dataclass_click
+from httpx import ConnectError
 
 from .. import __version__
 from ..api import AppleMusicApi, ItunesApi
@@ -68,10 +69,17 @@ async def main(config: CliConfig):
     logger.info(f"Starting Gamdl {__version__}")
 
     if config.use_wrapper:
-        apple_music_api = await AppleMusicApi.create_from_wrapper(
-            wrapper_account_url=config.wrapper_account_url,
-            language=config.language,
-        )
+        try:
+            apple_music_api = await AppleMusicApi.create_from_wrapper(
+                wrapper_account_url=config.wrapper_account_url,
+                language=config.language,
+            )
+        except ConnectError:
+            logger.critical(
+                "Could not connect to the wrapper account API. "
+                "Make sure the wrapper is running and the URL is correct."
+            )
+            return
     else:
         cookies_path = prompt_path(config.cookies_path)
         apple_music_api = await AppleMusicApi.create_from_netscape_cookies(
@@ -115,7 +123,6 @@ async def main(config: CliConfig):
         mp4decrypt_path=config.mp4decrypt_path,
         ffmpeg_path=config.ffmpeg_path,
         mp4box_path=config.mp4box_path,
-        amdecrypt_path=config.amdecrypt_path,
         use_wrapper=config.use_wrapper,
         wrapper_decrypt_ip=config.wrapper_decrypt_ip,
         download_mode=config.download_mode,
@@ -190,10 +197,6 @@ async def main(config: CliConfig):
             and not base_downloader.full_nm3u8dlre_path
         ):
             logger.critical(X_NOT_IN_PATH.format("N_m3u8DL-RE", config.nm3u8dlre_path))
-            return
-
-        if config.use_wrapper and not base_downloader.full_amdecrypt_path:
-            logger.critical(X_NOT_IN_PATH.format("amdecrypt", config.amdecrypt_path))
             return
 
         if not config.song_codec.is_legacy() and not config.use_wrapper:

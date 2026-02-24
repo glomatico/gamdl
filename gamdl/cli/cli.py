@@ -106,7 +106,7 @@ async def main(config: CliConfig):
 
     if config.song_codec.is_legacy() and config.use_wrapper:
         logger.warning(
-            "Legacy song codecs are not supported when using the wrapper."
+            "Legacy song codecs are not supported when using the wrapper. "
             "Your song codec will be changed to AAC."
         )
         config.song_codec = SongCodec.AAC

@@ -230,6 +230,13 @@ class AppleMusicSongInterface(AppleMusicInterface):
         song_metadata: dict,
         codec: SongCodec,
     ) -> StreamInfoAv | None:
+        if "extendedAssetUrls" not in song_metadata["attributes"]:
+            song_metadata = (
+                await self.apple_music_api.get_song(
+                    self.get_media_id_of_library_media(song_metadata),
+                )
+            )["data"][0]
+
         m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
             "enhancedHls"
         )

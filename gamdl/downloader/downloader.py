@@ -497,12 +497,6 @@ class AppleMusicDownloader:
                 raise ExecutableNotFound("mp4decrypt")
 
             if (
-                self.song_downloader.use_wrapper
-                and not self.base_downloader.full_amdecrypt_path
-            ):
-                raise ExecutableNotFound("amdecrypt")
-
-            if (
                 self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
                 and not self.base_downloader.full_nm3u8dlre_path
             ):

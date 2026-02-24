@@ -29,7 +29,6 @@ class AppleMusicBaseDownloader:
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
         mp4box_path: str = "MP4Box",
-        amdecrypt_path: str = "amdecrypt",
         use_wrapper: bool = False,
         wrapper_decrypt_ip: str = "127.0.0.1:10020",
         download_mode: DownloadMode = DownloadMode.YTDLP,
@@ -58,7 +57,6 @@ class AppleMusicBaseDownloader:
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
         self.mp4box_path = mp4box_path
-        self.amdecrypt_path = amdecrypt_path
         self.use_wrapper = use_wrapper
         self.wrapper_decrypt_ip = wrapper_decrypt_ip
         self.download_mode = download_mode
@@ -87,7 +85,6 @@ class AppleMusicBaseDownloader:
         self.full_mp4decrypt_path = shutil.which(self.mp4decrypt_path)
         self.full_ffmpeg_path = shutil.which(self.ffmpeg_path)
         self.full_mp4box_path = shutil.which(self.mp4box_path)
-        self.full_amdecrypt_path = shutil.which(self.amdecrypt_path)
 
     def _initialize_cdm(self):
         if self.wvd_path:

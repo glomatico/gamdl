@@ -4,6 +4,7 @@ from ..interface.enums import SongCodec, SyncedLyricsFormat
 from ..interface.interface_song import AppleMusicSongInterface
 from ..interface.types import DecryptionKeyAv
 from ..utils import async_subprocess
+from .amdecrypt import decrypt_file
 from .constants import DEFAULT_SONG_DECRYPTION_KEY
 from .downloader_base import AppleMusicBaseDownloader
 from .enums import RemuxMode
@@ -235,10 +236,8 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         media_id: str,
         fairplay_key: str,
     ) -> None:
-        await async_subprocess(
-            self.amdecrypt_path,
+        await decrypt_file(
             self.wrapper_decrypt_ip,
-            self.full_mp4decrypt_path,
             media_id,
             fairplay_key,
             input_path,

@@ -14,6 +14,7 @@ from .constants import (
     LICENSE_API_URL,
     WEBPLAYBACK_API_URL,
 )
+from .exceptions import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,6 @@ class AppleMusicApi:
 
     async def _get_token(self) -> str:
         response = await self.client.get(APPLE_MUSIC_HOMEPAGE_URL)
-        raise_for_status(response)
         home_page = response.text
 
         index_js_uri_match = re.search(
@@ -142,7 +142,6 @@ class AppleMusicApi:
         index_js_uri = index_js_uri_match.group(1)
 
         response = await self.client.get(f"{APPLE_MUSIC_HOMEPAGE_URL}/{index_js_uri}")
-        raise_for_status(response)
         index_js_page = response.text
 
         token_match = re.search('(?=eyJh)(.*?)(?=")', index_js_page)
@@ -186,21 +185,39 @@ class AppleMusicApi:
             return None
         return data[0].get("attributes", {}).get("restrictions")
 
-    async def get_account_info(self, meta: str | None = "subscription") -> dict:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/me/account",
-            params={
-                **({"meta": meta} if meta else {}),
+    async def get_account_info(self, meta: str = "subscription") -> dict:
+        account_info = await self._amp_request(
+            f"/v1/me/account",
+            {
+                "meta": meta,
             },
         )
-        raise_for_status(response)
-
-        account_info = safe_json(response)
-        if not "data" in account_info or (meta and "meta" not in account_info):
-            raise Exception("Error getting account info:", response.text)
         logger.debug(f"Account info: {account_info}")
 
         return account_info
+
+    async def _amp_request(
+        self,
+        endpoint: str,
+        params: dict | None = None,
+    ) -> dict:
+        response = await self.client.get(
+            AMP_API_URL + endpoint,
+            params=params or {},
+        )
+        response_json = safe_json(response)
+
+        if (
+            response.status_code != 200
+            or response_json is None
+            or "errors" in response_json
+        ):
+            raise ApiError(
+                message=response.text,
+                status_code=response.status_code,
+            )
+
+        return response_json
 
     async def get_song(
         self,
@@ -208,21 +225,13 @@ class AppleMusicApi:
         extend: str = "extendedAssetUrls",
         include: str = "lyrics,albums",
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/songs/{song_id}",
-            params={
+        song = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/songs/{song_id}",
+            {
                 "extend": extend,
                 "include": include,
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        song = safe_json(response)
-        if not "data" in song:
-            raise Exception("Error getting song:", response.text)
         logger.debug(f"Song: {song}")
 
         return song
@@ -232,20 +241,12 @@ class AppleMusicApi:
         music_video_id: str,
         include: str = "albums",
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/music-videos/{music_video_id}",
-            params={
+        music_video = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/music-videos/{music_video_id}",
+            {
                 "include": include,
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        music_video = safe_json(response)
-        if not "data" in music_video:
-            raise Exception("Error getting music video:", response.text)
         logger.debug(f"Music video: {music_video}")
 
         return music_video
@@ -254,17 +255,9 @@ class AppleMusicApi:
         self,
         post_id: str,
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/uploaded-videos/{post_id}"
+        uploaded_video = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/uploaded-videos/{post_id}",
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        uploaded_video = safe_json(response)
-        if not "data" in uploaded_video:
-            raise Exception("Error getting uploaded video:", response.text)
         logger.debug(f"Uploaded video: {uploaded_video}")
 
         return uploaded_video
@@ -274,20 +267,12 @@ class AppleMusicApi:
         album_id: str,
         extend: str = "extendedAssetUrls",
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/albums/{album_id}",
-            params={
+        album = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/albums/{album_id}",
+            {
                 "extend": extend,
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        album = safe_json(response)
-        if not "data" in album:
-            raise Exception("Error getting album:", response.text)
         logger.debug(f"Album: {album}")
 
         return album
@@ -298,21 +283,13 @@ class AppleMusicApi:
         limit_tracks: int = 300,
         extend: str = "extendedAssetUrls",
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/playlists/{playlist_id}",
-            params={
+        playlist = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/playlists/{playlist_id}",
+            {
                 "limit[tracks]": limit_tracks,
                 "extend": extend,
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        playlist = safe_json(response)
-        if not "data" in playlist:
-            raise Exception("Error getting playlist:", response.text)
         logger.debug(f"Playlist: {playlist}")
 
         return playlist
@@ -324,9 +301,9 @@ class AppleMusicApi:
         views: str = "full-albums,compilation-albums,singles,top-songs",
         limit: int = 100,
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/artists/{artist_id}",
-            params={
+        artist = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/artists/{artist_id}",
+            {
                 "include": include,
                 "views": views,
                 **{
@@ -335,14 +312,6 @@ class AppleMusicApi:
                 },
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        artist = safe_json(response)
-        if not "data" in artist:
-            raise Exception("Error getting artist:", response.text)
         logger.debug(f"Artist: {artist}")
 
         return artist
@@ -352,20 +321,12 @@ class AppleMusicApi:
         album_id: str,
         extend: str = "extendedAssetUrls",
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/me/library/albums/{album_id}",
-            params={
+        album = await self._amp_request(
+            f"/v1/me/library/albums/{album_id}",
+            {
                 "extend": extend,
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        album = safe_json(response)
-        if not "data" in album:
-            raise Exception("Error getting library album:", response.text)
         logger.debug(f"Library album: {album}")
 
         return album
@@ -377,22 +338,15 @@ class AppleMusicApi:
         limit: int = 100,
         extend: str = "extendedAssetUrls",
     ) -> dict | None:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/me/library/playlists/{playlist_id}",
-            params={
+        playlist = await self._amp_request(
+            f"/v1/me/library/playlists/{playlist_id}",
+            {
                 "include": include,
                 **{f"limit[{_include}]": limit for _include in include.split(",")},
                 "extend": extend,
             },
         )
-        raise_for_status(response, {200, 404})
-
-        if response.status_code == 404:
-            return None
-
-        playlist = safe_json(response)
-        if not "data" in playlist:
-            raise Exception("Error getting library playlist:", response.text)
+        logger.debug(f"Library playlist: {playlist}")
 
         return playlist
 
@@ -403,20 +357,15 @@ class AppleMusicApi:
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
-        response = await self.client.get(
-            f"{AMP_API_URL}/v1/catalog/{self.storefront}/search",
-            params={
+        search_results = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/search",
+            {
                 "term": term,
                 "types": types,
                 "limit": limit,
                 "offset": offset,
             },
         )
-        raise_for_status(response)
-
-        search_results = safe_json(response)
-        if not "results" in search_results:
-            raise Exception("Error searching:", response.text)
         logger.debug(f"Search results: {search_results}")
 
         return search_results
@@ -447,19 +396,13 @@ class AppleMusicApi:
         limit: int,
         extend: str,
     ) -> dict:
-        response = await self.client.get(
-            AMP_API_URL + next_uri,
-            params={
+        extended_api_data = await self._amp_request(
+            next_uri,
+            {
                 "limit": limit,
                 "extend": extend,
-                **parse_qs(urlparse(next_uri).query),
             },
         )
-        raise_for_status(response)
-
-        extended_api_data = safe_json(response)
-        if not "data" in extended_api_data:
-            raise Exception("Error getting extended API data:", response.text)
         logger.debug(f"Extended API data: {extended_api_data}")
 
         return extended_api_data
@@ -475,12 +418,17 @@ class AppleMusicApi:
                 "language": self.language,
             },
         )
-        raise_for_status(response)
-
         webplayback = safe_json(response)
-        if not "songList" in webplayback:
-            raise Exception("Error getting webplayback:", response.text)
-        logger.debug(f"Webplayback: {webplayback}")
+
+        if (
+            response.status_code != 200
+            or webplayback is None
+            or "dialog" in webplayback
+        ):
+            raise ApiError(
+                message=response.text,
+                status_code=response.status_code,
+            )
 
         return webplayback
 
@@ -502,11 +450,18 @@ class AppleMusicApi:
                 "user-initiated": True,
             },
         )
-        raise_for_status(response)
-
         license_exchange = safe_json(response)
-        if not "license" in license_exchange:
-            raise Exception("Error getting license exchange:", response.text)
+
+        if (
+            response.status_code != 200
+            or license_exchange is None
+            or license_exchange.get("status") != 0
+        ):
+            raise ApiError(
+                message=response.text,
+                status_code=response.status_code,
+            )
+
         logger.debug(f"License exchange: {license_exchange}")
 
         return license_exchange

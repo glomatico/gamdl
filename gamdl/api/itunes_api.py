@@ -2,8 +2,9 @@ import logging
 
 import httpx
 
-from ..utils import raise_for_status, safe_json
+from ..utils import safe_json
 from .constants import ITUNES_LOOKUP_API_URL, ITUNES_PAGE_API_URL, STOREFRONT_IDS
+from .exceptions import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,14 @@ class ItunesApi:
                 "entity": entity,
             },
         )
-        raise_for_status(response)
-
         lookup_result = safe_json(response)
-        if "results" not in lookup_result:
-            raise Exception("Error getting lookup result:", response.text)
+
+        if response.status_code != 200 or lookup_result is None:
+            raise ApiError(
+                message=response.text,
+                status_code=response.status_code,
+            )
+
         logger.debug(f"Lookup result: {lookup_result}")
 
         return lookup_result
@@ -69,11 +73,14 @@ class ItunesApi:
         response = await self.client.get(
             f"{ITUNES_PAGE_API_URL}/{media_type}/{media_id}"
         )
-        raise_for_status(response)
-
         itunes_page = safe_json(response)
-        if "storePlatformData" not in itunes_page:
-            raise Exception("Error getting iTunes page:", response.text)
+
+        if response.status_code != 200 or itunes_page is None:
+            raise ApiError(
+                message=response.text,
+                status_code=response.status_code,
+            )
+
         logger.debug(f"iTunes page: {itunes_page}")
 
         return itunes_page

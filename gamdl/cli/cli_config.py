@@ -240,7 +240,7 @@ class CliConfig:
         bool,
         option(
             "--use-wrapper",
-            help="Use wrapper and amdecrypt for decrypting songs",
+            help="Use wrapper for decrypting songs",
             is_flag=True,
         ),
     ]

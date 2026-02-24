@@ -480,7 +480,10 @@ class AppleMusicDownloader:
             *SONG_MEDIA_TYPE,
             *MUSIC_VIDEO_MEDIA_TYPE,
         }:
-            if not self.base_downloader.use_wrapper:
+            if (
+                not self.base_downloader.use_wrapper
+                or download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+            ):
                 if (
                     self.base_downloader.remux_mode == RemuxMode.FFMPEG
                     and not self.base_downloader.full_ffmpeg_path

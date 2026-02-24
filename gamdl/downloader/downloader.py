@@ -480,26 +480,24 @@ class AppleMusicDownloader:
             *SONG_MEDIA_TYPE,
             *MUSIC_VIDEO_MEDIA_TYPE,
         }:
-            if (
-                self.base_downloader.remux_mode == RemuxMode.FFMPEG
-                and not self.base_downloader.full_ffmpeg_path
-            ):
-                raise ExecutableNotFound("ffmpeg")
+            if not self.base_downloader.use_wrapper:
+                if (
+                    self.base_downloader.remux_mode == RemuxMode.FFMPEG
+                    and not self.base_downloader.full_ffmpeg_path
+                ):
+                    raise ExecutableNotFound("ffmpeg")
 
-            if (
-                self.base_downloader.remux_mode == RemuxMode.MP4BOX
-                and not self.base_downloader.full_mp4box_path
-            ):
-                raise ExecutableNotFound("MP4Box")
+                if (
+                    self.base_downloader.remux_mode == RemuxMode.MP4BOX
+                    and not self.base_downloader.full_mp4box_path
+                ):
+                    raise ExecutableNotFound("MP4Box")
 
-            if (
-                self.song_downloader.use_wrapper
-                or (
+                if (
                     download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
                     or self.base_downloader.remux_mode == RemuxMode.MP4BOX
-                )
-            ) and not self.base_downloader.full_mp4decrypt_path:
-                raise ExecutableNotFound("mp4decrypt")
+                ) and not self.base_downloader.full_mp4decrypt_path:
+                    raise ExecutableNotFound("mp4decrypt")
 
             if (
                 self.base_downloader.download_mode == DownloadMode.NM3U8DLRE

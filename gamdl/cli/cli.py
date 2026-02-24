@@ -104,6 +104,13 @@ async def main(config: CliConfig):
             " downloadable"
         )
 
+    if config.song_codec.is_legacy() and config.use_wrapper:
+        logger.warning(
+            "Legacy song codecs are not supported when using the wrapper."
+            "Your song codec will be changed to AAC."
+        )
+        config.song_codec = SongCodec.AAC
+
     interface = AppleMusicInterface(
         apple_music_api,
         itunes_api,
@@ -171,26 +178,29 @@ async def main(config: CliConfig):
     )
 
     if not config.synced_lyrics_only:
-        if not base_downloader.full_ffmpeg_path and (
-            config.remux_mode == RemuxMode.FFMPEG
-            or config.download_mode == DownloadMode.NM3U8DLRE
-        ):
-            logger.critical(X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path))
-            return
+        if not config.use_wrapper:
+            if not base_downloader.full_ffmpeg_path and (
+                config.remux_mode == RemuxMode.FFMPEG
+                or config.download_mode == DownloadMode.NM3U8DLRE
+            ):
+                logger.critical(X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path))
+                return
 
-        if (
-            not base_downloader.full_mp4box_path
-            and config.remux_mode == RemuxMode.MP4BOX
-        ):
-            logger.critical(X_NOT_IN_PATH.format("MP4Box", config.mp4box_path))
-            return
+            if (
+                not base_downloader.full_mp4box_path
+                and config.remux_mode == RemuxMode.MP4BOX
+            ):
+                logger.critical(X_NOT_IN_PATH.format("MP4Box", config.mp4box_path))
+                return
 
-        if not base_downloader.full_mp4decrypt_path and (
-            config.song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
-            or config.remux_mode == RemuxMode.MP4BOX
-        ):
-            logger.critical(X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path))
-            return
+            if not base_downloader.full_mp4decrypt_path and (
+                config.song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
+                or config.remux_mode == RemuxMode.MP4BOX
+            ):
+                logger.critical(
+                    X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path)
+                )
+                return
 
         if (
             config.download_mode == DownloadMode.NM3U8DLRE

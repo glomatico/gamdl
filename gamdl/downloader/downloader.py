@@ -208,7 +208,7 @@ class AppleMusicDownloader:
             return await self.get_artist_albums_download_items(selected_tracks)
         elif media_type_key == "top-songs":
             return await self.get_artist_songs_download_items(selected_tracks)
-        elif media_type == "music-videos":
+        elif media_type_key == "music-videos":
             return await self.get_artist_music_videos_download_items(selected_tracks)
 
     async def get_artist_albums_download_items(

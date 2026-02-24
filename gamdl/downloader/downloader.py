@@ -483,6 +483,7 @@ class AppleMusicDownloader:
             if (
                 not self.base_downloader.use_wrapper
                 or download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+                or self.song_downloader.codec.is_legacy()
             ):
                 if (
                     self.base_downloader.remux_mode == RemuxMode.FFMPEG

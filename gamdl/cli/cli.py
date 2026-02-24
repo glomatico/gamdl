@@ -104,13 +104,6 @@ async def main(config: CliConfig):
             " downloadable"
         )
 
-    if config.song_codec.is_legacy() and config.use_wrapper:
-        logger.warning(
-            "Legacy song codecs are not supported when using the wrapper. "
-            "Your song codec will be changed to AAC."
-        )
-        config.song_codec = SongCodec.AAC
-
     interface = AppleMusicInterface(
         apple_music_api,
         itunes_api,

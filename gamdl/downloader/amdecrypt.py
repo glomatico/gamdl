@@ -441,18 +441,43 @@ def write_decrypted_m4a(
     This matches the output format of Go's amdecrypt which is required
     for ALAC playback.
     """
-    # Extract stsd content and timescale from original moov
+    # Extract stsd content, timescale, and timestamps from original moov
     # Note: _extract_stsd_content automatically cleans encryption metadata
     stsd_content = None
     timescale = 44100  # Default
+    mvhd_creation = 0
+    mvhd_modification = 0
+    tkhd_creation = 0
+    tkhd_modification = 0
+    mdhd_creation = 0
+    mdhd_modification = 0
+
     if original_path:
         with open(original_path, "rb") as f:
             orig_data = f.read()
         stsd_content = _extract_stsd_content(orig_data)
         timescale = _extract_timescale(orig_data)
+        mvhd_creation, mvhd_modification = _extract_timestamps_from_box(
+            orig_data, b"mvhd"
+        )
+        tkhd_creation, tkhd_modification = _extract_timestamps_from_box(
+            orig_data, b"tkhd"
+        )
+        mdhd_creation, mdhd_modification = _extract_timestamps_from_box(
+            orig_data, b"mdhd"
+        )
     elif song_info.moov_data:
         stsd_content = _extract_stsd_content(song_info.ftyp_data + song_info.moov_data)
         timescale = _extract_timescale(song_info.moov_data)
+        mvhd_creation, mvhd_modification = _extract_timestamps_from_box(
+            song_info.moov_data, b"mvhd"
+        )
+        tkhd_creation, tkhd_modification = _extract_timestamps_from_box(
+            song_info.moov_data, b"tkhd"
+        )
+        mdhd_creation, mdhd_modification = _extract_timestamps_from_box(
+            song_info.moov_data, b"mdhd"
+        )
 
     with open(output_path, "wb") as f:
         # Write ftyp
@@ -469,6 +494,12 @@ def write_decrypted_m4a(
             timescale,
             stsd_content,
             decrypted_data,
+            mvhd_creation,
+            mvhd_modification,
+            tkhd_creation,
+            tkhd_modification,
+            mdhd_creation,
+            mdhd_modification,
         )
 
         # Write mdat
@@ -509,6 +540,12 @@ def _write_moov(
     timescale: int,
     stsd_content: bytes,
     decrypted_data: bytes,
+    mvhd_creation: int = 0,
+    mvhd_modification: int = 0,
+    tkhd_creation: int = 0,
+    tkhd_modification: int = 0,
+    mdhd_creation: int = 0,
+    mdhd_modification: int = 0,
 ):
     """Write moov box with sample tables."""
     # First, build all the content
@@ -518,8 +555,8 @@ def _write_moov(
     f.write(b"\x00" * 8)
 
     # mvhd (movie header)
-    mvhd_content = struct.pack(">I", 0)  # creation_time
-    mvhd_content += struct.pack(">I", 0)  # modification_time
+    mvhd_content = struct.pack(">I", mvhd_creation)  # creation_time
+    mvhd_content += struct.pack(">I", mvhd_modification)  # modification_time
     mvhd_content += struct.pack(">I", timescale)
     mvhd_content += struct.pack(">I", total_duration)
     mvhd_content += struct.pack(">I", 0x00010000)  # rate (1.0)
@@ -537,8 +574,8 @@ def _write_moov(
     f.write(b"\x00" * 8)  # trak header placeholder
 
     # tkhd (track header)
-    tkhd_content = struct.pack(">I", 0)  # creation_time
-    tkhd_content += struct.pack(">I", 0)  # modification_time
+    tkhd_content = struct.pack(">I", tkhd_creation)  # creation_time
+    tkhd_content += struct.pack(">I", tkhd_modification)  # modification_time
     tkhd_content += struct.pack(">I", 1)  # track_id
     tkhd_content += struct.pack(">I", 0)  # reserved
     tkhd_content += struct.pack(">I", total_duration)
@@ -561,8 +598,8 @@ def _write_moov(
     f.write(b"\x00" * 8)
 
     # mdhd (media header)
-    mdhd_content = struct.pack(">I", 0)  # creation_time
-    mdhd_content += struct.pack(">I", 0)  # modification_time
+    mdhd_content = struct.pack(">I", mdhd_creation)  # creation_time
+    mdhd_content += struct.pack(">I", mdhd_modification)  # modification_time
     mdhd_content += struct.pack(">I", timescale)
     mdhd_content += struct.pack(">I", total_duration)
     mdhd_content += struct.pack(">H", 0x55C4)  # language (und)
@@ -984,6 +1021,16 @@ def _extract_timescale(data: bytes) -> int:
         # mdhd: version(1) + flags(3) + creation(4) + modification(4) + timescale(4)
         return struct.unpack(">I", data[idx + 16 : idx + 20])[0]
     return 44100  # Default
+
+
+def _extract_timestamps_from_box(data: bytes, box_type: bytes) -> tuple[int, int]:
+    """Extract creation_time and modification_time from a FullBox (mvhd, tkhd, mdhd)."""
+    idx = data.find(box_type)
+    if idx > 0 and idx + 16 < len(data):
+        creation_time = struct.unpack(">I", data[idx + 8 : idx + 12])[0]
+        modification_time = struct.unpack(">I", data[idx + 12 : idx + 16])[0]
+        return creation_time, modification_time
+    return 0, 0
 
 
 async def decrypt_file(

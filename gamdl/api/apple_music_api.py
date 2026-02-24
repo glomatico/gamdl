@@ -298,7 +298,7 @@ class AppleMusicApi:
         self,
         artist_id: str,
         include: str = "albums,music-videos",
-        views: str = "full-albums,compilation-albums,singles,top-songs",
+        views: str = "full-albums,compilation-albums,live-albums,singles,top-songs",
         limit: int = 100,
     ) -> dict | None:
         artist = await self._amp_request(

@@ -396,13 +396,13 @@ class AppleMusicApi:
         limit: int,
         extend: str,
     ) -> dict:
-        extended_api_data = await self._amp_request(
-            next_uri,
-            {
-                "limit": limit,
-                "extend": extend,
-            },
-        )
+        next_uri_params = parse_qs(urlparse(next_uri).query)
+        params = {
+            "limit": limit,
+            "offset": next_uri_params["offset"][0],
+            "extend": extend,
+        }
+        extended_api_data = await self._amp_request(next_uri, params)
         logger.debug(f"Extended API data: {extended_api_data}")
 
         return extended_api_data

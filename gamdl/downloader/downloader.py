@@ -5,6 +5,7 @@ from pathlib import Path
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
+from ..api.exceptions import ApiError
 from ..interface import AppleMusicInterface
 from ..utils import safe_gather
 from .constants import (
@@ -357,9 +358,14 @@ class AppleMusicDownloader:
         download_items = []
 
         if url_type in ARTIST_MEDIA_TYPE:
-            artist_response = await self.interface.apple_music_api.get_artist(
-                id,
-            )
+            try:
+                artist_response = await self.interface.apple_music_api.get_artist(
+                    id,
+                )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if artist_response is None:
                 return None
@@ -369,7 +375,12 @@ class AppleMusicDownloader:
             )
 
         if url_type in SONG_MEDIA_TYPE:
-            song_respose = await self.interface.apple_music_api.get_song(id)
+            try:
+                song_respose = await self.interface.apple_music_api.get_song(id)
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if song_respose is None:
                 return None
@@ -379,12 +390,17 @@ class AppleMusicDownloader:
             )
 
         if url_type in ALBUM_MEDIA_TYPE:
-            if is_library:
-                album_response = await self.interface.apple_music_api.get_library_album(
-                    id
-                )
-            else:
-                album_response = await self.interface.apple_music_api.get_album(id)
+            try:
+                if is_library:
+                    album_response = (
+                        await self.interface.apple_music_api.get_library_album(id)
+                    )
+                else:
+                    album_response = await self.interface.apple_music_api.get_album(id)
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if album_response is None:
                 return None
@@ -394,14 +410,19 @@ class AppleMusicDownloader:
             )
 
         if url_type in PLAYLIST_MEDIA_TYPE:
-            if is_library:
-                playlist_response = (
-                    await self.interface.apple_music_api.get_library_playlist(id)
-                )
-            else:
-                playlist_response = await self.interface.apple_music_api.get_playlist(
-                    id
-                )
+            try:
+                if is_library:
+                    playlist_response = (
+                        await self.interface.apple_music_api.get_library_playlist(id)
+                    )
+                else:
+                    playlist_response = (
+                        await self.interface.apple_music_api.get_playlist(id)
+                    )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if playlist_response is None:
                 return None
@@ -411,9 +432,14 @@ class AppleMusicDownloader:
             )
 
         if url_type in MUSIC_VIDEO_MEDIA_TYPE:
-            music_video_response = await self.interface.apple_music_api.get_music_video(
-                id
-            )
+            try:
+                music_video_response = (
+                    await self.interface.apple_music_api.get_music_video(id)
+                )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if music_video_response is None:
                 return None
@@ -423,7 +449,14 @@ class AppleMusicDownloader:
             )
 
         if url_type in UPLOADED_VIDEO_MEDIA_TYPE:
-            uploaded_video = await self.interface.apple_music_api.get_uploaded_video(id)
+            try:
+                uploaded_video = (
+                    await self.interface.apple_music_api.get_uploaded_video(id)
+                )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if uploaded_video is None:
                 return None

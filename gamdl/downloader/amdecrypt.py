@@ -1,5 +1,6 @@
 """
 This is a modified version of https://github.com/sn0wst0rm/st0rmMusicPlayer/blob/main/scripts/amdecrypt.py
+All the modifications made here were AI generated
 """
 
 import asyncio

@@ -79,7 +79,8 @@ class AppleMusicInterface:
             cover_url_template = self._get_raw_cover_url(
                 metadata["attributes"]["artwork"]["url"]
             )
-        cover_url_template = metadata["attributes"]["artwork"]["url"]
+        else:
+            cover_url_template = metadata["attributes"]["artwork"]["url"]
 
         logger.debug(f"Cover URL template: {cover_url_template}")
         return cover_url_template
@@ -102,9 +103,9 @@ class AppleMusicInterface:
         cover_format: CoverFormat,
     ) -> str:
         cover_url = re.sub(
-            r"\{w\}x\{h\}([a-z]{2})\.jpg",
+            r"/\{w\}x\{h\}([a-z]{2})\.jpg",
             (
-                f"{cover_size}x{cover_size}bb.{cover_format.value}"
+                f"/{cover_size}x{cover_size}bb.{cover_format.value}"
                 if cover_format != CoverFormat.RAW
                 else ""
             ),
@@ -123,12 +124,11 @@ class AppleMusicInterface:
         if cover_format != CoverFormat.RAW:
             return f".{cover_format.value}"
 
-        cover_url = self.get_cover_url(cover_url)
         cover_bytes = await self.get_cover_bytes(cover_url)
         if cover_bytes is None:
             return None
 
-        image_obj = Image.open(BytesIO(self.get_cover_bytes(cover_url)))
+        image_obj = Image.open(BytesIO(await self.get_cover_bytes(cover_url)))
         image_format = image_obj.format.lower()
         return IMAGE_FILE_EXTENSION_MAP.get(
             image_format,

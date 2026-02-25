@@ -12,7 +12,7 @@ from ..interface.enums import CoverFormat
 from ..interface.types import MediaTags, PlaylistTags
 from ..utils import CustomStringFormatter, async_subprocess
 from .constants import ILLEGAL_CHAR_REPLACEMENT, ILLEGAL_CHARS_RE, TEMP_PATH_TEMPLATE
-from .enums import DownloadMode, RemuxMode
+from .enums import DownloadMode
 from .hardcoded_wvd import HARDCODED_WVD
 
 
@@ -32,7 +32,6 @@ class AppleMusicBaseDownloader:
         use_wrapper: bool = False,
         wrapper_decrypt_ip: str = "127.0.0.1:10020",
         download_mode: DownloadMode = DownloadMode.YTDLP,
-        remux_mode: RemuxMode = RemuxMode.FFMPEG,
         cover_format: CoverFormat = CoverFormat.JPG,
         album_folder_template: str = "{album_artist}/{album}",
         compilation_folder_template: str = "Compilations/{album}",
@@ -60,7 +59,6 @@ class AppleMusicBaseDownloader:
         self.use_wrapper = use_wrapper
         self.wrapper_decrypt_ip = wrapper_decrypt_ip
         self.download_mode = download_mode
-        self.remux_mode = remux_mode
         self.cover_format = cover_format
         self.album_folder_template = album_folder_template
         self.compilation_folder_template = compilation_folder_template

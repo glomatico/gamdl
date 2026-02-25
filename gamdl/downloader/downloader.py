@@ -476,53 +476,45 @@ class AppleMusicDownloader:
         ):
             raise MediaFileExists(download_item.final_path)
 
-        if download_item.media_metadata["type"] in {
-            *SONG_MEDIA_TYPE,
-            *MUSIC_VIDEO_MEDIA_TYPE,
-        }:
+        if (
+            self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
+            and not self.base_downloader.full_nm3u8dlre_path
+        ):
+            raise ExecutableNotFound("N_m3u8DL-RE")
+
+        if download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
             if (
-                not self.base_downloader.use_wrapper
-                or download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
-                or self.song_downloader.codec.is_legacy()
+                self.music_video_downloader.remux_mode == RemuxMode.FFMPEG
+                and not self.base_downloader.full_ffmpeg_path
             ):
-                if (
-                    self.base_downloader.remux_mode == RemuxMode.FFMPEG
-                    and not self.base_downloader.full_ffmpeg_path
-                ):
-                    raise ExecutableNotFound("ffmpeg")
-
-                if (
-                    self.base_downloader.remux_mode == RemuxMode.MP4BOX
-                    and not self.base_downloader.full_mp4box_path
-                ):
-                    raise ExecutableNotFound("MP4Box")
-
-                if (
-                    download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
-                    or self.base_downloader.remux_mode == RemuxMode.MP4BOX
-                ) and not self.base_downloader.full_mp4decrypt_path:
-                    raise ExecutableNotFound("mp4decrypt")
+                raise ExecutableNotFound("ffmpeg")
 
             if (
-                self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
-                and not self.base_downloader.full_nm3u8dlre_path
+                self.music_video_downloader.remux_mode == RemuxMode.MP4BOX
+                and not self.base_downloader.full_mp4box_path
             ):
-                raise ExecutableNotFound("N_m3u8DL-RE")
+                raise ExecutableNotFound("MP4Box")
 
             if (
-                not download_item.stream_info
-                or not download_item.stream_info.audio_track
-                or not download_item.stream_info.audio_track.stream_url
-                or (
-                    (
-                        not download_item.decryption_key
-                        or not download_item.decryption_key.audio_track
-                        or not download_item.decryption_key.audio_track.key
-                    )
-                    and not self.base_downloader.use_wrapper
+                download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+                or self.music_video_downloader.remux_mode == RemuxMode.MP4BOX
+            ) and not self.base_downloader.full_mp4decrypt_path:
+                raise ExecutableNotFound("mp4decrypt")
+
+        if (
+            not download_item.stream_info
+            or not download_item.stream_info.audio_track
+            or not download_item.stream_info.audio_track.stream_url
+            or (
+                (
+                    not download_item.decryption_key
+                    or not download_item.decryption_key.audio_track
+                    or not download_item.decryption_key.audio_track.key
                 )
-            ):
-                raise FormatNotAvailable(download_item.media_metadata["id"])
+                and not self.base_downloader.use_wrapper
+            )
+        ):
+            raise FormatNotAvailable(download_item.media_metadata["id"])
 
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
             await self.song_downloader.download(download_item)

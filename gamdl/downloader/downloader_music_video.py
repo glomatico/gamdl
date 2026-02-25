@@ -18,12 +18,14 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             MusicVideoCodec.H264,
             MusicVideoCodec.H265,
         ],
+        remux_mode: RemuxMode = RemuxMode.FFMPEG,
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
         resolution: MusicVideoResolution = MusicVideoResolution.R1080P,
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
         self.codec_priority = codec_priority
+        self.remux_mode = remux_mode
         self.remux_format = remux_format
         self.resolution = resolution
 

@@ -214,7 +214,7 @@ wheels = [
 
 [[package]]
 name = "gamdl"
-version = "2.9"
+version = "2.9.1"
 source = { virtual = "." }
 dependencies = [
     { name = "async-lru" },

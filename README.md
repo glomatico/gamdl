@@ -128,6 +128,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--save-cover`, `-s`            | Save cover as separate file                                       | `false`                                        |
 | `--save-playlist`               | Save M3U8 playlist file                                           | `false`                                        |
 | **Download Options**            |                                                                   |                                                |
+| `--artist-auto-select`          | Automatically select artist content to download (artist URLs)     | -                                              |
 | `--nm3u8dlre-path`              | N_m3u8DL-RE executable path                                       | `N_m3u8DL-RE`                                  |
 | `--mp4decrypt-path`             | mp4decrypt executable path                                        | `mp4decrypt`                                   |
 | `--ffmpeg-path`                 | FFmpeg executable path                                            | `ffmpeg`                                       |
@@ -149,7 +150,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--cover-size`                  | Cover size in pixels                                              | `1200`                                         |
 | `--truncate`                    | Max filename length                                               | -                                              |
 | **Song Options**                |                                                                   |                                                |
-| `--song-codec`                  | Song codec                                                        | `aac-legacy`                                   |
+| `--song-codec-priority`         | Comma-separated codec priority                                    | `aac-legacy`                                   |
 | `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                                          |
 | `--no-synced-lyrics`            | Don't download synced lyrics                                      | `false`                                        |
 | `--synced-lyrics-only`          | Download only synced lyrics                                       | `false`                                        |

@@ -485,43 +485,48 @@ def write_decrypted_m4a(
     This matches the output format of Go's amdecrypt which is required
     for ALAC playback.
     """
-    # Extract stsd content, timescale, and timestamps from original moov
+    # Extract original boxes for faithful reproduction
     # Note: _extract_stsd_content automatically cleans encryption metadata
     stsd_content = None
+    orig_mvhd = None
+    orig_tkhd = None
+    orig_mdhd = None
+    orig_hdlr = None
+    orig_smhd = None
+    orig_dinf = None
     timescale = 44100  # Default
-    mvhd_creation = 0
-    mvhd_modification = 0
-    tkhd_creation = 0
-    tkhd_modification = 0
-    mdhd_creation = 0
-    mdhd_modification = 0
 
     if original_path:
         with open(original_path, "rb") as f:
             orig_data = f.read()
+    elif song_info.moov_data:
+        orig_data = song_info.ftyp_data + song_info.moov_data
+    else:
+        orig_data = None
+
+    if orig_data:
         stsd_content = _extract_stsd_content(orig_data)
         timescale = _extract_timescale(orig_data)
-        mvhd_creation, mvhd_modification = _extract_timestamps_from_box(
-            orig_data, b"mvhd"
-        )
-        tkhd_creation, tkhd_modification = _extract_timestamps_from_box(
-            orig_data, b"tkhd"
-        )
-        mdhd_creation, mdhd_modification = _extract_timestamps_from_box(
-            orig_data, b"mdhd"
-        )
-    elif song_info.moov_data:
-        stsd_content = _extract_stsd_content(song_info.ftyp_data + song_info.moov_data)
-        timescale = _extract_timescale(song_info.moov_data)
-        mvhd_creation, mvhd_modification = _extract_timestamps_from_box(
-            song_info.moov_data, b"mvhd"
-        )
-        tkhd_creation, tkhd_modification = _extract_timestamps_from_box(
-            song_info.moov_data, b"tkhd"
-        )
-        mdhd_creation, mdhd_modification = _extract_timestamps_from_box(
-            song_info.moov_data, b"mdhd"
-        )
+
+        # Find moov box and extract child boxes
+        moov_idx = orig_data.find(b"moov")
+        if moov_idx >= 4:
+            moov_size = struct.unpack(">I", orig_data[moov_idx - 4 : moov_idx])[0]
+            moov_data = orig_data[moov_idx - 4 : moov_idx - 4 + moov_size]
+
+            orig_mvhd = _find_child_box(moov_data, b"mvhd")
+
+            audio_trak = _find_audio_trak(moov_data)
+            if audio_trak:
+                orig_tkhd = _find_child_box(audio_trak, b"tkhd")
+                mdia = _find_child_box(audio_trak, b"mdia")
+                if mdia:
+                    orig_mdhd = _find_child_box(mdia, b"mdhd")
+                    orig_hdlr = _find_child_box(mdia, b"hdlr")
+                    minf = _find_child_box(mdia, b"minf")
+                    if minf:
+                        orig_smhd = _find_child_box(minf, b"smhd")
+                        orig_dinf = _find_child_box(minf, b"dinf")
 
     with open(output_path, "wb") as f:
         # Write ftyp
@@ -538,12 +543,12 @@ def write_decrypted_m4a(
             timescale,
             stsd_content,
             decrypted_data,
-            mvhd_creation,
-            mvhd_modification,
-            tkhd_creation,
-            tkhd_modification,
-            mdhd_creation,
-            mdhd_modification,
+            orig_mvhd=orig_mvhd,
+            orig_tkhd=orig_tkhd,
+            orig_mdhd=orig_mdhd,
+            orig_hdlr=orig_hdlr,
+            orig_smhd=orig_smhd,
+            orig_dinf=orig_dinf,
         )
 
         # Write mdat
@@ -584,97 +589,110 @@ def _write_moov(
     timescale: int,
     stsd_content: bytes,
     decrypted_data: bytes,
-    mvhd_creation: int = 0,
-    mvhd_modification: int = 0,
-    tkhd_creation: int = 0,
-    tkhd_modification: int = 0,
-    mdhd_creation: int = 0,
-    mdhd_modification: int = 0,
+    orig_mvhd: Optional[bytes] = None,
+    orig_tkhd: Optional[bytes] = None,
+    orig_mdhd: Optional[bytes] = None,
+    orig_hdlr: Optional[bytes] = None,
+    orig_smhd: Optional[bytes] = None,
+    orig_dinf: Optional[bytes] = None,
 ):
-    """Write moov box with sample tables."""
-    # First, build all the content
-    moov_start = f.tell()
+    """Write moov box with sample tables.
 
-    # Placeholder for moov header
-    f.write(b"\x00" * 8)
+    When original box data is available, it is copied verbatim (with duration
+    fields patched) to faithfully reproduce the source file's metadata.
+    This matches the Go amdecrypt behavior of copying boxes from the original.
+    """
+    moov_start = f.tell()
+    f.write(b"\x00" * 8)  # moov header placeholder
 
     # mvhd (movie header)
-    mvhd_content = struct.pack(">I", mvhd_creation)  # creation_time
-    mvhd_content += struct.pack(">I", mvhd_modification)  # modification_time
-    mvhd_content += struct.pack(">I", timescale)
-    mvhd_content += struct.pack(">I", total_duration)
-    mvhd_content += struct.pack(">I", 0x00010000)  # rate (1.0)
-    mvhd_content += struct.pack(">H", 0x0100)  # volume (1.0)
-    mvhd_content += b"\x00" * 10  # reserved
-    mvhd_content += struct.pack(
-        ">9I", 0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000
-    )  # matrix
-    mvhd_content += b"\x00" * 24  # pre_defined
-    mvhd_content += struct.pack(">I", 2)  # next_track_id
-    _write_fullbox(f, b"mvhd", 0, 0, mvhd_content)
+    if orig_mvhd:
+        f.write(_patch_mvhd_duration(orig_mvhd, total_duration))
+    else:
+        mvhd_content = struct.pack(">II", 0, 0)  # creation, modification
+        mvhd_content += struct.pack(">I", timescale)
+        mvhd_content += struct.pack(">I", total_duration)
+        mvhd_content += struct.pack(">I", 0x00010000)  # rate (1.0)
+        mvhd_content += struct.pack(">H", 0x0100)  # volume (1.0)
+        mvhd_content += b"\x00" * 10  # reserved
+        mvhd_content += struct.pack(
+            ">9I", 0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000
+        )  # matrix
+        mvhd_content += b"\x00" * 24  # pre_defined
+        mvhd_content += struct.pack(">I", 2)  # next_track_id
+        _write_fullbox(f, b"mvhd", 0, 0, mvhd_content)
 
     # trak (track)
     trak_start = f.tell()
     f.write(b"\x00" * 8)  # trak header placeholder
 
     # tkhd (track header)
-    tkhd_content = struct.pack(">I", tkhd_creation)  # creation_time
-    tkhd_content += struct.pack(">I", tkhd_modification)  # modification_time
-    tkhd_content += struct.pack(">I", 1)  # track_id
-    tkhd_content += struct.pack(">I", 0)  # reserved
-    tkhd_content += struct.pack(">I", total_duration)
-    tkhd_content += b"\x00" * 8  # reserved
-    tkhd_content += struct.pack(">H", 0)  # layer
-    tkhd_content += struct.pack(">H", 0)  # alternate_group
-    tkhd_content += struct.pack(">H", 0x0100)  # volume
-    tkhd_content += struct.pack(">H", 0)  # reserved
-    tkhd_content += struct.pack(
-        ">9I", 0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000
-    )  # matrix
-    tkhd_content += struct.pack(">I", 0)  # width
-    tkhd_content += struct.pack(">I", 0)  # height
-    _write_fullbox(
-        f, b"tkhd", 0, 7, tkhd_content
-    )  # flags=7 (enabled, in_movie, in_preview)
+    if orig_tkhd:
+        f.write(_patch_tkhd_duration(orig_tkhd, total_duration))
+    else:
+        tkhd_content = struct.pack(">II", 0, 0)  # creation, modification
+        tkhd_content += struct.pack(">I", 1)  # track_id
+        tkhd_content += struct.pack(">I", 0)  # reserved
+        tkhd_content += struct.pack(">I", total_duration)
+        tkhd_content += b"\x00" * 8  # reserved
+        tkhd_content += struct.pack(">HH", 0, 0)  # layer, alternate_group
+        tkhd_content += struct.pack(">H", 0x0100)  # volume
+        tkhd_content += struct.pack(">H", 0)  # reserved
+        tkhd_content += struct.pack(
+            ">9I", 0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000
+        )  # matrix
+        tkhd_content += struct.pack(">II", 0, 0)  # width, height
+        _write_fullbox(f, b"tkhd", 0, 7, tkhd_content)
 
     # mdia (media)
     mdia_start = f.tell()
     f.write(b"\x00" * 8)
 
-    # mdhd (media header)
-    mdhd_content = struct.pack(">I", mdhd_creation)  # creation_time
-    mdhd_content += struct.pack(">I", mdhd_modification)  # modification_time
-    mdhd_content += struct.pack(">I", timescale)
-    mdhd_content += struct.pack(">I", total_duration)
-    mdhd_content += struct.pack(">H", 0x55C4)  # language (und)
-    mdhd_content += struct.pack(">H", 0)  # quality
-    _write_fullbox(f, b"mdhd", 0, 0, mdhd_content)
+    # mdhd (media header) - preserves original language code
+    if orig_mdhd:
+        f.write(_patch_mdhd_duration(orig_mdhd, total_duration))
+    else:
+        mdhd_content = struct.pack(">II", 0, 0)  # creation, modification
+        mdhd_content += struct.pack(">I", timescale)
+        mdhd_content += struct.pack(">I", total_duration)
+        mdhd_content += struct.pack(">H", 0x55C4)  # language (und)
+        mdhd_content += struct.pack(">H", 0)  # quality
+        _write_fullbox(f, b"mdhd", 0, 0, mdhd_content)
 
-    # hdlr (handler)
-    hdlr_content = struct.pack(">I", 0)  # pre_defined
-    hdlr_content += b"soun"  # handler_type
-    hdlr_content += b"\x00" * 12  # reserved
-    hdlr_content += b"SoundHandler\x00"
-    _write_fullbox(f, b"hdlr", 0, 0, hdlr_content)
+    # hdlr (handler) - preserves original handler name (e.g. "Core Media Audio")
+    if orig_hdlr:
+        f.write(orig_hdlr)
+    else:
+        hdlr_content = struct.pack(">I", 0)  # pre_defined
+        hdlr_content += b"soun"  # handler_type
+        hdlr_content += b"\x00" * 12  # reserved
+        handler_name = b"SoundHandler"
+        hdlr_content += struct.pack("B", len(handler_name)) + handler_name + b"\x00"
+        _write_fullbox(f, b"hdlr", 0, 0, hdlr_content)
 
     # minf (media info)
     minf_start = f.tell()
     f.write(b"\x00" * 8)
 
     # smhd (sound media header)
-    smhd_content = struct.pack(">H", 0)  # balance
-    smhd_content += struct.pack(">H", 0)  # reserved
-    _write_fullbox(f, b"smhd", 0, 0, smhd_content)
+    if orig_smhd:
+        f.write(orig_smhd)
+    else:
+        smhd_content = struct.pack(">HH", 0, 0)  # balance, reserved
+        _write_fullbox(f, b"smhd", 0, 0, smhd_content)
 
     # dinf + dref
-    dinf_start = f.tell()
-    f.write(b"\x00" * 8)
-    dref_content = struct.pack(">I", 1)  # entry_count
-    dref_content += (
-        struct.pack(">I", 12) + b"url " + struct.pack(">I", 1)
-    )  # url entry (self-contained)
-    _write_fullbox(f, b"dref", 0, 0, dref_content)
-    _fixup_box_size(f, dinf_start, b"dinf")
+    if orig_dinf:
+        f.write(orig_dinf)
+    else:
+        dinf_start = f.tell()
+        f.write(b"\x00" * 8)
+        dref_content = struct.pack(">I", 1)  # entry_count
+        dref_content += (
+            struct.pack(">I", 12) + b"url " + struct.pack(">I", 1)
+        )  # url entry (self-contained)
+        _write_fullbox(f, b"dref", 0, 0, dref_content)
+        _fixup_box_size(f, dinf_start, b"dinf")
 
     # stbl (sample table)
     stbl_start = f.tell()
@@ -710,6 +728,10 @@ def _write_moov(
     _fixup_box_size(f, minf_start, b"minf")
     _fixup_box_size(f, mdia_start, b"mdia")
     _fixup_box_size(f, trak_start, b"trak")
+
+    # udta > meta > hdlr(mdir) + ilst - metadata container
+    _write_udta(f)
+
     _fixup_box_size(f, moov_start, b"moov")
 
     # Fix up stco with correct mdat offset
@@ -1067,14 +1089,125 @@ def _extract_timescale(data: bytes) -> int:
     return 44100  # Default
 
 
-def _extract_timestamps_from_box(data: bytes, box_type: bytes) -> tuple[int, int]:
-    """Extract creation_time and modification_time from a FullBox (mvhd, tkhd, mdhd)."""
-    idx = data.find(box_type)
-    if idx > 0 and idx + 16 < len(data):
-        creation_time = struct.unpack(">I", data[idx + 8 : idx + 12])[0]
-        modification_time = struct.unpack(">I", data[idx + 12 : idx + 16])[0]
-        return creation_time, modification_time
-    return 0, 0
+def _find_child_box(
+    container_data: bytes, target_type: bytes, skip_header: int = 8
+) -> Optional[bytes]:
+    """Find a direct child box in container data.
+
+    Args:
+        container_data: Raw bytes of the container box (including its own header).
+        target_type: 4-byte box type to search for.
+        skip_header: Bytes to skip at start (8 for plain box, 12 for FullBox).
+
+    Returns:
+        Full box bytes (size + type + content) or None.
+    """
+    offset = skip_header
+    while offset + 8 <= len(container_data):
+        size = struct.unpack(">I", container_data[offset : offset + 4])[0]
+        box_type = container_data[offset + 4 : offset + 8]
+        if size < 8 or offset + size > len(container_data):
+            break
+        if box_type == target_type:
+            return container_data[offset : offset + size]
+        offset += size
+    return None
+
+
+def _find_audio_trak(moov_data: bytes) -> Optional[bytes]:
+    """Find the audio trak box in moov data.
+
+    Iterates trak children and returns the first one whose hdlr has
+    handler_type == 'soun'. Returns full trak box bytes or None.
+    """
+    offset = 8  # Skip moov header
+    while offset + 8 <= len(moov_data):
+        size = struct.unpack(">I", moov_data[offset : offset + 4])[0]
+        box_type = moov_data[offset + 4 : offset + 8]
+        if size < 8 or offset + size > len(moov_data):
+            break
+        if box_type == b"trak":
+            trak_data = moov_data[offset : offset + size]
+            hdlr_idx = trak_data.find(b"hdlr")
+            if hdlr_idx > 0:
+                # hdlr FullBox: version+flags(4) + pre_defined(4) + handler_type(4)
+                handler_offset = hdlr_idx + 4 + 4 + 4
+                if handler_offset + 4 <= len(trak_data):
+                    if trak_data[handler_offset : handler_offset + 4] == b"soun":
+                        return trak_data
+        offset += size
+    return None
+
+
+def _patch_mvhd_duration(box_data: bytes, duration: int) -> bytes:
+    """Return a copy of the mvhd box with its duration field patched."""
+    data = bytearray(box_data)
+    version = data[8]  # After size(4) + type(4)
+    if version == 0:
+        # v0: ver+flags(4) + creation(4) + modification(4) + timescale(4) + duration(4)
+        struct.pack_into(">I", data, 24, duration)
+    else:
+        # v1: ver+flags(4) + creation(8) + modification(8) + timescale(4) + duration(8)
+        struct.pack_into(">Q", data, 32, duration)
+    return bytes(data)
+
+
+def _patch_tkhd_duration(box_data: bytes, duration: int) -> bytes:
+    """Return a copy of the tkhd box with duration patched and flags set to 7."""
+    data = bytearray(box_data)
+    version = data[8]
+    # Set flags = 7 (enabled | in_movie | in_preview)
+    data[9:12] = struct.pack(">I", 7)[1:]  # 3-byte flags
+    if version == 0:
+        # v0: ver+flags(4) + creation(4) + modification(4) + track_id(4) + reserved(4) + duration(4)
+        struct.pack_into(">I", data, 28, duration)
+    else:
+        # v1: ver+flags(4) + creation(8) + modification(8) + track_id(4) + reserved(4) + duration(8)
+        struct.pack_into(">Q", data, 36, duration)
+    return bytes(data)
+
+
+def _patch_mdhd_duration(box_data: bytes, duration: int) -> bytes:
+    """Return a copy of the mdhd box with its duration field patched.
+
+    Preserves the original language code and all other fields.
+    """
+    data = bytearray(box_data)
+    version = data[8]
+    if version == 0:
+        # Same layout as mvhd v0
+        struct.pack_into(">I", data, 24, duration)
+    else:
+        struct.pack_into(">Q", data, 32, duration)
+    return bytes(data)
+
+
+def _write_udta(f):
+    """Write udta > meta > hdlr(mdir) + ilst metadata container.
+
+    This matches the Go amdecrypt output which creates an empty metadata
+    container so tools can find and write metadata atoms.
+    """
+    udta_start = f.tell()
+    f.write(b"\x00" * 8)  # udta placeholder
+
+    meta_start = f.tell()
+    f.write(b"\x00" * 8)  # meta placeholder
+    # meta is a FullBox: version(1) + flags(3)
+    f.write(struct.pack(">I", 0))  # version + flags
+
+    # hdlr for metadata (handler_type = 'mdir', reserved = 'appl' + zeros)
+    hdlr_content = struct.pack(">I", 0)  # pre_defined
+    hdlr_content += b"mdir"  # handler_type
+    hdlr_content += struct.pack(">III", 0x6170706C, 0, 0)  # reserved ('appl', 0, 0)
+    hdlr_content += b"\x00"  # empty name (null terminator)
+    _write_fullbox(f, b"hdlr", 0, 0, hdlr_content)
+
+    # ilst (empty)
+    _write_box(f, b"ilst", b"")
+
+    _fixup_box_size(f, meta_start, b"meta")
+    _fixup_box_size(f, udta_start, b"udta")
 
 
 def _extract_audio_track_id(moov_data: bytes) -> int:

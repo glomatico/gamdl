@@ -255,7 +255,7 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 
 ## ⚙️ Wrapper
 
-Use the [wrapper](https://github.com/WorldObservationLog/wrapper) to download songs in ALAC and other experimental codecs without API limitations. Cookies, FFmpeg, MP4Box, or mp4decrypt are not required when using the wrapper.
+Use the [wrapper](https://github.com/WorldObservationLog/wrapper) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.
 
 ### Setup Instructions
 

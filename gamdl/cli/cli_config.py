@@ -9,9 +9,11 @@ from dataclass_click import argument, option
 from ..api import AppleMusicApi
 from ..downloader import (
     AppleMusicBaseDownloader,
+    AppleMusicDownloader,
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
+    ArtistDownloadSelection,
     DownloadMode,
     RemuxFormatMusicVideo,
     RemuxMode,
@@ -35,6 +37,7 @@ song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
 uploaded_video_downloader_sig = inspect.signature(
     AppleMusicUploadedVideoDownloader.__init__
 )
+downloader_sig = inspect.signature(AppleMusicDownloader.__init__)
 
 
 @dataclass
@@ -133,6 +136,16 @@ class CliConfig:
             "-l",
             help="Metadata language",
             default=api_sig.parameters["language"].default,
+        ),
+    ]
+    # Downloader specific options
+    artist_selection: Annotated[
+        ArtistDownloadSelection | None,
+        option(
+            "--artist-selection",
+            help="Artist download selection",
+            default=downloader_sig.parameters["artist_selection"].default,
+            type=ArtistDownloadSelection,
         ),
     ]
     # Base Downloader specific options

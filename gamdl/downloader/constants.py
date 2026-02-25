@@ -11,7 +11,7 @@ ARTIST_MEDIA_TYPE = {"artist", "artists", "library-artists"}
 UPLOADED_VIDEO_MEDIA_TYPE = {"post", "uploaded-videos"}
 PLAYLIST_MEDIA_TYPE = {"playlist", "playlists", "library-playlists"}
 
-ARTIST_DOWNLOAD_SELECTION_KEY_MAP = {
+ARTIST_AUTO_SELECT_KEY_MAP = {
     "main-albums": ("views", "full-albums"),
     "compilation-albums": ("views", "compilation-albums"),
     "live-albums": ("views", "live-albums"),
@@ -20,7 +20,7 @@ ARTIST_DOWNLOAD_SELECTION_KEY_MAP = {
     "top-songs": ("views", "top-songs"),
     "music-videos": ("relationships", "music-videos"),
 }
-ARTIST_DOWNLOAD_SELECTION_STR_MAP = {
+ARTIST_AUTO_SELECT_STR_MAP = {
     "main-albums": "Main Albums",
     "compilation-albums": "Compilation Albums",
     "live-albums": "Live Albums",

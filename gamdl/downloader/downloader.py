@@ -21,7 +21,7 @@ from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
-from .enums import ArtistDownloadSelection, DownloadMode, RemuxMode
+from .enums import ArtistAutoSelect, DownloadMode, RemuxMode
 from .exceptions import (
     ExecutableNotFound,
     FormatNotAvailable,
@@ -41,7 +41,7 @@ class AppleMusicDownloader:
         song_downloader: AppleMusicSongDownloader,
         music_video_downloader: AppleMusicMusicVideoDownloader,
         uploaded_video_downloader: AppleMusicUploadedVideoDownloader,
-        artist_selection: ArtistDownloadSelection | None = None,
+        artist_auto_select: ArtistAutoSelect | None = None,
         skip_music_videos: bool = False,
         skip_processing: bool = False,
         flat_filter: typing.Callable = None,
@@ -51,7 +51,7 @@ class AppleMusicDownloader:
         self.song_downloader = song_downloader
         self.music_video_downloader = music_video_downloader
         self.uploaded_video_downloader = uploaded_video_downloader
-        self.artist_selection = artist_selection
+        self.artist_auto_select = artist_auto_select
         self.skip_music_videos = skip_music_videos
         self.skip_processing = skip_processing
         self.flat_filter = flat_filter
@@ -152,18 +152,18 @@ class AppleMusicDownloader:
         self,
         artist_metadata: dict,
     ) -> list[DownloadItem]:
-        if not self.artist_selection:
+        if not self.artist_auto_select:
             available_choices = []
-            for possible_selection in list(ArtistDownloadSelection):
-                relation_key, type_key = possible_selection.path_key
+            for artist_auto_select_option in list(ArtistAutoSelect):
+                relation_key, type_key = artist_auto_select_option.path_key
                 available_choices.append(
                     Choice(
-                        name=str(possible_selection),
-                        value=(possible_selection,),
+                        name=str(artist_auto_select_option),
+                        value=(artist_auto_select_option,),
                     ),
                 )
 
-            (artist_selection,) = await inquirer.select(
+            (artist_auto_select,) = await inquirer.select(
                 message=f'Select which type to download for artist "{artist_metadata["attributes"]["name"]}":',
                 choices=available_choices,
                 validate=lambda result: artist_metadata.get(result[0].path_key[0], {})
@@ -171,9 +171,9 @@ class AppleMusicDownloader:
                 .get("data"),
             ).execute_async()
         else:
-            artist_selection = self.artist_selection
+            artist_auto_select = self.artist_auto_select
 
-        relation_key, type_key = artist_selection.path_key
+        relation_key, type_key = artist_auto_select.path_key
         artist_metadata[relation_key][type_key]["data"].extend(
             [
                 extended_data
@@ -184,25 +184,25 @@ class AppleMusicDownloader:
         )
 
         selected_items = artist_metadata[relation_key][type_key]["data"]
-        select_all = self.artist_selection is not None
+        select_all = self.artist_auto_select is not None
 
-        if artist_selection in {
-            ArtistDownloadSelection.MAIN_ALBUMS,
-            ArtistDownloadSelection.COMPILATION_ALBUMS,
-            ArtistDownloadSelection.LIVE_ALBUMS,
-            ArtistDownloadSelection.SINGLES_EPS,
-            ArtistDownloadSelection.ALL_ALBUMS,
+        if artist_auto_select in {
+            ArtistAutoSelect.MAIN_ALBUMS,
+            ArtistAutoSelect.COMPILATION_ALBUMS,
+            ArtistAutoSelect.LIVE_ALBUMS,
+            ArtistAutoSelect.SINGLES_EPS,
+            ArtistAutoSelect.ALL_ALBUMS,
         }:
             return await self.get_artist_albums_download_items(
                 selected_items,
                 select_all,
             )
-        elif artist_selection == ArtistDownloadSelection.TOP_SONGS:
+        elif artist_auto_select == ArtistAutoSelect.TOP_SONGS:
             return await self.get_artist_songs_download_items(
                 selected_items,
                 select_all,
             )
-        elif artist_selection == ArtistDownloadSelection.MUSIC_VIDEOS:
+        elif artist_auto_select == ArtistAutoSelect.MUSIC_VIDEOS:
             return await self.get_artist_music_videos_download_items(
                 selected_items,
                 select_all,

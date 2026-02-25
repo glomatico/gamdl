@@ -1,8 +1,8 @@
 from enum import Enum
 
 from .constants import (
-    ARTIST_DOWNLOAD_SELECTION_KEY_MAP,
-    ARTIST_DOWNLOAD_SELECTION_STR_MAP,
+    ARTIST_AUTO_SELECT_KEY_MAP,
+    ARTIST_AUTO_SELECT_STR_MAP,
 )
 
 
@@ -21,7 +21,7 @@ class RemuxFormatMusicVideo(Enum):
     MP4 = "mp4"
 
 
-class ArtistDownloadSelection(Enum):
+class ArtistAutoSelect(Enum):
     MAIN_ALBUMS = "main-albums"
     COMPILATION_ALBUMS = "compilation-albums"
     LIVE_ALBUMS = "live-albums"
@@ -32,7 +32,7 @@ class ArtistDownloadSelection(Enum):
 
     @property
     def path_key(self) -> tuple[str, str]:
-        return ARTIST_DOWNLOAD_SELECTION_KEY_MAP[self.value]
+        return ARTIST_AUTO_SELECT_KEY_MAP[self.value]
 
     def __str__(self) -> str:
-        return ARTIST_DOWNLOAD_SELECTION_STR_MAP[self.value]
+        return ARTIST_AUTO_SELECT_STR_MAP[self.value]

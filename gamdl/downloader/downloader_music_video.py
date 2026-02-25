@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ..interface.enums import MusicVideoCodec, MusicVideoResolution
+from ..interface.enums import CoverFormat, MusicVideoCodec, MusicVideoResolution
 from ..interface.interface_music_video import AppleMusicMusicVideoInterface
 from ..interface.types import DecryptionKeyAv
 from ..utils import async_subprocess
@@ -273,7 +273,11 @@ class AppleMusicMusicVideoDownloader(AppleMusicBaseDownloader):
             download_item.decryption_key,
         )
 
-        cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
+        cover_bytes = (
+            await self.interface.get_cover_bytes(download_item.cover_url)
+            if self.cover_format != CoverFormat.RAW
+            else None
+        )
         await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,

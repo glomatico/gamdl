@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ..interface.enums import SongCodec, SyncedLyricsFormat
+from ..interface.enums import CoverFormat, SongCodec, SyncedLyricsFormat
 from ..interface.interface_song import AppleMusicSongInterface
 from ..interface.types import DecryptionKeyAv
 from .amdecrypt import decrypt_file, decrypt_file_hex
@@ -237,7 +237,11 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             download_item.stream_info.audio_track.fairplay_key,
         )
 
-        cover_bytes = await self.interface.get_cover_bytes(download_item.cover_url)
+        cover_bytes = (
+            await self.interface.get_cover_bytes(download_item.cover_url)
+            if self.cover_format != CoverFormat.RAW
+            else None
+        )
         await self.apply_tags(
             download_item.staged_path,
             download_item.media_tags,

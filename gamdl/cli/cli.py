@@ -168,7 +168,7 @@ async def main(config: CliConfig):
         song_downloader=song_downloader,
         music_video_downloader=music_video_downloader,
         uploaded_video_downloader=uploaded_video_downloader,
-        artist_selection=config.artist_selection,
+        artist_auto_select=config.artist_auto_select,
     )
 
     if not config.synced_lyrics_only:

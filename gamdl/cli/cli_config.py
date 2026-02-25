@@ -13,7 +13,7 @@ from ..downloader import (
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
-    ArtistDownloadSelection,
+    ArtistAutoSelect,
     DownloadMode,
     RemuxFormatMusicVideo,
     RemuxMode,
@@ -139,13 +139,13 @@ class CliConfig:
         ),
     ]
     # Downloader specific options
-    artist_selection: Annotated[
-        ArtistDownloadSelection | None,
+    artist_auto_select: Annotated[
+        ArtistAutoSelect | None,
         option(
-            "--artist-selection",
-            help="Artist download selection",
-            default=downloader_sig.parameters["artist_selection"].default,
-            type=ArtistDownloadSelection,
+            "--artist-auto-select",
+            help="Automatically select artist content to download (only for artist URLs)",
+            default=downloader_sig.parameters["artist_auto_select"].default,
+            type=ArtistAutoSelect,
         ),
     ]
     # Base Downloader specific options

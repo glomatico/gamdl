@@ -64,6 +64,7 @@ gamdl [OPTIONS] URLS...
 - Music Videos
 - Artists
 - Post Videos
+- Apple Music Classical
 
 ### Examples
 

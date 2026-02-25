@@ -3,10 +3,8 @@ from pathlib import Path
 from ..interface.enums import SongCodec, SyncedLyricsFormat
 from ..interface.interface_song import AppleMusicSongInterface
 from ..interface.types import DecryptionKeyAv
-from ..utils import async_subprocess
 from .amdecrypt import decrypt_file, decrypt_file_hex
 from .downloader_base import AppleMusicBaseDownloader
-from .enums import RemuxMode
 from .types import DownloadItem
 
 

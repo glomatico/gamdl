@@ -254,6 +254,16 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `best` - Up to 1080p with AAC 256kbps
 - `ask` - Interactive quality selection
 
+### Artist Auto-Select Options
+
+- `main-albums`
+- `compilation-albums`
+- `live-albums`
+- `singles-eps`
+- `all-albums`
+- `top-songs`
+- `music-videos`
+
 ## ⚙️ Wrapper
 
 Use the [wrapper](https://github.com/WorldObservationLog/wrapper) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.

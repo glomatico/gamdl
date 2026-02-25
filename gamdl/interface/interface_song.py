@@ -227,6 +227,17 @@ class AppleMusicSongInterface(AppleMusicInterface):
 
     async def get_stream_info(
         self,
+        codec: SongCodec,
+        song_metadata: dict | None = None,
+        webplayback: dict | None = None,
+    ) -> StreamInfoAv | None:
+        if codec.is_legacy():
+            return await self._get_stream_info_legacy(webplayback, codec)
+        else:
+            return await self._get_stream_info(song_metadata, codec)
+
+    async def _get_stream_info(
+        self,
         song_metadata: dict,
         codec: SongCodec,
     ) -> StreamInfoAv | None:
@@ -257,7 +268,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
         if playlist is None:
             return None
 
-        stream_info = StreamInfo()
+        stream_info = StreamInfo(legacy=False)
         stream_info.stream_url = (
             f"{m3u8_master_url.rpartition('/')[0]}/{playlist['uri']}"
         )
@@ -386,14 +397,14 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 return key.uri
         return None
 
-    async def get_stream_info_legacy(
+    async def _get_stream_info_legacy(
         self,
         webplayback: dict,
         codec: SongCodec,
     ) -> StreamInfoAv:
         flavor = "32:ctrp64" if codec == SongCodec.AAC_HE_LEGACY else "28:ctrp256"
 
-        stream_info = StreamInfo()
+        stream_info = StreamInfo(legacy=True)
         stream_info.stream_url = next(
             i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor
         )["URL"]

@@ -362,13 +362,13 @@ class CliConfig:
         ),
     ]
     # DownloaderSong specific options
-    song_codec: Annotated[
-        SongCodec,
+    song_codec_piority: Annotated[
+        list[SongCodec],
         option(
-            "--song-codec",
-            help="Song codec",
-            default=song_downloader_sig.parameters["codec"].default,
-            type=SongCodec,
+            "--song-codec-priority",
+            help="Comma-separated codec priority",
+            default=song_downloader_sig.parameters["codec_priority"].default,
+            type=Csv(SongCodec),
         ),
     ]
     synced_lyrics_format: Annotated[

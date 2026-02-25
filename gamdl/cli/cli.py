@@ -142,7 +142,7 @@ async def main(config: CliConfig):
     song_downloader = AppleMusicSongDownloader(
         base_downloader=base_downloader,
         interface=song_interface,
-        codec=config.song_codec,
+        codec_priority=config.song_codec_piority,
         synced_lyrics_format=config.synced_lyrics_format,
         no_synced_lyrics=config.no_synced_lyrics,
         synced_lyrics_only=config.synced_lyrics_only,
@@ -197,7 +197,8 @@ async def main(config: CliConfig):
             )
 
         if not base_downloader.full_mp4decrypt_path and (
-            config.song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
+            config.song_codec_piority
+            not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
             or config.music_video_remux_mode == RemuxMode.MP4BOX
         ):
             missing_music_video_paths.append(
@@ -210,7 +211,10 @@ async def main(config: CliConfig):
                 + "\n".join(missing_music_video_paths)
             )
 
-        if not config.song_codec.is_legacy() and not config.use_wrapper:
+        if (
+            any(not codec.is_legacy() for codec in config.song_codec_piority)
+            and not config.use_wrapper
+        ):
             logger.warning(
                 "You have chosen an experimental song codec "
                 "without enabling wrapper. "

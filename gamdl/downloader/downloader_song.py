@@ -13,7 +13,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         self,
         base_downloader: AppleMusicBaseDownloader,
         interface: AppleMusicSongInterface,
-        codec: SongCodec = SongCodec.AAC_LEGACY,
+        codec_priority: SongCodec = [SongCodec.AAC_LEGACY],
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         no_synced_lyrics: bool = False,
         synced_lyrics_only: bool = False,
@@ -22,7 +22,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
     ):
         self.__dict__.update(base_downloader.__dict__)
         self.interface = interface
-        self.codec = codec
+        self.codec_priority = codec_priority
         self.synced_lyrics_format = synced_lyrics_format
         self.no_synced_lyrics = no_synced_lyrics
         self.synced_lyrics_only = synced_lyrics_only
@@ -78,33 +78,31 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         if self.synced_lyrics_only:
             return download_item
 
-        if self.codec.is_legacy():
-            download_item.stream_info = await self.interface.get_stream_info_legacy(
+        for codec in self.codec_priority:
+            download_item.stream_info = await self.interface.get_stream_info(
+                codec,
+                song_metadata,
                 webplayback,
-                self.codec,
             )
+            if download_item.stream_info:
+                break
+
+        if download_item.stream_info.audio_track.legacy:
             download_item.decryption_key = (
                 await self.interface.get_decryption_key_legacy(
                     download_item.stream_info,
                     self.cdm,
                 )
             )
-        else:
-            download_item.stream_info = await self.interface.get_stream_info(
-                song_metadata,
-                self.codec,
+        elif (
+            not self.use_wrapper
+            and download_item.stream_info
+            and download_item.stream_info.audio_track.widevine_pssh
+        ):
+            download_item.decryption_key = await self.interface.get_decryption_key(
+                download_item.stream_info,
+                self.cdm,
             )
-            if (
-                not self.use_wrapper
-                and download_item.stream_info
-                and download_item.stream_info.audio_track.widevine_pssh
-            ):
-                download_item.decryption_key = await self.interface.get_decryption_key(
-                    download_item.stream_info,
-                    self.cdm,
-                )
-            else:
-                download_item.decryption_key = None
 
         download_item.cover_url_template = self.interface.get_cover_url_template(
             song_metadata,
@@ -173,11 +171,11 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         encrypted_path: str,
         staged_path: str,
         decryption_key: DecryptionKeyAv,
-        codec: SongCodec,
+        legacy: bool,
         media_id: str,
         fairplay_key: str,
     ):
-        if self.use_wrapper and not codec.is_legacy():
+        if self.use_wrapper and not legacy:
             await self.decrypt_amdecrypt(
                 encrypted_path,
                 staged_path,
@@ -189,7 +187,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 encrypted_path,
                 staged_path,
                 decryption_key.audio_track.key,
-                legacy=codec.is_legacy(),
+                legacy,
             )
 
     def get_lyrics_synced_path(self, final_path: str) -> str:
@@ -232,7 +230,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             encrypted_path,
             download_item.staged_path,
             download_item.decryption_key,
-            self.codec,
+            download_item.stream_info.audio_track.legacy,
             download_item.media_metadata["id"],
             download_item.stream_info.audio_track.fairplay_key,
         )

@@ -121,6 +121,7 @@ class StreamInfo:
     codec: str = None
     width: int = None
     height: int = None
+    legacy: bool = None
 
 
 @dataclass

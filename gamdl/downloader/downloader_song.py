@@ -177,7 +177,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         media_id: str,
         fairplay_key: str,
     ):
-        if self.use_wrapper:
+        if self.use_wrapper and not codec.is_legacy():
             await self.decrypt_amdecrypt(
                 encrypted_path,
                 staged_path,

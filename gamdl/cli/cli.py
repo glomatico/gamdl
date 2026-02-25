@@ -212,8 +212,8 @@ async def main(config: CliConfig):
 
         if not config.song_codec.is_legacy() and not config.use_wrapper:
             logger.warning(
-                "You have chosen an experimental song codec"
-                " without enabling wrapper."
+                "You have chosen an experimental song codec "
+                "without enabling wrapper. "
                 "They're not guaranteed to work due to API limitations."
             )
 

@@ -12,7 +12,7 @@ UPLOADED_VIDEO_MEDIA_TYPE = {"post", "uploaded-videos"}
 PLAYLIST_MEDIA_TYPE = {"playlist", "playlists", "library-playlists"}
 
 VALID_URL_PATTERN = re.compile(
-    r"https://music\.apple\.com"
+    r"https://(?:classical\.)?music\.apple\.com"
     r"(?:"
     r"/(?P<storefront>[a-z]{2})"
     r"/(?P<type>artist|album|playlist|song|music-video|post)"

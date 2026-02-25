@@ -126,7 +126,6 @@ async def main(config: CliConfig):
         use_wrapper=config.use_wrapper,
         wrapper_decrypt_ip=config.wrapper_decrypt_ip,
         download_mode=config.download_mode,
-        remux_mode=config.remux_mode,
         cover_format=config.cover_format,
         album_folder_template=config.album_folder_template,
         compilation_folder_template=config.compilation_folder_template,
@@ -154,6 +153,7 @@ async def main(config: CliConfig):
         base_downloader=base_downloader,
         interface=music_video_interface,
         codec_priority=config.music_video_codec_priority,
+        remux_mode=config.music_video_remux_mode,
         remux_format=config.music_video_remux_format,
         resolution=config.music_video_resolution,
     )
@@ -171,36 +171,44 @@ async def main(config: CliConfig):
     )
 
     if not config.synced_lyrics_only:
-        if not config.use_wrapper:
-            if not base_downloader.full_ffmpeg_path and (
-                config.remux_mode == RemuxMode.FFMPEG
-                or config.download_mode == DownloadMode.NM3U8DLRE
-            ):
-                logger.critical(X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path))
-                return
-
-            if (
-                not base_downloader.full_mp4box_path
-                and config.remux_mode == RemuxMode.MP4BOX
-            ):
-                logger.critical(X_NOT_IN_PATH.format("MP4Box", config.mp4box_path))
-                return
-
-            if not base_downloader.full_mp4decrypt_path and (
-                config.song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
-                or config.remux_mode == RemuxMode.MP4BOX
-            ):
-                logger.critical(
-                    X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path)
-                )
-                return
-
         if (
             config.download_mode == DownloadMode.NM3U8DLRE
             and not base_downloader.full_nm3u8dlre_path
         ):
             logger.critical(X_NOT_IN_PATH.format("N_m3u8DL-RE", config.nm3u8dlre_path))
             return
+
+        missing_music_video_paths = []
+
+        if not base_downloader.full_ffmpeg_path and (
+            config.music_video_remux_mode == RemuxMode.FFMPEG
+            or config.download_mode == DownloadMode.NM3U8DLRE
+        ):
+            missing_music_video_paths.append(
+                X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path)
+            )
+
+        if (
+            not base_downloader.full_mp4box_path
+            and config.music_video_remux_mode == RemuxMode.MP4BOX
+        ):
+            missing_music_video_paths.append(
+                X_NOT_IN_PATH.format("MP4Box", config.mp4box_path)
+            )
+
+        if not base_downloader.full_mp4decrypt_path and (
+            config.song_codec not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
+            or config.music_video_remux_mode == RemuxMode.MP4BOX
+        ):
+            missing_music_video_paths.append(
+                X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path)
+            )
+
+        if missing_music_video_paths:
+            logger.warning(
+                "Music videos will not be downloaded due to missing dependencies:\n"
+                + "\n".join(missing_music_video_paths)
+            )
 
         if not config.song_codec.is_legacy() and not config.use_wrapper:
             logger.warning(

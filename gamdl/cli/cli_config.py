@@ -261,15 +261,6 @@ class CliConfig:
             type=DownloadMode,
         ),
     ]
-    remux_mode: Annotated[
-        RemuxMode,
-        option(
-            "--remux-mode",
-            help="Remux mode",
-            default=base_downloader_sig.parameters["remux_mode"].default,
-            type=RemuxMode,
-        ),
-    ]
     cover_format: Annotated[
         CoverFormat,
         option(
@@ -429,6 +420,15 @@ class CliConfig:
             help="Comma-separated codec priority",
             default=music_video_downloader_sig.parameters["codec_priority"].default,
             type=Csv(MusicVideoCodec),
+        ),
+    ]
+    music_video_remux_mode: Annotated[
+        RemuxMode,
+        option(
+            "--music-video-remux-mode",
+            help="Remux mode",
+            default=music_video_downloader_sig.parameters["remux_mode"].default,
+            type=RemuxMode,
         ),
     ]
     music_video_remux_format: Annotated[

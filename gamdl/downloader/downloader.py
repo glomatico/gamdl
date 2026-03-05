@@ -174,14 +174,10 @@ class AppleMusicDownloader:
             artist_auto_select = self.artist_auto_select
 
         relation_key, type_key = artist_auto_select.path_key
-        artist_metadata[relation_key][type_key]["data"].extend(
-            [
-                extended_data
-                async for extended_data in self.interface.apple_music_api.extend_api_data(
-                    artist_metadata[relation_key][type_key],
-                )
-            ]
-        )
+        async for extended_data in self.interface.apple_music_api.extend_api_data(
+            artist_metadata[relation_key][type_key],
+        ):
+            artist_metadata[relation_key][type_key]["data"].extend(extended_data["data"])
 
         selected_items = artist_metadata[relation_key][type_key]["data"]
         select_all = self.artist_auto_select is not None

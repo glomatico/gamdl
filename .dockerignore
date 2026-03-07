@@ -1,0 +1,14 @@
+.git/
+__pycache__/
+*.pyc
+*.pyo
+*.wvd
+cookies.txt
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+.claude/
+Apple Music/

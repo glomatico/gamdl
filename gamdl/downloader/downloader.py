@@ -5,6 +5,7 @@ from pathlib import Path
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
+from ..api.exceptions import ApiError
 from ..interface import AppleMusicInterface
 from ..utils import safe_gather
 from .constants import (
@@ -20,7 +21,7 @@ from .downloader_base import AppleMusicBaseDownloader
 from .downloader_music_video import AppleMusicMusicVideoDownloader
 from .downloader_song import AppleMusicSongDownloader
 from .downloader_uploaded_video import AppleMusicUploadedVideoDownloader
-from .enums import DownloadMode, RemuxMode
+from .enums import ArtistAutoSelect, DownloadMode, RemuxMode
 from .exceptions import (
     ExecutableNotFound,
     FormatNotAvailable,
@@ -40,6 +41,7 @@ class AppleMusicDownloader:
         song_downloader: AppleMusicSongDownloader,
         music_video_downloader: AppleMusicMusicVideoDownloader,
         uploaded_video_downloader: AppleMusicUploadedVideoDownloader,
+        artist_auto_select: ArtistAutoSelect | None = None,
         skip_music_videos: bool = False,
         skip_processing: bool = False,
         flat_filter: typing.Callable = None,
@@ -49,6 +51,7 @@ class AppleMusicDownloader:
         self.song_downloader = song_downloader
         self.music_video_downloader = music_video_downloader
         self.uploaded_video_downloader = uploaded_video_downloader
+        self.artist_auto_select = artist_auto_select
         self.skip_music_videos = skip_music_videos
         self.skip_processing = skip_processing
         self.flat_filter = flat_filter
@@ -149,67 +152,86 @@ class AppleMusicDownloader:
         self,
         artist_metadata: dict,
     ) -> list[DownloadItem]:
-        for relationship in artist_metadata["relationships"].keys():
-            artist_metadata["relationships"][relationship]["data"].extend(
-                [
-                    extended_data
-                    async for extended_data in self.interface.apple_music_api.extend_api_data(
-                        artist_metadata["relationships"][relationship],
-                    )
-                ]
-            )
+        if not self.artist_auto_select:
+            available_choices = []
+            for artist_auto_select_option in list(ArtistAutoSelect):
+                relation_key, type_key = artist_auto_select_option.path_key
+                available_choices.append(
+                    Choice(
+                        name=str(artist_auto_select_option),
+                        value=(artist_auto_select_option,),
+                    ),
+                )
 
-        media_type = await inquirer.select(
-            message=f'Select which type to download for artist "{artist_metadata["attributes"]["name"]}":',
-            choices=[
-                Choice(
-                    name="Albums",
-                    value="albums",
-                ),
-                Choice(
-                    name="Music Videos",
-                    value="music-videos",
-                ),
-            ],
-            validate=lambda result: artist_metadata["relationships"]
-            .get(result, {})
-            .get("data"),
-            invalid_message="The artist doesn't have any items of this type",
-        ).execute_async()
+            (artist_auto_select,) = await inquirer.select(
+                message=f'Select which type to download for artist "{artist_metadata["attributes"]["name"]}":',
+                choices=available_choices,
+                validate=lambda result: artist_metadata.get(result[0].path_key[0], {})
+                .get(result[0].path_key[1], {})
+                .get("data"),
+            ).execute_async()
+        else:
+            artist_auto_select = self.artist_auto_select
 
-        if media_type == "albums":
+        relation_key, type_key = artist_auto_select.path_key
+        async for extended_data in self.interface.apple_music_api.extend_api_data(
+            artist_metadata[relation_key][type_key],
+        ):
+            artist_metadata[relation_key][type_key]["data"].extend(extended_data["data"])
+
+        selected_items = artist_metadata[relation_key][type_key]["data"]
+        select_all = self.artist_auto_select is not None
+
+        if artist_auto_select in {
+            ArtistAutoSelect.MAIN_ALBUMS,
+            ArtistAutoSelect.COMPILATION_ALBUMS,
+            ArtistAutoSelect.LIVE_ALBUMS,
+            ArtistAutoSelect.SINGLES_EPS,
+            ArtistAutoSelect.ALL_ALBUMS,
+        }:
             return await self.get_artist_albums_download_items(
-                artist_metadata["relationships"]["albums"]["data"]
+                selected_items,
+                select_all,
             )
-        if media_type == "music-videos":
+        elif artist_auto_select == ArtistAutoSelect.TOP_SONGS:
+            return await self.get_artist_songs_download_items(
+                selected_items,
+                select_all,
+            )
+        elif artist_auto_select == ArtistAutoSelect.MUSIC_VIDEOS:
             return await self.get_artist_music_videos_download_items(
-                artist_metadata["relationships"]["music-videos"]["data"]
+                selected_items,
+                select_all,
             )
 
     async def get_artist_albums_download_items(
         self,
         albums_metadata: list[dict],
+        select_all: bool = False,
     ) -> list[DownloadItem]:
-        choices = [
-            Choice(
-                name=" | ".join(
-                    [
-                        f'{album["attributes"]["trackCount"]:03d}',
-                        f'{album["attributes"]["releaseDate"]:<10}',
-                        f'{album["attributes"].get("contentRating", "None").title():<8}',
-                        f'{album["attributes"]["name"]}',
-                    ]
-                ),
-                value=album,
-            )
-            for album in albums_metadata
-            if album.get("attributes")
-        ]
-        selected = await inquirer.select(
-            message="Select which albums to download: (Track Count | Release Date | Rating | Title)",
-            choices=choices,
-            multiselect=True,
-        ).execute_async()
+        if not select_all:
+            choices = [
+                Choice(
+                    name=" | ".join(
+                        [
+                            f'{album["attributes"]["trackCount"]:03d}',
+                            f'{album["attributes"]["releaseDate"]:<10}',
+                            f'{album["attributes"].get("contentRating", "None").title():<8}',
+                            f'{album["attributes"]["name"]}',
+                        ]
+                    ),
+                    value=album,
+                )
+                for album in albums_metadata
+                if album.get("attributes")
+            ]
+            selected = await inquirer.select(
+                message="Select which albums to download: (Track Count | Release Date | Rating | Title)",
+                choices=choices,
+                multiselect=True,
+            ).execute_async()
+        else:
+            selected = albums_metadata
 
         download_items = []
 
@@ -233,28 +255,32 @@ class AppleMusicDownloader:
     async def get_artist_music_videos_download_items(
         self,
         music_videos_metadata: list[dict],
+        select_all: bool = False,
     ) -> list[DownloadItem]:
-        choices = [
-            Choice(
-                name=" | ".join(
-                    [
-                        self.millis_to_min_sec(
-                            music_video["attributes"]["durationInMillis"]
-                        ),
-                        f'{music_video["attributes"].get("contentRating", "None").title():<8}',
-                        music_video["attributes"]["name"],
-                    ],
-                ),
-                value=music_video,
-            )
-            for music_video in music_videos_metadata
-            if music_video.get("attributes")
-        ]
-        selected = await inquirer.select(
-            message="Select which music videos to download: (Duration | Rating | Title)",
-            choices=choices,
-            multiselect=True,
-        ).execute_async()
+        if not select_all:
+            choices = [
+                Choice(
+                    name=" | ".join(
+                        [
+                            self.millis_to_min_sec(
+                                music_video["attributes"]["durationInMillis"]
+                            ),
+                            f'{music_video["attributes"].get("contentRating", "None").title():<8}',
+                            music_video["attributes"]["name"],
+                        ],
+                    ),
+                    value=music_video,
+                )
+                for music_video in music_videos_metadata
+                if music_video.get("attributes")
+            ]
+            selected = await inquirer.select(
+                message="Select which music videos to download: (Duration | Rating | Title)",
+                choices=choices,
+                multiselect=True,
+            ).execute_async()
+        else:
+            selected = music_videos_metadata
 
         music_video_tasks = [
             self.get_single_download_item(
@@ -263,6 +289,46 @@ class AppleMusicDownloader:
             for music_video_metadata in selected
         ]
         download_items = await safe_gather(*music_video_tasks)
+
+        return download_items
+
+    async def get_artist_songs_download_items(
+        self,
+        songs_metadata: list[dict],
+        select_all: bool = False,
+    ) -> list[DownloadItem]:
+        if not select_all:
+            choices = [
+                Choice(
+                    name=" | ".join(
+                        [
+                            self.millis_to_min_sec(
+                                song["attributes"]["durationInMillis"]
+                            ),
+                            f'{song["attributes"].get("contentRating", "None").title():<8}',
+                            song["attributes"]["name"],
+                        ],
+                    ),
+                    value=song,
+                )
+                for song in songs_metadata
+                if song.get("attributes")
+            ]
+            selected = await inquirer.select(
+                message="Select which songs to download: (Duration | Rating | Title)",
+                choices=choices,
+                multiselect=True,
+            ).execute_async()
+        else:
+            selected = songs_metadata
+
+        song_tasks = [
+            self.get_single_download_item(
+                song_metadata,
+            )
+            for song_metadata in selected
+        ]
+        download_items = await safe_gather(*song_tasks)
 
         return download_items
 
@@ -298,9 +364,14 @@ class AppleMusicDownloader:
         download_items = []
 
         if url_type in ARTIST_MEDIA_TYPE:
-            artist_response = await self.interface.apple_music_api.get_artist(
-                id,
-            )
+            try:
+                artist_response = await self.interface.apple_music_api.get_artist(
+                    id,
+                )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if artist_response is None:
                 return None
@@ -310,7 +381,12 @@ class AppleMusicDownloader:
             )
 
         if url_type in SONG_MEDIA_TYPE:
-            song_respose = await self.interface.apple_music_api.get_song(id)
+            try:
+                song_respose = await self.interface.apple_music_api.get_song(id)
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if song_respose is None:
                 return None
@@ -320,12 +396,17 @@ class AppleMusicDownloader:
             )
 
         if url_type in ALBUM_MEDIA_TYPE:
-            if is_library:
-                album_response = await self.interface.apple_music_api.get_library_album(
-                    id
-                )
-            else:
-                album_response = await self.interface.apple_music_api.get_album(id)
+            try:
+                if is_library:
+                    album_response = (
+                        await self.interface.apple_music_api.get_library_album(id)
+                    )
+                else:
+                    album_response = await self.interface.apple_music_api.get_album(id)
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if album_response is None:
                 return None
@@ -335,14 +416,19 @@ class AppleMusicDownloader:
             )
 
         if url_type in PLAYLIST_MEDIA_TYPE:
-            if is_library:
-                playlist_response = (
-                    await self.interface.apple_music_api.get_library_playlist(id)
-                )
-            else:
-                playlist_response = await self.interface.apple_music_api.get_playlist(
-                    id
-                )
+            try:
+                if is_library:
+                    playlist_response = (
+                        await self.interface.apple_music_api.get_library_playlist(id)
+                    )
+                else:
+                    playlist_response = (
+                        await self.interface.apple_music_api.get_playlist(id)
+                    )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if playlist_response is None:
                 return None
@@ -352,9 +438,14 @@ class AppleMusicDownloader:
             )
 
         if url_type in MUSIC_VIDEO_MEDIA_TYPE:
-            music_video_response = await self.interface.apple_music_api.get_music_video(
-                id
-            )
+            try:
+                music_video_response = (
+                    await self.interface.apple_music_api.get_music_video(id)
+                )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if music_video_response is None:
                 return None
@@ -364,7 +455,14 @@ class AppleMusicDownloader:
             )
 
         if url_type in UPLOADED_VIDEO_MEDIA_TYPE:
-            uploaded_video = await self.interface.apple_music_api.get_uploaded_video(id)
+            try:
+                uploaded_video = (
+                    await self.interface.apple_music_api.get_uploaded_video(id)
+                )
+            except ApiError as e:
+                if e.status_code == 404:
+                    return None
+                raise e
 
             if uploaded_video is None:
                 return None
@@ -417,57 +515,45 @@ class AppleMusicDownloader:
         ):
             raise MediaFileExists(download_item.final_path)
 
-        if download_item.media_metadata["type"] in {
-            *SONG_MEDIA_TYPE,
-            *MUSIC_VIDEO_MEDIA_TYPE,
-        }:
+        if (
+            self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
+            and not self.base_downloader.full_nm3u8dlre_path
+        ):
+            raise ExecutableNotFound("N_m3u8DL-RE")
+
+        if download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE:
             if (
-                self.base_downloader.remux_mode == RemuxMode.FFMPEG
+                self.music_video_downloader.remux_mode == RemuxMode.FFMPEG
                 and not self.base_downloader.full_ffmpeg_path
             ):
                 raise ExecutableNotFound("ffmpeg")
 
             if (
-                self.base_downloader.remux_mode == RemuxMode.MP4BOX
+                self.music_video_downloader.remux_mode == RemuxMode.MP4BOX
                 and not self.base_downloader.full_mp4box_path
             ):
                 raise ExecutableNotFound("MP4Box")
 
             if (
-                self.song_downloader.use_wrapper
-                or (
-                    download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
-                    or self.base_downloader.remux_mode == RemuxMode.MP4BOX
-                )
+                download_item.media_metadata["type"] in MUSIC_VIDEO_MEDIA_TYPE
+                or self.music_video_downloader.remux_mode == RemuxMode.MP4BOX
             ) and not self.base_downloader.full_mp4decrypt_path:
                 raise ExecutableNotFound("mp4decrypt")
 
-            if (
-                self.song_downloader.use_wrapper
-                and not self.base_downloader.full_amdecrypt_path
-            ):
-                raise ExecutableNotFound("amdecrypt")
-
-            if (
-                self.base_downloader.download_mode == DownloadMode.NM3U8DLRE
-                and not self.base_downloader.full_nm3u8dlre_path
-            ):
-                raise ExecutableNotFound("N_m3u8DL-RE")
-
-            if (
-                not download_item.stream_info
-                or not download_item.stream_info.audio_track
-                or not download_item.stream_info.audio_track.stream_url
-                or (
-                    (
-                        not download_item.decryption_key
-                        or not download_item.decryption_key.audio_track
-                        or not download_item.decryption_key.audio_track.key
-                    )
-                    and not self.base_downloader.use_wrapper
+        if (
+            not download_item.stream_info
+            or not download_item.stream_info.audio_track
+            or not download_item.stream_info.audio_track.stream_url
+            or (
+                (
+                    not download_item.decryption_key
+                    or not download_item.decryption_key.audio_track
+                    or not download_item.decryption_key.audio_track.key
                 )
-            ):
-                raise FormatNotAvailable(download_item.media_metadata["id"])
+                and not self.base_downloader.use_wrapper
+            )
+        ):
+            raise FormatNotAvailable(download_item.media_metadata["id"])
 
         if download_item.media_metadata["type"] in SONG_MEDIA_TYPE:
             await self.song_downloader.download(download_item)

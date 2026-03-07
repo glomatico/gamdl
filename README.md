@@ -26,18 +26,16 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 - **Apple Music Cookies** - Export your browser cookies in Netscape format while logged in with an active subscription at the Apple Music website:
   - **Firefox**: [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt)
   - **Chromium**: [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
-- **FFmpeg** - Must be in your system PATH
-  - **Windows**: [AnimMouse's FFmpeg Builds](https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases)
-  - **Linux**: [John Van Sickle's FFmpeg Builds](https://johnvansickle.com/ffmpeg/)
 
 ### Optional
 
 Add these tools to your system PATH for additional features:
 
-- **[mp4decrypt](https://www.bento4.com/downloads/)** - Required for `mp4box` remux mode, music videos, and experimental codecs
-- **[MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)** - Required for `mp4box` remux mode
+- **[FFmpeg](https://ffmpeg.org/download.html)** - Required for `ffmpeg` music video remux mode
+- **[mp4decrypt](https://www.bento4.com/downloads/)** - Required for `mp4box` music video remux mode
+- **[MP4Box](https://gpac.io/downloads/gpac-nightly-builds/)** - Required for `mp4box` music video remux mode
 - **[N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest)** - Required for `nm3u8dlre` download mode, which is faster than the default downloader
-- **[Wrapper & amdecrypt](#️-wrapper--amdecrypt)** - For downloading songs in ALAC and other experimental codecs without API limitations
+- **[Wrapper](#️-wrapper)** - For downloading songs in ALAC and other experimental codecs without API limitations
 
 ## 📦 Installation
 
@@ -110,6 +108,7 @@ gamdl [OPTIONS] URLS...
 - Music Videos
 - Artists
 - Post Videos
+- Apple Music Classical
 
 ### Examples
 
@@ -153,62 +152,63 @@ The file is created automatically on first run. Command-line arguments override 
 
 ### Configuration Options
 
-| Option                          | Description                     | Default                                        |
-| ------------------------------- | ------------------------------- | ---------------------------------------------- |
-| **General Options**             |                                 |                                                |
-| `--read-urls-as-txt`, `-r`      | Read URLs from text files       | `false`                                        |
-| `--config-path`                 | Config file path                | `<home>/.gamdl/config.ini`                     |
-| `--log-level`                   | Logging level                   | `INFO`                                         |
-| `--log-file`                    | Log file path                   | -                                              |
-| `--no-exceptions`               | Don't print exceptions          | `false`                                        |
-| `--no-config-file`, `-n`        | Don't use a config file         | `false`                                        |
-| **Apple Music Options**         |                                 |                                                |
-| `--cookies-path`, `-c`          | Cookies file path               | `./cookies.txt`                                |
-| `--wrapper-account-url`         | Wrapper account URL             | `http://127.0.0.1:30020`                       |
-| `--language`, `-l`              | Metadata language               | `en-US`                                        |
-| **Output Options**              |                                 |                                                |
-| `--output-path`, `-o`           | Output directory path           | `./Apple Music`                                |
-| `--temp-path`                   | Temporary directory path        | `.`                                            |
-| `--wvd-path`                    | .wvd file path                  | -                                              |
-| `--overwrite`                   | Overwrite existing files        | `false`                                        |
-| `--save-cover`, `-s`            | Save cover as separate file     | `false`                                        |
-| `--save-playlist`               | Save M3U8 playlist file         | `false`                                        |
-| **Download Options**            |                                 |                                                |
-| `--nm3u8dlre-path`              | N_m3u8DL-RE executable path     | `N_m3u8DL-RE`                                  |
-| `--mp4decrypt-path`             | mp4decrypt executable path      | `mp4decrypt`                                   |
-| `--ffmpeg-path`                 | FFmpeg executable path          | `ffmpeg`                                       |
-| `--mp4box-path`                 | MP4Box executable path          | `MP4Box`                                       |
-| `--amdecrypt-path`              | amdecrypt executable path       | `amdecrypt`                                    |
-| `--use-wrapper`                 | Use wrapper and amdecrypt       | `false`                                        |
-| `--wrapper-decrypt-ip`          | Wrapper decryption server IP    | `127.0.0.1:10020`                              |
-| `--download-mode`               | Download mode                   | `ytdlp`                                        |
-| `--remux-mode`                  | Remux mode                      | `ffmpeg`                                       |
-| `--cover-format`                | Cover format                    | `jpg`                                          |
-| **Template Options**            |                                 |                                                |
-| `--album-folder-template`       | Album folder template           | `{album_artist}/{album}`                       |
-| `--compilation-folder-template` | Compilation folder template     | `Compilations/{album}`                         |
-| `--no-album-folder-template`    | No album folder template        | `{artist}/Unknown Album`                       |
-| `--single-disc-file-template`   | Single disc file template       | `{track:02d} {title}`                          |
-| `--multi-disc-file-template`    | Multi disc file template        | `{disc}-{track:02d} {title}`                   |
-| `--no-album-file-template`      | No album file template          | `{title}`                                      |
-| `--playlist-file-template`      | Playlist file template          | `Playlists/{playlist_artist}/{playlist_title}` |
-| `--date-tag-template`           | Date tag template               | `%Y-%m-%dT%H:%M:%SZ`                           |
-| `--exclude-tags`                | Comma-separated tags to exclude | -                                              |
-| `--cover-size`                  | Cover size in pixels            | `1200`                                         |
-| `--truncate`                    | Max filename length             | -                                              |
-| **Song Options**                |                                 |                                                |
-| `--song-codec`                  | Song codec                      | `aac-legacy`                                   |
-| `--synced-lyrics-format`        | Synced lyrics format            | `lrc`                                          |
-| `--no-synced-lyrics`            | Don't download synced lyrics    | `false`                                        |
-| `--synced-lyrics-only`          | Download only synced lyrics     | `false`                                        |
-| `--use-album-date`              | Use album release date for songs | `false`                                        |
+| Option                          | Description                                                       | Default                                        |
+| ------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------- |
+| **General Options**             |                                                                   |                                                |
+| `--read-urls-as-txt`, `-r`      | Read URLs from text files                                         | `false`                                        |
+| `--config-path`                 | Config file path                                                  | `<home>/.gamdl/config.ini`                     |
+| `--log-level`                   | Logging level                                                     | `INFO`                                         |
+| `--log-file`                    | Log file path                                                     | -                                              |
+| `--no-exceptions`               | Don't print exceptions                                            | `false`                                        |
+| `--no-config-file`, `-n`        | Don't use a config file                                           | `false`                                        |
+| **Apple Music Options**         |                                                                   |                                                |
+| `--cookies-path`, `-c`          | Cookies file path                                                 | `./cookies.txt`                                |
+| `--wrapper-account-url`         | Wrapper account URL                                               | `http://127.0.0.1:30020`                       |
+| `--language`, `-l`              | Metadata language                                                 | `en-US`                                        |
+| **Output Options**              |                                                                   |                                                |
+| `--output-path`, `-o`           | Output directory path                                             | `./Apple Music`                                |
+| `--temp-path`                   | Temporary directory path                                          | `.`                                            |
+| `--wvd-path`                    | .wvd file path                                                    | -                                              |
+| `--overwrite`                   | Overwrite existing files                                          | `false`                                        |
+| `--save-cover`, `-s`            | Save cover as separate file                                       | `false`                                        |
+| `--save-playlist`               | Save M3U8 playlist file                                           | `false`                                        |
+| **Download Options**            |                                                                   |                                                |
+| `--artist-auto-select`          | Automatically select artist content to download (artist URLs)     | -                                              |
+| `--nm3u8dlre-path`              | N_m3u8DL-RE executable path                                       | `N_m3u8DL-RE`                                  |
+| `--mp4decrypt-path`             | mp4decrypt executable path                                        | `mp4decrypt`                                   |
+| `--ffmpeg-path`                 | FFmpeg executable path                                            | `ffmpeg`                                       |
+| `--mp4box-path`                 | MP4Box executable path                                            | `MP4Box`                                       |
+| `--use-wrapper`                 | Use wrapper                                                       | `false`                                        |
+| `--wrapper-decrypt-ip`          | Wrapper decryption server IP                                      | `127.0.0.1:10020`                              |
+| `--download-mode`               | Download mode                                                     | `ytdlp`                                        |
+| `--cover-format`                | Cover format                                                      | `jpg`                                          |
+| **Template Options**            |                                                                   |                                                |
+| `--album-folder-template`       | Album folder template                                             | `{album_artist}/{album}`                       |
+| `--compilation-folder-template` | Compilation folder template                                       | `Compilations/{album}`                         |
+| `--no-album-folder-template`    | No album folder template                                          | `{artist}/Unknown Album`                       |
+| `--single-disc-file-template`   | Single disc file template                                         | `{track:02d} {title}`                          |
+| `--multi-disc-file-template`    | Multi disc file template                                          | `{disc}-{track:02d} {title}`                   |
+| `--no-album-file-template`      | No album file template                                            | `{title}`                                      |
+| `--playlist-file-template`      | Playlist file template                                            | `Playlists/{playlist_artist}/{playlist_title}` |
+| `--date-tag-template`           | Date tag template                                                 | `%Y-%m-%dT%H:%M:%SZ`                           |
+| `--exclude-tags`                | Comma-separated tags to exclude                                   | -                                              |
+| `--cover-size`                  | Cover size in pixels                                              | `1200`                                         |
+| `--truncate`                    | Max filename length                                               | -                                              |
+| **Song Options**                |                                                                   |                                                |
+| `--song-codec-priority`         | Comma-separated codec priority                                    | `aac-legacy`                                   |
+| `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                                          |
+| `--no-synced-lyrics`            | Don't download synced lyrics                                      | `false`                                        |
+| `--synced-lyrics-only`          | Download only synced lyrics                                       | `false`                                        |
+| `--use-album-date`              | Use album release date for songs                                  | `false`                                        |
 | `--fetch-extra-tags`            | Fetch extra tags from preview (normalization and smooth playback) | `false`                                        |
-| **Music Video Options**         |                                 |                                                |
-| `--music-video-codec-priority`  | Comma-separated codec priority  | `h264,h265`                                    |
-| `--music-video-remux-format`    | Music video remux format        | `m4v`                                          |
-| `--music-video-resolution`      | Max music video resolution      | `1080p`                                        |
-| **Post Video Options**          |                                 |                                                |
-| `--uploaded-video-quality`      | Post video quality              | `best`                                         |
+| **Music Video Options**         |                                                                   |                                                |
+| `--music-video-codec-priority`  | Comma-separated codec priority                                    | `h264,h265`                                    |
+| `--music-video-remux-mode`      | Remux mode                                                        | `ffmpeg`                                       |
+| `--music-video-remux-format`    | Music video remux format                                          | `m4v`                                          |
+| `--music-video-resolution`      | Max music video resolution                                        | `1080p`                                        |
+| **Post Video Options**          |                                                                   |                                                |
+| `--uploaded-video-quality`      | Post video quality                                                | `best`                                         |
+
 
 ### Template Variables
 
@@ -299,15 +299,19 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `best` - Up to 1080p with AAC 256kbps
 - `ask` - Interactive quality selection
 
-## ⚙️ Wrapper & amdecrypt
+### Artist Auto-Select Options
 
-Use the [wrapper](https://github.com/WorldObservationLog/wrapper) and [amdecrypt](https://github.com/glomatico/amdecrypt) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.
+- `main-albums`
+- `compilation-albums`
+- `live-albums`
+- `singles-eps`
+- `all-albums`
+- `top-songs`
+- `music-videos`
 
-### Prerequisites
+## ⚙️ Wrapper
 
-- **[wrapper](https://github.com/WorldObservationLog/wrapper)** - Refer to the repository for installation
-- **[amdecrypt](https://github.com/glomatico/amdecrypt)** - Refer to the repository for installation
-- **[mp4decrypt](https://www.bento4.com/downloads/)** - Required by amdecrypt to decrypt protected files
+Use the [wrapper](https://github.com/WorldObservationLog/wrapper) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.
 
 ### Setup Instructions
 

@@ -14,11 +14,11 @@ def raise_for_status(httpx_response: httpx.Response, valid_responses: set[int] =
         )
 
 
-def safe_json(httpx_response: httpx.Response) -> dict:
+def safe_json(httpx_response: httpx.Response) -> dict | None:
     try:
         return httpx_response.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
+        return None
 
 
 async def get_response(
@@ -95,3 +95,7 @@ class CustomStringFormatter(string.Formatter):
                 return fallback_value
 
         return super().format_field(value, format_spec)
+
+
+class GamdlError(Exception):
+    pass

@@ -4,15 +4,16 @@ from pathlib import Path
 from typing import Annotated
 
 import click
-from click.types import BoolParamType, FuncParamType, IntParamType, StringParamType
 from dataclass_click import argument, option
 
 from ..api import AppleMusicApi
 from ..downloader import (
     AppleMusicBaseDownloader,
+    AppleMusicDownloader,
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
+    ArtistAutoSelect,
     DownloadMode,
     RemuxFormatMusicVideo,
     RemuxMode,
@@ -36,6 +37,7 @@ song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
 uploaded_video_downloader_sig = inspect.signature(
     AppleMusicUploadedVideoDownloader.__init__
 )
+downloader_sig = inspect.signature(AppleMusicDownloader.__init__)
 
 
 @dataclass
@@ -55,8 +57,6 @@ class CliConfig:
             "--read-urls-as-txt",
             "-r",
             help="Read URLs from text files",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -102,8 +102,6 @@ class CliConfig:
         option(
             "--no-exceptions",
             help="Don't print exceptions",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -129,7 +127,6 @@ class CliConfig:
             "--wrapper-account-url",
             help="Wrapper account URL",
             default=api_from_wrapper_sig.parameters["wrapper_account_url"].default,
-            type=StringParamType(),
         ),
     ]
     language: Annotated[
@@ -139,7 +136,16 @@ class CliConfig:
             "-l",
             help="Metadata language",
             default=api_sig.parameters["language"].default,
-            type=StringParamType(),
+        ),
+    ]
+    # Downloader specific options
+    artist_auto_select: Annotated[
+        ArtistAutoSelect | None,
+        option(
+            "--artist-auto-select",
+            help="Automatically select artist content to download (only for artist URLs)",
+            default=downloader_sig.parameters["artist_auto_select"].default,
+            type=ArtistAutoSelect,
         ),
     ]
     # Base Downloader specific options
@@ -191,8 +197,6 @@ class CliConfig:
         option(
             "--overwrite",
             help="Overwrite existing files",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -202,8 +206,6 @@ class CliConfig:
             "--save-cover",
             "-s",
             help="Save cover as separate file",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -212,8 +214,6 @@ class CliConfig:
         option(
             "--save-playlist",
             help="Save M3U8 playlist file",
-            type=BoolParamType(),
-            default=False,
             is_flag=True,
         ),
     ]
@@ -223,7 +223,6 @@ class CliConfig:
             "--nm3u8dlre-path",
             help="N_m3u8DL-RE executable path",
             default=base_downloader_sig.parameters["nm3u8dlre_path"].default,
-            type=StringParamType(),
         ),
     ]
     mp4decrypt_path: Annotated[
@@ -232,7 +231,6 @@ class CliConfig:
             "--mp4decrypt-path",
             help="mp4decrypt executable path",
             default=base_downloader_sig.parameters["mp4decrypt_path"].default,
-            type=StringParamType(),
         ),
     ]
     ffmpeg_path: Annotated[
@@ -241,7 +239,6 @@ class CliConfig:
             "--ffmpeg-path",
             help="FFmpeg executable path",
             default=base_downloader_sig.parameters["ffmpeg_path"].default,
-            type=StringParamType(),
         ),
     ]
     mp4box_path: Annotated[
@@ -250,25 +247,13 @@ class CliConfig:
             "--mp4box-path",
             help="MP4Box executable path",
             default=base_downloader_sig.parameters["mp4box_path"].default,
-            type=StringParamType(),
-        ),
-    ]
-    amdecrypt_path: Annotated[
-        str,
-        option(
-            "--amdecrypt-path",
-            help="amdecrypt executable path",
-            default=base_downloader_sig.parameters["amdecrypt_path"].default,
-            type=StringParamType(),
         ),
     ]
     use_wrapper: Annotated[
         bool,
         option(
             "--use-wrapper",
-            help="Use wrapper and amdecrypt for decrypting songs",
-            default=False,
-            type=BoolParamType(),
+            help="Use wrapper for decrypting songs",
             is_flag=True,
         ),
     ]
@@ -278,7 +263,6 @@ class CliConfig:
             "--wrapper-decrypt-ip",
             help="IP address and port for wrapper decryption",
             default=base_downloader_sig.parameters["wrapper_decrypt_ip"].default,
-            type=StringParamType(),
         ),
     ]
     download_mode: Annotated[
@@ -287,16 +271,7 @@ class CliConfig:
             "--download-mode",
             help="Download mode",
             default=base_downloader_sig.parameters["download_mode"].default,
-            type=FuncParamType(DownloadMode),
-        ),
-    ]
-    remux_mode: Annotated[
-        RemuxMode,
-        option(
-            "--remux-mode",
-            help="Remux mode",
-            default=base_downloader_sig.parameters["remux_mode"].default,
-            type=FuncParamType(RemuxMode),
+            type=DownloadMode,
         ),
     ]
     cover_format: Annotated[
@@ -305,7 +280,7 @@ class CliConfig:
             "--cover-format",
             help="Cover format",
             default=base_downloader_sig.parameters["cover_format"].default,
-            type=FuncParamType(CoverFormat),
+            type=CoverFormat,
         ),
     ]
     album_folder_template: Annotated[
@@ -314,7 +289,6 @@ class CliConfig:
             "--album-folder-template",
             help="Album folder template",
             default=base_downloader_sig.parameters["album_folder_template"].default,
-            type=StringParamType(),
         ),
     ]
     compilation_folder_template: Annotated[
@@ -325,7 +299,6 @@ class CliConfig:
             default=base_downloader_sig.parameters[
                 "compilation_folder_template"
             ].default,
-            type=StringParamType(),
         ),
     ]
     no_album_folder_template: Annotated[
@@ -334,7 +307,6 @@ class CliConfig:
             "--no-album-folder-template",
             help="No album folder template",
             default=base_downloader_sig.parameters["no_album_folder_template"].default,
-            type=StringParamType(),
         ),
     ]
     single_disc_file_template: Annotated[
@@ -343,7 +315,6 @@ class CliConfig:
             "--single-disc-file-template",
             help="Single disc file template",
             default=base_downloader_sig.parameters["single_disc_file_template"].default,
-            type=StringParamType(),
         ),
     ]
     multi_disc_file_template: Annotated[
@@ -352,7 +323,6 @@ class CliConfig:
             "--multi-disc-file-template",
             help="Multi disc file template",
             default=base_downloader_sig.parameters["multi_disc_file_template"].default,
-            type=StringParamType(),
         ),
     ]
     no_album_file_template: Annotated[
@@ -361,7 +331,6 @@ class CliConfig:
             "--no-album-file-template",
             help="No album file template",
             default=base_downloader_sig.parameters["no_album_file_template"].default,
-            type=StringParamType(),
         ),
     ]
     playlist_file_template: Annotated[
@@ -370,7 +339,6 @@ class CliConfig:
             "--playlist-file-template",
             help="Playlist file template",
             default=base_downloader_sig.parameters["playlist_file_template"].default,
-            type=StringParamType(),
         ),
     ]
     date_tag_template: Annotated[
@@ -379,7 +347,6 @@ class CliConfig:
             "--date-tag-template",
             help="Date tag template",
             default=base_downloader_sig.parameters["date_tag_template"].default,
-            type=StringParamType(),
         ),
     ]
     exclude_tags: Annotated[
@@ -397,7 +364,6 @@ class CliConfig:
             "--cover-size",
             help="Cover size in pixels",
             default=base_downloader_sig.parameters["cover_size"].default,
-            type=IntParamType(),
         ),
     ]
     truncate: Annotated[
@@ -406,17 +372,16 @@ class CliConfig:
             "--truncate",
             help="Max filename length",
             default=base_downloader_sig.parameters["truncate"].default,
-            type=IntParamType(),
         ),
     ]
     # DownloaderSong specific options
-    song_codec: Annotated[
-        SongCodec,
+    song_codec_piority: Annotated[
+        list[SongCodec],
         option(
-            "--song-codec",
-            help="Song codec",
-            default=song_downloader_sig.parameters["codec"].default,
-            type=FuncParamType(SongCodec),
+            "--song-codec-priority",
+            help="Comma-separated codec priority",
+            default=song_downloader_sig.parameters["codec_priority"].default,
+            type=Csv(SongCodec),
         ),
     ]
     synced_lyrics_format: Annotated[
@@ -425,7 +390,7 @@ class CliConfig:
             "--synced-lyrics-format",
             help="Synced lyrics format",
             default=song_downloader_sig.parameters["synced_lyrics_format"].default,
-            type=FuncParamType(SyncedLyricsFormat),
+            type=SyncedLyricsFormat,
         ),
     ]
     no_synced_lyrics: Annotated[
@@ -433,8 +398,6 @@ class CliConfig:
         option(
             "--no-synced-lyrics",
             help="Don't download synced lyrics",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -443,8 +406,6 @@ class CliConfig:
         option(
             "--synced-lyrics-only",
             help="Download only synced lyrics",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -453,8 +414,6 @@ class CliConfig:
         option(
             "--use-album-date",
             help="Use album release date for songs",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -463,8 +422,6 @@ class CliConfig:
         option(
             "--fetch-extra-tags",
             help="Fetch extra tags from preview (normalization and smooth playback)",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]
@@ -478,13 +435,22 @@ class CliConfig:
             type=Csv(MusicVideoCodec),
         ),
     ]
+    music_video_remux_mode: Annotated[
+        RemuxMode,
+        option(
+            "--music-video-remux-mode",
+            help="Remux mode",
+            default=music_video_downloader_sig.parameters["remux_mode"].default,
+            type=RemuxMode,
+        ),
+    ]
     music_video_remux_format: Annotated[
         RemuxFormatMusicVideo,
         option(
             "--music-video-remux-format",
             help="Music video remux format",
             default=music_video_downloader_sig.parameters["remux_format"].default,
-            type=FuncParamType(RemuxFormatMusicVideo),
+            type=RemuxFormatMusicVideo,
         ),
     ]
     music_video_resolution: Annotated[
@@ -493,7 +459,7 @@ class CliConfig:
             "--music-video-resolution",
             help="Max music video resolution",
             default=music_video_downloader_sig.parameters["resolution"].default,
-            type=FuncParamType(MusicVideoResolution),
+            type=MusicVideoResolution,
         ),
     ]
     # DownloaderUploadedVideo specific options
@@ -503,7 +469,7 @@ class CliConfig:
             "--uploaded-video-quality",
             help="Post video quality",
             default=uploaded_video_downloader_sig.parameters["quality"].default,
-            type=FuncParamType(UploadedVideoQuality),
+            type=UploadedVideoQuality,
         ),
     ]
     no_config_file: Annotated[
@@ -512,8 +478,6 @@ class CliConfig:
             "--no-config-file",
             "-n",
             help="Don't use a config file",
-            default=False,
-            type=BoolParamType(),
             is_flag=True,
         ),
     ]

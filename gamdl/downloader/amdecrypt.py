@@ -158,15 +158,24 @@ def extract_song(input_path: str) -> SongInfo:
         elif box["type"] == "moov":
             song_info.moov_data = box["data"]
 
-    # Get default sample info from trex (inside moov)
-    default_sample_duration = 1024
-    default_sample_size = 0
-
     # Determine which track is the audio track
     audio_track_id = (
         _extract_audio_track_id(song_info.moov_data) if song_info.moov_data else 1
     )
     logger.debug(f"Audio track ID: {audio_track_id}")
+
+    # Get default sample info from trex (inside moov/mvex)
+    trex_defaults = (
+        _extract_trex_defaults(song_info.moov_data, audio_track_id)
+        if song_info.moov_data
+        else {"default_sample_duration": 1024, "default_sample_size": 0}
+    )
+    default_sample_duration = trex_defaults["default_sample_duration"]
+    default_sample_size = trex_defaults["default_sample_size"]
+    logger.debug(
+        f"Default sample duration: {default_sample_duration}, "
+        f"default sample size: {default_sample_size}"
+    )
 
     # Extract encryption scheme info from moov (sinf/schm + sinf/schi/tenc)
     if song_info.moov_data:
@@ -1304,6 +1313,72 @@ def _write_udta(f):
 
     _fixup_box_size(f, meta_start, b"meta")
     _fixup_box_size(f, udta_start, b"udta")
+
+
+def _extract_trex_defaults(moov_data: bytes, target_track_id: int = 0) -> dict:
+    """Extract default sample values from moov/mvex/trex box.
+
+    The trex (Track Extends) box provides default values for sample duration,
+    size, description index, and flags used by track fragments (traf/trun)
+    when those fields are not explicitly present.
+
+    Args:
+        moov_data: Raw bytes of the moov box.
+        target_track_id: If > 0, only return defaults for this track.
+                         If 0, return the first trex found.
+
+    Returns:
+        Dict with keys: default_sample_duration, default_sample_size,
+        default_sample_description_index, default_sample_flags.
+    """
+    defaults = {
+        "default_sample_duration": 1024,
+        "default_sample_size": 0,
+        "default_sample_description_index": 1,
+        "default_sample_flags": 0,
+    }
+
+    # Find mvex box inside moov
+    mvex = _find_child_box(moov_data, b"mvex")
+    if mvex is None:
+        return defaults
+
+    # Iterate trex children inside mvex
+    offset = 8  # Skip mvex box header
+    while offset + 8 <= len(mvex):
+        size = struct.unpack(">I", mvex[offset : offset + 4])[0]
+        box_type = mvex[offset + 4 : offset + 8]
+        if size < 8 or offset + size > len(mvex):
+            break
+        if box_type == b"trex" and size >= 32:
+            # trex FullBox: size(4) + type(4) + version(1) + flags(3)
+            #   + track_id(4) + default_sample_description_index(4)
+            #   + default_sample_duration(4) + default_sample_size(4)
+            #   + default_sample_flags(4)
+            trex_data = mvex[offset : offset + size]
+            track_id = struct.unpack(">I", trex_data[12:16])[0]
+            if target_track_id == 0 or track_id == target_track_id:
+                defaults["default_sample_description_index"] = struct.unpack(
+                    ">I", trex_data[16:20]
+                )[0]
+                defaults["default_sample_duration"] = struct.unpack(
+                    ">I", trex_data[20:24]
+                )[0]
+                defaults["default_sample_size"] = struct.unpack(">I", trex_data[24:28])[
+                    0
+                ]
+                defaults["default_sample_flags"] = struct.unpack(
+                    ">I", trex_data[28:32]
+                )[0]
+                logger.debug(
+                    f"trex defaults for track {track_id}: "
+                    f"duration={defaults['default_sample_duration']}, "
+                    f"size={defaults['default_sample_size']}"
+                )
+                break
+        offset += size
+
+    return defaults
 
 
 def _extract_encryption_info(moov_data: bytes) -> Optional[EncryptionInfo]:

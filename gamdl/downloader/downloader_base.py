@@ -94,6 +94,28 @@ class AppleMusicBaseDownloader:
     def get_random_uuid(self) -> str:
         return uuid.uuid4().hex[:8]
 
+    def get_wrapper_m3u8_ip(self) -> str:
+        host, _sep, port = self.wrapper_decrypt_ip.rpartition(":")
+        if not host:
+            host = self.wrapper_decrypt_ip
+        m3u8_port = int(port) + 10000 if port else 20020
+        return f"{host}:{m3u8_port}"
+
+    async def get_wrapper_song_m3u8_url(self, media_id: str) -> str | None:
+        host, port = self.get_wrapper_m3u8_ip().rsplit(":", 1)
+        reader, writer = await asyncio.open_connection(host, int(port))
+        try:
+            media_id_bytes = media_id.encode("utf-8")
+            writer.write(bytes([len(media_id_bytes)]))
+            writer.write(media_id_bytes)
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=30)
+            url = response.decode("utf-8").strip()
+            return url or None
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
     def is_media_streamable(
         self,
         media_metadata: dict,

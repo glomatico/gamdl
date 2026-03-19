@@ -230,27 +230,34 @@ class AppleMusicSongInterface(AppleMusicInterface):
         codec: SongCodec,
         song_metadata: dict | None = None,
         webplayback: dict | None = None,
+        m3u8_master_url: str | None = None,
     ) -> StreamInfoAv | None:
         if codec.is_legacy():
             return await self._get_stream_info_legacy(webplayback, codec)
         else:
-            return await self._get_stream_info(song_metadata, codec)
+            return await self._get_stream_info(
+                song_metadata,
+                codec,
+                m3u8_master_url,
+            )
 
     async def _get_stream_info(
         self,
         song_metadata: dict,
         codec: SongCodec,
+        m3u8_master_url: str | None = None,
     ) -> StreamInfoAv | None:
-        if "extendedAssetUrls" not in song_metadata["attributes"]:
-            song_metadata = (
-                await self.apple_music_api.get_song(
-                    self.get_media_id_of_library_media(song_metadata),
-                )
-            )["data"][0]
+        if m3u8_master_url is None:
+            if "extendedAssetUrls" not in song_metadata["attributes"]:
+                song_metadata = (
+                    await self.apple_music_api.get_song(
+                        self.get_media_id_of_library_media(song_metadata),
+                    )
+                )["data"][0]
 
-        m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
-            "enhancedHls"
-        )
+            m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
+                "enhancedHls"
+            )
         if not m3u8_master_url:
             return None
 

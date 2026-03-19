@@ -1,10 +1,12 @@
 from pathlib import Path
 
+from ..api.exceptions import ApiError
 from ..interface.enums import CoverFormat, SongCodec, SyncedLyricsFormat
 from ..interface.interface_song import AppleMusicSongInterface
 from ..interface.types import DecryptionKeyAv
 from .amdecrypt import decrypt_file, decrypt_file_hex
 from .downloader_base import AppleMusicBaseDownloader
+from .exceptions import ExperimentalCodecRequiresWrapper
 from .types import DownloadItem
 
 
@@ -85,6 +87,17 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
                 webplayback,
             )
             if download_item.stream_info:
+                if self.use_wrapper and not download_item.stream_info.audio_track.legacy:
+                    wrapper_master_url = await self.get_wrapper_song_m3u8_url(song_id)
+                    if wrapper_master_url:
+                        wrapper_stream_info = await self.interface.get_stream_info(
+                            codec,
+                            song_metadata,
+                            webplayback,
+                            m3u8_master_url=wrapper_master_url,
+                        )
+                        if wrapper_stream_info:
+                            download_item.stream_info = wrapper_stream_info
                 break
 
         if download_item.stream_info.audio_track.legacy:
@@ -99,10 +112,15 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
             and download_item.stream_info
             and download_item.stream_info.audio_track.widevine_pssh
         ):
-            download_item.decryption_key = await self.interface.get_decryption_key(
-                download_item.stream_info,
-                self.cdm,
-            )
+            try:
+                download_item.decryption_key = await self.interface.get_decryption_key(
+                    download_item.stream_info,
+                    self.cdm,
+                )
+            except ApiError as exc:
+                if exc.status_code == 200 and '{"status":-1002}' in str(exc):
+                    raise ExperimentalCodecRequiresWrapper(codec.value) from exc
+                raise
 
         download_item.cover_url_template = self.interface.get_cover_url_template(
             song_metadata,

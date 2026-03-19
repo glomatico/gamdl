@@ -29,3 +29,11 @@ class SyncedLyricsOnly(GamdlError):
 class UnsupportedMediaType(GamdlError):
     def __init__(self, media_type: str):
         super().__init__(f"Unsupported media type: {media_type}")
+
+
+class ExperimentalCodecRequiresWrapper(GamdlError):
+    def __init__(self, codec: str):
+        super().__init__(
+            f'Experimental codec "{codec}" could not acquire a license without wrapper. '
+            "Retry with --use-wrapper and a compatible wrapper account/decrypt server."
+        )

@@ -469,6 +469,8 @@ async def decrypt_samples(
     track_id: str,
     fairplay_key: str,
     samples: List[SampleInfo],
+    encryption_info: EncryptionInfo,
+    encryption_info_per_desc: Optional[dict] = None,
     progress_callback=None,
 ) -> bytes:
     """
@@ -503,6 +505,26 @@ async def decrypt_samples(
         last_progress_time = start_time
 
         for i, sample in enumerate(samples):
+            if sample.desc_index == 0:
+                decrypted_sample = decrypt_samples_hex(
+                    [sample],
+                    {0: DEFAULT_SONG_DECRYPTION_KEY},
+                    encryption_info,
+                    encryption_info_per_desc,
+                )
+                decrypted_data.extend(decrypted_sample)
+                bytes_processed += len(sample.data)
+
+                now = time.time()
+                if progress_callback and (
+                    i % 50 == 0 or now - last_progress_time > 0.5 or i == total_samples - 1
+                ):
+                    elapsed = now - start_time
+                    speed = bytes_processed / elapsed if elapsed > 0 else 0
+                    progress_callback(i + 1, total_samples, bytes_processed, speed)
+                    last_progress_time = now
+                continue
+
             # Check if we need to switch keys
             if last_desc_index != sample.desc_index:
                 if last_desc_index != 255:
@@ -1636,6 +1658,12 @@ async def decrypt_file(
 
     # Extract samples (run in thread to not block)
     song_info = await asyncio.to_thread(extract_song, input_path)
+    enc_info = song_info.encryption_info or EncryptionInfo(scheme_type="cbcs")
+    enc_info_per_desc = None
+    if song_info.moov_data:
+        enc_info_per_desc = await asyncio.to_thread(
+            _extract_encryption_info_per_stsd, song_info.moov_data
+        )
 
     # Decrypt samples via wrapper
     decrypted_data = await decrypt_samples(
@@ -1643,6 +1671,8 @@ async def decrypt_file(
         track_id,
         fairplay_key,
         song_info.samples,
+        enc_info,
+        enc_info_per_desc,
         progress_callback,
     )
 

@@ -19,6 +19,12 @@ from .exceptions import ApiError
 logger = logging.getLogger(__name__)
 
 
+def _matches_apple_music_cookie_domain(domain: str) -> bool:
+    normalized_domain = domain.lstrip(".").lower()
+    primary_domain = APPLE_MUSIC_COOKIE_DOMAIN.lstrip(".").lower()
+    return normalized_domain == primary_domain or normalized_domain == "apple.com"
+
+
 class AppleMusicApi:
     def __init__(
         self,
@@ -45,7 +51,8 @@ class AppleMusicApi:
             (
                 cookie.value
                 for cookie in cookies
-                if cookie.name == name and cookie.domain == APPLE_MUSIC_COOKIE_DOMAIN
+                if cookie.name == name
+                and _matches_apple_music_cookie_domain(cookie.domain)
             ),
             None,
         )

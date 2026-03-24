@@ -33,8 +33,15 @@ logger = logging.getLogger(__name__)
 
 
 class AppleMusicSongInterface(AppleMusicInterface):
-    def __init__(self, interface: AppleMusicInterface):
+    def __init__(
+        self,
+        interface: AppleMusicInterface,
+        get_m3u8_from_device: bool = False,
+        get_m3u8_port: str = "127.0.0.1:20020",
+    ):
         self.__dict__.update(interface.__dict__)
+        self.get_m3u8_from_device = get_m3u8_from_device
+        self.get_m3u8_port = get_m3u8_port
 
     async def get_lyrics(
         self,
@@ -236,6 +243,27 @@ class AppleMusicSongInterface(AppleMusicInterface):
         else:
             return await self._get_stream_info(song_metadata, codec)
 
+    async def _get_m3u8_from_device(self, adam_id: str) -> str | None:
+        logger.debug(f"Fetching M3U8 from device for Adam ID: {adam_id}")
+        host, port = self.get_m3u8_port.split(":")
+        try:
+            reader, writer = await asyncio.open_connection(host, int(port))
+            writer.write(len(adam_id).to_bytes(1, "big"))
+            writer.write(adam_id.encode())
+            await writer.drain()
+            response = await reader.readline()
+            writer.close()
+            await writer.wait_closed()
+            result = response.decode().strip()
+            if result:
+                logger.debug(f"Successfully fetched M3U8 from device: {result}")
+            else:
+                logger.warning("Device returned an empty M3U8 URL")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get M3U8 from device at {self.get_m3u8_port}: {e}")
+            return None
+
     async def _get_stream_info(
         self,
         song_metadata: dict,
@@ -248,9 +276,20 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 )
             )["data"][0]
 
-        m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
-            "enhancedHls"
-        )
+        m3u8_master_url = None
+        if self.get_m3u8_from_device:
+            if "hi-res-lossless" in song_metadata["attributes"].get(
+                "audioTraits", []
+            ):
+                m3u8_master_url = await self._get_m3u8_from_device(song_metadata["id"])
+                if m3u8_master_url:
+                    logger.debug(f"Using M3U8 from device: {m3u8_master_url}")
+
+        if not m3u8_master_url:
+            m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
+                "enhancedHls"
+            )
+
         if not m3u8_master_url:
             return None
 
@@ -355,10 +394,37 @@ class AppleMusicSongInterface(AppleMusicInterface):
         if not matching_playlists:
             return None
 
-        return max(
-            matching_playlists,
-            key=lambda x: x["stream_info"]["average_bandwidth"],
-        )
+        for playlist in matching_playlists:
+            logger.debug(
+                f"Matching playlist: {playlist['stream_info']['audio']} "
+                f"(Bandwidth: {playlist['stream_info']['average_bandwidth']})"
+            )
+
+        if codec == SongCodec.ALAC:
+
+            def get_alac_sample_rate(playlist):
+                # audio-alac-stereo-96000-24 or audio-alac-96000-24
+                audio_id = playlist["stream_info"]["audio"]
+                match = re.search(r"audio-alac-(?:stereo-)?(\d+)-\d+", audio_id)
+                if match:
+                    return int(match.group(1))
+                return 0
+
+            selected_playlist = max(
+                matching_playlists,
+                key=lambda x: (
+                    get_alac_sample_rate(x),
+                    x["stream_info"]["average_bandwidth"],
+                ),
+            )
+        else:
+            selected_playlist = max(
+                matching_playlists,
+                key=lambda x: x["stream_info"]["average_bandwidth"],
+            )
+
+        logger.debug(f"Selected playlist: {selected_playlist['stream_info']['audio']}")
+        return selected_playlist
 
     async def _get_playlist_from_user(self, m3u8_data: dict) -> dict | None:
         choices = [

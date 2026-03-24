@@ -108,7 +108,11 @@ async def main(config: CliConfig):
         apple_music_api,
         itunes_api,
     )
-    song_interface = AppleMusicSongInterface(interface)
+    song_interface = AppleMusicSongInterface(
+        interface,
+        get_m3u8_from_device=config.get_m3u8_from_device,
+        get_m3u8_port=config.get_m3u8_port,
+    )
     music_video_interface = AppleMusicMusicVideoInterface(interface)
     uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
 

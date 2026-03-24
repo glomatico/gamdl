@@ -425,6 +425,23 @@ class CliConfig:
             is_flag=True,
         ),
     ]
+    get_m3u8_from_device: Annotated[
+        bool,
+        option(
+            "--get-m3u8-from-device",
+            help="Get M3U8 from device (requires a running agent)",
+            is_flag=True,
+            default=True,
+        ),
+    ]
+    get_m3u8_port: Annotated[
+        str,
+        option(
+            "--get-m3u8-port",
+            help="Port for getting M3U8 from device",
+            default="127.0.0.1:20020",
+        ),
+    ]
     # DownloaderMusicVideo specific options
     music_video_codec_priority: Annotated[
         list[MusicVideoCodec],

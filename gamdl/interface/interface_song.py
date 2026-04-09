@@ -174,13 +174,18 @@ class AppleMusicSongInterface(AppleMusicInterface):
         self,
         webplayback: dict,
         lyrics: str | None = None,
+        album_metadata: dict | None = None,
         use_album_date: bool = False,
     ) -> MediaTags:
         webplayback_metadata = webplayback["songList"][0]["assets"][0]["metadata"]
 
         tags = MediaTags(
             album=webplayback_metadata["playlistName"],
-            album_artist=webplayback_metadata["playlistArtistName"],
+            album_artist=(
+                album_metadata.get("attributes", {}).get("artistName")
+                if album_metadata
+                else webplayback_metadata["playlistArtistName"]
+            ),
             album_id=int(webplayback_metadata["playlistId"]),
             album_sort=webplayback_metadata["sort-album"],
             artist=webplayback_metadata["artistName"],

@@ -47,11 +47,24 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         )
 
         webplayback = await self.interface.apple_music_api.get_webplayback(song_id)
+
+        album_id = webplayback.get("songList", [{}])[0].get("assets", [{}])[0].get("metadata", {}).get("playlistId")
+        album_metadata = None
+        if album_id:
+            try:
+                album_response = await self.interface.apple_music_api.get_album(str(album_id))
+                if album_response and "data" in album_response and len(album_response["data"]) > 0:
+                    album_metadata = album_response["data"][0]
+            except Exception:
+                pass
+
         download_item.media_tags = await self.interface.get_tags(
             webplayback,
             download_item.lyrics.unsynced if download_item.lyrics else None,
+            album_metadata,
             self.use_album_date,
         )
+
         if self.fetch_extra_tags:
             download_item.extra_tags = await self.interface.get_extra_tags(
                 song_metadata,

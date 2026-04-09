@@ -443,11 +443,31 @@ class AppleMusicSongInterface(AppleMusicInterface):
                     cdm.get_license_challenge, cdm_session, pssh_obj
                 )
             ).decode()
-            license_response = await self.apple_music_api.get_license_exchange(
-                stream_info.media_id,
-                stream_info.audio_track.widevine_pssh,
-                challenge,
-            )
+
+            max_attempts = 3
+            last_exc: Exception | None = None
+
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    license_response = await self.apple_music_api.get_license_exchange(
+                        stream_info.media_id,
+                        stream_info.audio_track.widevine_pssh,
+                        challenge,
+                    )
+                    break
+                except Exception as e:
+                    last_exc = e
+
+                    if attempt < max_attempts:
+                        await asyncio.sleep(1)
+                    else:
+                        # All attempts failed, re-raise last exception
+                        logger.warning(
+                            "Error getting license exchange for media_id %s: %s",
+                            stream_info.media_id,
+                            e,
+                        )
+                        raise last_exc
 
             await asyncio.to_thread(
                 cdm.parse_license, cdm_session, license_response["license"]

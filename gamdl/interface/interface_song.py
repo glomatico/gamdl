@@ -176,7 +176,13 @@ class AppleMusicSongInterface(AppleMusicInterface):
         lyrics: str | None = None,
         use_album_date: bool = False,
     ) -> MediaTags:
-        webplayback_metadata = webplayback["songList"][0]["assets"][0]["metadata"]
+        # Try to find a non-preview asset to avoid incorrect duration/metadata
+        assets = webplayback["songList"][0]["assets"]
+        webplayback_metadata = assets[0]["metadata"]
+        for asset in assets:
+            if "preview" not in asset.get("flavor", "").lower():
+                webplayback_metadata = asset["metadata"]
+                break
 
         tags = MediaTags(
             album=webplayback_metadata["playlistName"],
@@ -496,5 +502,18 @@ class AppleMusicSongInterface(AppleMusicInterface):
         preview_bytes = preview_response.content
         preview_tags = dict(MP4(io.BytesIO(preview_bytes)).tags)
 
-        logger.debug(f"Extra tags: {preview_tags.keys()}")
-        return preview_tags
+        # Filter out duration-related tags at extraction time to prevent incorrect reporting
+        # especially for full-track ALAC downloads
+        tags_to_exclude = [
+            "\xa9dur", "dash", "purl", "pnam", "iTunSMPB", 
+            "iTunNORM", "egid", "stik", "rtng", "sfid"
+        ]
+        
+        # Use substring matching so it catches "----:com.apple.iTunes:iTunSMPB"
+        filtered_preview_tags = {
+            k: v for k, v in preview_tags.items()
+            if not any(excluded_tag in k for excluded_tag in tags_to_exclude)
+        }
+
+        logger.debug(f"Extra tags: {filtered_preview_tags.keys()}")
+        return filtered_preview_tags

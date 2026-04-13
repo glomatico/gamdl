@@ -236,6 +236,14 @@ class AppleMusicApi:
 
         return song
 
+    async def get_syllable_lyrics(self, song_id: str) -> dict | None:
+        syllable_lyrics = await self._amp_request(
+            f"/v1/catalog/{self.storefront}/songs/{song_id}/syllable-lyrics",
+        )
+        logger.debug(f"Syllable lyrics: {syllable_lyrics}")
+
+        return syllable_lyrics
+
     async def get_music_video(
         self,
         music_video_id: str,

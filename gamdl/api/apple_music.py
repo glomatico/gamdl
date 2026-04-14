@@ -492,7 +492,6 @@ class AppleMusicApi:
         log = logger.bind(
             action="extend_api_data", next_uri=next_uri, href_uri=href_uri
         )
-        log.debug("Extending API data")
 
         if not next_uri:
             log.debug("No next URI provided, skipping extension")

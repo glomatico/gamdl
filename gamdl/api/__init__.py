@@ -1,2 +1,2 @@
-from .apple_music_api import AppleMusicApi
-from .itunes_api import ItunesApi
+from .apple_music import AppleMusicApi
+from .itunes import ItunesApi

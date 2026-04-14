@@ -49,7 +49,7 @@ class AppleMusicSongDownloader(AppleMusicBaseDownloader):
         webplayback = await self.interface.apple_music_api.get_webplayback(song_id)
         download_item.media_tags = await self.interface.get_tags(
             webplayback,
-            download_item.lyrics.unsynced if download_item.lyrics else None,
+            (download_item.lyrics.synced if download_item.lyrics and download_item.lyrics.synced else download_item.lyrics.unsynced) if download_item.lyrics else None,
             self.use_album_date,
         )
         if self.fetch_extra_tags:

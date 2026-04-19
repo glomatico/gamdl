@@ -112,7 +112,7 @@ class AppleMusicApi:
             raise GamdlApiResponseError("Error finding token in index.js page")
         token = token_match.group(1)
 
-        log.debug("Received token")
+        log.debug("success")
 
         return token
 
@@ -145,7 +145,7 @@ class AppleMusicApi:
                     status_code=response.status_code,
                 )
 
-        log.debug("Received account info", account_info=account_info)
+        log.debug("success", account_info=account_info)
 
         return account_info
 

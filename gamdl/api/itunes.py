@@ -61,7 +61,7 @@ class ItunesApi:
 
         storefront_id = int(storefront_match.group(1))
 
-        log.debug("Extracted storefront", storefront_id=storefront_id)
+        log.debug("success", storefront_id=storefront_id)
 
         return storefront_id
 

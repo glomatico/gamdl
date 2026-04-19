@@ -17,8 +17,14 @@ class ItunesApi:
     def __init__(
         self,
         client: httpx.AsyncClient,
+        storefront: str,
+        language: str,
+        storefront_id: int,
     ) -> None:
         self.client = client
+        self.storefront = storefront
+        self.language = language
+        self.storefront_id = storefront_id
 
     @staticmethod
     async def get_storefront_id(storefront: str) -> int:
@@ -69,17 +75,15 @@ class ItunesApi:
         storefront_id = storefront_id or await cls.get_storefront_id(storefront)
 
         client = httpx.AsyncClient(
-            params={
-                "country": storefront,
-                "lang": language,
-            },
-            headers={
-                "X-Apple-Store-Front": f"{storefront_id}-1,32 t:music31",
-            },
             timeout=60.0,
         )
 
-        return cls(client=client)
+        return cls(
+            client=client,
+            storefront=storefront,
+            language=language,
+            storefront_id=storefront_id,
+        )
 
     async def get_lookup_result(
         self,
@@ -94,6 +98,8 @@ class ItunesApi:
                 params={
                     "id": media_id,
                     "entity": entity,
+                    "country": self.storefront,
+                    "lang": self.language,
                 },
             )
             response.raise_for_status()
@@ -122,7 +128,10 @@ class ItunesApi:
 
         try:
             response = await self.client.get(
-                ITUNES_PAGE_API_URL.format(media_type=media_type, media_id=media_id)
+                ITUNES_PAGE_API_URL.format(media_type=media_type, media_id=media_id),
+                headers={
+                    "X-Apple-Store-Front": f"{self.storefront_id}-1,32 t:music31",
+                },
             )
             response.raise_for_status()
             itunes_page = response.json()

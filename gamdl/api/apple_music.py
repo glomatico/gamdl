@@ -307,7 +307,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received song", song=song)
+        log.debug("success", song=song)
 
         return song
 
@@ -328,7 +328,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received music video", music_video=music_video)
+        log.debug("success", music_video=music_video)
 
         return music_video
 
@@ -347,7 +347,7 @@ class AppleMusicApi:
             )
         )
 
-        log.debug("Received uploaded video", uploaded_video=uploaded_video)
+        log.debug("success", uploaded_video=uploaded_video)
 
         return uploaded_video
 
@@ -368,7 +368,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received album", album=album)
+        log.debug("success", album=album)
 
         return album
 
@@ -391,7 +391,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received playlist", playlist=playlist)
+        log.debug("success", playlist=playlist)
 
         return playlist
 
@@ -419,7 +419,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received artist", artist=artist)
+        log.debug("success", artist=artist)
 
         return artist
 
@@ -439,7 +439,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received library album", album=album)
+        log.debug("success", album=album)
 
         return album
 
@@ -463,7 +463,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received library playlist", playlist=playlist)
+        log.debug("success", playlist=playlist)
 
         return playlist
 
@@ -488,7 +488,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received search results", search_results=search_results)
+        log.debug("success", search_results=search_results)
 
         return search_results
 
@@ -502,7 +502,7 @@ class AppleMusicApi:
         )
 
         if not next_uri:
-            log.debug("No next URI provided, skipping extension")
+            log.debug("no_next_uri")
             return
 
         href_params = parse_qs(urlparse(href_uri).query)
@@ -523,7 +523,7 @@ class AppleMusicApi:
             },
         )
 
-        log.debug("Received extended data", extended_data=extended_data)
+        log.debug("success", extended_data=extended_data)
 
         return extended_data
 
@@ -556,7 +556,7 @@ class AppleMusicApi:
                 content=webplayback["dialog"],
             )
 
-        log.debug("Received webplayback data", webplayback=webplayback)
+        log.debug("success", webplayback=webplayback)
 
         return webplayback
 
@@ -598,6 +598,6 @@ class AppleMusicApi:
                 status_code=response.status_code,
             )
 
-        log.debug("Received license exchange data", license_exchange=license_exchange)
+        log.debug("success", license_exchange=license_exchange)
 
         return license_exchange

@@ -111,7 +111,7 @@ class ItunesApi:
                 status_code=response.status_code,
             )
 
-        log.debug("Received lookup result", lookup_result=lookup_result)
+        log.debug("success", lookup_result=lookup_result)
 
         return lookup_result
 
@@ -142,6 +142,6 @@ class ItunesApi:
                 status_code=response.status_code,
             )
 
-        log.debug("Received iTunes page", itunes_page=itunes_page)
+        log.debug("success", itunes_page=itunes_page)
 
         return itunes_page

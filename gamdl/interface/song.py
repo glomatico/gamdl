@@ -1,25 +1,26 @@
-import asyncio
 import base64
 import datetime
 import io
 import json
-import logging
 import re
+from typing import Callable
 from xml.dom import minidom
 from xml.etree import ElementTree
 
 import m3u8
-from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
+import structlog
 from mutagen.mp4 import MP4
-from pywidevine import PSSH, Cdm
-from pywidevine.license_protocol_pb2 import WidevinePsshData
 
-from ..utils import get_response
+from .base import AppleMusicBaseInterface
 from .constants import DRM_DEFAULT_KEY_MAPPING, MP4_FORMAT_CODECS, SONG_CODEC_REGEX_MAP
 from .enums import MediaRating, MediaType, SongCodec, SyncedLyricsFormat
-from .interface import AppleMusicInterface
+from .exceptions import (
+    GamdlInterfaceDecryptionNotAvailableError,
+    GamdlInterfaceFormatNotAvailableError,
+    GamdlInterfaceMediaNotStreamableError,
+)
 from .types import (
+    AppleMusicMedia,
     DecryptionKey,
     DecryptionKeyAv,
     Lyrics,
@@ -29,19 +30,39 @@ from .types import (
     StreamInfoAv,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
-class AppleMusicSongInterface(AppleMusicInterface):
-    def __init__(self, interface: AppleMusicInterface):
-        self.__dict__.update(interface.__dict__)
+class AppleMusicSongInterface(AppleMusicBaseInterface):
+    def __init__(
+        self,
+        base: AppleMusicBaseInterface,
+        synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
+        codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY],
+        use_album_date: bool = False,
+        skip_decryption_key_non_legacy: bool = False,
+        fetch_extra_tags: bool = False,
+        ask_codec_function: Callable[[list[dict]], dict] | None = None,
+    ):
+        self.synced_lyrics_format = synced_lyrics_format
+        self.codec_priority = codec_priority
+        self.use_album_date = use_album_date
+        self.skip_decryption_key_non_legacy = skip_decryption_key_non_legacy
+        self.fetch_extra_tags = fetch_extra_tags
+        self.ask_codec_function = ask_codec_function
+
+        self.__dict__.update(base.__dict__)
 
     async def get_lyrics(
         self,
         song_metadata: dict,
-        synced_lyrics_format: SyncedLyricsFormat,
     ) -> Lyrics | None:
+        log = logger.bind(
+            action="get_lyrics", song_id=self.parse_catalog_media_id(song_metadata)
+        )
+
         if not song_metadata["attributes"]["hasLyrics"]:
+            log.debug("no_lyrics")
             return None
 
         if (
@@ -50,7 +71,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
         ):
             song_metadata = (
                 await self.apple_music_api.get_song(
-                    self.get_media_id_of_library_media(song_metadata)
+                    self.parse_catalog_media_id(song_metadata)
                 )
             )["data"][0]
 
@@ -68,16 +89,17 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 song_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
                     "ttml"
                 ],
-                synced_lyrics_format,
             )
-            logging.debug(f"Lyrics: {lyrics}")
+
+            log.debug("success", lyrics=lyrics)
 
             return lyrics
+        else:
+            log.debug("no_lyrics_data")
 
     def _get_lyrics(
         self,
         lyrics_ttml: str,
-        synced_lyrics_format: SyncedLyricsFormat,
     ) -> Lyrics:
         lyrics_ttml_et = ElementTree.fromstring(lyrics_ttml)
         unsynced_lyrics = []
@@ -93,13 +115,13 @@ class AppleMusicSongInterface(AppleMusicInterface):
                     stanza.append(p.text)
 
                 if p.attrib.get("begin"):
-                    if synced_lyrics_format == SyncedLyricsFormat.LRC:
+                    if self.synced_lyrics_format == SyncedLyricsFormat.LRC:
                         synced_lyrics.append(self._get_lyrics_line_lrc(p))
 
-                    if synced_lyrics_format == SyncedLyricsFormat.SRT:
+                    if self.synced_lyrics_format == SyncedLyricsFormat.SRT:
                         synced_lyrics.append(self._get_lyrics_line_srt(index, p))
 
-                    if synced_lyrics_format == SyncedLyricsFormat.TTML:
+                    if self.synced_lyrics_format == SyncedLyricsFormat.TTML:
                         if not synced_lyrics:
                             synced_lyrics.append(
                                 minidom.parseString(lyrics_ttml).toprettyxml()
@@ -174,8 +196,9 @@ class AppleMusicSongInterface(AppleMusicInterface):
         self,
         webplayback: dict,
         lyrics: str | None = None,
-        use_album_date: bool = False,
     ) -> MediaTags:
+        log = logger.bind(action="get_song_tags")
+
         webplayback_metadata = webplayback["songList"][0]["assets"][0]["metadata"]
 
         tags = MediaTags(
@@ -198,7 +221,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
             copyright=webplayback_metadata.get("copyright"),
             date=(
                 await self.get_media_date(webplayback_metadata["playlistId"])
-                if use_album_date
+                if self.use_album_date
                 else (
                     self.parse_date(webplayback_metadata["releaseDate"])
                     if webplayback_metadata.get("releaseDate")
@@ -221,30 +244,33 @@ class AppleMusicSongInterface(AppleMusicInterface):
             track_total=webplayback_metadata["trackCount"],
             xid=webplayback_metadata.get("xid"),
         )
-        logger.debug(f"Tags: {tags}")
+
+        log.debug("success", tags=tags)
 
         return tags
 
     async def get_stream_info(
         self,
-        codec: SongCodec,
         song_metadata: dict | None = None,
         webplayback: dict | None = None,
     ) -> StreamInfoAv | None:
-        if codec.is_legacy():
-            return await self._get_stream_info_legacy(webplayback, codec)
-        else:
-            return await self._get_stream_info(song_metadata, codec)
+        for codec in self.codec_priority:
+            if codec.is_legacy():
+                return await self._get_stream_info_legacy(webplayback, codec)
+            else:
+                return await self._get_stream_info(song_metadata, codec)
 
     async def _get_stream_info(
         self,
         song_metadata: dict,
         codec: SongCodec,
     ) -> StreamInfoAv | None:
+        log = logger.bind(action="get_song_stream_info")
+
         if "extendedAssetUrls" not in song_metadata["attributes"]:
             song_metadata = (
                 await self.apple_music_api.get_song(
-                    self.get_media_id_of_library_media(song_metadata),
+                    self.parse_catalog_media_id(song_metadata),
                 )
             )["data"][0]
 
@@ -254,7 +280,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
         if not m3u8_master_url:
             return None
 
-        m3u8_master_obj = m3u8.loads((await get_response(m3u8_master_url)).text)
+        m3u8_master_obj = m3u8.loads((await self.get_response(m3u8_master_url)).text)
         m3u8_master_data = m3u8_master_obj.data
 
         if codec == SongCodec.ASK:
@@ -266,6 +292,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
             )
 
         if playlist is None:
+            log.debug("no_matching_playlist", codec=codec.value)
             return None
 
         stream_info = StreamInfo(legacy=False)
@@ -298,7 +325,9 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 "com.apple.streamingkeydelivery",
             )
         else:
-            m3u8_obj = m3u8.loads((await get_response(stream_info.stream_url)).text)
+            m3u8_obj = m3u8.loads(
+                (await self.get_response(stream_info.stream_url)).text
+            )
 
             stream_info.widevine_pssh = self._get_drm_uri_from_m3u8_keys(
                 m3u8_obj,
@@ -317,7 +346,8 @@ class AppleMusicSongInterface(AppleMusicInterface):
             audio_track=stream_info,
             file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
         )
-        logger.debug(f"Stream info: {stream_info_av}")
+
+        log.debug("success", stream_info=stream_info_av)
 
         return stream_info_av
 
@@ -361,18 +391,12 @@ class AppleMusicSongInterface(AppleMusicInterface):
         )
 
     async def _get_playlist_from_user(self, m3u8_data: dict) -> dict | None:
-        choices = [
-            Choice(
-                name=playlist["stream_info"]["audio"],
-                value=playlist,
-            )
-            for playlist in m3u8_data["playlists"]
-        ]
+        if not self.ask_codec_function:
+            return None
 
-        return await inquirer.select(
-            message="Select which codec to download:",
-            choices=choices,
-        ).execute_async()
+        return self.ask_codec_function(
+            [playlist["stream_info"] for playlist in m3u8_data["playlists"]]
+        )
 
     def _get_drm_uri_from_session_key(
         self,
@@ -402,6 +426,8 @@ class AppleMusicSongInterface(AppleMusicInterface):
         webplayback: dict,
         codec: SongCodec,
     ) -> StreamInfoAv:
+        log = logger.bind(action="get_legacy_song_stream_info")
+
         flavor = "32:ctrp64" if codec == SongCodec.AAC_HE_LEGACY else "28:ctrp256"
 
         stream_info = StreamInfo(legacy=True)
@@ -409,7 +435,7 @@ class AppleMusicSongInterface(AppleMusicInterface):
             i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor
         )["URL"]
 
-        m3u8_obj = m3u8.loads((await get_response(stream_info.stream_url)).text)
+        m3u8_obj = m3u8.loads((await self.get_response(stream_info.stream_url)).text)
         stream_info.widevine_pssh = m3u8_obj.keys[0].uri
 
         stream_info_av = StreamInfoAv(
@@ -417,84 +443,93 @@ class AppleMusicSongInterface(AppleMusicInterface):
             audio_track=stream_info,
             file_format=MediaFileFormat.M4A,
         )
-        logger.debug(f"Stream info legacy: {stream_info_av}")
+        log.debug("success", stream_info=stream_info_av)
 
         return stream_info_av
-
-    async def get_decryption_key_legacy(
-        self,
-        stream_info: StreamInfoAv,
-        cdm: Cdm,
-    ) -> DecryptionKeyAv:
-        stream_info_audio = stream_info.audio_track
-
-        try:
-            cdm_session = cdm.open()
-
-            widevine_pssh_data = WidevinePsshData()
-            widevine_pssh_data.algorithm = 1
-            widevine_pssh_data.key_ids.append(
-                base64.b64decode(stream_info_audio.widevine_pssh.split(",")[1])
-            )
-            pssh_obj = PSSH(widevine_pssh_data.SerializeToString())
-
-            challenge = base64.b64encode(
-                await asyncio.to_thread(
-                    cdm.get_license_challenge, cdm_session, pssh_obj
-                )
-            ).decode()
-            license_response = await self.apple_music_api.get_license_exchange(
-                stream_info.media_id,
-                stream_info.audio_track.widevine_pssh,
-                challenge,
-            )
-
-            await asyncio.to_thread(
-                cdm.parse_license, cdm_session, license_response["license"]
-            )
-
-            decryption_key = next(
-                i for i in cdm.get_keys(cdm_session) if i.type == "CONTENT"
-            )
-        finally:
-            cdm.close(cdm_session)
-
-        decryption_key = DecryptionKeyAv(
-            audio_track=DecryptionKey(
-                kid=decryption_key.kid.hex,
-                key=decryption_key.key.hex(),
-            )
-        )
-        logger.debug(f"Decryption key legacy: {decryption_key}")
-
-        return decryption_key
-
-    async def get_decryption_key(
-        self,
-        stream_info: StreamInfoAv,
-        cdm: Cdm,
-    ) -> DecryptionKeyAv:
-        return DecryptionKeyAv(
-            audio_track=await AppleMusicInterface.get_decryption_key(
-                self,
-                stream_info.audio_track.widevine_pssh,
-                stream_info.media_id,
-                cdm,
-            )
-        )
 
     async def get_extra_tags(
         self,
         song_metadata: dict,
     ) -> dict:
+        log = logger.bind(action="get_extra_tags")
         previews = song_metadata["attributes"].get("previews", [])
         if not previews:
             return {}
 
         preview_url = previews[0]["url"]
-        preview_response = await get_response(preview_url)
+        preview_response = await self.get_response(preview_url)
         preview_bytes = preview_response.content
         preview_tags = dict(MP4(io.BytesIO(preview_bytes)).tags)
 
-        logger.debug(f"Extra tags: {preview_tags.keys()}")
+        log.debug("success", tag_keys=list(preview_tags.keys()))
+
         return preview_tags
+
+    async def get_media(
+        self,
+        song_metadata: dict,
+        playlist_metadata: dict | None = None,
+        playlist_track: int | None = None,
+    ) -> AppleMusicMedia:
+        media = AppleMusicMedia(
+            media_id=self.parse_catalog_media_id(song_metadata),
+            media_metadata=song_metadata,
+        )
+
+        if not self.is_media_streamable(song_metadata):
+            raise GamdlInterfaceMediaNotStreamableError(
+                media_id=media.media_id,
+            )
+
+        if playlist_metadata and playlist_track:
+            media.playlist_metadata = playlist_metadata
+            media.playlist_tags = self.get_playlist_tags(
+                playlist_metadata,
+                playlist_track,
+            )
+
+        if self.fetch_extra_tags:
+            media.extra_tags = await self.get_extra_tags(song_metadata)
+
+        media.cover = await self.get_cover(song_metadata)
+
+        media.lyrics = await self.get_lyrics(song_metadata)
+
+        webplayback = await self.apple_music_api.get_webplayback(media.media_id)
+
+        media.tags = await self.get_tags(
+            webplayback,
+            media.lyrics.unsynced if media.lyrics else None,
+        )
+
+        media.stream_info = await self.get_stream_info(
+            song_metadata,
+            webplayback,
+        )
+        if not media.stream_info:
+            raise GamdlInterfaceFormatNotAvailableError(
+                media_id=media.media_id,
+                codec=self.codec_priority,
+            )
+
+        if (
+            not self.skip_decryption_key_non_legacy
+            and not media.stream_info.audio_track.widevine_pssh
+        ) or (
+            self.skip_decryption_key_non_legacy
+            and not media.stream_info.audio_track.fairplay_key
+        ):
+            raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
+
+        if (
+            media.stream_info.audio_track.widevine_pssh
+            and not self.skip_decryption_key_non_legacy
+        ) or media.stream_info.audio_track.legacy:
+            media.decryption_key = DecryptionKeyAv(
+                audio_track=await self.get_decryption_key(
+                    media.stream_info.audio_track.widevine_pssh,
+                    media.media_id,
+                )
+            )
+
+        return media

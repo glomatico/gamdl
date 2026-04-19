@@ -1,3 +1,5 @@
+import re
+
 MEDIA_TYPE_STR_MAP = {
     1: "Song",
     6: "Music Video",
@@ -59,4 +61,38 @@ UPLOADED_VIDEO_QUALITY_RANK = [
 IMAGE_FILE_EXTENSION_MAP = {
     "jpeg": ".jpg",
     "tiff": ".tif",
+}
+
+VALID_URL_PATTERN = re.compile(
+    r"https://(?:classical\.)?music\.apple\.com"
+    r"(?:"
+    r"/(?P<storefront>[a-z]{2})"
+    r"/(?P<type>artist|album|playlist|song|music-video|post)"
+    r"(?:/(?P<slug>[^\s/]+))?"
+    r"/(?P<id>[0-9]+|pl\.[0-9a-z]{32}|pl\.u-[a-zA-Z0-9]+)"
+    r"(?:\?i=(?P<sub_id>[0-9]+))?"
+    r"|"
+    r"(?:/(?P<library_storefront>[a-z]{2}))?"
+    r"/library/(?P<library_type>playlist|albums)"
+    r"/(?P<library_id>p\.[a-zA-Z0-9]+|l\.[a-zA-Z0-9]+)"
+    r")"
+)
+
+ARTIST_AUTO_SELECT_KEY_MAP = {
+    "main-albums": ("views", "full-albums"),
+    "compilation-albums": ("views", "compilation-albums"),
+    "live-albums": ("views", "live-albums"),
+    "singles-eps": ("views", "singles"),
+    "all-albums": ("relationships", "albums"),
+    "top-songs": ("views", "top-songs"),
+    "music-videos": ("relationships", "music-videos"),
+}
+ARTIST_AUTO_SELECT_STR_MAP = {
+    "main-albums": "Main Albums",
+    "compilation-albums": "Compilation Albums",
+    "live-albums": "Live Albums",
+    "singles-eps": "Singles & EPs",
+    "all-albums": "All Albums",
+    "top-songs": "Top Songs",
+    "music-videos": "Music Videos",
 }

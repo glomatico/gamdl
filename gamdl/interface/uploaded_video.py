@@ -1,0 +1,122 @@
+from collections.abc import Callable
+
+import structlog
+
+from .base import AppleMusicBaseInterface
+from .constants import UPLOADED_VIDEO_QUALITY_RANK
+from .enums import UploadedVideoQuality
+from .exceptions import (
+    GamdlInterfaceFormatNotAvailableError,
+    GamdlInterfaceMediaNotStreamableError,
+)
+from .types import AppleMusicMedia, MediaFileFormat, MediaTags, StreamInfo, StreamInfoAv
+
+logger = structlog.get_logger(__name__)
+
+
+class AppleMusicUploadedVideoInterface(AppleMusicBaseInterface):
+    def __init__(
+        self,
+        base: AppleMusicBaseInterface,
+        quality: UploadedVideoQuality = UploadedVideoQuality.BEST,
+        ask_quality_function: Callable[[list[dict]], dict] | None = None,
+    ):
+        self.quality = quality
+        self.ask_quality_function = ask_quality_function
+
+        self.__dict__.update(base.__dict__)
+
+    def _get_best_stream_url(self, metadata: dict) -> str:
+        best_quality = next(
+            (
+                quality
+                for quality in UPLOADED_VIDEO_QUALITY_RANK
+                if metadata["attributes"]["assetTokens"].get(quality)
+            ),
+            None,
+        )
+        return metadata["attributes"]["assetTokens"][best_quality]
+
+    async def _get_stream_url_from_user(self, metadata: dict) -> str | None:
+        return (
+            self.ask_quality_function(metadata["attributes"]["assetTokens"])
+            if self.ask_quality_function
+            else None
+        )
+
+    async def _get_stream_url(
+        self,
+        metadata: dict,
+    ) -> str | None:
+        if self.quality == UploadedVideoQuality.BEST:
+            stream_url = self._get_best_stream_url(metadata)
+
+        if self.quality == UploadedVideoQuality.ASK:
+            stream_url = await self._get_stream_url_from_user(metadata)
+
+        return stream_url
+
+    async def get_stream_info(
+        self,
+        metadata: dict,
+    ) -> StreamInfo | None:
+        log = logger.bind(
+            action="get_uploaded_video_stream_info", media_id=metadata["id"]
+        )
+
+        stream_url = await self._get_stream_url(metadata)
+        if not stream_url:
+            log.debug("no_stream_url_available")
+
+            return None
+
+        stream_info = StreamInfoAv(
+            file_format=MediaFileFormat.M4V,
+            video_track=StreamInfo(
+                stream_url=stream_url,
+            ),
+        )
+
+        log.debug("success", stream_info=stream_info)
+
+        return stream_info
+
+    def get_tags(self, metadata: dict) -> MediaTags:
+        log = logger.bind(action="get_uploaded_video_tags", media_id=metadata["id"])
+
+        attributes = metadata["attributes"]
+        upload_date = attributes.get("uploadDate")
+
+        tags = MediaTags(
+            artist=attributes.get("artistName"),
+            date=self.parse_date(upload_date) if upload_date else None,
+            title=attributes.get("name"),
+            title_id=int(metadata["id"]),
+            storefront=self.itunes_api.storefront_id,
+        )
+
+        log.debug("success", tags=tags)
+
+        return tags
+
+    async def get_media(
+        self,
+        uploaded_video_metadata: dict,
+    ) -> AppleMusicMedia:
+        media = AppleMusicMedia(
+            uploaded_video_metadata["id"],
+            uploaded_video_metadata,
+        )
+
+        if not self.is_media_streamable(uploaded_video_metadata):
+            raise GamdlInterfaceMediaNotStreamableError(media.media_id)
+
+        media.cover = await self.get_cover(uploaded_video_metadata)
+
+        media.stream_info = await self.get_stream_info(uploaded_video_metadata)
+        if not media.stream_info:
+            raise GamdlInterfaceFormatNotAvailableError(media.media_id)
+
+        media.tags = self.get_tags(uploaded_video_metadata)
+
+        return media

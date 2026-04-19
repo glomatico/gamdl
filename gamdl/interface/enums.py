@@ -1,6 +1,8 @@
 from enum import Enum
 
 from .constants import (
+    ARTIST_AUTO_SELECT_KEY_MAP,
+    ARTIST_AUTO_SELECT_STR_MAP,
     FOURCC_MAP,
     LEGACY_SONG_CODECS,
     MEDIA_RATING_STR_MAP,
@@ -93,3 +95,20 @@ class CoverFormat(Enum):
     JPG = "jpg"
     PNG = "png"
     RAW = "raw"
+
+
+class ArtistMediaType(Enum):
+    MAIN_ALBUMS = "main-albums"
+    COMPILATION_ALBUMS = "compilation-albums"
+    LIVE_ALBUMS = "live-albums"
+    SINGLES_EPS = "singles-eps"
+    ALL_ALBUMS = "all-albums"
+    TOP_SONGS = "top-songs"
+    MUSIC_VIDEOS = "music-videos"
+
+    @property
+    def path_key(self) -> tuple[str, str]:
+        return ARTIST_AUTO_SELECT_KEY_MAP[self.value]
+
+    def __str__(self) -> str:
+        return ARTIST_AUTO_SELECT_STR_MAP[self.value]

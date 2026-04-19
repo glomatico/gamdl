@@ -4,6 +4,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import structlog
+from httpx_retries import Retry, RetryTransport
 
 from .constants import (
     APPLE_MUSIC_ACCOUNT_INFO_API_URI,
@@ -176,7 +177,14 @@ class AppleMusicApi:
             headers={
                 "authorization": f"Bearer {token}",
                 "origin": APPLE_MUSIC_HOMEPAGE_URL,
-            }
+            },
+            transport=RetryTransport(
+                retry=Retry(
+                    total=6,
+                    backoff_factor=1,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                )
+            ),
         )
 
         if media_user_token:

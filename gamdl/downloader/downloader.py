@@ -1,25 +1,19 @@
-import asyncio
-import typing
+import shutil
 from pathlib import Path
 from typing import AsyncGenerator
 
 import structlog
-import shutil
-from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
 
-from ..interface import AppleMusicInterface
-from .base import AppleMusicBaseDownloader
-from .enums import ArtistAutoSelect, DownloadMode, RemuxMode
+from .constants import TEMP_PATH_TEMPLATE
+from .enums import DownloadMode, RemuxMode
 from .exceptions import (
-    GamdlDownloaderSyncedLyricsOnlyError,
-    GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderDependencyNotFoundError,
+    GamdlDownloaderMediaFileExistsError,
+    GamdlDownloaderSyncedLyricsOnlyError,
 )
 from .music_video import AppleMusicMusicVideoDownloader
 from .song import AppleMusicSongDownloader
 from .types import DownloadItem
-from .constants import TEMP_PATH_TEMPLATE
 from .uploaded_video import AppleMusicUploadedVideoDownloader
 
 logger = structlog.get_logger(__name__)

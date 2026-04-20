@@ -41,14 +41,12 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
         codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY],
         use_album_date: bool = False,
         skip_decryption_key_non_legacy: bool = False,
-        fetch_extra_tags: bool = False,
         ask_codec_function: Callable[[list[dict]], dict] | None = None,
     ):
         self.synced_lyrics_format = synced_lyrics_format
         self.codec_priority = codec_priority
         self.use_album_date = use_album_date
         self.skip_decryption_key_non_legacy = skip_decryption_key_non_legacy
-        self.fetch_extra_tags = fetch_extra_tags
         self.ask_codec_function = ask_codec_function
 
         self.__dict__.update(base.__dict__)
@@ -447,24 +445,6 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
 
         return stream_info_av
 
-    async def get_extra_tags(
-        self,
-        song_metadata: dict,
-    ) -> dict:
-        log = logger.bind(action="get_extra_tags")
-        previews = song_metadata["attributes"].get("previews", [])
-        if not previews:
-            return {}
-
-        preview_url = previews[0]["url"]
-        preview_response = await self.get_response(preview_url)
-        preview_bytes = preview_response.content
-        preview_tags = dict(MP4(io.BytesIO(preview_bytes)).tags)
-
-        log.debug("success", tag_keys=list(preview_tags.keys()))
-
-        return preview_tags
-
     async def get_media(
         self,
         song_metadata: dict,
@@ -487,9 +467,6 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
                 playlist_metadata,
                 playlist_track,
             )
-
-        if self.fetch_extra_tags:
-            media.extra_tags = await self.get_extra_tags(song_metadata)
 
         media.cover = await self.get_cover(song_metadata)
 

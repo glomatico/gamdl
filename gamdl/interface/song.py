@@ -33,7 +33,7 @@ from .types import (
 logger = structlog.get_logger(__name__)
 
 
-class AppleMusicSongInterface(AppleMusicBaseInterface):
+class AppleMusicSongInterface:
     def __init__(
         self,
         base: AppleMusicBaseInterface,
@@ -49,14 +49,15 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
         self.skip_decryption_key_non_legacy = skip_decryption_key_non_legacy
         self.ask_codec_function = ask_codec_function
 
-        self.__dict__.update(base.__dict__)
+        self._base = base
 
     async def get_lyrics(
         self,
         song_metadata: dict,
     ) -> Lyrics | None:
         log = logger.bind(
-            action="get_lyrics", song_id=self.parse_catalog_media_id(song_metadata)
+            action="get_lyrics",
+            song_id=self._base.parse_catalog_media_id(song_metadata),
         )
 
         if not song_metadata["attributes"]["hasLyrics"]:
@@ -68,8 +69,8 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
             or "lyrics" not in song_metadata["relationships"]
         ):
             song_metadata = (
-                await self.apple_music_api.get_song(
-                    self.parse_catalog_media_id(song_metadata)
+                await self._base.apple_music_api.get_song(
+                    self._base.parse_catalog_media_id(song_metadata)
                 )
             )["data"][0]
 
@@ -218,10 +219,10 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
             composer_sort=webplayback_metadata.get("sort-composer"),
             copyright=webplayback_metadata.get("copyright"),
             date=(
-                await self.get_media_date(webplayback_metadata["playlistId"])
+                await self._base.get_media_date(webplayback_metadata["playlistId"])
                 if self.use_album_date
                 else (
-                    self.parse_date(webplayback_metadata["releaseDate"])
+                    self._base.parse_date(webplayback_metadata["releaseDate"])
                     if webplayback_metadata.get("releaseDate")
                     else None
                 )
@@ -267,8 +268,8 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
 
         if "extendedAssetUrls" not in song_metadata["attributes"]:
             song_metadata = (
-                await self.apple_music_api.get_song(
-                    self.parse_catalog_media_id(song_metadata),
+                await self._base.apple_music_api.get_song(
+                    self._base.parse_catalog_media_id(song_metadata),
                 )
             )["data"][0]
 
@@ -278,7 +279,9 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
         if not m3u8_master_url:
             return None
 
-        m3u8_master_obj = m3u8.loads((await self.get_response(m3u8_master_url)).text)
+        m3u8_master_obj = m3u8.loads(
+            (await self._base.get_response(m3u8_master_url)).text
+        )
         m3u8_master_data = m3u8_master_obj.data
 
         if codec == SongCodec.ASK:
@@ -324,7 +327,7 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
             )
         else:
             m3u8_obj = m3u8.loads(
-                (await self.get_response(stream_info.stream_url)).text
+                (await self._base.get_response(stream_info.stream_url)).text
             )
 
             stream_info.widevine_pssh = self._get_drm_uri_from_m3u8_keys(
@@ -433,7 +436,9 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
             i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor
         )["URL"]
 
-        m3u8_obj = m3u8.loads((await self.get_response(stream_info.stream_url)).text)
+        m3u8_obj = m3u8.loads(
+            (await self._base.get_response(stream_info.stream_url)).text
+        )
         stream_info.widevine_pssh = m3u8_obj.keys[0].uri
 
         stream_info_av = StreamInfoAv(
@@ -452,27 +457,27 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
         playlist_track: int | None = None,
     ) -> AppleMusicMedia:
         media = AppleMusicMedia(
-            media_id=self.parse_catalog_media_id(song_metadata),
+            media_id=self._base.parse_catalog_media_id(song_metadata),
             media_metadata=song_metadata,
         )
 
-        if not self.is_media_streamable(song_metadata):
+        if not self._base.is_media_streamable(song_metadata):
             raise GamdlInterfaceMediaNotStreamableError(
                 media_id=media.media_id,
             )
 
         if playlist_metadata and playlist_track:
             media.playlist_metadata = playlist_metadata
-            media.playlist_tags = self.get_playlist_tags(
+            media.playlist_tags = self._base.get_playlist_tags(
                 playlist_metadata,
                 playlist_track,
             )
 
-        media.cover = await self.get_cover(song_metadata)
+        media.cover = await self._base.get_cover(song_metadata)
 
         media.lyrics = await self.get_lyrics(song_metadata)
 
-        webplayback = await self.apple_music_api.get_webplayback(media.media_id)
+        webplayback = await self._base.apple_music_api.get_webplayback(media.media_id)
 
         media.tags = await self.get_tags(
             webplayback,
@@ -503,7 +508,7 @@ class AppleMusicSongInterface(AppleMusicBaseInterface):
             and not self.skip_decryption_key_non_legacy
         ) or media.stream_info.audio_track.legacy:
             media.decryption_key = DecryptionKeyAv(
-                audio_track=await self.get_decryption_key(
+                audio_track=await self._base.get_decryption_key(
                     media.stream_info.audio_track.widevine_pssh,
                     media.media_id,
                 )

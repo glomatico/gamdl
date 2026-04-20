@@ -5,7 +5,6 @@ import io
 import json
 import logging
 import re
-from xml.dom import minidom
 from xml.etree import ElementTree
 
 import m3u8
@@ -54,31 +53,57 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 )
             )["data"][0]
 
-        if (
-            "lyrics" in song_metadata["relationships"]
-            and "data" in song_metadata["relationships"]["lyrics"]
-            and len(song_metadata["relationships"]["lyrics"]["data"]) > 0
-            and "attributes" in song_metadata["relationships"]["lyrics"]["data"][0]
-            and song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
-                "ttml"
+        lyrics_ttml = None
+        try:
+            lyrics_response = await self.apple_music_api.get_syllable_lyrics(
+                self.get_media_id_of_library_media(song_metadata)
             )
-            is not None
-        ):
-            lyrics = self._get_lyrics(
-                song_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
-                    "ttml"
-                ],
-                synced_lyrics_format,
+            if (
+                lyrics_response
+                and "data" in lyrics_response
+                and len(lyrics_response["data"]) > 0
+                and "attributes" in lyrics_response["data"][0]
+            ):
+                lyrics_ttml = lyrics_response["data"][0]["attributes"].get("ttml")
+        except Exception as exc:  # preserve existing behavior if endpoint fails
+            logger.debug(
+                f"Failed to fetch syllable lyrics endpoint, falling back to metadata lyrics: {exc}"
             )
-            logging.debug(f"Lyrics: {lyrics}")
 
-            return lyrics
+        if lyrics_ttml is None:
+            if (
+                "lyrics" in song_metadata["relationships"]
+                and "data" in song_metadata["relationships"]["lyrics"]
+                and len(song_metadata["relationships"]["lyrics"]["data"]) > 0
+                and "attributes" in song_metadata["relationships"]["lyrics"]["data"][0]
+                and song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
+                    "ttml"
+                )
+                is not None
+            ):
+                lyrics_ttml = song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
+                    "ttml"
+                )
+
+        if lyrics_ttml is None:
+            return None
+
+        lyrics = self._get_lyrics(
+            lyrics_ttml,
+            synced_lyrics_format,
+        )
+        logging.debug(f"Lyrics: {lyrics}")
+
+        return lyrics
 
     def _get_lyrics(
         self,
         lyrics_ttml: str,
         synced_lyrics_format: SyncedLyricsFormat,
     ) -> Lyrics:
+        ElementTree.register_namespace("", "http://www.w3.org/ns/ttml")
+        ElementTree.register_namespace("itunes", "http://music.apple.com/lyric-ttml-internal")
+        ElementTree.register_namespace("ttm", "http://www.w3.org/ns/ttml#metadata")
         lyrics_ttml_et = ElementTree.fromstring(lyrics_ttml)
         unsynced_lyrics = []
         synced_lyrics = []
@@ -101,9 +126,19 @@ class AppleMusicSongInterface(AppleMusicInterface):
 
                     if synced_lyrics_format == SyncedLyricsFormat.TTML:
                         if not synced_lyrics:
-                            synced_lyrics.append(
-                                minidom.parseString(lyrics_ttml).toprettyxml()
+                            for elem in lyrics_ttml_et.iter():
+                                if elem.tail:
+                                    current_text = elem.text or ""
+                                    elem.text = current_text + elem.tail
+                                    elem.tail = None
+                                
+                            ElementTree.indent(lyrics_ttml_et, space="  ")
+                            pretty_xml = ElementTree.tostring(
+                                lyrics_ttml_et, 
+                                encoding="unicode",
                             )
+                            synced_lyrics.append(pretty_xml)
+                        
                         continue
 
                     index += 1

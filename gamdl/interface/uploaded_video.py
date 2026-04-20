@@ -21,10 +21,9 @@ class AppleMusicUploadedVideoInterface:
         quality: UploadedVideoQuality = UploadedVideoQuality.BEST,
         ask_quality_function: Callable[[list[dict]], dict] | None = None,
     ):
+        self.base = base
         self.quality = quality
         self.ask_quality_function = ask_quality_function
-
-        self._base = base
 
     def _get_best_stream_url(self, metadata: dict) -> str:
         best_quality = next(
@@ -89,10 +88,10 @@ class AppleMusicUploadedVideoInterface:
 
         tags = MediaTags(
             artist=attributes.get("artistName"),
-            date=self._base.parse_date(upload_date) if upload_date else None,
+            date=self.base.parse_date(upload_date) if upload_date else None,
             title=attributes.get("name"),
             title_id=int(metadata["id"]),
-            storefront=self._base.itunes_api.storefront_id,
+            storefront=self.base.itunes_api.storefront_id,
         )
 
         log.debug("success", tags=tags)
@@ -108,10 +107,10 @@ class AppleMusicUploadedVideoInterface:
             uploaded_video_metadata,
         )
 
-        if not self._base.is_media_streamable(uploaded_video_metadata):
+        if not self.base.is_media_streamable(uploaded_video_metadata):
             raise GamdlInterfaceMediaNotStreamableError(media.media_id)
 
-        media.cover = await self._base.get_cover(uploaded_video_metadata)
+        media.cover = await self.base.get_cover(uploaded_video_metadata)
 
         media.stream_info = await self.get_stream_info(uploaded_video_metadata)
         if not media.stream_info:

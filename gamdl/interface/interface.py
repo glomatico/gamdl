@@ -44,6 +44,8 @@ class AppleMusicInterface:
         self.concurrency = concurrency
         self.disallowed_media_types = disallowed_media_types
 
+        self._base = song._base
+
     @staticmethod
     def get_url_info(url: str) -> AppleMusicUrlInfo | None:
         log = logger.bind(action="get_url_info", url=url)
@@ -72,7 +74,7 @@ class AppleMusicInterface:
         if not media_metadata:
             try:
                 media_metadata = (
-                    await self.song.apple_music_api.get_song(
+                    await self._base.apple_music_api.get_song(
                         media_id,
                     )
                 )[
@@ -86,7 +88,7 @@ class AppleMusicInterface:
                 )
 
         if not media_id:
-            media_id = self.song.parse_catalog_media_id(media_metadata)
+            media_id = self._base.parse_catalog_media_id(media_metadata)
 
         base_media = AppleMusicMedia(media_id, media_metadata)
 
@@ -130,7 +132,7 @@ class AppleMusicInterface:
         if not media_metadata:
             try:
                 media_metadata = (
-                    await self.music_video.apple_music_api.get_music_video(
+                    await self._base.apple_music_api.get_music_video(
                         media_id,
                     )
                 )["data"][0]
@@ -182,7 +184,7 @@ class AppleMusicInterface:
     ) -> AppleMusicMedia:
         try:
             media_metadata = (
-                await self.uploaded_video.apple_music_api.get_uploaded_video(
+                await self._base.apple_music_api.get_uploaded_video(
                     media_id,
                 )
             )["data"][0]
@@ -228,11 +230,11 @@ class AppleMusicInterface:
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         try:
             media_metadata = (
-                await self.song.apple_music_api.get_library_album(
+                await self._base.apple_music_api.get_library_album(
                     media_id,
                 )
                 if is_library
-                else await self.song.apple_music_api.get_album(
+                else await self._base.apple_music_api.get_album(
                     media_id,
                 )
             )["data"][0]
@@ -306,11 +308,11 @@ class AppleMusicInterface:
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         try:
             media_metadata = (
-                await self.song.apple_music_api.get_library_playlist(
+                await self._base.apple_music_api.get_library_playlist(
                     media_id,
                 )
                 if is_library
-                else await self.song.apple_music_api.get_playlist(
+                else await self._base.apple_music_api.get_playlist(
                     media_id,
                 )
             )["data"][0]
@@ -355,7 +357,7 @@ class AppleMusicInterface:
         href_uri = media_metadata["relationships"]["tracks"].get("href")
         while next_uri:
             try:
-                extended_data = await self.song.apple_music_api.get_extended_api_data(
+                extended_data = await self._base.apple_music_api.get_extended_api_data(
                     next_uri,
                     href_uri,
                 )
@@ -403,7 +405,7 @@ class AppleMusicInterface:
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         try:
             media_metadata = (
-                await self.song.apple_music_api.get_artist(
+                await self._base.apple_music_api.get_artist(
                     media_id,
                 )
             )[
@@ -466,7 +468,7 @@ class AppleMusicInterface:
         href_uri = items_relation.get("href")
         while next_uri:
             try:
-                extended_data = await self.song.apple_music_api.get_extended_api_data(
+                extended_data = await self._base.apple_music_api.get_extended_api_data(
                     next_uri,
                     href_uri,
                 )

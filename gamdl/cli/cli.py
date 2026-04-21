@@ -20,8 +20,8 @@ from ..downloader import (
     AppleMusicUploadedVideoDownloader,
     DownloadItem,
     GamdlDownloaderDependencyNotFoundError,
-    GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderFlatFilterExcludedError,
+    GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderSyncedLyricsOnlyError,
 )
 from ..interface import (
@@ -34,6 +34,7 @@ from ..interface import (
     GamdlInterfaceDecryptionNotAvailableError,
     GamdlInterfaceFormatNotAvailableError,
     GamdlInterfaceMediaNotStreamableError,
+    GamdlInterfaceUrlParseError,
 )
 from .cli_config import CliConfig
 from .config_file import ConfigFile
@@ -247,9 +248,14 @@ async def main(config: CliConfig):
             download_queue: list[DownloadItem] = []
             async for media in downloader.get_download_item_from_url(url):
                 download_queue.append(media)
+        except GamdlInterfaceUrlParseError as e:
+            url_log.warning(f"{e}")
+            continue
         except Exception as e:
             url_log.error(f'Error processing "{url}": {e}')
             error_count += 1
+            if not config.no_exceptions:
+                traceback.print_exc()
             continue
 
         for download_index, download_item in enumerate(

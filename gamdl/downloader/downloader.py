@@ -254,5 +254,4 @@ class AppleMusicDownloader:
         temp_path = Path(self.base.temp_path) / TEMP_PATH_TEMPLATE.format(folder_tag)
         if temp_path.exists() and temp_path.is_dir() and not self.skip_cleanup:
             shutil.rmtree(temp_path, ignore_errors=True)
-
-        log.debug("success")
+            log.debug("success")

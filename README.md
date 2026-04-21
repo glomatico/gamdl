@@ -211,6 +211,9 @@ The file is created automatically on first run. Command-line arguments override 
 
 - `ytdlp`, `nm3u8dlre`
 
+> [!NOTE]
+> - **yt-dlp is only used as a file download library**. Media is still fetched directly from Apple Music's servers, and yt-dlp is only responsible for handling the file download process.
+
 ### Remux Mode
 
 - `ffmpeg`

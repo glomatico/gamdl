@@ -191,9 +191,7 @@ class AppleMusicDownloader:
             raise item.media.error
 
         if self.synced_lyrics_only:
-            raise GamdlDownloaderSyncedLyricsOnlyError(
-                "Download mode is set to synced lyrics only"
-            )
+            raise GamdlDownloaderSyncedLyricsOnlyError()
 
         if Path(item.final_path).exists() and not self.overwrite:
             raise GamdlDownloaderMediaFileExistsError(item.final_path)

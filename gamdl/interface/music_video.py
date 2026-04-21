@@ -35,11 +35,9 @@ class AppleMusicMusicVideoInterface:
             MusicVideoCodec.H265,
         ],
         ask_video_codec_function: (
-            Callable[[list[dict | m3u8.Playlist]], dict | None] | None
+            Callable[[list[m3u8.Playlist]], dict | None] | None
         ) = None,
-        ask_audio_codec_function: (
-            Callable[[list[dict | m3u8.Playlist]], dict | None] | None
-        ) = None,
+        ask_audio_codec_function: Callable[[list[dict]], dict | None] | None = None,
     ):
         self.base = base
         self.resolution = resolution

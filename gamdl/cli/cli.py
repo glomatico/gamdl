@@ -150,6 +150,7 @@ async def main(config: CliConfig):
         codec_priority=config.song_codec_piority,
         use_album_date=config.use_album_date,
         skip_decryption_key_non_legacy=config.use_wrapper,
+        skip_stream_info=config.synced_lyrics_only,
         ask_codec_function=interactive_prompts.ask_song_codec,
     )
     music_video_interface = AppleMusicMusicVideoInterface(

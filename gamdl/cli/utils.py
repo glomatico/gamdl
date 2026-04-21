@@ -1,6 +1,7 @@
-import logging
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -38,31 +39,34 @@ class Csv(click.ParamType):
         return result
 
 
-class CustomLoggerFormatter(logging.Formatter):
-    base_format = "[%(levelname)-8s %(asctime)s]"
-    format_colors = {
-        logging.DEBUG: dict(dim=True),
-        logging.INFO: dict(fg="green"),
-        logging.WARNING: dict(fg="yellow"),
-        logging.ERROR: dict(fg="red"),
-        logging.CRITICAL: dict(fg="red", bold=True),
+def custom_structlog_formatter(
+    logger: Any,
+    name: str,
+    event_dict: dict[str, Any],
+) -> str:
+    level = event_dict.get("level", "INFO").upper()
+    timestamp = datetime.now().strftime("%H:%M:%S")
+
+    level_colors = {
+        "DEBUG": "cyan",
+        "INFO": "green",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "red",
     }
-    date_format = "%H:%M:%S"
 
-    def __init__(self, use_colors: bool = True) -> None:
-        super().__init__()
-        self.use_colors = use_colors
+    color = level_colors.get(level, "white")
+    prefix = click.style(f"[{level:<8} {timestamp}]", fg=color)
 
-    def format(self, record: logging.LogRecord) -> str:
-        return logging.Formatter(
-            (
-                click.style(self.base_format, **self.format_colors.get(record.levelno))
-                if self.use_colors
-                else self.base_format
-            )
-            + " %(message)s",
-            datefmt=self.date_format,
-        ).format(record)
+    action = event_dict.pop("action", None)
+    if action:
+        prefix += click.style(f" [{action}]", dim=True)
+
+    if level in {"INFO", "WARNING", "ERROR", "CRITICAL"}:
+        message = event_dict.get("event", "")
+        return f"{prefix} {message}"
+    else:
+        return f"{prefix} {event_dict}"
 
 
 def prompt_path(

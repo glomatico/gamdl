@@ -5,11 +5,13 @@ from pathlib import Path
 
 import click
 import colorama
+import structlog
 from dataclass_click import dataclass_click
 from httpx import ConnectError
 
 from .. import __version__
-from ..api import AppleMusicApi, ItunesApi
+from ..api import AppleMusicApi
+import traceback
 from ..downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
@@ -17,23 +19,27 @@ from ..downloader import (
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
     DownloadItem,
-    DownloadMode,
-    GamdlError,
-    RemuxMode,
+    GamdlDownloaderSyncedLyricsOnlyError,
+    GamdlDownloaderMediaFileExistsError,
+    GamdlDownloaderDependencyNotFoundError,
 )
 from ..interface import (
+    AppleMusicBaseInterface,
     AppleMusicInterface,
     AppleMusicMusicVideoInterface,
     AppleMusicSongInterface,
     AppleMusicUploadedVideoInterface,
-    SongCodec,
+    GamdlInterfaceArtistMediaTypeError,
+    GamdlInterfaceDecryptionNotAvailableError,
+    GamdlInterfaceFormatNotAvailableError,
+    GamdlInterfaceMediaNotStreamableError,
 )
 from .cli_config import CliConfig
 from .config_file import ConfigFile
-from .constants import X_NOT_IN_PATH
-from .utils import CustomLoggerFormatter, prompt_path
+from .utils import custom_structlog_formatter, prompt_path
+from .interactive_prompts import InteractivePrompts
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def make_sync(func):
@@ -58,13 +64,21 @@ async def main(config: CliConfig):
     root_logger.propagate = False
 
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(CustomLoggerFormatter())
+    stream_handler.setFormatter(logging.Formatter("%(message)s"))
     root_logger.addHandler(stream_handler)
 
     if config.log_file:
         file_handler = logging.FileHandler(config.log_file, encoding="utf-8")
-        file_handler.setFormatter(CustomLoggerFormatter(use_colors=False))
+        file_handler.setFormatter(logging.Formatter("%(message)s"))
         root_logger.addHandler(file_handler)
+
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            custom_structlog_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+    )
 
     logger.info(f"Starting Gamdl {__version__}")
 
@@ -87,38 +101,73 @@ async def main(config: CliConfig):
             language=config.language,
         )
 
-    itunes_api = ItunesApi(
-        apple_music_api.storefront,
-        apple_music_api.language,
-    )
-
     if not apple_music_api.active_subscription:
         logger.critical(
             "No active Apple Music subscription found, you won't be able to download"
             " anything"
         )
         return
+
     if apple_music_api.account_restrictions:
         logger.warning(
             "Your account has content restrictions enabled, some content may not be"
             " downloadable"
         )
 
-    interface = AppleMusicInterface(
-        apple_music_api,
-        itunes_api,
+    if (
+        any(not codec.is_legacy() for codec in config.song_codec_piority)
+        and not config.use_wrapper
+    ):
+        logger.warning(
+            "You have chosen an experimental song codec "
+            "without enabling wrapper. "
+            "They're not guaranteed to work due to API limitations."
+        )
+
+    interactive_prompts = InteractivePrompts(
+        artist_auto_select=config.artist_auto_select,
     )
-    song_interface = AppleMusicSongInterface(interface)
-    music_video_interface = AppleMusicMusicVideoInterface(interface)
-    uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
+
+    base_interface = await AppleMusicBaseInterface.create(
+        apple_music_api=apple_music_api,
+        cover_format=config.cover_format,
+        cover_size=config.cover_size,
+        wvd_path=config.wvd_path,
+    )
+
+    song_interface = AppleMusicSongInterface(
+        base=base_interface,
+        synced_lyrics_format=config.synced_lyrics_format,
+        codec_priority=config.song_codec_piority,
+        use_album_date=config.use_album_date,
+        skip_decryption_key_non_legacy=config.use_wrapper,
+        ask_codec_function=interactive_prompts.ask_song_codec,
+    )
+    music_video_interface = AppleMusicMusicVideoInterface(
+        base=base_interface,
+        resolution=config.music_video_resolution,
+        codec_priority=config.music_video_codec_priority,
+        ask_video_codec_function=interactive_prompts.ask_music_video_video_codec_function,
+        ask_audio_codec_function=interactive_prompts.ask_music_video_audio_codec_function,
+    )
+    uploaded_video_interface = AppleMusicUploadedVideoInterface(
+        base=base_interface,
+        quality=config.uploaded_video_quality,
+        ask_quality_function=interactive_prompts.ask_uploaded_video_quality_function,
+    )
+
+    interface = AppleMusicInterface(
+        song=song_interface,
+        music_video=music_video_interface,
+        uploaded_video=uploaded_video_interface,
+        artist_select_media_type_function=interactive_prompts.ask_artist_media_type,
+        artist_select_items_function=interactive_prompts.ask_artist_select_items,
+    )
 
     base_downloader = AppleMusicBaseDownloader(
+        interface=interface,
         output_path=config.output_path,
         temp_path=config.temp_path,
-        wvd_path=config.wvd_path,
-        overwrite=config.overwrite,
-        save_cover=config.save_cover,
-        save_playlist=config.save_playlist,
         nm3u8dlre_path=config.nm3u8dlre_path,
         mp4decrypt_path=config.mp4decrypt_path,
         ffmpeg_path=config.ffmpeg_path,
@@ -126,101 +175,41 @@ async def main(config: CliConfig):
         use_wrapper=config.use_wrapper,
         wrapper_decrypt_ip=config.wrapper_decrypt_ip,
         download_mode=config.download_mode,
-        cover_format=config.cover_format,
         album_folder_template=config.album_folder_template,
         compilation_folder_template=config.compilation_folder_template,
         no_album_folder_template=config.no_album_folder_template,
+        playlist_folder_template=config.playlist_folder_template,
         single_disc_file_template=config.single_disc_file_template,
         multi_disc_file_template=config.multi_disc_file_template,
         no_album_file_template=config.no_album_file_template,
         playlist_file_template=config.playlist_file_template,
         date_tag_template=config.date_tag_template,
         exclude_tags=config.exclude_tags,
-        cover_size=config.cover_size,
         truncate=config.truncate,
     )
+
     song_downloader = AppleMusicSongDownloader(
-        base_downloader=base_downloader,
-        interface=song_interface,
-        codec_priority=config.song_codec_piority,
-        synced_lyrics_format=config.synced_lyrics_format,
-        no_synced_lyrics=config.no_synced_lyrics,
-        synced_lyrics_only=config.synced_lyrics_only,
-        use_album_date=config.use_album_date,
-        fetch_extra_tags=config.fetch_extra_tags,
+        base=base_downloader,
     )
     music_video_downloader = AppleMusicMusicVideoDownloader(
-        base_downloader=base_downloader,
-        interface=music_video_interface,
-        codec_priority=config.music_video_codec_priority,
+        base=base_downloader,
         remux_mode=config.music_video_remux_mode,
         remux_format=config.music_video_remux_format,
-        resolution=config.music_video_resolution,
     )
     uploaded_video_downloader = AppleMusicUploadedVideoDownloader(
-        base_downloader=base_downloader,
-        interface=uploaded_video_interface,
-        quality=config.uploaded_video_quality,
+        base=base_downloader,
     )
+
     downloader = AppleMusicDownloader(
-        interface=interface,
-        base_downloader=base_downloader,
-        song_downloader=song_downloader,
-        music_video_downloader=music_video_downloader,
-        uploaded_video_downloader=uploaded_video_downloader,
-        artist_auto_select=config.artist_auto_select,
+        song=song_downloader,
+        music_video=music_video_downloader,
+        uploaded_video=uploaded_video_downloader,
+        overwrite=config.overwrite,
+        save_cover=config.save_cover,
+        save_playlist=config.save_playlist,
+        no_synced_lyrics=config.no_synced_lyrics,
+        synced_lyrics_only=config.synced_lyrics_only,
     )
-
-    if not config.synced_lyrics_only:
-        if (
-            config.download_mode == DownloadMode.NM3U8DLRE
-            and not base_downloader.full_nm3u8dlre_path
-        ):
-            logger.critical(X_NOT_IN_PATH.format("N_m3u8DL-RE", config.nm3u8dlre_path))
-            return
-
-        missing_music_video_paths = []
-
-        if not base_downloader.full_ffmpeg_path and (
-            config.music_video_remux_mode == RemuxMode.FFMPEG
-            or config.download_mode == DownloadMode.NM3U8DLRE
-        ):
-            missing_music_video_paths.append(
-                X_NOT_IN_PATH.format("ffmpeg", config.ffmpeg_path)
-            )
-
-        if (
-            not base_downloader.full_mp4box_path
-            and config.music_video_remux_mode == RemuxMode.MP4BOX
-        ):
-            missing_music_video_paths.append(
-                X_NOT_IN_PATH.format("MP4Box", config.mp4box_path)
-            )
-
-        if not base_downloader.full_mp4decrypt_path and (
-            config.song_codec_piority
-            not in (SongCodec.AAC_LEGACY, SongCodec.AAC_HE_LEGACY)
-            or config.music_video_remux_mode == RemuxMode.MP4BOX
-        ):
-            missing_music_video_paths.append(
-                X_NOT_IN_PATH.format("mp4decrypt", config.mp4decrypt_path)
-            )
-
-        if missing_music_video_paths:
-            logger.warning(
-                "Music videos will not be downloaded due to missing dependencies:\n"
-                + "\n".join(missing_music_video_paths)
-            )
-
-        if (
-            any(not codec.is_legacy() for codec in config.song_codec_piority)
-            and not config.use_wrapper
-        ):
-            logger.warning(
-                "You have chosen an experimental song codec "
-                "without enabling wrapper. "
-                "They're not guaranteed to work due to API limitations."
-            )
 
     if config.read_urls_as_txt:
         urls_from_file = []
@@ -239,68 +228,53 @@ async def main(config: CliConfig):
 
     error_count = 0
     for url_index, url in enumerate(urls, 1):
-        url_progress = click.style(f"[URL {url_index}/{len(urls)}]", dim=True)
-        logger.info(url_progress + f' Processing "{url}"')
-        download_queue = None
+        url_log = logger.bind(action=f"URL {url_index:>3}/{len(urls):<3}")
+
+        url_log.info(f'Processing "{url}"')
+
         try:
-            url_info = downloader.get_url_info(url)
-            if not url_info:
-                logger.warning(
-                    url_progress + f' Could not parse "{url}", skipping.',
-                )
-                continue
-
-            download_queue = await downloader.get_download_queue(url_info)
-            if not download_queue:
-                logger.warning(
-                    url_progress
-                    + f' No downloadable media found for "{url}", skipping.',
-                )
-                continue
-        except KeyboardInterrupt:
-            exit(1)
+            download_queue: list[DownloadItem] = []
+            async for media in downloader.get_download_item_from_url(url):
+                download_queue.append(media)
         except Exception as e:
+            url_log.error(f'Error processing "{url}": {e}')
             error_count += 1
-            logger.error(
-                url_progress + f' Error processing "{url}"',
-                exc_info=not config.no_exceptions,
-            )
-
-        if not download_queue:
             continue
 
         for download_index, download_item in enumerate(
             download_queue,
             1,
         ):
-            download_queue_progress = click.style(
-                f"[Track {download_index}/{len(download_queue)}]",
-                dim=True,
+            track_log = logger.bind(
+                action=f"Track {download_index:>3}/{len(download_queue):<3}"
             )
+
             media_title = (
-                download_item.media_metadata["attributes"]["name"]
-                if isinstance(
-                    download_item,
-                    DownloadItem,
-                )
+                download_item.media.media_metadata["attributes"]["name"]
+                if download_item.media.media_metadata
+                and download_item.media.media_metadata.get("attributes", {}).get("name")
                 else "Unknown Title"
             )
-            logger.info(download_queue_progress + f' Downloading "{media_title}"')
+
+            track_log.info(f'Downloading "{media_title}"')
 
             try:
                 await downloader.download(download_item)
-            except GamdlError as e:
-                logger.warning(
-                    download_queue_progress + f' Skipping "{media_title}": {e}'
-                )
+            except (
+                GamdlInterfaceMediaNotStreamableError,
+                GamdlInterfaceFormatNotAvailableError,
+                GamdlInterfaceDecryptionNotAvailableError,
+                GamdlInterfaceArtistMediaTypeError,
+                GamdlDownloaderSyncedLyricsOnlyError,
+                GamdlDownloaderMediaFileExistsError,
+                GamdlDownloaderDependencyNotFoundError,
+            ) as e:
+                track_log.warning(f'Skipping "{media_title}": {e}')
                 continue
-            except KeyboardInterrupt:
-                exit(1)
             except Exception as e:
                 error_count += 1
-                logger.error(
-                    download_queue_progress + f' Error downloading "{media_title}"',
-                    exc_info=not config.no_exceptions,
-                )
+                track_log.error(f'Error downloading "{media_title}"')
+                if not config.no_exceptions:
+                    traceback.print_exc()
 
     logger.info(f"Finished with {error_count} error(s)")

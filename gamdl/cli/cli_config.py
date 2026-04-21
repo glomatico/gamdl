@@ -11,14 +11,17 @@ from ..downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
     AppleMusicMusicVideoDownloader,
-    AppleMusicSongDownloader,
-    AppleMusicUploadedVideoDownloader,
-    ArtistAutoSelect,
     DownloadMode,
     RemuxFormatMusicVideo,
     RemuxMode,
 )
 from ..interface import (
+    AppleMusicBaseInterface,
+    AppleMusicInterface,
+    AppleMusicMusicVideoInterface,
+    AppleMusicSongInterface,
+    AppleMusicUploadedVideoInterface,
+    ArtistMediaType,
     CoverFormat,
     MusicVideoCodec,
     MusicVideoResolution,
@@ -30,13 +33,18 @@ from .utils import Csv
 
 api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
 api_from_wrapper_sig = inspect.signature(AppleMusicApi.create_from_wrapper)
-api_sig = inspect.signature(AppleMusicApi.__init__)
+api_create_sig = inspect.signature(AppleMusicApi.create)
+
+base_interface_create_sig = inspect.signature(AppleMusicBaseInterface.create)
+song_interface_sig = inspect.signature(AppleMusicSongInterface.__init__)
+music_video_interface_sig = inspect.signature(AppleMusicMusicVideoInterface.__init__)
+uploaded_video_interface_sig = inspect.signature(
+    AppleMusicUploadedVideoInterface.__init__
+)
+interface_create_sig = inspect.signature(AppleMusicInterface)
+
 base_downloader_sig = inspect.signature(AppleMusicBaseDownloader.__init__)
 music_video_downloader_sig = inspect.signature(AppleMusicMusicVideoDownloader.__init__)
-song_downloader_sig = inspect.signature(AppleMusicSongDownloader.__init__)
-uploaded_video_downloader_sig = inspect.signature(
-    AppleMusicUploadedVideoDownloader.__init__
-)
 downloader_sig = inspect.signature(AppleMusicDownloader.__init__)
 
 
@@ -105,6 +113,24 @@ class CliConfig:
             is_flag=True,
         ),
     ]
+    artist_auto_select: Annotated[
+        ArtistMediaType | None,
+        option(
+            "--artist-auto-select",
+            help="Automatically select artist content to download (only for artist URLs)",
+            default=None,
+            type=ArtistMediaType,
+        ),
+    ]
+    no_config_file: Annotated[
+        bool,
+        option(
+            "--no-config-file",
+            "-n",
+            help="Don't use a config file",
+            is_flag=True,
+        ),
+    ]
     # API specific options
     cookies_path: Annotated[
         str,
@@ -135,17 +161,95 @@ class CliConfig:
             "--language",
             "-l",
             help="Metadata language",
-            default=api_sig.parameters["language"].default,
+            default=api_create_sig.parameters["language"].default,
         ),
     ]
-    # Downloader specific options
-    artist_auto_select: Annotated[
-        ArtistAutoSelect | None,
+    # Base Interface specific options
+    cover_format: Annotated[
+        CoverFormat,
         option(
-            "--artist-auto-select",
-            help="Automatically select artist content to download (only for artist URLs)",
-            default=downloader_sig.parameters["artist_auto_select"].default,
-            type=ArtistAutoSelect,
+            "--cover-format",
+            help="Cover format",
+            default=base_interface_create_sig.parameters["cover_format"].default,
+            type=CoverFormat,
+        ),
+    ]
+    cover_size: Annotated[
+        int,
+        option(
+            "--cover-size",
+            help="Cover size in pixels",
+            default=base_interface_create_sig.parameters["cover_size"].default,
+        ),
+    ]
+    wvd_path: Annotated[
+        str | None,
+        option(
+            "--wvd-path",
+            help=".wvd file path",
+            default=base_interface_create_sig.parameters["wvd_path"].default,
+            type=click.Path(
+                file_okay=False,
+                dir_okay=True,
+                writable=True,
+                resolve_path=True,
+            ),
+        ),
+    ]
+    # Song Interface Options
+    synced_lyrics_format: Annotated[
+        SyncedLyricsFormat,
+        option(
+            "--synced-lyrics-format",
+            help="Synced lyrics format",
+            default=song_interface_sig.parameters["synced_lyrics_format"].default,
+            type=SyncedLyricsFormat,
+        ),
+    ]
+    song_codec_piority: Annotated[
+        list[SongCodec],
+        option(
+            "--song-codec-priority",
+            help="Comma-separated codec priority",
+            default=song_interface_sig.parameters["codec_priority"].default,
+            type=Csv(SongCodec),
+        ),
+    ]
+    use_album_date: Annotated[
+        bool,
+        option(
+            "--use-album-date",
+            help="Use album release date for songs",
+            is_flag=True,
+        ),
+    ]
+    # Music Video Interface Options
+    music_video_resolution: Annotated[
+        MusicVideoResolution,
+        option(
+            "--music-video-resolution",
+            help="Max music video resolution",
+            default=music_video_interface_sig.parameters["resolution"].default,
+            type=MusicVideoResolution,
+        ),
+    ]
+    music_video_codec_priority: Annotated[
+        list[MusicVideoCodec],
+        option(
+            "--music-video-codec-priority",
+            help="Comma-separated codec priority",
+            default=music_video_interface_sig.parameters["codec_priority"].default,
+            type=Csv(MusicVideoCodec),
+        ),
+    ]
+    # Uploaded Video Interface Options
+    uploaded_video_quality: Annotated[
+        UploadedVideoQuality,
+        option(
+            "--uploaded-video-quality",
+            help="Post video quality",
+            default=uploaded_video_interface_sig.parameters["quality"].default,
+            type=UploadedVideoQuality,
         ),
     ]
     # Base Downloader specific options
@@ -176,45 +280,6 @@ class CliConfig:
                 writable=True,
                 resolve_path=True,
             ),
-        ),
-    ]
-    wvd_path: Annotated[
-        str,
-        option(
-            "--wvd-path",
-            help=".wvd file path",
-            default=base_downloader_sig.parameters["wvd_path"].default,
-            type=click.Path(
-                file_okay=False,
-                dir_okay=True,
-                writable=True,
-                resolve_path=True,
-            ),
-        ),
-    ]
-    overwrite: Annotated[
-        bool,
-        option(
-            "--overwrite",
-            help="Overwrite existing files",
-            is_flag=True,
-        ),
-    ]
-    save_cover: Annotated[
-        bool,
-        option(
-            "--save-cover",
-            "-s",
-            help="Save cover as separate file",
-            is_flag=True,
-        ),
-    ]
-    save_playlist: Annotated[
-        bool,
-        option(
-            "--save-playlist",
-            help="Save M3U8 playlist file",
-            is_flag=True,
         ),
     ]
     nm3u8dlre_path: Annotated[
@@ -274,15 +339,6 @@ class CliConfig:
             type=DownloadMode,
         ),
     ]
-    cover_format: Annotated[
-        CoverFormat,
-        option(
-            "--cover-format",
-            help="Cover format",
-            default=base_downloader_sig.parameters["cover_format"].default,
-            type=CoverFormat,
-        ),
-    ]
     album_folder_template: Annotated[
         str,
         option(
@@ -307,6 +363,14 @@ class CliConfig:
             "--no-album-folder-template",
             help="No album folder template",
             default=base_downloader_sig.parameters["no_album_folder_template"].default,
+        ),
+    ]
+    playlist_folder_template: Annotated[
+        str,
+        option(
+            "--playlist-folder-template",
+            help="Playlist folder template",
+            default=base_downloader_sig.parameters["playlist_folder_template"].default,
         ),
     ]
     single_disc_file_template: Annotated[
@@ -358,14 +422,6 @@ class CliConfig:
             type=Csv(str),
         ),
     ]
-    cover_size: Annotated[
-        int,
-        option(
-            "--cover-size",
-            help="Cover size in pixels",
-            default=base_downloader_sig.parameters["cover_size"].default,
-        ),
-    ]
     truncate: Annotated[
         int,
         option(
@@ -374,67 +430,7 @@ class CliConfig:
             default=base_downloader_sig.parameters["truncate"].default,
         ),
     ]
-    # DownloaderSong specific options
-    song_codec_piority: Annotated[
-        list[SongCodec],
-        option(
-            "--song-codec-priority",
-            help="Comma-separated codec priority",
-            default=song_downloader_sig.parameters["codec_priority"].default,
-            type=Csv(SongCodec),
-        ),
-    ]
-    synced_lyrics_format: Annotated[
-        SyncedLyricsFormat,
-        option(
-            "--synced-lyrics-format",
-            help="Synced lyrics format",
-            default=song_downloader_sig.parameters["synced_lyrics_format"].default,
-            type=SyncedLyricsFormat,
-        ),
-    ]
-    no_synced_lyrics: Annotated[
-        bool,
-        option(
-            "--no-synced-lyrics",
-            help="Don't download synced lyrics",
-            is_flag=True,
-        ),
-    ]
-    synced_lyrics_only: Annotated[
-        bool,
-        option(
-            "--synced-lyrics-only",
-            help="Download only synced lyrics",
-            is_flag=True,
-        ),
-    ]
-    use_album_date: Annotated[
-        bool,
-        option(
-            "--use-album-date",
-            help="Use album release date for songs",
-            is_flag=True,
-        ),
-    ]
-    fetch_extra_tags: Annotated[
-        bool,
-        option(
-            "--fetch-extra-tags",
-            help="Fetch extra tags from preview (normalization and smooth playback)",
-            is_flag=True,
-        ),
-    ]
     # DownloaderMusicVideo specific options
-    music_video_codec_priority: Annotated[
-        list[MusicVideoCodec],
-        option(
-            "--music-video-codec-priority",
-            help="Comma-separated codec priority",
-            default=music_video_downloader_sig.parameters["codec_priority"].default,
-            type=Csv(MusicVideoCodec),
-        ),
-    ]
     music_video_remux_mode: Annotated[
         RemuxMode,
         option(
@@ -453,31 +449,45 @@ class CliConfig:
             type=RemuxFormatMusicVideo,
         ),
     ]
-    music_video_resolution: Annotated[
-        MusicVideoResolution,
-        option(
-            "--music-video-resolution",
-            help="Max music video resolution",
-            default=music_video_downloader_sig.parameters["resolution"].default,
-            type=MusicVideoResolution,
-        ),
-    ]
-    # DownloaderUploadedVideo specific options
-    uploaded_video_quality: Annotated[
-        UploadedVideoQuality,
-        option(
-            "--uploaded-video-quality",
-            help="Post video quality",
-            default=uploaded_video_downloader_sig.parameters["quality"].default,
-            type=UploadedVideoQuality,
-        ),
-    ]
-    no_config_file: Annotated[
+    # Downloader specific options
+    overwrite: Annotated[
         bool,
         option(
-            "--no-config-file",
-            "-n",
-            help="Don't use a config file",
+            "--overwrite",
+            help="Overwrite existing files",
+            is_flag=True,
+        ),
+    ]
+    save_cover: Annotated[
+        bool,
+        option(
+            "--save-cover",
+            "-s",
+            help="Save cover as separate file",
+            is_flag=True,
+        ),
+    ]
+    save_playlist: Annotated[
+        bool,
+        option(
+            "--save-playlist",
+            help="Save M3U8 playlist file",
+            is_flag=True,
+        ),
+    ]
+    no_synced_lyrics: Annotated[
+        bool,
+        option(
+            "--no-synced-lyrics",
+            help="Don't download synced lyrics",
+            is_flag=True,
+        ),
+    ]
+    synced_lyrics_only: Annotated[
+        bool,
+        option(
+            "--synced-lyrics-only",
+            help="Download only synced lyrics",
             is_flag=True,
         ),
     ]

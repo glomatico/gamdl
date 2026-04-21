@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 
 import structlog
@@ -19,7 +20,7 @@ class AppleMusicUploadedVideoInterface:
         self,
         base: AppleMusicBaseInterface,
         quality: UploadedVideoQuality = UploadedVideoQuality.BEST,
-        ask_quality_function: Callable[[list[dict]], dict] | None = None,
+        ask_quality_function: Callable[[dict], dict | None] | None = None,
     ):
         self.base = base
         self.quality = quality
@@ -37,11 +38,15 @@ class AppleMusicUploadedVideoInterface:
         return metadata["attributes"]["assetTokens"][best_quality]
 
     async def _get_stream_url_from_user(self, metadata: dict) -> str | None:
-        return (
-            self.ask_quality_function(metadata["attributes"]["assetTokens"])
-            if self.ask_quality_function
-            else None
-        )
+        if self.ask_quality_function:
+            selected_quality = self.ask_quality_function(
+                metadata["attributes"]["assetTokens"]
+            )
+            if asyncio.iscoroutine(selected_quality):
+                selected_quality = await selected_quality
+            return selected_quality
+
+        return None
 
     async def _get_stream_url(
         self,

@@ -1,6 +1,6 @@
+import asyncio
 import base64
 import datetime
-import io
 import json
 import re
 from typing import Callable
@@ -9,7 +9,6 @@ from xml.etree import ElementTree
 
 import m3u8
 import structlog
-from mutagen.mp4 import MP4
 
 from .base import AppleMusicBaseInterface
 from .constants import DRM_DEFAULT_KEY_MAPPING, MP4_FORMAT_CODECS, SONG_CODEC_REGEX_MAP
@@ -21,7 +20,6 @@ from .exceptions import (
 )
 from .types import (
     AppleMusicMedia,
-    DecryptionKey,
     DecryptionKeyAv,
     Lyrics,
     MediaFileFormat,
@@ -41,7 +39,7 @@ class AppleMusicSongInterface:
         codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY],
         use_album_date: bool = False,
         skip_decryption_key_non_legacy: bool = False,
-        ask_codec_function: Callable[[list[dict]], dict] | None = None,
+        ask_codec_function: Callable[[list[dict]], dict | None] | None = None,
     ):
         self.base = base
         self.synced_lyrics_format = synced_lyrics_format
@@ -391,12 +389,16 @@ class AppleMusicSongInterface:
         )
 
     async def _get_playlist_from_user(self, m3u8_data: dict) -> dict | None:
-        if not self.ask_codec_function:
-            return None
+        if self.ask_codec_function:
+            playlist = self.ask_codec_function(
+                [playlist["stream_info"] for playlist in m3u8_data["playlists"]]
+            )
+            if asyncio.iscoroutine(playlist):
+                playlist = await playlist
 
-        return self.ask_codec_function(
-            [playlist["stream_info"] for playlist in m3u8_data["playlists"]]
-        )
+            return playlist
+
+        return None
 
     def _get_drm_uri_from_session_key(
         self,

@@ -35,10 +35,10 @@ class AppleMusicMusicVideoInterface:
             MusicVideoCodec.H265,
         ],
         ask_video_codec_function: (
-            Callable[[list[dict | m3u8.Playlist]], dict] | None
+            Callable[[list[dict | m3u8.Playlist]], dict | None] | None
         ) = None,
         ask_audio_codec_function: (
-            Callable[[list[dict | m3u8.Playlist]], dict] | None
+            Callable[[list[dict | m3u8.Playlist]], dict | None] | None
         ) = None,
     ):
         self.base = base
@@ -245,27 +245,33 @@ class AppleMusicMusicVideoInterface:
         self,
         video_playlists: list[m3u8.Playlist],
     ) -> m3u8.Playlist | None:
-        return (
-            self.ask_video_codec_function(video_playlists)
-            if self.ask_video_codec_function
-            else None
-        )
+        if self.ask_video_codec_function:
+            video_playlist = self.ask_video_codec_function(video_playlists)
+            if asyncio.iscoroutine(video_playlist):
+                video_playlist = await video_playlist
+
+            return video_playlist
+
+        return None
 
     async def _get_audio_playlist_from_user(
         self,
         playlist_master_data: dict,
-    ) -> dict:
-        return (
-            self.ask_audio_codec_function(
+    ) -> dict | None:
+        if self.ask_audio_codec_function:
+            audio_playlist = self.ask_audio_codec_function(
                 [
                     playlist
                     for playlist in playlist_master_data["media"]
                     if playlist.get("uri")
                 ]
             )
-            if self.ask_audio_codec_function
-            else None
-        )
+            if asyncio.iscoroutine(audio_playlist):
+                audio_playlist = await audio_playlist
+
+            return audio_playlist
+
+        return None
 
     def _get_key_by_format(
         self,

@@ -26,10 +26,10 @@ class AppleMusicInterface:
         music_video: AppleMusicMusicVideoInterface,
         uploaded_video: AppleMusicUploadedVideoInterface,
         artist_select_media_type_function: (
-            Callable[[list[ArtistMediaType]], ArtistMediaType] | None
+            Callable[[list[ArtistMediaType]], ArtistMediaType | None] | None
         ) = None,
         artist_select_items_function: (
-            Callable[[ArtistMediaType, list[dict]], list[dict]] | None
+            Callable[[ArtistMediaType, list[dict]], list[dict] | None] | None
         ) = None,
         flat_filter_function: Callable[[dict], Any] | None = None,
         concurrency: int = 5,
@@ -447,11 +447,15 @@ class AppleMusicInterface:
             )
             return
 
-        artist_media_type = (
-            self.artist_select_media_type_function(list(ArtistMediaType))
-            if self.artist_select_media_type_function
-            else list(ArtistMediaType)[0]
-        )
+        if self.artist_select_media_type_function:
+            artist_media_type = self.artist_select_media_type_function(
+                list(ArtistMediaType)
+            )
+            if asyncio.iscoroutine(artist_media_type):
+                artist_media_type = await artist_media_type
+        else:
+            artist_media_type = list(ArtistMediaType)[0]
+
         relation_key, type_key = artist_media_type.path_key
 
         items_relation = media_metadata.get(relation_key, {}).get(type_key, {})
@@ -482,14 +486,15 @@ class AppleMusicInterface:
             items.extend(extended_data.get("data", []))
             next_uri = extended_data.get("next")
 
-        selected_items = (
-            self.artist_select_items_function(
+        if self.artist_select_items_function:
+            selected_items = self.artist_select_items_function(
                 artist_media_type,
                 items,
             )
-            if self.artist_select_items_function
-            else items[:1]
-        )
+            if asyncio.iscoroutine(selected_items):
+                selected_items = await selected_items
+        else:
+            selected_items = items[:1]
 
         tasks = []
         for item in selected_items:

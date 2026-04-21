@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 from functools import wraps
 from pathlib import Path
 
@@ -11,7 +12,6 @@ from httpx import ConnectError
 
 from .. import __version__
 from ..api import AppleMusicApi
-import traceback
 from ..downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
@@ -19,9 +19,10 @@ from ..downloader import (
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
     DownloadItem,
-    GamdlDownloaderSyncedLyricsOnlyError,
-    GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderDependencyNotFoundError,
+    GamdlDownloaderMediaFileExistsError,
+    GamdlDownloaderFlatFilterExcludedError,
+    GamdlDownloaderSyncedLyricsOnlyError,
 )
 from ..interface import (
     AppleMusicBaseInterface,
@@ -36,8 +37,9 @@ from ..interface import (
 )
 from .cli_config import CliConfig
 from .config_file import ConfigFile
-from .utils import custom_structlog_formatter, prompt_path
+from .database import Database
 from .interactive_prompts import InteractivePrompts
+from .utils import custom_structlog_formatter, prompt_path
 
 logger = structlog.get_logger(__name__)
 
@@ -124,6 +126,13 @@ async def main(config: CliConfig):
             "They're not guaranteed to work due to API limitations."
         )
 
+    if config.database_path:
+        database = Database(config.database_path)
+        flat_filter = database.flat_filter
+    else:
+        database = None
+        flat_filter = None
+
     interactive_prompts = InteractivePrompts(
         artist_auto_select=config.artist_auto_select,
     )
@@ -162,6 +171,7 @@ async def main(config: CliConfig):
         uploaded_video=uploaded_video_interface,
         artist_select_media_type_function=interactive_prompts.ask_artist_media_type,
         artist_select_items_function=interactive_prompts.ask_artist_select_items,
+        flat_filter_function=flat_filter,
     )
 
     base_downloader = AppleMusicBaseDownloader(
@@ -268,6 +278,7 @@ async def main(config: CliConfig):
                 GamdlDownloaderSyncedLyricsOnlyError,
                 GamdlDownloaderMediaFileExistsError,
                 GamdlDownloaderDependencyNotFoundError,
+                GamdlDownloaderFlatFilterExcludedError,
             ) as e:
                 track_log.warning(f'Skipping "{media_title}": {e}')
                 continue
@@ -276,5 +287,15 @@ async def main(config: CliConfig):
                 track_log.error(f'Error downloading "{media_title}"')
                 if not config.no_exceptions:
                     traceback.print_exc()
+
+            if (
+                database
+                and download_item.media.media_metadata
+                and download_item.final_path
+            ):
+                database.add(
+                    download_item.media.media_metadata["id"],
+                    download_item.final_path,
+                )
 
     logger.info(f"Finished with {error_count} error(s)")

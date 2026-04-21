@@ -4,6 +4,8 @@ from typing import AsyncGenerator
 
 import structlog
 
+from ..interface.types import AppleMusicMedia
+
 from .constants import TEMP_PATH_TEMPLATE
 from .enums import DownloadMode, RemuxMode
 from .exceptions import (
@@ -52,20 +54,26 @@ class AppleMusicDownloader:
         url: str,
     ) -> AsyncGenerator[DownloadItem, None]:
         async for media in self.base.interface.get_media_from_url(url):
-            if media.error or media.flat_filter_result:
-                yield DownloadItem(media)
+            yield await self.parse_download_item(media)
 
-            elif media.media_metadata["type"] in {"songs", "library-songs"}:
-                yield await self.song.get_download_item(media)
+    async def parse_download_item(
+        self,
+        media: AppleMusicMedia,
+    ) -> DownloadItem:
+        if media.error or media.flat_filter_result:
+            return DownloadItem(media)
 
-            elif media.media_metadata["type"] in {
-                "music-videos",
-                "library-music-videos",
-            }:
-                yield await self.music_video.get_download_item(media)
+        elif media.media_metadata["type"] in {"songs", "library-songs"}:
+            return await self.song.get_download_item(media)
 
-            elif media.media_metadata["type"] in {"uploaded-videos"}:
-                yield await self.uploaded_video.get_download_item(media)
+        elif media.media_metadata["type"] in {
+            "music-videos",
+            "library-music-videos",
+        }:
+            return await self.music_video.get_download_item(media)
+
+        elif media.media_metadata["type"] in {"uploaded-videos"}:
+            return await self.uploaded_video.get_download_item(media)
 
     async def download(self, item: DownloadItem) -> None:
         try:

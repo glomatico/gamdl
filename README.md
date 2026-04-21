@@ -35,7 +35,7 @@ Add these tools to your system PATH or specify their paths via command-line argu
 |---|---|---|
 | **Songs in Legacy Codecs** | `song_codec_priority: aac-legacy\|aac-he-legacy` | None |
 | **Songs in Non Legacy Codecs** | `song_codec_priority: aac\|aac-he\|aac-binaural\|aac-downmix\|aac-he-binaural\|aac-he-downmix\|atmos\|ac3`<br/>`use_wrapper: true` | Wrapper |
-| **Music Videos** | `music_video_remux_mode: ffmpeg` | FFmpeg |
+| **Music Videos** | `music_video_remux_mode: ffmpeg` | FFmpeg<br/>mp4decrypt |
 | | `music_video_remux_mode: mp4box` | MP4Box<br/>mp4decrypt |
 | **Faster Downloads** | `download_mode: nm3u8dlre` | N_m3u8DL-RE |
 

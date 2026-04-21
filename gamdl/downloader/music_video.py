@@ -45,22 +45,12 @@ class AppleMusicMusicVideoDownloader:
         input_path_video: str,
         input_path_audio: str,
         output_path: str,
-        decryption_key: str = None,
     ):
-        if decryption_key:
-            key = [
-                "-decryption_key",
-                decryption_key,
-            ]
-        else:
-            key = []
-
         await async_subprocess(
             self.base.full_ffmpeg_path,
             "-loglevel",
             "error",
             "-y",
-            *key,
             "-i",
             input_path_video,
             "-i",

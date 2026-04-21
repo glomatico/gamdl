@@ -45,7 +45,8 @@ class AppleMusicSongInterface(AppleMusicInterface):
 
         if (
             "relationships" not in song_metadata
-            or "lyrics" not in song_metadata["relationships"]
+            or ("lyrics" not in song_metadata["relationships"] 
+                and "syllable-lyrics" not in song_metadata["relationships"])
         ):
             song_metadata = (
                 await self.apple_music_api.get_song(
@@ -53,48 +54,42 @@ class AppleMusicSongInterface(AppleMusicInterface):
                 )
             )["data"][0]
 
-        lyrics_ttml = None
-        try:
-            lyrics_response = await self.apple_music_api.get_syllable_lyrics(
-                self.get_media_id_of_library_media(song_metadata)
+        # Prioritize syllable-lyrics (word-level timing) over regular lyrics
+        lyrics_data = None
+        
+        if (
+            "syllable-lyrics" in song_metadata["relationships"]
+            and "data" in song_metadata["relationships"]["syllable-lyrics"]
+            and len(song_metadata["relationships"]["syllable-lyrics"]["data"]) > 0
+            and "attributes" in song_metadata["relationships"]["syllable-lyrics"]["data"][0]
+            and song_metadata["relationships"]["syllable-lyrics"]["data"][0]["attributes"].get(
+                "ttml"
             )
-            if (
-                lyrics_response
-                and "data" in lyrics_response
-                and len(lyrics_response["data"]) > 0
-                and "attributes" in lyrics_response["data"][0]
-            ):
-                lyrics_ttml = lyrics_response["data"][0]["attributes"].get("ttml")
-        except Exception as exc:  # preserve existing behavior if endpoint fails
-            logger.debug(
-                f"Failed to fetch syllable lyrics endpoint, falling back to metadata lyrics: {exc}"
+            is not None
+        ):
+            lyrics_data = song_metadata["relationships"]["syllable-lyrics"]["data"][0]["attributes"]["ttml"]
+        elif (
+            "lyrics" in song_metadata["relationships"]
+            and "data" in song_metadata["relationships"]["lyrics"]
+            and len(song_metadata["relationships"]["lyrics"]["data"]) > 0
+            and "attributes" in song_metadata["relationships"]["lyrics"]["data"][0]
+            and song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
+                "ttml"
             )
+            is not None
+        ):
+            lyrics_data = song_metadata["relationships"]["lyrics"]["data"][0]["attributes"]["ttml"]
 
-        if lyrics_ttml is None:
-            if (
-                "lyrics" in song_metadata["relationships"]
-                and "data" in song_metadata["relationships"]["lyrics"]
-                and len(song_metadata["relationships"]["lyrics"]["data"]) > 0
-                and "attributes" in song_metadata["relationships"]["lyrics"]["data"][0]
-                and song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
-                    "ttml"
-                )
-                is not None
-            ):
-                lyrics_ttml = song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
-                    "ttml"
-                )
+        if lyrics_data is not None:
+            lyrics = self._get_lyrics(
+                lyrics_data,
+                synced_lyrics_format,
+            )
+            logging.debug(f"Lyrics: {lyrics}")
 
-        if lyrics_ttml is None:
-            return None
-
-        lyrics = self._get_lyrics(
-            lyrics_ttml,
-            synced_lyrics_format,
-        )
-        logging.debug(f"Lyrics: {lyrics}")
-
-        return lyrics
+            return lyrics
+        
+        return None
 
     def _get_lyrics(
         self,

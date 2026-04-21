@@ -223,7 +223,7 @@ class AppleMusicApi:
         self,
         song_id: str,
         extend: str = "extendedAssetUrls",
-        include: str = "lyrics,albums",
+        include: str = "syllable-lyrics,albums",
     ) -> dict | None:
         song = await self._amp_request(
             f"/v1/catalog/{self.storefront}/songs/{song_id}",
@@ -235,14 +235,6 @@ class AppleMusicApi:
         logger.debug(f"Song: {song}")
 
         return song
-
-    async def get_syllable_lyrics(self, song_id: str) -> dict | None:
-        syllable_lyrics = await self._amp_request(
-            f"/v1/catalog/{self.storefront}/songs/{song_id}/syllable-lyrics",
-        )
-        logger.debug(f"Syllable lyrics: {syllable_lyrics}")
-
-        return syllable_lyrics
 
     async def get_music_video(
         self,

@@ -21,12 +21,13 @@ class AppleMusicSongDownloader:
     async def get_download_item(self, media: AppleMusicMedia) -> DownloadItem:
         download_item = DownloadItem(media)
 
-        download_item.staged_path = self.base.get_temp_path(
-            media.media_metadata["id"],
-            download_item.uuid_,
-            "staged",
-            "." + media.stream_info.file_format.value,
-        )
+        if media.stream_info:
+            download_item.staged_path = self.base.get_temp_path(
+                media.media_metadata["id"],
+                download_item.uuid_,
+                "staged",
+                "." + media.stream_info.file_format.value,
+            )
 
         download_item.final_path = self.base.get_final_path(
             media.tags,

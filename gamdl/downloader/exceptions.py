@@ -18,3 +18,8 @@ class GamdlDownloaderMediaFileExistsError(GamdlDownloaderError):
 class GamdlDownloaderDependencyNotFoundError(GamdlDownloaderError):
     def __init__(self, dependency_name: str) -> None:
         super().__init__(f"Required dependency not found: {dependency_name}")
+
+
+class GamdlDownloaderFlatFilterExcludedError(GamdlDownloaderError):
+    def __init__(self, media_id: str) -> None:
+        super().__init__(f"Media is excluded by flat filter: {media_id}")

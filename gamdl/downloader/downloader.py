@@ -8,6 +8,7 @@ from .constants import TEMP_PATH_TEMPLATE
 from .enums import DownloadMode, RemuxMode
 from .exceptions import (
     GamdlDownloaderDependencyNotFoundError,
+    GamdlDownloaderFlatFilterExcludedError,
     GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderSyncedLyricsOnlyError,
 )
@@ -70,6 +71,11 @@ class AppleMusicDownloader:
         try:
             if item.media.error:
                 raise item.media.error
+
+            if item.media.flat_filter_result:
+                raise GamdlDownloaderFlatFilterExcludedError(
+                    item.media.media_metadata["id"]
+                )
 
             await self._initial_processing(item)
             await self._download(item)

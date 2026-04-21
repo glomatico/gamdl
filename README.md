@@ -282,7 +282,7 @@ Use Gamdl as a library in your Python projects:
 ```python
 import asyncio
 
-from gamdl.api import AppleMusicApi, ItunesApi
+from gamdl.api import AppleMusicApi
 from gamdl.downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
@@ -291,63 +291,79 @@ from gamdl.downloader import (
     AppleMusicUploadedVideoDownloader,
 )
 from gamdl.interface import (
+    AppleMusicBaseInterface,
     AppleMusicInterface,
     AppleMusicMusicVideoInterface,
     AppleMusicSongInterface,
     AppleMusicUploadedVideoInterface,
 )
 
+
 async def main():
-    # Create AppleMusicApi instance (from cookies or wrapper)
+    # Create AppleMusicApi instance from cookies
     apple_music_api = await AppleMusicApi.create_from_netscape_cookies(
         cookies_path="cookies.txt",
     )
-    itunes_api = ItunesApi(
-        apple_music_api.storefront,
-        apple_music_api.language,
-    )
 
     # Check subscription
-    assert apple_music_api.active_subscription
+    if not apple_music_api.active_subscription:
+        print("No active Apple Music subscription")
+        return
 
-    # Set up interfaces
-    interface = AppleMusicInterface(apple_music_api, itunes_api)
-    song_interface = AppleMusicSongInterface(interface)
-    music_video_interface = AppleMusicMusicVideoInterface(interface)
-    uploaded_video_interface = AppleMusicUploadedVideoInterface(interface)
-
-    # Set up base downloader and specialized downloaders
-    base_downloader = AppleMusicBaseDownloader()
-    song_downloader = AppleMusicSongDownloader(
-        base_downloader=base_downloader,
-        interface=song_interface,
-    )
-    music_video_downloader = AppleMusicMusicVideoDownloader(
-        base_downloader=base_downloader,
-        interface=music_video_interface,
-    )
-    uploaded_video_downloader = AppleMusicUploadedVideoDownloader(
-        base_downloader=base_downloader,
-        interface=uploaded_video_interface,
+    # Create base interface
+    base_interface = await AppleMusicBaseInterface.create(
+        apple_music_api=apple_music_api,
     )
 
-    # Main downloader
-    downloader = AppleMusicDownloader(
+    # Create specialized interfaces
+    song_interface = AppleMusicSongInterface(
+        base=base_interface,
+    )
+    music_video_interface = AppleMusicMusicVideoInterface(
+        base=base_interface,
+    )
+    uploaded_video_interface = AppleMusicUploadedVideoInterface(
+        base=base_interface,
+    )
+
+    # Create main interface
+    interface = AppleMusicInterface(
+        song=song_interface,
+        music_video=music_video_interface,
+        uploaded_video=uploaded_video_interface,
+    )
+
+    # Create base downloader
+    base_downloader = AppleMusicBaseDownloader(
         interface=interface,
-        base_downloader=base_downloader,
-        song_downloader=song_downloader,
-        music_video_downloader=music_video_downloader,
-        uploaded_video_downloader=uploaded_video_downloader,
     )
 
-    # Download a song
+    # Create specialized downloaders
+    song_downloader = AppleMusicSongDownloader(base=base_downloader)
+    music_video_downloader = AppleMusicMusicVideoDownloader(
+        base=base_downloader,
+    )
+    uploaded_video_downloader = AppleMusicUploadedVideoDownloader(base=base_downloader)
+
+    # Create main downloader
+    downloader = AppleMusicDownloader(
+        song=song_downloader,
+        music_video=music_video_downloader,
+        uploaded_video=uploaded_video_downloader,
+    )
+
+    # Download from URL
     url = "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
-    url_info = downloader.get_url_info(url)
-    if url_info:
-        download_queue = await downloader.get_download_queue(url_info)
-        if download_queue:
-            for download_item in download_queue:
-                await downloader.download(download_item)
+    
+    download_queue = []
+    async for media in downloader.get_download_item_from_url(url):
+        download_queue.append(media)
+
+    for download_item in download_queue:
+        try:
+            await downloader.download(download_item)
+        except Exception as e:
+            print(f"Error downloading: {e}")
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ class AppleMusicSongInterface:
         codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY],
         use_album_date: bool = False,
         skip_decryption_key_non_legacy: bool = False,
+        skip_stream_info: bool = False,
         ask_codec_function: Callable[[list[dict]], dict | None] | None = None,
     ):
         self.base = base
@@ -46,6 +47,7 @@ class AppleMusicSongInterface:
         self.codec_priority = codec_priority
         self.use_album_date = use_album_date
         self.skip_decryption_key_non_legacy = skip_decryption_key_non_legacy
+        self.skip_stream_info = skip_stream_info
         self.ask_codec_function = ask_codec_function
 
     async def get_lyrics(
@@ -485,34 +487,35 @@ class AppleMusicSongInterface:
             media.lyrics.unsynced if media.lyrics else None,
         )
 
-        media.stream_info = await self.get_stream_info(
-            song_metadata,
-            webplayback,
-        )
-        if not media.stream_info:
-            raise GamdlInterfaceFormatNotAvailableError(
-                media_id=media.media_id,
-                codec=self.codec_priority,
+        if not self.skip_stream_info:
+            media.stream_info = await self.get_stream_info(
+                song_metadata,
+                webplayback,
             )
-
-        if (
-            not self.skip_decryption_key_non_legacy
-            and not media.stream_info.audio_track.widevine_pssh
-        ) or (
-            self.skip_decryption_key_non_legacy
-            and not media.stream_info.audio_track.fairplay_key
-        ):
-            raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
-
-        if (
-            media.stream_info.audio_track.widevine_pssh
-            and not self.skip_decryption_key_non_legacy
-        ) or media.stream_info.audio_track.legacy:
-            media.decryption_key = DecryptionKeyAv(
-                audio_track=await self.base.get_decryption_key(
-                    media.stream_info.audio_track.widevine_pssh,
-                    media.media_id,
+            if not media.stream_info:
+                raise GamdlInterfaceFormatNotAvailableError(
+                    media_id=media.media_id,
+                    codec=self.codec_priority,
                 )
-            )
+
+            if (
+                not self.skip_decryption_key_non_legacy
+                and not media.stream_info.audio_track.widevine_pssh
+            ) or (
+                self.skip_decryption_key_non_legacy
+                and not media.stream_info.audio_track.fairplay_key
+            ):
+                raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
+
+            if (
+                media.stream_info.audio_track.widevine_pssh
+                and not self.skip_decryption_key_non_legacy
+            ) or media.stream_info.audio_track.legacy:
+                media.decryption_key = DecryptionKeyAv(
+                    audio_track=await self.base.get_decryption_key(
+                        media.stream_info.audio_track.widevine_pssh,
+                        media.media_id,
+                    )
+                )
 
         return media

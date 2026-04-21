@@ -391,7 +391,7 @@ class AppleMusicSongInterface:
     async def _get_playlist_from_user(self, m3u8_data: dict) -> dict | None:
         if self.ask_codec_function:
             playlist = self.ask_codec_function(
-                [playlist["stream_info"] for playlist in m3u8_data["playlists"]]
+                [playlist for playlist in m3u8_data["playlists"]]
             )
             if asyncio.iscoroutine(playlist):
                 playlist = await playlist

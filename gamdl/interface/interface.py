@@ -26,7 +26,7 @@ class AppleMusicInterface:
         music_video: AppleMusicMusicVideoInterface,
         uploaded_video: AppleMusicUploadedVideoInterface,
         artist_select_media_type_function: (
-            Callable[[list[ArtistMediaType]], ArtistMediaType | None] | None
+            Callable[[list[ArtistMediaType], dict], ArtistMediaType | None] | None
         ) = None,
         artist_select_items_function: (
             Callable[[ArtistMediaType, list[dict]], list[dict] | None] | None
@@ -449,7 +449,8 @@ class AppleMusicInterface:
 
         if self.artist_select_media_type_function:
             artist_media_type = self.artist_select_media_type_function(
-                list(ArtistMediaType)
+                list(ArtistMediaType),
+                media_metadata,
             )
             if asyncio.iscoroutine(artist_media_type):
                 artist_media_type = await artist_media_type

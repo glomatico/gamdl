@@ -103,6 +103,18 @@ class AppleMusicBaseInterface:
 
         return response
 
+    @staticmethod
+    def format_cover(
+        template_cover_url: str,
+        cover_size: int,
+        cover_format: CoverFormat,
+    ) -> str:
+        return re.sub(
+            r"/\{w\}x\{h\}([a-z]{2})\.jpg",
+            f"/{cover_size}x{cover_size}bb.{cover_format.value}",
+            template_cover_url,
+        )
+
     @classmethod
     async def create(
         cls,
@@ -246,10 +258,10 @@ class AppleMusicBaseInterface:
         if self.cover_format == CoverFormat.RAW:
             cover_url = template_url
         else:
-            cover_url = re.sub(
-                r"/\{w\}x\{h\}([a-z]{2})\.jpg",
-                f"/{self.cover_size}x{self.cover_size}bb.{self.cover_format.value}",
+            cover_url = self.format_cover(
                 template_url,
+                self.cover_size,
+                self.cover_format,
             )
 
         cover_file_extension = await self._get_cover_file_extension(cover_url)

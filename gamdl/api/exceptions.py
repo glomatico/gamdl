@@ -9,7 +9,7 @@ class GamdlApiResponseError(GamdlApiError):
     def __init__(
         self,
         message: str,
-        content: str,
+        content: str | None = None,
         status_code: int | None = None,
     ):
         self.message = message

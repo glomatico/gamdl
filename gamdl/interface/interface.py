@@ -281,7 +281,6 @@ class AppleMusicInterface:
                 self._get_song_media(
                     media_id=track["id"],
                     index=index,
-                    total=base_media.media_metadata["attributes"]["trackCount"],
                     media_metadata=track,
                     playlist_metadata=base_media.media_metadata,
                 )
@@ -289,7 +288,6 @@ class AppleMusicInterface:
                 else self._get_music_video_media(
                     media_id=track["id"],
                     index=index,
-                    total=base_media.media_metadata["attributes"]["trackCount"],
                     media_metadata=track,
                     playlist_metadata=base_media.media_metadata,
                 )

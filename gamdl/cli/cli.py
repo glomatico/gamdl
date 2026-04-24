@@ -293,7 +293,7 @@ async def main(config: CliConfig):
                         download_item.final_path,
                     )
         except GamdlInterfaceUrlParseError as e:
-            url_log.exception(f"{e}")
+            url_log.error(f"{e}")
             continue
         except Exception as e:
             url_log.exception(f'Error processing "{url}": {e}')

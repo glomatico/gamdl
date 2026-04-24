@@ -5,12 +5,10 @@ from typing import AsyncGenerator
 import structlog
 
 from ..interface.types import AppleMusicMedia
-
 from .constants import TEMP_PATH_TEMPLATE
 from .enums import DownloadMode, RemuxMode
 from .exceptions import (
     GamdlDownloaderDependencyNotFoundError,
-    GamdlDownloaderFlatFilterExcludedError,
     GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderSyncedLyricsOnlyError,
 )
@@ -60,7 +58,10 @@ class AppleMusicDownloader:
         self,
         media: AppleMusicMedia,
     ) -> DownloadItem:
-        if media.error or media.flat_filter_result:
+        if media.error:
+            return DownloadItem(media)
+
+        if media.partial:
             return DownloadItem(media)
 
         elif media.media_metadata["type"] in {"songs", "library-songs"}:
@@ -80,10 +81,8 @@ class AppleMusicDownloader:
             if item.media.error:
                 raise item.media.error
 
-            if item.media.flat_filter_result:
-                raise GamdlDownloaderFlatFilterExcludedError(
-                    item.media.media_metadata["id"]
-                )
+            if item.media.partial:
+                return
 
             await self._initial_processing(item)
             await self._download(item)

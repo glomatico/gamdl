@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable
+from typing import AsyncGenerator
 
 import structlog
 
@@ -105,22 +106,28 @@ class AppleMusicUploadedVideoInterface:
 
     async def get_media(
         self,
-        uploaded_video_metadata: dict,
-    ) -> AppleMusicMedia:
-        media = AppleMusicMedia(
-            uploaded_video_metadata["id"],
-            uploaded_video_metadata,
-        )
+        media: AppleMusicMedia,
+    ) -> AsyncGenerator[AppleMusicMedia, None]:
+        if not media.media_metadata:
+            media.media_metadata = (
+                await self.base.apple_music_api.get_uploaded_video(media.media_id)
+            )["data"][0]
 
-        if not self.base.is_media_streamable(uploaded_video_metadata):
+        media.media_id = self.base.parse_catalog_media_id(media.media_metadata)
+
+        yield media
+
+        if not self.base.is_media_streamable(media.media_metadata):
             raise GamdlInterfaceMediaNotStreamableError(media.media_id)
 
-        media.cover = await self.base.get_cover(uploaded_video_metadata)
+        media.cover = await self.base.get_cover(media.media_metadata)
 
-        media.stream_info = await self.get_stream_info(uploaded_video_metadata)
+        media.stream_info = await self.get_stream_info(media.media_metadata)
         if not media.stream_info:
             raise GamdlInterfaceFormatNotAvailableError(media.media_id)
 
-        media.tags = self.get_tags(uploaded_video_metadata)
+        media.tags = self.get_tags(media.media_metadata)
 
-        return media
+        media.partial = False
+
+        yield media

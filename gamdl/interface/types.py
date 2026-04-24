@@ -155,9 +155,10 @@ class Cover:
 @dataclass
 class AppleMusicMedia:
     media_id: str
-    media_metadata: dict
     index: int = 0
     total: int = 0
+    partial: bool = True
+    media_metadata: dict | None = None
     error: BaseException | None = None
     playlist_metadata: dict | None = None
     playlist_tags: PlaylistTags | None = None
@@ -167,7 +168,6 @@ class AppleMusicMedia:
     tags: MediaTags | None = None
     stream_info: StreamInfoAv | None = None
     decryption_key: DecryptionKeyAv | None = None
-    flat_filter_result: Any = None
 
 
 @dataclass

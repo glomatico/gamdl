@@ -1,6 +1,6 @@
 import asyncio
 import urllib.parse
-from typing import Callable
+from typing import AsyncGenerator, Callable
 
 import m3u8
 import structlog
@@ -378,35 +378,36 @@ class AppleMusicMusicVideoInterface:
 
     async def get_media(
         self,
-        music_video_metadata: dict,
-        playlist_metadata: dict | None = None,
-        playlist_track: dict | None = None,
-    ) -> AppleMusicMedia:
-        media = AppleMusicMedia(
-            media_id=self.base.parse_catalog_media_id(music_video_metadata),
-            media_metadata=music_video_metadata,
-        )
+        media: AppleMusicMedia,
+    ) -> AsyncGenerator[AppleMusicMedia, None]:
+        if not media.media_metadata:
+            media.media_metadata = (
+                await self.base.apple_music_api.get_music_video(media.media_id)
+            )["data"][0]
 
-        if not self.base.is_media_streamable(music_video_metadata):
+        media.media_id = self.base.parse_catalog_media_id(media.media_metadata)
+
+        yield media
+
+        if not self.base.is_media_streamable(media.media_metadata):
             raise GamdlInterfaceMediaNotStreamableError(media.media_id)
 
-        if playlist_metadata and playlist_track:
-            media.playlist_metadata = playlist_metadata
+        if media.playlist_metadata:
             media.playlist_tags = self.base.get_playlist_tags(
-                playlist_metadata,
-                playlist_track,
+                media.playlist_metadata,
+                media.index,
             )
 
-        media.cover = await self.base.get_cover(music_video_metadata)
+        media.cover = await self.base.get_cover(media.media_metadata)
 
-        itunes_page_metadata = await self.get_itunes_page_metadata(music_video_metadata)
+        itunes_page_metadata = await self.get_itunes_page_metadata(media.media_metadata)
         media.tags = await self.get_tags(
-            music_video_metadata,
+            media.media_metadata,
             itunes_page_metadata,
         )
 
         media.stream_info = await self.get_stream_info(
-            music_video_metadata,
+            media.media_metadata,
             itunes_page_metadata,
         )
         if not media.stream_info:
@@ -423,4 +424,6 @@ class AppleMusicMusicVideoInterface:
 
         media.decryption_key = await self.get_decryption_key(media.stream_info)
 
-        return media
+        media.partial = False
+
+        yield media

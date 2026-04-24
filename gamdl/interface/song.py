@@ -3,9 +3,9 @@ import base64
 import datetime
 import json
 import re
-from typing import Callable
-from xml.dom import minidom
 import struct
+from typing import AsyncGenerator, Callable
+from xml.dom import minidom
 from xml.etree import ElementTree
 
 import m3u8
@@ -475,30 +475,31 @@ class AppleMusicSongInterface:
 
     async def get_media(
         self,
-        song_metadata: dict,
-        playlist_metadata: dict | None = None,
-        playlist_track: int | None = None,
-    ) -> AppleMusicMedia:
-        media = AppleMusicMedia(
-            media_id=self.base.parse_catalog_media_id(song_metadata),
-            media_metadata=song_metadata,
-        )
+        media: AppleMusicMedia,
+    ) -> AsyncGenerator[AppleMusicMedia, None]:
+        if not media.media_metadata:
+            media.media_metadata = (
+                await self.base.apple_music_api.get_song(media.media_id)
+            )["data"][0]
 
-        if not self.base.is_media_streamable(song_metadata):
+        media.media_id = self.base.parse_catalog_media_id(media.media_metadata)
+
+        yield media
+
+        if not self.base.is_media_streamable(media.media_metadata):
             raise GamdlInterfaceMediaNotStreamableError(
                 media_id=media.media_id,
             )
 
-        if playlist_metadata and playlist_track:
-            media.playlist_metadata = playlist_metadata
+        if media.playlist_metadata:
             media.playlist_tags = self.base.get_playlist_tags(
-                playlist_metadata,
-                playlist_track,
+                media.playlist_metadata,
+                media.index,
             )
 
-        media.cover = await self.base.get_cover(song_metadata)
+        media.cover = await self.base.get_cover(media.media_metadata)
 
-        media.lyrics = await self.get_lyrics(song_metadata)
+        media.lyrics = await self.get_lyrics(media.media_metadata)
 
         webplayback = await self.base.apple_music_api.get_webplayback(media.media_id)
 
@@ -509,7 +510,7 @@ class AppleMusicSongInterface:
 
         if not self.skip_stream_info:
             media.stream_info = await self.get_stream_info(
-                song_metadata,
+                media.media_metadata,
                 webplayback,
             )
             if not media.stream_info:
@@ -537,4 +538,6 @@ class AppleMusicSongInterface:
                     )
                 )
 
-        return media
+        media.partial = False
+
+        yield media

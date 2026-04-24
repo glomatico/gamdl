@@ -96,7 +96,7 @@ class AppleMusicSongDownloader:
             staged_path=staged_path,
         )
 
-        if self.base.use_wrapper and not legacy:
+        if self.base.interface.base.use_wrapper and not legacy:
             await self._decrypt_amdecrypt(
                 encrypted_path,
                 staged_path,

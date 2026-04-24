@@ -29,12 +29,16 @@ class AppleMusicBaseInterface:
         itunes_api: ItunesApi,
         cover_format: CoverFormat,
         cover_size: int,
+        use_wrapper: bool,
+        wrapper_m3u8_ip: str,
         cdm: Cdm,
     ) -> None:
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
         self.cover_format = cover_format
         self.cover_size = cover_size
+        self.use_wrapper = use_wrapper
+        self.wrapper_m3u8_ip = wrapper_m3u8_ip
         self.cdm = cdm
 
     @staticmethod
@@ -121,8 +125,10 @@ class AppleMusicBaseInterface:
         apple_music_api: AppleMusicApi,
         cover_format: CoverFormat = CoverFormat.JPG,
         cover_size: int = 1200,
-        itunes_api: ItunesApi | None = None,
+        use_wrapper: bool = False,
+        wrapper_m3u8_ip: str = "127.0.0.1:20020",
         wvd_path: str | None = None,
+        itunes_api: ItunesApi | None = None,
     ):
         itunes_api = itunes_api or await ItunesApi.create(
             storefront=apple_music_api.storefront,
@@ -135,6 +141,8 @@ class AppleMusicBaseInterface:
             itunes_api=itunes_api,
             cover_format=cover_format,
             cover_size=cover_size,
+            use_wrapper=use_wrapper,
+            wrapper_m3u8_ip=wrapper_m3u8_ip,
             cdm=cdm,
         )
         return base

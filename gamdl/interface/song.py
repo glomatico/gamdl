@@ -5,6 +5,7 @@ import json
 import re
 from typing import Callable
 from xml.dom import minidom
+import struct
 from xml.etree import ElementTree
 
 import m3u8
@@ -258,6 +259,25 @@ class AppleMusicSongInterface:
             else:
                 return await self._get_stream_info(song_metadata, codec)
 
+    async def get_wrapper_m3u8(self, adam_id: str) -> str | None:
+        host, port = self.base.wrapper_m3u8_ip.split(":")
+        reader, writer = await asyncio.open_connection(host, port)
+
+        data = struct.pack("B", len(adam_id)) + adam_id.encode()
+        writer.write(data)
+        await writer.drain()
+
+        response = await reader.readuntil(b"\n")
+        m3u8_url = response.decode().strip()
+
+        writer.close()
+        await writer.wait_closed()
+
+        if m3u8_url:
+            return m3u8_url
+
+        return None
+
     async def _get_stream_info(
         self,
         song_metadata: dict,
@@ -272,8 +292,10 @@ class AppleMusicSongInterface:
                 )
             )["data"][0]
 
-        m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
-            "enhancedHls"
+        m3u8_master_url = (
+            self.get_wrapper_m3u8(self.base.parse_catalog_media_id(song_metadata))
+            if self.base.use_wrapper
+            else song_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
         )
         if not m3u8_master_url:
             return None

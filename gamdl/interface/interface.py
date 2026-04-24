@@ -596,6 +596,7 @@ class AppleMusicInterface:
         if url_info.type == "song" or url_info.sub_id:
             media = await self._get_song_media(
                 index=0,
+                total=1,
                 media_id=url_info.sub_id or url_info.id,
             )
             yield media

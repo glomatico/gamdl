@@ -156,6 +156,8 @@ class Cover:
 class AppleMusicMedia:
     media_id: str
     media_metadata: dict
+    index: int = 0
+    total: int = 0
     error: BaseException | None = None
     playlist_metadata: dict | None = None
     playlist_tags: PlaylistTags | None = None

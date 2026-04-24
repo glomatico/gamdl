@@ -1,6 +1,6 @@
 [project]
 name = "gamdl"
-version = "3.1"
+version = "3.2"
 description = "A command-line app for downloading Apple Music songs, music videos and post videos."
 readme = "README.md"
 license = "MIT"

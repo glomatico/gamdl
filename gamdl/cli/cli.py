@@ -17,9 +17,7 @@ from ..downloader import (
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
-    DownloadItem,
     GamdlDownloaderDependencyNotFoundError,
-    GamdlDownloaderFlatFilterExcludedError,
     GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderSyncedLyricsOnlyError,
 )
@@ -31,6 +29,7 @@ from ..interface import (
     AppleMusicUploadedVideoInterface,
     GamdlInterfaceArtistMediaTypeError,
     GamdlInterfaceDecryptionNotAvailableError,
+    GamdlInterfaceFlatFilterExcludedError,
     GamdlInterfaceFormatNotAvailableError,
     GamdlInterfaceMediaNotStreamableError,
     GamdlInterfaceUrlParseError,
@@ -261,8 +260,21 @@ async def main(config: CliConfig):
                     )
                     else "Unknown Title"
                 )
+                media_type = (
+                    download_item.media.media_metadata["type"]
+                    if download_item.media.media_metadata
+                    else None
+                )
 
-                track_log.info(f'Downloading "{media_title}"')
+                if download_item.media.partial and media_type in {
+                    None,
+                    "songs",
+                    "library-songs",
+                    "music-videos",
+                    "library-music-videos",
+                    "uploaded-videos",
+                }:
+                    track_log.info(f'Downloading "{media_title}"')
 
                 try:
                     await downloader.download(download_item)
@@ -274,7 +286,7 @@ async def main(config: CliConfig):
                     GamdlDownloaderSyncedLyricsOnlyError,
                     GamdlDownloaderMediaFileExistsError,
                     GamdlDownloaderDependencyNotFoundError,
-                    GamdlDownloaderFlatFilterExcludedError,
+                    GamdlInterfaceFlatFilterExcludedError,
                 ) as e:
                     track_log.warning(f'Skipping "{media_title}": {e}')
                     continue

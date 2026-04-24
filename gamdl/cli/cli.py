@@ -142,6 +142,8 @@ async def main(config: CliConfig):
         apple_music_api=apple_music_api,
         cover_format=config.cover_format,
         cover_size=config.cover_size,
+        use_wrapper=config.use_wrapper,
+        wrapper_m3u8_ip=config.wrapper_m3u8_ip,
         wvd_path=config.wvd_path,
     )
 
@@ -184,7 +186,6 @@ async def main(config: CliConfig):
         mp4decrypt_path=config.mp4decrypt_path,
         ffmpeg_path=config.ffmpeg_path,
         mp4box_path=config.mp4box_path,
-        use_wrapper=config.use_wrapper,
         wrapper_decrypt_ip=config.wrapper_decrypt_ip,
         download_mode=config.download_mode,
         album_folder_template=config.album_folder_template,

@@ -210,6 +210,22 @@ class CliConfig:
             ),
         ),
     ]
+    use_wrapper: Annotated[
+        bool,
+        option(
+            "--use-wrapper",
+            help="Use wrapper for decrypting songs",
+            is_flag=True,
+        ),
+    ]
+    wrapper_m3u8_ip: Annotated[
+        str,
+        option(
+            "--wrapper-m3u8-ip",
+            help="Wrapper m3u8 IP address and port",
+            default=base_interface_create_sig.parameters["wrapper_m3u8_ip"].default,
+        ),
+    ]
     # Song Interface Options
     synced_lyrics_format: Annotated[
         SyncedLyricsFormat,
@@ -326,14 +342,6 @@ class CliConfig:
             "--mp4box-path",
             help="MP4Box executable path",
             default=base_downloader_sig.parameters["mp4box_path"].default,
-        ),
-    ]
-    use_wrapper: Annotated[
-        bool,
-        option(
-            "--use-wrapper",
-            help="Use wrapper for decrypting songs",
-            is_flag=True,
         ),
     ]
     wrapper_decrypt_ip: Annotated[

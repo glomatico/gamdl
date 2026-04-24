@@ -39,7 +39,6 @@ class AppleMusicSongInterface:
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
         codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY],
         use_album_date: bool = False,
-        skip_decryption_key_non_legacy: bool = False,
         skip_stream_info: bool = False,
         ask_codec_function: Callable[[list[dict]], dict | None] | None = None,
     ):
@@ -47,7 +46,6 @@ class AppleMusicSongInterface:
         self.synced_lyrics_format = synced_lyrics_format
         self.codec_priority = codec_priority
         self.use_album_date = use_album_date
-        self.skip_decryption_key_non_legacy = skip_decryption_key_non_legacy
         self.skip_stream_info = skip_stream_info
         self.ask_codec_function = ask_codec_function
 
@@ -521,17 +519,16 @@ class AppleMusicSongInterface:
                 )
 
             if (
-                not self.skip_decryption_key_non_legacy
+                not self.base.use_wrapper
                 and not media.stream_info.audio_track.widevine_pssh
             ) or (
-                self.skip_decryption_key_non_legacy
-                and not media.stream_info.audio_track.fairplay_key
+                self.base.use_wrapper and not media.stream_info.audio_track.fairplay_key
             ):
                 raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
 
             if (
                 media.stream_info.audio_track.widevine_pssh
-                and not self.skip_decryption_key_non_legacy
+                and not self.base.use_wrapper
             ) or media.stream_info.audio_track.legacy:
                 media.decryption_key = DecryptionKeyAv(
                     audio_track=await self.base.get_decryption_key(

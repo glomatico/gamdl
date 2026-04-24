@@ -246,9 +246,52 @@ async def main(config: CliConfig):
         url_log.info(f'Processing "{url}"')
 
         try:
-            download_queue: list[DownloadItem] = []
-            async for media in downloader.get_download_item_from_url(url):
-                download_queue.append(media)
+            async for download_item in downloader.get_download_item_from_url(url):
+                media_index = download_item.media.index + 1 or "-"
+                media_total = download_item.media.total or "-"
+
+                track_log = logger.bind(
+                    action=f"Track {media_index:>3}/{media_total:<3}"
+                )
+
+                media_title = (
+                    download_item.media.media_metadata["attributes"]["name"]
+                    if download_item.media.media_metadata
+                    and download_item.media.media_metadata.get("attributes", {}).get(
+                        "name"
+                    )
+                    else "Unknown Title"
+                )
+
+                track_log.info(f'Downloading "{media_title}"')
+
+                try:
+                    await downloader.download(download_item)
+                except (
+                    GamdlInterfaceMediaNotStreamableError,
+                    GamdlInterfaceFormatNotAvailableError,
+                    GamdlInterfaceDecryptionNotAvailableError,
+                    GamdlInterfaceArtistMediaTypeError,
+                    GamdlDownloaderSyncedLyricsOnlyError,
+                    GamdlDownloaderMediaFileExistsError,
+                    GamdlDownloaderDependencyNotFoundError,
+                    GamdlDownloaderFlatFilterExcludedError,
+                ) as e:
+                    track_log.warning(f'Skipping "{media_title}": {e}')
+                    continue
+                except Exception as e:
+                    error_count += 1
+                    track_log.exception(f'Error downloading "{media_title}"')
+
+                if (
+                    database
+                    and download_item.media.media_metadata
+                    and download_item.final_path
+                ):
+                    database.add(
+                        download_item.media.media_metadata["id"],
+                        download_item.final_path,
+                    )
         except GamdlInterfaceUrlParseError as e:
             url_log.exception(f"{e}")
             continue
@@ -256,50 +299,5 @@ async def main(config: CliConfig):
             url_log.exception(f'Error processing "{url}": {e}')
             error_count += 1
             continue
-
-        for download_index, download_item in enumerate(
-            download_queue,
-            1,
-        ):
-            track_log = logger.bind(
-                action=f"Track {download_index:>3}/{len(download_queue):<3}"
-            )
-
-            media_title = (
-                download_item.media.media_metadata["attributes"]["name"]
-                if download_item.media.media_metadata
-                and download_item.media.media_metadata.get("attributes", {}).get("name")
-                else "Unknown Title"
-            )
-
-            track_log.info(f'Downloading "{media_title}"')
-
-            try:
-                await downloader.download(download_item)
-            except (
-                GamdlInterfaceMediaNotStreamableError,
-                GamdlInterfaceFormatNotAvailableError,
-                GamdlInterfaceDecryptionNotAvailableError,
-                GamdlInterfaceArtistMediaTypeError,
-                GamdlDownloaderSyncedLyricsOnlyError,
-                GamdlDownloaderMediaFileExistsError,
-                GamdlDownloaderDependencyNotFoundError,
-                GamdlDownloaderFlatFilterExcludedError,
-            ) as e:
-                track_log.warning(f'Skipping "{media_title}": {e}')
-                continue
-            except Exception as e:
-                error_count += 1
-                track_log.exception(f'Error downloading "{media_title}"')
-
-            if (
-                database
-                and download_item.media.media_metadata
-                and download_item.final_path
-            ):
-                database.add(
-                    download_item.media.media_metadata["id"],
-                    download_item.final_path,
-                )
 
     logger.info(f"Finished with {error_count} error(s)")

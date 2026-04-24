@@ -247,7 +247,7 @@ async def main(config: CliConfig):
 
         try:
             async for download_item in downloader.get_download_item_from_url(url):
-                media_index = download_item.media.index + 1 or "-"
+                media_index = download_item.media.index + 1
                 media_total = download_item.media.total or "-"
 
                 track_log = logger.bind(

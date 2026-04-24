@@ -30,6 +30,7 @@ class ItunesApi:
     async def get_storefront_id(storefront: str) -> int:
         log = logger.bind(action="get_storefront_id", storefront=storefront)
 
+        response = None
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(APPLE_MUSIC_MUSIC_KIT_URL)
@@ -38,7 +39,7 @@ class ItunesApi:
             except httpx.HTTPError:
                 raise GamdlApiResponseError(
                     "Error fetching MusicKit content",
-                    status_code=response.status_code,
+                    status_code=response.status_code if response is not None else None,
                 )
 
         normalized_storefront = storefront.upper()
@@ -92,6 +93,7 @@ class ItunesApi:
     ) -> dict:
         log = logger.bind(action="get_lookup_result", media_id=media_id, entity=entity)
 
+        response = None
         try:
             response = await self.client.get(
                 ITUNES_LOOKUP_API_URL,
@@ -107,8 +109,8 @@ class ItunesApi:
         except httpx.HTTPError:
             raise GamdlApiResponseError(
                 "Error fetching iTunes lookup result",
-                content=response.text,
-                status_code=response.status_code,
+                content=response.text if response is not None else None,
+                status_code=response.status_code if response is not None else None,
             )
 
         log.debug("success", lookup_result=lookup_result)
@@ -126,6 +128,7 @@ class ItunesApi:
             media_id=media_id,
         )
 
+        response = None
         try:
             response = await self.client.get(
                 ITUNES_PAGE_API_URL.format(media_type=media_type, media_id=media_id),
@@ -138,8 +141,8 @@ class ItunesApi:
         except httpx.HTTPError:
             raise GamdlApiResponseError(
                 "Error fetching iTunes page",
-                content=response.text,
-                status_code=response.status_code,
+                content=response.text if response is not None else None,
+                status_code=response.status_code if response is not None else None,
             )
 
         log.debug("success", itunes_page=itunes_page)

@@ -70,6 +70,7 @@ class AppleMusicApi:
     async def get_token() -> str:
         log = logger.bind(action="get_token")
 
+        response = None
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
@@ -81,7 +82,7 @@ class AppleMusicApi:
             except httpx.HTTPError:
                 raise GamdlApiResponseError(
                     "Error fetching Apple Music homepage",
-                    status_code=response.status_code,
+                    status_code=response.status_code if response is not None else None,
                 )
 
         index_js_uri_match = re.search(
@@ -94,6 +95,7 @@ class AppleMusicApi:
             )
         index_js_uri = index_js_uri_match.group(1)
 
+        response = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.get(
@@ -104,7 +106,7 @@ class AppleMusicApi:
             except httpx.HTTPError:
                 raise GamdlApiResponseError(
                     "Error fetching index.js page",
-                    status_code=response.status_code,
+                    status_code=response.status_code if response is not None else None,
                 )
 
         token_match = re.search('(?=eyJh)(.*?)(?=")', index_js_page)
@@ -124,6 +126,7 @@ class AppleMusicApi:
     ) -> dict:
         log = logger.bind(action="get_account_info", meta=meta)
 
+        response = None
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
@@ -142,7 +145,7 @@ class AppleMusicApi:
             except httpx.HTTPError:
                 raise GamdlApiResponseError(
                     "Error fetching account info",
-                    status_code=response.status_code,
+                    status_code=response.status_code if response is not None else None,
                 )
 
         log.debug("success", account_info=account_info)
@@ -243,6 +246,7 @@ class AppleMusicApi:
         *args,
         **kwargs,
     ) -> "AppleMusicApi":
+        response = None
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(wrapper_account_url)
@@ -251,7 +255,7 @@ class AppleMusicApi:
             except httpx.HTTPError:
                 raise GamdlApiResponseError(
                     "Error fetching wrapper account info",
-                    status_code=response.status_code,
+                    status_code=response.status_code if response is not None else None,
                 )
 
         return await cls.create(
@@ -266,6 +270,7 @@ class AppleMusicApi:
         uri: str,
         params: dict | None = None,
     ) -> dict:
+        response = None
         try:
             response = await self.client.get(
                 APPLE_MUSIC_AMP_API_URL + uri,
@@ -276,8 +281,8 @@ class AppleMusicApi:
         except httpx.HTTPError:
             raise GamdlApiResponseError(
                 "Error fetching from AMP API",
-                content=response.text,
-                status_code=response.status_code,
+                content=response.text if response is not None else None,
+                status_code=response.status_code if response is not None else None,
             )
 
         if "errors" in response_json:
@@ -533,6 +538,7 @@ class AppleMusicApi:
     ) -> dict:
         log = logger.bind(action="get_webplayback", track_id=track_id)
 
+        response = None
         try:
             response = await self.client.post(
                 APPLE_MUSIC_WEBPLAYBACK_API_URL,
@@ -546,8 +552,8 @@ class AppleMusicApi:
         except httpx.HTTPError:
             raise GamdlApiResponseError(
                 "Error fetching webplayback data",
-                content=response.text,
-                status_code=response.status_code,
+                content=response.text if response is not None else None,
+                status_code=response.status_code if response is not None else None,
             )
 
         if "dialog" in webplayback:
@@ -570,6 +576,7 @@ class AppleMusicApi:
     ) -> dict:
         log = logger.bind(action="get_license_exchange", track_id=track_id)
 
+        response = None
         try:
             response = await self.client.post(
                 APPLE_MUSIC_LICENSE_API_URL,
@@ -587,8 +594,8 @@ class AppleMusicApi:
         except httpx.HTTPError:
             raise GamdlApiResponseError(
                 "Error fetching license exchange data",
-                content=response.text,
-                status_code=response.status_code,
+                content=response.text if response is not None else None,
+                status_code=response.status_code if response is not None else None,
             )
 
         if license_exchange.get("status") != 0:

@@ -142,6 +142,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--cover-format`                | Cover format                                                      | `jpg`                                          |
 | `--cover-size`                  | Cover size in pixels                                              | `1200`                                         |
 | `--wvd-path`                    | .wvd file path                                                    | -                                              |
+| `--wrapper-m3u8-ip`             | Wrapper m3u8 IP address and port                                  | -                                              |
 | **Song Options**                |                                                                   |                                                |
 | `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                                          |
 | `--song-codec-priority`         | Comma-separated codec priority                                    | `aac-legacy`                                   |

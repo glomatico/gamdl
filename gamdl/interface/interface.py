@@ -603,6 +603,8 @@ class AppleMusicInterface:
 
         elif url_info.type == "music-video":
             media = await self._get_music_video_media(
+                index=0,
+                total=1,
                 media_id=url_info.id,
             )
             yield media

@@ -66,6 +66,8 @@ class AppleMusicInterface:
 
     async def _get_song_media(
         self,
+        index: int,
+        total: int = 0,
         media_id: str | None = None,
         media_metadata: dict | None = None,
         playlist_metadata: dict | None = None,
@@ -84,13 +86,15 @@ class AppleMusicInterface:
                 return AppleMusicMedia(
                     media_id=media_id,
                     media_metadata=None,
+                    index=index,
+                    total=total,
                     error=e,
                 )
 
         if not media_id:
             media_id = self.base.parse_catalog_media_id(media_metadata)
 
-        base_media = AppleMusicMedia(media_id, media_metadata)
+        base_media = AppleMusicMedia(media_id, media_metadata, index, total)
 
         if self.flat_filter_function:
             flat_filter_result = self.flat_filter_function(media_metadata)
@@ -113,17 +117,22 @@ class AppleMusicInterface:
             return base_media
 
         try:
-            return await self.song.get_media(
+            media = await self.song.get_media(
                 media_metadata,
                 playlist_metadata,
                 playlist_track,
             )
+            media.index = index
+            media.total = total
+            return media
         except Exception as e:
             base_media.error = e
             return base_media
 
     async def _get_music_video_media(
         self,
+        index: int,
+        total: int = 0,
         media_id: str | None = None,
         media_metadata: dict | None = None,
         playlist_metadata: dict | None = None,
@@ -140,13 +149,15 @@ class AppleMusicInterface:
                 return AppleMusicMedia(
                     media_id=media_id,
                     media_metadata=None,
+                    index=index,
+                    total=total,
                     error=e,
                 )
 
         if not media_id:
-            media_id = self.music_video.parse_catalog_media_id(media_metadata)
+            media_id = self.base.parse_catalog_media_id(media_metadata)
 
-        base_media = AppleMusicMedia(media_id, media_metadata)
+        base_media = AppleMusicMedia(media_id, media_metadata, index, total)
 
         if self.flat_filter_function:
             flat_filter_result = self.flat_filter_function(media_metadata)
@@ -169,11 +180,14 @@ class AppleMusicInterface:
             return base_media
 
         try:
-            return await self.music_video.get_media(
+            media = await self.music_video.get_media(
                 media_metadata,
                 playlist_metadata,
                 playlist_track,
             )
+            media.index = index
+            media.total = total
+            return media
         except Exception as e:
             base_media.error = e
             return base_media
@@ -278,18 +292,22 @@ class AppleMusicInterface:
         tasks = [
             (
                 self._get_song_media(
+                    index=index,
+                    total=media_metadata["attributes"]["trackCount"],
                     media_id=track["id"],
                     media_metadata=track,
                     playlist_metadata=media_metadata,
                 )
                 if track["type"] in {"songs", "library-songs"}
                 else self._get_music_video_media(
+                    index=index,
+                    total=media_metadata["attributes"]["trackCount"],
                     media_id=track["id"],
                     media_metadata=track,
                     playlist_metadata=media_metadata,
                 )
             )
-            for track in tracks
+            for index, track in enumerate(tracks)
         ]
 
         if self.concurrency == 1:
@@ -374,6 +392,7 @@ class AppleMusicInterface:
         tasks = [
             (
                 self._get_song_media(
+                    index=index,
                     media_id=track["id"],
                     media_metadata=track,
                     playlist_metadata=media_metadata,
@@ -381,6 +400,7 @@ class AppleMusicInterface:
                 )
                 if track["type"] in {"songs", "library-songs"}
                 else self._get_music_video_media(
+                    index=index,
                     media_id=track["id"],
                     media_metadata=track,
                     playlist_metadata=media_metadata,
@@ -498,7 +518,7 @@ class AppleMusicInterface:
             selected_items = items[:1]
 
         tasks = []
-        for item in selected_items:
+        for index, item in enumerate(selected_items):
             if item["type"] in {"songs", "library-songs"}:
                 tasks.append(
                     (
@@ -506,6 +526,8 @@ class AppleMusicInterface:
                         self._get_song_media(
                             media_id=item["id"],
                             media_metadata=item,
+                            index=index,
+                            total=len(selected_items),
                         ),
                     )
                 )
@@ -525,6 +547,8 @@ class AppleMusicInterface:
                         self._get_music_video_media(
                             media_id=item["id"],
                             media_metadata=item,
+                            index=index,
+                            total=len(selected_items),
                         ),
                     )
                 )

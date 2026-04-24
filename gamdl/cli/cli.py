@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import traceback
 from functools import wraps
 from pathlib import Path
 
@@ -78,6 +77,7 @@ async def main(config: CliConfig):
     structlog.configure(
         processors=[
             structlog.processors.add_log_level,
+            structlog.processors.ExceptionPrettyPrinter(),
             custom_structlog_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -250,13 +250,11 @@ async def main(config: CliConfig):
             async for media in downloader.get_download_item_from_url(url):
                 download_queue.append(media)
         except GamdlInterfaceUrlParseError as e:
-            url_log.warning(f"{e}")
+            url_log.exception(f"{e}")
             continue
         except Exception as e:
-            url_log.error(f'Error processing "{url}": {e}')
+            url_log.exception(f'Error processing "{url}": {e}')
             error_count += 1
-            if not config.no_exceptions:
-                traceback.print_exc()
             continue
 
         for download_index, download_item in enumerate(
@@ -292,9 +290,7 @@ async def main(config: CliConfig):
                 continue
             except Exception as e:
                 error_count += 1
-                track_log.error(f'Error downloading "{media_title}"')
-                if not config.no_exceptions:
-                    traceback.print_exc()
+                track_log.exception(f'Error downloading "{media_title}"')
 
             if (
                 database

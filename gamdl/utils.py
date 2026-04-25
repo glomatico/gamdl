@@ -20,7 +20,7 @@ async def async_subprocess(*args: str, silent: bool = False) -> None:
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        msg = f'"{args[0]}" exited with code {proc.returncode}'
+        msg = f"Exited with code {proc.returncode}: {' '.join(args)}"
 
         if stdout:
             msg += f"\nstdout:\n{stdout.decode()}"

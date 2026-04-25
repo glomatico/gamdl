@@ -88,7 +88,8 @@ class AppleMusicDownloader:
             await self._download(item)
             await self._final_processing(item)
         finally:
-            self._cleanup_temp(item.uuid_)
+            if not self.skip_cleanup:
+                self._cleanup_temp(item.uuid_)
 
     def _update_playlist_file(
         self,
@@ -263,6 +264,6 @@ class AppleMusicDownloader:
         log = logger.bind(action="cleanup_temp", folder_tag=folder_tag)
 
         temp_path = Path(self.base.temp_path) / TEMP_PATH_TEMPLATE.format(folder_tag)
-        if temp_path.exists() and temp_path.is_dir() and not self.skip_cleanup:
+        if temp_path.exists() and temp_path.is_dir():
             shutil.rmtree(temp_path, ignore_errors=True)
             log.debug("success")

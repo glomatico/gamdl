@@ -1,5 +1,5 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..interface.types import AppleMusicMedia
 
@@ -7,7 +7,7 @@ from ..interface.types import AppleMusicMedia
 @dataclass
 class DownloadItem:
     media: AppleMusicMedia
-    uuid_: str = uuid.uuid4().hex[:8]
+    uuid_: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     staged_path: str = None
     final_path: str = None
     playlist_file_path: str = None

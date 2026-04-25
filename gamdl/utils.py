@@ -1,14 +1,13 @@
 import asyncio
 import string
-import subprocess
 import typing
 
 
 async def async_subprocess(*args: str, silent: bool = False) -> None:
     if silent:
         additional_args = {
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
+            "stdout": asyncio.subprocess.PIPE,
+            "stderr": asyncio.subprocess.PIPE,
         }
     else:
         additional_args = {}
@@ -17,10 +16,18 @@ async def async_subprocess(*args: str, silent: bool = False) -> None:
         *args,
         **additional_args,
     )
-    await proc.communicate()
+
+    stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        raise Exception(f'"{args[0]}" exited with code {proc.returncode}')
+        msg = f'"{args[0]}" exited with code {proc.returncode}'
+
+        if stdout:
+            msg += f"\nstdout:\n{stdout.decode()}"
+        if stderr:
+            msg += f"\nstderr:\n{stderr.decode()}"
+
+        raise Exception(msg)
 
 
 async def safe_gather(

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from functools import wraps
 from pathlib import Path
 
@@ -38,7 +37,7 @@ from .cli_config import CliConfig
 from .config_file import ConfigFile
 from .database import Database
 from .interactive_prompts import InteractivePrompts
-from .utils import custom_structlog_formatter, prompt_path
+from .utils import CustomOutputWriter, custom_structlog_formatter, prompt_path
 
 logger = structlog.get_logger(__name__)
 
@@ -60,18 +59,10 @@ def make_sync(func):
 async def main(config: CliConfig):
     colorama.just_fix_windows_console()
 
-    root_logger = logging.getLogger(__name__.split(".")[0])
-    root_logger.setLevel(config.log_level)
-    root_logger.propagate = False
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(logging.Formatter("%(message)s"))
-    root_logger.addHandler(stream_handler)
+    log_output = CustomOutputWriter()
 
     if config.log_file:
-        file_handler = logging.FileHandler(config.log_file, encoding="utf-8")
-        file_handler.setFormatter(logging.Formatter("%(message)s"))
-        root_logger.addHandler(file_handler)
+        log_output.add_file(config.log_file)
 
     structlog.configure(
         processors=[
@@ -79,7 +70,8 @@ async def main(config: CliConfig):
             structlog.processors.ExceptionPrettyPrinter(),
             custom_structlog_formatter,
         ],
-        logger_factory=structlog.stdlib.LoggerFactory(),
+        logger_factory=structlog.PrintLoggerFactory(file=log_output),
+        wrapper_class=structlog.make_filtering_bound_logger(config.log_level),
     )
 
     logger.info(f"Starting Gamdl {__version__}")

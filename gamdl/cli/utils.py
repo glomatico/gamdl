@@ -1,3 +1,5 @@
+import atexit
+import sys
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -37,6 +39,27 @@ class Csv(click.ParamType):
                     ctx,
                 )
         return result
+
+
+class CustomOutputWriter:
+    def __init__(
+        self,
+        streams: list[Any] = [sys.stdout],
+    ):
+        self.streams = streams
+
+    def add_file(self, path: str):
+        file_stream = open(path, "a")
+        atexit.register(file_stream.close)
+        self.streams.append(file_stream)
+
+    def write(self, message: str):
+        for stream in self.streams:
+            stream.write(message)
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
 
 
 def custom_structlog_formatter(

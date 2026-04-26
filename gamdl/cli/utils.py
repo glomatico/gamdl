@@ -67,7 +67,7 @@ def custom_structlog_formatter(
     name: str,
     event_dict: dict[str, Any],
 ) -> str:
-    level = event_dict.get("level", "INFO").upper()
+    level = event_dict.pop("level", "INFO").upper()
     timestamp = datetime.now().strftime("%H:%M:%S")
 
     level_colors = {
@@ -86,7 +86,7 @@ def custom_structlog_formatter(
         prefix += click.style(f" [{action}]", dim=True)
 
     if level in {"INFO", "WARNING", "ERROR", "CRITICAL"}:
-        message = event_dict.get("event", "")
+        message = event_dict.pop("event", "")
         return f"{prefix} {message}"
     else:
         return f"{prefix} {event_dict}"

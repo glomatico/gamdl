@@ -170,7 +170,7 @@ class CliConfig:
         ),
     ]
     media_user_token: Annotated[
-        str,
+        str | None,
         option(
             "--media-user-token",
             help="Raw media_user_token cookie",

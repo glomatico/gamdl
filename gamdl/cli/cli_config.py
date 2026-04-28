@@ -169,6 +169,14 @@ class CliConfig:
             default=api_from_wrapper_sig.parameters["wrapper_account_url"].default,
         ),
     ]
+    media_user_token: Annotated[
+        str,
+        option(
+            "--media-user-token",
+            help="Raw media_user_token cookie",
+            default=api_from_wrapper_sig.parameters["media_user_token"].default,
+        ),
+    ]
     language: Annotated[
         str,
         option(

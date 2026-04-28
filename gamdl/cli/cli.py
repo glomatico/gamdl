@@ -88,6 +88,13 @@ async def main(config: CliConfig):
                 "Make sure the wrapper is running and the URL is correct."
             )
             return
+            
+    elif config.media_user_token:
+        apple_music_api = await AppleMusicApi.create(
+            media_user_token=config.media_user_token,
+            language=config.language,
+        )
+        
     else:
         cookies_path = prompt_path(config.cookies_path)
         apple_music_api = await AppleMusicApi.create_from_netscape_cookies(

@@ -181,7 +181,7 @@ class CliConfig:
         str | None,
         option(
             "--auth-token",
-            help="Browser authorization token; do not include \"Bearer\" prefix",
+            help="Browser authorization token to optionally pair with --media-user-token; do not include \"Bearer\" prefix",
             default=api_create_sig.parameters["token"].default,
         ),
     ]

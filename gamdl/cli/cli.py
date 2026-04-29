@@ -92,6 +92,7 @@ async def main(config: CliConfig):
     elif config.media_user_token:
         apple_music_api = await AppleMusicApi.create(
             media_user_token=config.media_user_token,
+            token=config.auth_token,
             language=config.language,
         )
         

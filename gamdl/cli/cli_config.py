@@ -177,6 +177,14 @@ class CliConfig:
             default=api_create_sig.parameters["media_user_token"].default,
         ),
     ]
+    auth_token: Annotated[
+        str | None,
+        option(
+            "--auth-token",
+            help="Browser authorization token; do not include \"Bearer\" prefix",
+            default=api_create_sig.parameters["token"].default,
+        ),
+    ]
     language: Annotated[
         str,
         option(

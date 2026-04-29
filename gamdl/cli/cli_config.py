@@ -174,7 +174,7 @@ class CliConfig:
         option(
             "--media-user-token",
             help="Raw media_user_token cookie",
-            default=api_from_wrapper_sig.parameters["media_user_token"].default,
+            default=api_create_sig.parameters["media_user_token"].default,
         ),
     ]
     language: Annotated[

@@ -137,6 +137,7 @@ The file is created automatically on first run. Command-line arguments override 
 | **Apple Music Options**         |                                                                   |                                                |
 | `--cookies-path`, `-c`          | Cookies file path                                                 | `./cookies.txt`                                |
 | `--media-user-token`            | Raw *media_user_token* cookie                                     | -                                              |
+| `--auth-token`                  | Optional authorization token to pair with `--media-user-token`    | -                                              |
 | `--wrapper-account-url`         | Wrapper account URL                                               | `http://127.0.0.1:30020`                       |
 | `--language`, `-l`              | Metadata language                                                 | `en-US`                                        |
 | **Output Options**              |                                                                   |                                                |

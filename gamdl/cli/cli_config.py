@@ -427,6 +427,14 @@ class CliConfig:
             default=base_downloader_sig.parameters["playlist_file_template"].default,
         ),
     ]
+    global_path_template: Annotated[
+        str,
+        option(
+            "--global-path-template",
+            help="Override folder/file template; ignoring tags",
+            default=base_downloader_sig.parameters["global_path_template"].default,
+        ),
+    ]
     date_tag_template: Annotated[
         str,
         option(

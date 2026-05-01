@@ -428,7 +428,7 @@ class CliConfig:
         ),
     ]
     global_path_template: Annotated[
-        str,
+        str | None,
         option(
             "--global-path-template",
             help="Override folder/file template; ignoring tags",

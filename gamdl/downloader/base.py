@@ -37,6 +37,7 @@ class AppleMusicBaseDownloader:
         multi_disc_file_template: str = "{disc}-{track:02d} {title}",
         no_album_file_template: str = "{title}",
         playlist_file_template: str = "{playlist_title}",
+        global_path_template: str | None = None,
         date_tag_template: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: list[str] = None,
         truncate: int = None,
@@ -59,6 +60,7 @@ class AppleMusicBaseDownloader:
         self.playlist_folder_template = playlist_folder_template
         self.no_album_file_template = no_album_file_template
         self.playlist_file_template = playlist_file_template
+        self.global_path_template = global_path_template
         self.date_tag_template = date_tag_template
         self.exclude_tags = exclude_tags
         self.truncate = truncate
@@ -123,13 +125,13 @@ class AppleMusicBaseDownloader:
 
         return sanitized_string.strip()
 
-    def get_final_path(
+    def _get_template_parts(
         self,
         tags: MediaTags,
-        file_extension: str,
-        playlist_tags: PlaylistTags | None,
     ) -> str:
-        log = logger.bind(action="get_final_path")
+
+        if self.global_path_template:
+            return self.global_path_template
 
         if tags.album:
             template_folder_parts = (
@@ -138,7 +140,7 @@ class AppleMusicBaseDownloader:
                 else self.album_folder_template.split("/")
             )
         else:
-            template_folder_parts = self.no_album_folder_template.split("/")
+            C = self.no_album_folder_template.split("/")
 
         if tags.album:
             template_file_parts = (
@@ -150,6 +152,17 @@ class AppleMusicBaseDownloader:
             template_file_parts = self.no_album_file_template.split("/")
 
         template_parts = template_folder_parts + template_file_parts
+        return template_parts
+
+    def get_final_path(
+        self,
+        tags: MediaTags,
+        file_extension: str,
+        playlist_tags: PlaylistTags | None,
+    ) -> str:
+        log = logger.bind(action="get_final_path")
+
+        temple_parts = self._get_template_parts(tags)
         formatted_parts = []
 
         for i, part in enumerate(template_parts):

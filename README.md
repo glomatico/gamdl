@@ -167,6 +167,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--wrapper-decrypt-ip`          | Wrapper decryption server IP                                      | `127.0.0.1:10020`                              |
 | `--download-mode`               | Download mode                                                     | `ytdlp`                                        |
 | **Template Options**            |                                                                   |                                                |
+| `--global-path-template`        | Override folder/file template; ignoring tags                      | -                                              |
 | `--album-folder-template`       | Album folder template                                             | `{album_artist}/{album}`                       |
 | `--compilation-folder-template` | Compilation folder template                                       | `Compilations/{album}`                         |
 | `--no-album-folder-template`    | No album folder template                                          | `{artist}/Unknown Album`                       |

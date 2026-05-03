@@ -186,6 +186,7 @@ async def main(config: CliConfig):
         multi_disc_file_template=config.multi_disc_file_template,
         no_album_file_template=config.no_album_file_template,
         playlist_file_template=config.playlist_file_template,
+        global_path_template=config.global_path_template,
         date_tag_template=config.date_tag_template,
         exclude_tags=config.exclude_tags,
         truncate=config.truncate,

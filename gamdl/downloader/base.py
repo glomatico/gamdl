@@ -162,7 +162,7 @@ class AppleMusicBaseDownloader:
     ) -> str:
         log = logger.bind(action="get_final_path")
 
-        temple_parts = self._get_template_parts(tags)
+        template_parts = self._get_template_parts(tags)
         formatted_parts = []
 
         for i, part in enumerate(template_parts):

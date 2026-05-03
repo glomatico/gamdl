@@ -106,7 +106,7 @@ class AppleMusicBaseDownloader:
     def _sanitize_string(
         self,
         dirty_string: str,
-        file_ext: str = None,
+        file_ext: str | None = None,
     ) -> str:
         sanitized_string = re.sub(
             ILLEGAL_CHARS_RE,
@@ -127,22 +127,28 @@ class AppleMusicBaseDownloader:
 
     def _get_template_parts(
         self,
-        tags: MediaTags,
-    ) -> str:
+        is_playlist: bool = False,
+        tags: MediaTags | None = None,
+    ) -> list[str]:
 
         if self.global_path_template:
-            return self.global_path_template
+            return self.global_path_template.split("/")
 
-        if tags.album:
+        if is_playlist:
+            template_folder_parts = self.playlist_folder_template.split("/")
+            template_file_parts = self.playlist_file_template.split("/")
+            return template_folder_parts + template_file_parts
+
+        if tags is not None and tags.album:
             template_folder_parts = (
                 self.compilation_folder_template.split("/")
                 if tags.compilation
                 else self.album_folder_template.split("/")
             )
         else:
-            C = self.no_album_folder_template.split("/")
+            template_folder_parts = self.no_album_folder_template.split("/")
 
-        if tags.album:
+        if tags is not None and tags.album:
             template_file_parts = (
                 self.multi_disc_file_template.split("/")
                 if isinstance(tags.disc_total, int) and tags.disc_total > 1
@@ -162,7 +168,7 @@ class AppleMusicBaseDownloader:
     ) -> str:
         log = logger.bind(action="get_final_path")
 
-        template_parts = self._get_template_parts(tags)
+        template_parts = self._get_template_parts(tags=tags)
         formatted_parts = []
 
         for i, part in enumerate(template_parts):
@@ -352,9 +358,7 @@ class AppleMusicBaseDownloader:
     ) -> str:
         log = logger.bind(action="get_playlist_file_path")
 
-        template_folder_parts = self.playlist_folder_template.split("/")
-        template_file_parts = self.playlist_file_template.split("/")
-        template_parts = template_folder_parts + template_file_parts
+        template_parts = self._get_template_parts(is_playlist=True)
         formatted_parts = []
 
         for i, part in enumerate(template_parts):

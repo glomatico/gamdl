@@ -138,6 +138,11 @@ class AppleMusicMusicVideoInterface:
             tags.compilation = album["attributes"]["isCompilation"]
             tags.track = lookup_metadata[0]["trackNumber"]
             tags.track_total = lookup_metadata[0]["trackCount"]
+            tags.release_type = (
+                "COMPILATION" if tags.compilation
+                else "SINGLE" if tags.track_total == 1
+                else "ALBUM"
+            )
 
         log.debug("success", tags=tags)
 

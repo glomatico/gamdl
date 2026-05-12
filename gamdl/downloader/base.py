@@ -1,6 +1,7 @@
 import asyncio
 import re
 import shutil
+import unicodedata
 from pathlib import Path
 
 import structlog
@@ -41,6 +42,7 @@ class AppleMusicBaseDownloader:
         exclude_tags: list[str] = None,
         truncate: int = None,
         silent: bool = False,
+        artist_separator: str = " & ",
     ):
         self.interface = interface
         self.output_path = output_path
@@ -63,6 +65,7 @@ class AppleMusicBaseDownloader:
         self.exclude_tags = exclude_tags
         self.truncate = truncate
         self.silent = silent
+        self.artist_separator = artist_separator
 
         self._initialize_binary_paths()
 
@@ -100,6 +103,27 @@ class AppleMusicBaseDownloader:
         log.debug("success", temp_path=temp_path)
 
         return temp_path
+
+    def _get_artist_initials(self, name: str) -> str:
+        """Return the first letter of name, ASCII-normalized, or '#' for non-alpha."""
+        ch = (name or "").strip()[:1].upper()
+        if not ch:
+            return "#"
+        normalized = "".join(
+            c for c in unicodedata.normalize("NFD", ch)
+            if unicodedata.category(c) != "Mn"
+        )
+        return normalized if normalized.isalpha() else "#"
+
+    def _apply_artist_separator(self, artist_str: str) -> str:
+        """Split a combined artist string on ' & ' / ', ' and rejoin with artist_separator."""
+        if not artist_str:
+            return artist_str
+        # Split on ' & ' first, then on ', ' within each part
+        parts = []
+        for segment in re.split(r" & ", artist_str):
+            parts.extend(re.split(r", ", segment))
+        return self.artist_separator.join(p.strip() for p in parts if p.strip())
 
     def _sanitize_string(
         self,
@@ -152,21 +176,33 @@ class AppleMusicBaseDownloader:
         template_parts = template_folder_parts + template_file_parts
         formatted_parts = []
 
+        _artist_initials = self._get_artist_initials(tags.album_artist or tags.artist)
+        _artists = self._apply_artist_separator(tags.artist or "")
+        _album_artists = self._apply_artist_separator(tags.album_artist or "")
+        _explicit = (
+            "(explicit)" if tags.rating is not None and tags.rating.value == 1 else ""
+        )
+        _release = getattr(tags, "release_type", None) or "ALBUM"
+
         for i, part in enumerate(template_parts):
             is_folder = i < len(template_parts) - 1
             formatted_part = CustomStringFormatter().format(
                 part,
                 album=(tags.album, "Unknown Album"),
-                album_artist=(tags.album_artist, "Unknown Artist"),
+                album_artist=(_album_artists or tags.album_artist, "Unknown Artist"),
                 album_id=(tags.album_id, "Unknown Album ID"),
-                artist=(tags.artist, "Unknown Artist"),
+                artist=(_artists or tags.artist, "Unknown Artist"),
                 artist_id=(tags.artist_id, "Unknown Artist ID"),
+                artist_initials=(_artist_initials, "#"),
+                artists=(_artists, "Unknown Artist"),
                 composer=(tags.composer, "Unknown Composer"),
                 composer_id=(tags.composer_id, "Unknown Composer ID"),
                 date=(tags.date, "Unknown Date"),
                 disc=(tags.disc, ""),
                 disc_total=(tags.disc_total, ""),
+                explicit=(_explicit, ""),
                 media_type=(tags.media_type, "Unknown Media Type"),
+                release=(_release, "ALBUM"),
                 playlist_artist=(
                     (playlist_tags.artist if playlist_tags else None),
                     "Unknown Playlist Artist",

@@ -35,6 +35,7 @@ class MediaTags:
     lyrics: str = None
     media_type: MediaType = None
     rating: MediaRating = None
+    release_type: str = None
     storefront: str = None
     title: str = None
     title_id: int = None

@@ -240,6 +240,11 @@ class AppleMusicSongInterface:
             track=webplayback_metadata["trackNumber"],
             track_total=webplayback_metadata["trackCount"],
             xid=webplayback_metadata.get("xid"),
+            release_type=(
+                "COMPILATION" if webplayback_metadata.get("compilation")
+                else "SINGLE" if webplayback_metadata.get("trackCount", 0) == 1
+                else "ALBUM"
+            ),
         )
 
         log.debug("success", tags=tags)

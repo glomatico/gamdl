@@ -43,6 +43,7 @@ class AppleMusicBaseDownloader:
         truncate: int = None,
         silent: bool = False,
         artist_separator: str = " & ",
+        music_video_output_path: str = None,
     ):
         self.interface = interface
         self.output_path = output_path
@@ -70,6 +71,7 @@ class AppleMusicBaseDownloader:
         self.artist_separator = (
             artist_separator.strip("\"'") if isinstance(artist_separator, str) else " & "
         )
+        self.music_video_output_path = music_video_output_path
 
         self._initialize_binary_paths()
 
@@ -234,7 +236,14 @@ class AppleMusicBaseDownloader:
             )
             formatted_parts.append(sanitized_formatted_part)
 
-        final_path = str(Path(self.output_path, *formatted_parts))
+        from ..interface.enums import MediaType
+        effective_output = (
+            self.music_video_output_path
+            if self.music_video_output_path
+            and tags.media_type == MediaType.MUSIC_VIDEO
+            else self.output_path
+        )
+        final_path = str(Path(effective_output, *formatted_parts))
 
         log.debug("success", final_path=final_path)
 

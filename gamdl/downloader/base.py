@@ -12,7 +12,7 @@ from ..interface.enums import CoverFormat
 from ..interface.interface import AppleMusicInterface
 from ..interface.types import MediaTags, PlaylistTags
 from ..utils import CustomStringFormatter, async_subprocess
-from .constants import ILLEGAL_CHAR_REPLACEMENT, ILLEGAL_CHARS_RE, TEMP_PATH_TEMPLATE
+from .constants import FULLWIDTH_REPLACEMENTS, ILLEGAL_CHAR_REPLACEMENT, ILLEGAL_CHARS_RE, TEMP_PATH_TEMPLATE
 from .enums import DownloadMode
 
 logger = structlog.get_logger(__name__)
@@ -44,6 +44,7 @@ class AppleMusicBaseDownloader:
         silent: bool = False,
         artist_separator: str = " & ",
         music_video_output_path: str = None,
+        use_fullwidth_replacements: bool = True,
     ):
         self.interface = interface
         self.output_path = output_path
@@ -72,6 +73,7 @@ class AppleMusicBaseDownloader:
             artist_separator.strip("\"'") if isinstance(artist_separator, str) else " & "
         )
         self.music_video_output_path = music_video_output_path
+        self.use_fullwidth_replacements = use_fullwidth_replacements
 
         self._initialize_binary_paths()
 
@@ -136,11 +138,16 @@ class AppleMusicBaseDownloader:
         dirty_string: str,
         file_ext: str = None,
     ) -> str:
-        sanitized_string = re.sub(
-            ILLEGAL_CHARS_RE,
-            ILLEGAL_CHAR_REPLACEMENT,
-            dirty_string,
-        )
+        if self.use_fullwidth_replacements:
+            sanitized_string = dirty_string
+            for char, replacement in FULLWIDTH_REPLACEMENTS.items():
+                sanitized_string = sanitized_string.replace(char, replacement)
+        else:
+            sanitized_string = re.sub(
+                ILLEGAL_CHARS_RE,
+                ILLEGAL_CHAR_REPLACEMENT,
+                dirty_string,
+            )
 
         if file_ext is None:
             sanitized_string = sanitized_string[: self.truncate]

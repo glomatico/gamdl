@@ -65,7 +65,11 @@ class AppleMusicBaseDownloader:
         self.exclude_tags = exclude_tags
         self.truncate = truncate
         self.silent = silent
-        self.artist_separator = artist_separator
+        # Strip surrounding quotes so config.ini values like " / " work correctly
+        # (configparser strips leading/trailing whitespace but preserves quote chars)
+        self.artist_separator = (
+            artist_separator.strip("\"'") if isinstance(artist_separator, str) else " & "
+        )
 
         self._initialize_binary_paths()
 

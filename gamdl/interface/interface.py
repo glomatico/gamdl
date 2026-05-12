@@ -35,6 +35,8 @@ class AppleMusicInterface:
         flat_filter_function: Callable[[dict], Any] | None = None,
         concurrency: int = 1,
         disallowed_media_types: list[str] | None = None,
+        artist_views: str = "full-albums,compilation-albums,live-albums,singles,top-songs",
+        artist_deduplicate_albums: bool = True,
     ) -> None:
         self.song = song
         self.music_video = music_video
@@ -44,6 +46,8 @@ class AppleMusicInterface:
         self.flat_filter_function = flat_filter_function
         self.concurrency = concurrency
         self.disallowed_media_types = disallowed_media_types
+        self.artist_views = artist_views
+        self.artist_deduplicate_albums = artist_deduplicate_albums
 
         self.base = song.base
 
@@ -316,6 +320,7 @@ class AppleMusicInterface:
             base_media.media_metadata = (
                 await self.base.apple_music_api.get_artist(
                     media_id,
+                    views=self.artist_views,
                 )
             )["data"][0]
 
@@ -373,8 +378,27 @@ class AppleMusicInterface:
         else:
             selected_items = items[:1]
 
+        # Deduplicate albums by normalized name to avoid downloading the same
+        # compilation/album multiple times when Apple Music catalogues it under
+        # different IDs or release years across storefronts.
+        seen_album_names: set[str] = set()
+
+        def _seen(item: dict) -> bool:
+            if not self.artist_deduplicate_albums:
+                return False
+            if item.get("type") not in {"albums", "library-albums"}:
+                return False
+            name = (item.get("attributes") or {}).get("name", "")
+            key = name.strip().lower()
+            if key in seen_album_names:
+                return True
+            seen_album_names.add(key)
+            return False
+
         tasks = []
         for index, item in enumerate(selected_items):
+            if _seen(item):
+                continue
             if item["type"] in {"songs", "library-songs"}:
                 tasks.append(
                     self._get_song_media(

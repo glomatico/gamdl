@@ -109,9 +109,19 @@ class AppleMusicMusicVideoInterface:
         else:
             rating = MediaRating.CLEAN
 
+        primary_artist = (
+            metadata.get("relationships", {})
+            .get("artists", {})
+            .get("data", [{}])[0]
+            .get("attributes", {})
+            .get("name")
+            or lookup_metadata[0]["artistName"]
+        )
+
         tags = MediaTags(
             artist=lookup_metadata[0]["artistName"],
             artist_id=int(lookup_metadata[0]["artistId"]),
+            album_artist=primary_artist,
             copyright=itunes_page_metadata.get("copyright"),
             date=self.base.parse_date(lookup_metadata[0]["releaseDate"]),
             genre=lookup_metadata[0]["primaryGenreName"],

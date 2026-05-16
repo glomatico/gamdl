@@ -319,7 +319,7 @@ class AppleMusicApi:
     async def get_music_video(
         self,
         music_video_id: str,
-        include: str = "albums",
+        include: str = "albums,artists",
     ) -> dict:
         log = logger.bind(action="get_music_video", music_video_id=music_video_id)
 

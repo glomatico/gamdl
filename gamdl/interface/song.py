@@ -247,6 +247,21 @@ class AppleMusicSongInterface:
             ),
         )
 
+        # Extract featured artists from title and add to artist / clean title
+        feat_match = re.search(
+            r"\s*\((?:feat|ft|featuring)\.?\s+([^)]+)\)",
+            tags.title or "",
+            re.IGNORECASE,
+        )
+        if feat_match:
+            tags.artist = f"{tags.artist} & {feat_match.group(1).strip()}"
+            tags.title = re.sub(
+                r"\s*\((?:feat|ft|featuring)\.?\s+[^)]+\)",
+                "",
+                tags.title,
+                flags=re.IGNORECASE,
+            ).strip()
+
         log.debug("success", tags=tags)
 
         return tags

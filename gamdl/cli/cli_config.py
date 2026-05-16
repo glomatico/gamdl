@@ -540,7 +540,7 @@ class CliConfig:
         option(
             "--inter-track-delay-min",
             help="Minimum delay in seconds between tracks",
-            default=0.0,
+            default=10.0,
         ),
     ]
     inter_track_delay_max: Annotated[
@@ -548,7 +548,7 @@ class CliConfig:
         option(
             "--inter-track-delay-max",
             help="Maximum delay in seconds between tracks",
-            default=0.0,
+            default=20.0,
         ),
     ]
     inter_album_delay_min: Annotated[
@@ -556,7 +556,7 @@ class CliConfig:
         option(
             "--inter-album-delay-min",
             help="Minimum delay in seconds between albums/URLs",
-            default=0.0,
+            default=30.0,
         ),
     ]
     inter_album_delay_max: Annotated[
@@ -564,6 +564,6 @@ class CliConfig:
         option(
             "--inter-album-delay-max",
             help="Maximum delay in seconds between albums/URLs",
-            default=0.0,
+            default=60.0,
         ),
     ]

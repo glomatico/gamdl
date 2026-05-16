@@ -452,6 +452,28 @@ class CliConfig:
             default=base_downloader_sig.parameters["truncate"].default,
         ),
     ]
+    artist_separator: Annotated[
+        str,
+        option(
+            "--artist-separator",
+            help="Separator between multiple artists",
+            default=base_downloader_sig.parameters["artist_separator"].default,
+        ),
+    ]
+    music_video_output_path: Annotated[
+        str,
+        option(
+            "--music-video-output-path",
+            help="Output path for music videos (overrides output-path for music videos)",
+            default=base_downloader_sig.parameters["music_video_output_path"].default,
+            type=click.Path(
+                file_okay=False,
+                dir_okay=True,
+                writable=True,
+                resolve_path=True,
+            ),
+        ),
+    ]
     # DownloaderMusicVideo specific options
     music_video_remux_mode: Annotated[
         RemuxMode,

@@ -190,6 +190,8 @@ async def main(config: CliConfig):
         date_tag_template=config.date_tag_template,
         exclude_tags=config.exclude_tags,
         truncate=config.truncate,
+        artist_separator=config.artist_separator,
+        music_video_output_path=config.music_video_output_path,
     )
 
     song_downloader = AppleMusicSongDownloader(

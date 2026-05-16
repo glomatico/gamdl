@@ -193,7 +193,7 @@ class AppleMusicBaseDownloader:
         _artists = self._apply_artist_separator(tags.artist or "")
         _album_artists = self._apply_artist_separator(tags.album_artist or "")
         _explicit = (
-            "(explicit)" if tags.rating is not None and tags.rating.value == 1 else ""
+            " (explicit)" if tags.rating is not None and tags.rating.value == 1 else ""
         )
         _release = getattr(tags, "release_type", None) or "ALBUM"
 

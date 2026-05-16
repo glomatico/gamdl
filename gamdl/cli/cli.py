@@ -319,4 +319,18 @@ async def main(config: CliConfig):
             error_count += 1
             continue
 
+        if (
+            url_index < len(urls)
+            and (
+                config.inter_album_delay_min > 0
+                or config.inter_album_delay_max > 0
+            )
+        ):
+            delay = random.uniform(
+                config.inter_album_delay_min,
+                max(config.inter_album_delay_max, config.inter_album_delay_min),
+            )
+            logger.info(f"Pausing {delay:.1f}s between albums...")
+            await asyncio.sleep(delay)
+
     logger.info(f"Finished with {error_count} error(s)")

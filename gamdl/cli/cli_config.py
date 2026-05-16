@@ -551,3 +551,19 @@ class CliConfig:
             default=0.0,
         ),
     ]
+    inter_album_delay_min: Annotated[
+        float,
+        option(
+            "--inter-album-delay-min",
+            help="Minimum delay in seconds between albums/URLs",
+            default=0.0,
+        ),
+    ]
+    inter_album_delay_max: Annotated[
+        float,
+        option(
+            "--inter-album-delay-max",
+            help="Maximum delay in seconds between albums/URLs",
+            default=0.0,
+        ),
+    ]

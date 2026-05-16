@@ -1,4 +1,5 @@
 import asyncio
+import random
 from functools import wraps
 from pathlib import Path
 
@@ -273,6 +274,18 @@ async def main(config: CliConfig):
 
                 try:
                     await downloader.download(download_item)
+                    if (
+                        config.inter_track_delay_min > 0
+                        or config.inter_track_delay_max > 0
+                    ):
+                        delay = random.uniform(
+                            config.inter_track_delay_min,
+                            max(
+                                config.inter_track_delay_max,
+                                config.inter_track_delay_min,
+                            ),
+                        )
+                        await asyncio.sleep(delay)
                 except (
                     GamdlInterfaceMediaNotStreamableError,
                     GamdlInterfaceFormatNotAvailableError,

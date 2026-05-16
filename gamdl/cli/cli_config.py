@@ -535,3 +535,19 @@ class CliConfig:
             is_flag=True,
         ),
     ]
+    inter_track_delay_min: Annotated[
+        float,
+        option(
+            "--inter-track-delay-min",
+            help="Minimum delay in seconds between tracks",
+            default=0.0,
+        ),
+    ]
+    inter_track_delay_max: Annotated[
+        float,
+        option(
+            "--inter-track-delay-max",
+            help="Maximum delay in seconds between tracks",
+            default=0.0,
+        ),
+    ]

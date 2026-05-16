@@ -1,4 +1,6 @@
 import asyncio
+import unicodedata
+from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
 
 import structlog
@@ -37,6 +39,7 @@ class AppleMusicInterface:
         disallowed_media_types: list[str] | None = None,
         artist_views: str = "full-albums,compilation-albums,live-albums,singles,top-songs",
         artist_deduplicate_albums: bool = True,
+        output_path: str | None = None,
     ) -> None:
         self.song = song
         self.music_video = music_video
@@ -48,8 +51,82 @@ class AppleMusicInterface:
         self.disallowed_media_types = disallowed_media_types
         self.artist_views = artist_views
         self.artist_deduplicate_albums = artist_deduplicate_albums
+        self.output_path = output_path
 
         self.base = song.base
+
+    @staticmethod
+    def _normalize_for_dedup(s: str) -> str:
+        """Normalize for name-based dedup: fullwidth→ASCII, strip diacritics, lowercase."""
+        fullwidth_map = str.maketrans({
+            '？': '?', '！': '!', '：': ':', '；': ';',
+            '＊': '*', '＂': '"', '＜': '<', '＞': '>',
+            '｜': '|', '／': '/', '＼': '\\',
+        })
+        s = s.translate(fullwidth_map)
+        decomposed = unicodedata.normalize('NFD', s)
+        return ''.join(c for c in decomposed if unicodedata.category(c) != 'Mn').lower().strip()
+
+    def _album_exists_on_disk(self, album_name: str, artist_name: str) -> bool:
+        """Return True if a non-empty folder matching album_name already exists on disk.
+
+        Searches under output_path/{initial}/{artist}/ and output_path/{artist}/ to
+        cover both 3-level (initials/artist/album) and 2-level (artist/album) templates.
+        Uses normalized substring matching so year prefixes like '(2004) ' and release
+        suffixes like ' (ALBUM)' are ignored.
+        """
+        if not self.output_path:
+            return False
+
+        norm_album = self._normalize_for_dedup(album_name)
+        if not norm_album:
+            return False
+
+        output = Path(self.output_path)
+        if not output.is_dir():
+            return False
+
+        norm_artist = self._normalize_for_dedup(artist_name)
+
+        # First alpha char of artist name, ASCII-normalized → initials folder letter
+        first = next((c for c in artist_name.upper() if c.isalpha()), '#')
+        initials_char = ''.join(
+            c for c in unicodedata.normalize('NFD', first)
+            if unicodedata.category(c) != 'Mn'
+        ) or '#'
+
+        def has_matching_album(directory: Path) -> bool:
+            try:
+                for folder in directory.iterdir():
+                    if not folder.is_dir():
+                        continue
+                    if norm_album in self._normalize_for_dedup(folder.name):
+                        if any(folder.iterdir()):
+                            return True
+            except OSError:
+                pass
+            return False
+
+        def artist_matches(name: str) -> bool:
+            n = self._normalize_for_dedup(name)
+            return bool(n) and (norm_artist in n or n in norm_artist)
+
+        try:
+            # 3-level: output/{initial}/{artist}/album_folder
+            initials_dir = output / initials_char
+            if initials_dir.is_dir():
+                for d in initials_dir.iterdir():
+                    if d.is_dir() and artist_matches(d.name) and has_matching_album(d):
+                        return True
+
+            # 2-level: output/{artist}/album_folder
+            for d in output.iterdir():
+                if d.is_dir() and artist_matches(d.name) and has_matching_album(d):
+                    return True
+        except OSError:
+            pass
+
+        return False
 
     @staticmethod
     def get_url_info(url: str) -> AppleMusicUrlInfo | None:
@@ -381,6 +458,8 @@ class AppleMusicInterface:
         # Deduplicate albums by normalized name to avoid downloading the same
         # compilation/album multiple times when Apple Music catalogues it under
         # different IDs or release years across storefronts.
+        # Also checks disk so that albums already downloaded in a previous session
+        # (possibly under a different year folder) are not re-downloaded.
         seen_album_names: set[str] = set()
 
         def _seen(item: dict) -> bool:
@@ -388,9 +467,15 @@ class AppleMusicInterface:
                 return False
             if item.get("type") not in {"albums", "library-albums"}:
                 return False
-            name = (item.get("attributes") or {}).get("name", "")
+            attrs = item.get("attributes") or {}
+            name = attrs.get("name", "")
+            artist = attrs.get("artistName", "")
             key = name.strip().lower()
             if key in seen_album_names:
+                return True
+            # Cross-session disk check: skip if a matching folder already has files
+            if self._album_exists_on_disk(name, artist):
+                seen_album_names.add(key)
                 return True
             seen_album_names.add(key)
             return False

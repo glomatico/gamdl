@@ -49,13 +49,19 @@ class CustomOutputWriter:
         self.streams = streams
 
     def add_file(self, path: str):
-        file_stream = open(path, "a")
+        file_stream = open(path, "a", encoding="utf-8")
         atexit.register(file_stream.close)
         self.streams.append(file_stream)
 
     def write(self, message: str):
         for stream in self.streams:
-            stream.write(message)
+            try:
+                stream.write(message)
+            except UnicodeEncodeError:
+                if hasattr(stream, "buffer"):
+                    stream.buffer.write(message.encode("utf-8", errors="replace"))
+                else:
+                    stream.write(message.encode("utf-8", errors="replace").decode(stream.encoding or "utf-8", errors="replace"))
 
     def flush(self):
         for stream in self.streams:

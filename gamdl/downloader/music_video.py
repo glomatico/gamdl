@@ -57,10 +57,6 @@ class AppleMusicMusicVideoDownloader:
             input_path_audio,
             "-c",
             "copy",
-            "-c:s",
-            "mov_text",
-            "-movflags",
-            "+faststart",
             output_path,
             silent=self.base.silent,
         )
@@ -176,7 +172,6 @@ class AppleMusicMusicVideoDownloader:
             download_item.media.stream_info.audio_track.stream_url,
             encrypted_path_audio,
         )
-
         decrypted_path_video = self.base.get_temp_path(
             download_item.media.media_metadata["id"],
             download_item.uuid_,

@@ -518,13 +518,11 @@ class AppleMusicApi:
         else:
             limit = None
 
-        offset = int(next_params["offset"][0])
-
         extended_data = await self._amp_request(
             urlparse(next_uri).path,
             {
-                "offset": offset,
                 **({"limit": limit} if limit else {}),
+                **{k: v for k, v in next_params.items() if k not in ["limit"]},
             },
         )
 

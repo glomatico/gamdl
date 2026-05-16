@@ -77,7 +77,7 @@ class AppleMusicMusicVideoInterface:
         ).geturl()
 
         m3u8_master_url = m3u8_master_url.replace(
-            "itunes.apple.com",
+            "play-edge.itunes.apple.com",
             "play.itunes.apple.com",
         ).replace(
             "MZPlayLocal.woa",

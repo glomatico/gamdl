@@ -109,7 +109,7 @@ async def main(config: CliConfig):
         )
 
     if (
-        any(not codec.is_legacy() for codec in config.song_codec_piority)
+        any(not codec.is_legacy() for codec in config.song_codec_priority)
         and not config.use_wrapper
     ):
         logger.warning(
@@ -141,7 +141,7 @@ async def main(config: CliConfig):
     song_interface = AppleMusicSongInterface(
         base=base_interface,
         synced_lyrics_format=config.synced_lyrics_format,
-        codec_priority=config.song_codec_piority,
+        codec_priority=config.song_codec_priority,
         use_album_date=config.use_album_date,
         skip_stream_info=config.synced_lyrics_only,
         ask_codec_function=interactive_prompts.ask_song_codec,
@@ -166,6 +166,7 @@ async def main(config: CliConfig):
         artist_select_media_type_function=interactive_prompts.ask_artist_media_type,
         artist_select_items_function=interactive_prompts.ask_artist_select_items,
         flat_filter_function=flat_filter,
+        output_path=config.output_path,
     )
 
     base_downloader = AppleMusicBaseDownloader(

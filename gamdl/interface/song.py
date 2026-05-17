@@ -247,20 +247,20 @@ class AppleMusicSongInterface:
             ),
         )
 
-        # Extract featured artists from title and add to artist / clean title
-        feat_match = re.search(
-            r"\s*\((?:feat|ft|featuring)\.?\s+([^)]+)\)",
-            tags.title or "",
+        # Extract featured/guest artists from title and clean
+        # Handles: (feat. X), (ft. X), (featuring X), (with X),
+        #          (duet with X), (con X), (& X) in parens
+        _COLLAB_PATTERN = re.compile(
+            r"\s*\((?:feat|ft|featuring|with|duet\s+with|con)\.?\s+([^)]+)\)",
             re.IGNORECASE,
         )
+        feat_match = _COLLAB_PATTERN.search(tags.title or "")
         if feat_match:
-            tags.artist = f"{tags.artist} & {feat_match.group(1).strip()}"
-            tags.title = re.sub(
-                r"\s*\((?:feat|ft|featuring)\.?\s+[^)]+\)",
-                "",
-                tags.title,
-                flags=re.IGNORECASE,
-            ).strip()
+            featured = feat_match.group(1).strip()
+            # Only add to artist string if not already present
+            if featured.lower() not in (tags.artist or "").lower():
+                tags.artist = f"{tags.artist} & {featured}"
+            tags.title = _COLLAB_PATTERN.sub("", tags.title).strip()
 
         log.debug("success", tags=tags)
 

@@ -1,4 +1,5 @@
 import datetime
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,8 +70,16 @@ class MediaTags:
         else:
             date_mp4 = None
 
+        _album_clean = re.sub(
+            r"\s*-\s*(?:Single|EP|Single Version|Deluxe Edition|Deluxe Version|"
+            r"Expanded Edition|Special Edition|Remastered|Remaster)\s*$",
+            "",
+            self.album or "",
+            flags=re.IGNORECASE,
+        ).strip() or self.album
+
         mp4_tags = {
-            "\xa9alb": self.album,
+            "\xa9alb": _album_clean,
             "aART": self.album_artist,
             "plID": self.album_id,
             "soal": self.album_sort,

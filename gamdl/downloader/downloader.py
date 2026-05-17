@@ -246,6 +246,17 @@ class AppleMusicDownloader:
         elif item.media.media_metadata["type"] in {"uploaded-videos"}:
             await self.uploaded_video.download(item)
 
+    @staticmethod
+    def _win_path(p: str) -> str:
+        """Add \\?\ prefix to bypass MAX_PATH (260 chars) on Windows UNC/local paths."""
+        if p.startswith("\\\\?\\"):
+            return p
+        if p.startswith("\\\\"):
+            return "\\\\?\\UNC\\" + p[2:]
+        if len(p) >= 2 and p[1] == ":":
+            return "\\\\?\\" + p
+        return p
+
     def _move_to_final_path(self, staged_path: str, final_path: str) -> None:
         log = logger.bind(
             action="move_to_final_path",
@@ -253,13 +264,13 @@ class AppleMusicDownloader:
             final_path=final_path,
         )
 
-        Path(final_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(self._win_path(final_path)).parent.mkdir(parents=True, exist_ok=True)
         try:
-            shutil.move(staged_path, final_path)
+            shutil.move(staged_path, self._win_path(final_path))
         except OSError as e:
-            log.warning(f"rename_failed ({e.winerror if hasattr(e,'winerror') else e}), trying copy+delete: {final_path!r}")
+            log.warning(f"move_fallback ({getattr(e,'winerror',e)}): trying copy+delete")
             try:
-                shutil.copy2(staged_path, final_path)
+                shutil.copy2(staged_path, self._win_path(final_path))
                 Path(staged_path).unlink(missing_ok=True)
             except OSError as e2:
                 log.error(f"move_failed final_path={final_path!r} error={e2}")

@@ -198,12 +198,20 @@ class AppleMusicBaseDownloader:
             " (explicit)" if tags.rating is not None and tags.rating.value == 1 else ""
         )
         _release = getattr(tags, "release_type", None) or "ALBUM"
+        _album_clean = re.sub(
+            r"\s*-\s*(?:Single|EP|Single Version|Deluxe Edition|Deluxe Version|"
+            r"Expanded Edition|Special Edition|Remastered|Remaster)\s*$",
+            "",
+            tags.album or "",
+            flags=re.IGNORECASE,
+        ).strip() if tags.album else None
 
         for i, part in enumerate(template_parts):
             is_folder = i < len(template_parts) - 1
             formatted_part = CustomStringFormatter().format(
                 part,
                 album=(tags.album, "Unknown Album"),
+                album_clean=(_album_clean, "Unknown Album"),
                 album_artist=(_album_artists or tags.album_artist, "Unknown Artist"),
                 album_id=(tags.album_id, "Unknown Album ID"),
                 artist=(_artists or tags.artist, "Unknown Artist"),

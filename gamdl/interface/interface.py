@@ -1,4 +1,5 @@
 import asyncio
+import re
 import unicodedata
 from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
@@ -78,7 +79,15 @@ class AppleMusicInterface:
         if not self.output_path:
             return False
 
-        norm_album = self._normalize_for_dedup(album_name)
+        # Strip common release suffixes before comparing (e.g. "- Single", "- EP")
+        _clean = re.sub(
+            r'\s*-\s*(?:single|ep|single version|deluxe edition|deluxe version|'
+            r'expanded edition|special edition|remastered|remaster)\s*$',
+            '',
+            album_name,
+            flags=re.IGNORECASE,
+        ).strip()
+        norm_album = self._normalize_for_dedup(_clean or album_name)
         if not norm_album:
             return False
 

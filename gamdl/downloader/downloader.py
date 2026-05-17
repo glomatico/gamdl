@@ -193,8 +193,19 @@ class AppleMusicDownloader:
         if self.synced_lyrics_only:
             raise GamdlDownloaderSyncedLyricsOnlyError()
 
-        if Path(item.final_path).exists() and not self.overwrite:
-            raise GamdlDownloaderMediaFileExistsError(item.final_path)
+        if not self.overwrite:
+            _final = Path(item.final_path)
+            _audio_exts = {".m4a", ".flac", ".mp3", ".ogg", ".opus", ".wav", ".mp4", ".m4v"}
+            _exists = _final.exists()
+            if not _exists:
+                # Check same filename with any audio extension
+                for _ext in _audio_exts:
+                    _candidate = _final.with_suffix(_ext)
+                    if _candidate.exists():
+                        _exists = True
+                        break
+            if _exists:
+                raise GamdlDownloaderMediaFileExistsError(item.final_path)
 
         if item.media.media_metadata["type"] in {
             "music-videos",

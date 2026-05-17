@@ -272,10 +272,16 @@ class AppleMusicSongInterface:
         webplayback: dict | None = None,
     ) -> StreamInfoAv | None:
         for codec in self.codec_priority:
-            if codec.is_legacy():
-                return await self._get_stream_info_legacy(webplayback, codec)
-            else:
-                return await self._get_stream_info(song_metadata, codec)
+            try:
+                if codec.is_legacy():
+                    stream_info = await self._get_stream_info_legacy(webplayback, codec)
+                else:
+                    stream_info = await self._get_stream_info(song_metadata, codec)
+                if stream_info is not None:
+                    return stream_info
+            except Exception:
+                pass
+        return None
 
     async def get_wrapper_m3u8(self, adam_id: str) -> str | None:
         host, port = self.base.wrapper_m3u8_ip.split(":")

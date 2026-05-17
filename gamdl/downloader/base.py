@@ -140,15 +140,17 @@ class AppleMusicBaseDownloader:
         dirty_string: str,
         file_ext: str = None,
     ) -> str:
+        # Strip control characters (ASCII 0-31) — illegal in Windows filenames
+        sanitized_string = re.sub(r"[\x00-\x1f]", "", dirty_string)
+
         if self.use_fullwidth_replacements:
-            sanitized_string = dirty_string
             for char, replacement in FULLWIDTH_REPLACEMENTS.items():
                 sanitized_string = sanitized_string.replace(char, replacement)
         else:
             sanitized_string = re.sub(
                 ILLEGAL_CHARS_RE,
                 ILLEGAL_CHAR_REPLACEMENT,
-                dirty_string,
+                sanitized_string,
             )
 
         if file_ext is None:

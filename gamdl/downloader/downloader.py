@@ -254,7 +254,11 @@ class AppleMusicDownloader:
         )
 
         Path(final_path).parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(staged_path, final_path)
+        try:
+            shutil.move(staged_path, final_path)
+        except OSError as e:
+            log.error(f"move_failed final_path={final_path!r} error={e}")
+            raise
 
         log.debug("success")
 

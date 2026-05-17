@@ -38,6 +38,7 @@ class AppleMusicBaseDownloader:
         multi_disc_file_template: str = "{disc}-{track:02d} {title}",
         no_album_file_template: str = "{title}",
         playlist_file_template: str = "{playlist_title}",
+        playlist_track_file_template: str = "{artists} - {title}{explicit}",
         date_tag_template: str = "%Y-%m-%dT%H:%M:%SZ",
         exclude_tags: list[str] = None,
         truncate: int = None,
@@ -63,6 +64,7 @@ class AppleMusicBaseDownloader:
         self.playlist_folder_template = playlist_folder_template
         self.no_album_file_template = no_album_file_template
         self.playlist_file_template = playlist_file_template
+        self.playlist_track_file_template = playlist_track_file_template
         self.date_tag_template = date_tag_template
         self.exclude_tags = exclude_tags
         self.truncate = truncate
@@ -168,22 +170,22 @@ class AppleMusicBaseDownloader:
     ) -> str:
         log = logger.bind(action="get_final_path")
 
-        if tags.album:
+        if playlist_tags:
+            template_folder_parts = self.playlist_folder_template.split("/")
+            template_file_parts = self.playlist_track_file_template.split("/")
+        elif tags.album:
             template_folder_parts = (
                 self.compilation_folder_template.split("/")
                 if tags.compilation
                 else self.album_folder_template.split("/")
             )
-        else:
-            template_folder_parts = self.no_album_folder_template.split("/")
-
-        if tags.album:
             template_file_parts = (
                 self.multi_disc_file_template.split("/")
                 if isinstance(tags.disc_total, int) and tags.disc_total > 1
                 else self.single_disc_file_template.split("/")
             )
         else:
+            template_folder_parts = self.no_album_folder_template.split("/")
             template_file_parts = self.no_album_file_template.split("/")
 
         template_parts = template_folder_parts + template_file_parts

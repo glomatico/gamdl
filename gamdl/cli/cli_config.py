@@ -423,8 +423,16 @@ class CliConfig:
         str,
         option(
             "--playlist-file-template",
-            help="Playlist file template",
+            help="Playlist M3U8 file template",
             default=base_downloader_sig.parameters["playlist_file_template"].default,
+        ),
+    ]
+    playlist_track_file_template: Annotated[
+        str,
+        option(
+            "--playlist-track-file-template",
+            help="Track filename template when downloading playlists",
+            default=base_downloader_sig.parameters["playlist_track_file_template"].default,
         ),
     ]
     date_tag_template: Annotated[

@@ -257,8 +257,13 @@ class AppleMusicDownloader:
         try:
             shutil.move(staged_path, final_path)
         except OSError as e:
-            log.error(f"move_failed final_path={final_path!r} error={e}")
-            raise
+            log.warning(f"rename_failed ({e.winerror if hasattr(e,'winerror') else e}), trying copy+delete: {final_path!r}")
+            try:
+                shutil.copy2(staged_path, final_path)
+                Path(staged_path).unlink(missing_ok=True)
+            except OSError as e2:
+                log.error(f"move_failed final_path={final_path!r} error={e2}")
+                raise
 
         log.debug("success")
 

@@ -203,9 +203,9 @@ class CliConfig:
             help=".wvd file path",
             default=base_interface_create_sig.parameters["wvd_path"].default,
             type=click.Path(
-                file_okay=False,
-                dir_okay=True,
-                writable=True,
+                file_okay=True,
+                dir_okay=False,
+                writable=False,
                 resolve_path=True,
             ),
         ),
@@ -344,12 +344,12 @@ class CliConfig:
             default=base_downloader_sig.parameters["mp4box_path"].default,
         ),
     ]
-    wrapper_decrypt_ip: Annotated[
+    wrapper_decrypt_url: Annotated[
         str,
         option(
-            "--wrapper-decrypt-ip",
-            help="IP address and port for wrapper decryption",
-            default=base_downloader_sig.parameters["wrapper_decrypt_ip"].default,
+            "--wrapper-decrypt-url",
+            help="wrapper-v2 base URL for FairPlay decrypt (e.g. http://127.0.0.1:80 or host:port)",
+            default=base_downloader_sig.parameters["wrapper_decrypt_url"].default,
         ),
     ]
     download_mode: Annotated[

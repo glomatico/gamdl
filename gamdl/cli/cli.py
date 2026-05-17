@@ -176,7 +176,7 @@ async def main(config: CliConfig):
         mp4decrypt_path=config.mp4decrypt_path,
         ffmpeg_path=config.ffmpeg_path,
         mp4box_path=config.mp4box_path,
-        wrapper_decrypt_ip=config.wrapper_decrypt_ip,
+        wrapper_decrypt_url=config.wrapper_decrypt_url,
         download_mode=config.download_mode,
         album_folder_template=config.album_folder_template,
         compilation_folder_template=config.compilation_folder_template,

@@ -1,15 +1,24 @@
 """
 This is a modified version of https://github.com/sn0wst0rm/st0rmMusicPlayer/blob/main/scripts/amdecrypt.py
 All the modifications made here were AI generated
+
+FairPlay sample decryption talks to wrapper-v2 over HTTP POST /decrypt (JSON), not the
+legacy raw TCP port used by the original wrapper (e.g. 10020).
 """
 
+from __future__ import annotations
+
 import asyncio
+import base64
 import io
 import logging
 import struct
 import time
 from dataclasses import dataclass, field
 from typing import BinaryIO, List, Optional
+from urllib.parse import urlparse
+
+import httpx
 
 from Crypto.Cipher import AES
 
@@ -21,8 +30,146 @@ DEFAULT_SONG_DECRYPTION_KEY = b"2\xb8\xad\xe1v\x9e&\xb1\xff\xb8\x98cRy?\xc6"
 # Pre-fetch key used for first sample description
 PREFETCH_KEY = "skd://itunes.apple.com/P000000000/s1/e1"
 
-# Default wrapper address
-DEFAULT_WRAPPER_IP = "127.0.0.1:10020"
+# wrapper-v2 HTTP API base (no trailing slash). Override via decrypt_file(..., wrapper_ip=...).
+DEFAULT_WRAPPER_IP = "http://127.0.0.1:80"
+
+# Max ciphertext blobs per POST /decrypt (same adam_id + uri). Increase for fewer
+# round-trips; set to 1 if a given wrapper build mis-handles CBC between chunks.
+WRAPPER_DECRYPT_BATCH_SIZE = 128
+
+# wrapper-v2: use one SKD segment per ``adam_id``+``uri`` (do not interleave prefetch
+# and main keys in one request). Flush pending ciphertexts before switching keys.
+
+
+def _wrapper_v2_base_url(wrapper_ip: str) -> str:
+    """Normalize config to an HTTP origin for wrapper-v2.
+
+    Accepts:
+    - ``http://host:port`` / ``https://host:port``
+    - ``host:port`` (becomes ``http://host:port``) — legacy "IP:port" strings
+    - ``host`` only (becomes ``http://host:80``)
+    """
+    s = (wrapper_ip or "").strip().rstrip("/")
+    if not s:
+        s = DEFAULT_WRAPPER_IP
+    if "://" in s:
+        u = urlparse(s)
+        if not u.scheme or not u.netloc:
+            raise ValueError(f"Invalid wrapper URL: {wrapper_ip!r}")
+        return f"{u.scheme}://{u.netloc}"
+    if ":" in s:
+        host, _, port = s.partition(":")
+        return f"http://{host}:{port}"
+    return f"http://{s}:80"
+
+
+async def _post_decrypt_batch(
+    client: httpx.AsyncClient,
+    base_url: str,
+    adam_id: str,
+    skd_uri: str,
+    ciphertexts: List[bytes],
+) -> List[bytes]:
+    """One POST /decrypt; ciphertexts and returned plaintexts are in order."""
+    payload = {
+        "adam_id": adam_id,
+        "uri": skd_uri,
+        "samples": [base64.standard_b64encode(c).decode("ascii") for c in ciphertexts],
+    }
+    r = await client.post(f"{base_url}/decrypt", json=payload)
+    if r.status_code == 401:
+        raise IOError(
+            "wrapper-v2: POST /decrypt returned 401 — log in with POST /login "
+            "or restore a session on the daemon first"
+        )
+    if r.status_code == 503:
+        raise IOError(
+            "wrapper-v2: decrypt unavailable (503) — check daemon logs /health "
+            "for playback_ready and Apple lib init"
+        )
+    if r.status_code != 200:
+        detail = ""
+        try:
+            j = r.json()
+            detail = (j.get("detail") or j.get("error") or str(j)) or ""
+        except Exception:
+            detail = (r.text or "")[:500]
+        raise IOError(f"wrapper-v2: POST /decrypt failed HTTP {r.status_code}: {detail}")
+
+    body = r.json()
+    if not isinstance(body, dict) or "samples" not in body:
+        raise IOError("wrapper-v2: POST /decrypt: expected JSON object with 'samples' array")
+    out_b64 = body["samples"]
+    if not isinstance(out_b64, list) or len(out_b64) != len(ciphertexts):
+        raise IOError(
+            f"wrapper-v2: expected {len(ciphertexts)} samples in response, "
+            f"got {len(out_b64) if isinstance(out_b64, list) else type(out_b64)}"
+        )
+    out: List[bytes] = []
+    for i, item in enumerate(out_b64):
+        if not isinstance(item, str):
+            raise IOError(f"wrapper-v2: samples[{i}] must be base64 string")
+        out.append(base64.standard_b64decode(item.encode("ascii")))
+    return out
+
+
+def _cbcs_ciphertext_for_sample(sample: SampleInfo) -> Optional[tuple[bytes, bytes]]:
+    """Payload for FairPlay CBC: aligned decrypt input and trailing pass-through bytes.
+
+    Matches ``decrypt_samples_hex``: all encrypted subsample runs in one MP4 sample
+    are **concatenated**, then ``len & ~0xF`` bytes are decrypted as **one** CBC
+    stream; the remainder is copied (see hex path). Clear subsample bytes must never
+    be fed to the decryptor.
+
+    Returns:
+        ``None`` — no AES input for this sample (emit literal ``sample.data``).
+        ``(aligned, tail)`` — ``aligned`` may be empty if only a short tail exists;
+        then ``tail`` is the full encrypted concatenation (pass-through).
+    """
+    data = sample.data
+    if not sample.subsamples:
+        n = len(data)
+        t = n & ~0xF
+        tail = data[t:] if t < n else b""
+        if t > 0:
+            return (data[:t], tail)
+        return None
+
+    enc_cat = bytearray()
+    offset = 0
+    for clear_b, enc_b in sample.subsamples:
+        offset += clear_b
+        if enc_b:
+            enc_cat.extend(data[offset : offset + enc_b])
+            offset += enc_b
+    if not enc_cat:
+        return None
+    blob = bytes(enc_cat)
+    cbc_len = len(blob) & ~0xF
+    tail = blob[cbc_len:]
+    aligned = blob[:cbc_len]
+    return (aligned, tail)
+
+
+def _append_reassembled_sample(decrypted_data: bytearray, sample: SampleInfo, plain: bytes, tail: bytes) -> None:
+    """Place decrypted bytes back into MP4 sample layout (clear / encrypted regions)."""
+    full_dec = plain + tail
+    data = sample.data
+    if not sample.subsamples:
+        decrypted_data.extend(full_dec)
+        return
+    dec_off = 0
+    offset = 0
+    for clear_b, enc_b in sample.subsamples:
+        if clear_b:
+            decrypted_data.extend(data[offset : offset + clear_b])
+            offset += clear_b
+        if enc_b:
+            decrypted_data.extend(full_dec[dec_off : dec_off + enc_b])
+            dec_off += enc_b
+            offset += enc_b
+    if offset < len(data):
+        decrypted_data.extend(data[offset:])
 
 
 @dataclass
@@ -275,9 +422,10 @@ def _parse_moof_mdat(
                 "flags": 0,
                 "base_data_offset": None,
             }
-            trun_entries = []
-            first_trun_data_offset = None
-            senc_entries = []  # Per-sample encryption info from senc box
+            # Each 'trun' has its own optional data_offset; concatenating entry lists
+            # and keeping only the first data_offset breaks multi-trun fragments.
+            trun_runs: List[tuple] = []
+            senc_entries: List[dict] = []
 
             traf_offset = offset + 8
             traf_end = offset + size
@@ -300,9 +448,7 @@ def _parse_moof_mdat(
                     entries, data_off = _parse_trun(
                         moof_data[traf_offset + 8 : traf_offset + inner_size], tfhd_info
                     )
-                    if first_trun_data_offset is None:
-                        first_trun_data_offset = data_off
-                    trun_entries.extend(entries)
+                    trun_runs.append((entries, data_off))
                 elif inner_type == "senc":
                     senc_entries = _parse_senc(
                         moof_data[traf_offset + 8 : traf_offset + inner_size],
@@ -316,44 +462,58 @@ def _parse_moof_mdat(
                 offset += size
                 continue
 
-            # Compute starting offset in mdat_data
             base = tfhd_info.get("base_data_offset")
             if base is None:
                 base = moof_offset  # Default: first byte of containing moof
 
-            if first_trun_data_offset is not None:
-                mdat_idx = (base + first_trun_data_offset) - mdat_data_offset
-            else:
-                mdat_idx = 0
-
-            mdat_read_offset = max(0, mdat_idx)
             desc_index = tfhd_info["desc_index"]
             if desc_index > 0:
                 desc_index -= 1  # Convert to 0-indexed
 
-            for i, entry in enumerate(trun_entries):
-                sample_size = entry.get("size", tfhd_info["default_size"])
-                sample_duration = entry.get("duration", tfhd_info["default_duration"])
+            mdat_pos: Optional[int] = None
+            sample_index_in_traf = 0
 
-                if sample_size > 0 and mdat_read_offset + sample_size <= len(mdat_data):
-                    # Attach per-sample encryption info from senc if available
-                    sample_iv = b""
-                    sample_subsamples = []
-                    if i < len(senc_entries):
-                        sample_iv = senc_entries[i]["iv"]
-                        sample_subsamples = senc_entries[i]["subsamples"]
+            for trun_entries, trun_data_off in trun_runs:
+                if trun_data_off is not None:
+                    mdat_pos = base + trun_data_off - mdat_data_offset
+                elif mdat_pos is None:
+                    # Legacy behaviour: first trun without data_offset starts at mdat payload 0.
+                    mdat_pos = 0
+                mdat_pos = max(0, mdat_pos)
+                mdat_read_offset = mdat_pos
 
-                    sample = SampleInfo(
-                        data=mdat_data[
-                            mdat_read_offset : mdat_read_offset + sample_size
-                        ],
-                        duration=sample_duration,
-                        desc_index=desc_index,
-                        iv=sample_iv,
-                        subsamples=sample_subsamples,
+                for entry in trun_entries:
+                    sample_size = entry.get("size", tfhd_info["default_size"])
+                    sample_duration = entry.get(
+                        "duration", tfhd_info["default_duration"]
                     )
-                    samples.append(sample)
-                    mdat_read_offset += sample_size
+
+                    if sample_size > 0 and mdat_read_offset + sample_size <= len(
+                        mdat_data
+                    ):
+                        sample_iv = b""
+                        sample_subsamples: List[tuple] = []
+                        if sample_index_in_traf < len(senc_entries):
+                            sample_iv = senc_entries[sample_index_in_traf]["iv"]
+                            sample_subsamples = senc_entries[sample_index_in_traf][
+                                "subsamples"
+                            ]
+
+                        sample = SampleInfo(
+                            data=mdat_data[
+                                mdat_read_offset : mdat_read_offset + sample_size
+                            ],
+                            duration=sample_duration,
+                            desc_index=desc_index,
+                            iv=sample_iv,
+                            subsamples=sample_subsamples,
+                        )
+                        samples.append(sample)
+                        mdat_read_offset += sample_size
+                    # One senc row per trun sample entry (even if size 0 or read fails)
+                    sample_index_in_traf += 1
+
+                mdat_pos = mdat_read_offset
 
         offset += size
 
@@ -491,105 +651,93 @@ async def decrypt_samples(
     progress_callback=None,
 ) -> bytes:
     """
-    Send samples to wrapper for CBCS decryption and return decrypted data.
+    Send samples to wrapper-v2 (HTTP POST /decrypt) for CBCS decryption and return decrypted bytes.
 
-    CBCS full subsample encryption (used by ALAC):
-    - Only bytes aligned to 16 are encrypted
-    - Remaining bytes (len % 16) are clear and kept as-is
+    Ciphertext is sent in batches of up to :data:`WRAPPER_DECRYPT_BATCH_SIZE` MP4 samples
+    per request (same ``adam_id`` and ``uri``). Literal or tail-only samples are applied
+    between batches so output order matches the input.
 
-    Protocol:
-    - For each new key: [1B id_len][id][1B key_len][key]
-    - For each sample: [4B LE truncated_size][truncated_data] -> read back [decrypted_data]
-    - Key switch: [0,0,0,0]
-    - Close: [0,0,0,0,0]
+    Subsample layout matches ``decrypt_samples_hex`` (concat encrypted runs, decrypt
+    ``len & ~0xF``, reassemble).
+
+    Requires an authenticated wrapper-v2 session (POST /login or restored session).
 
     Args:
-        progress_callback: Optional callback(current_sample, total_samples, bytes_processed) for progress tracking
+        wrapper_ip: wrapper-v2 base URL, e.g. ``http://127.0.0.1:80`` or legacy ``host:port``
+        progress_callback: Optional callback(current_sample, total_samples, bytes_processed, speed)
     """
-    host, port = wrapper_ip.split(":")
-    port = int(port)
+    base_url = _wrapper_v2_base_url(wrapper_ip)
+    keys = [PREFETCH_KEY, fairplay_key]
+    decrypted_data = bytearray()
+    last_desc_index: int = 255
+    total_samples = len(samples)
+    bytes_processed = 0
+    start_time = time.time()
+    last_progress_time = start_time
 
-    reader, writer = await asyncio.open_connection(host, port)
+    segment_adam: Optional[str] = None
+    segment_uri: Optional[str] = None
+    # Pending (sample, aligned_cbc, tail) for one SKD segment, flushed in batches.
+    crypto_batch: List[tuple] = []
 
-    try:
-        decrypted_data = bytearray()
-        last_desc_index = 255
+    async def flush_crypto_batch(client: httpx.AsyncClient) -> None:
+        if not crypto_batch:
+            return
+        if segment_adam is None or segment_uri is None:
+            raise IOError("wrapper-v2: internal error (segment without adam/uri)")
+        chunks = [t[1] for t in crypto_batch]
+        tails = [t[2] for t in crypto_batch]
+        sources = [t[0] for t in crypto_batch]
+        plains = await _post_decrypt_batch(
+            client, base_url, segment_adam, segment_uri, chunks
+        )
+        if len(plains) != len(chunks):
+            raise IOError("wrapper-v2: plaintext batch count mismatch")
+        for s, plain, tail in zip(sources, plains, tails):
+            _append_reassembled_sample(decrypted_data, s, plain, tail)
+        crypto_batch.clear()
 
-        keys = [PREFETCH_KEY, fairplay_key]
-        total_samples = len(samples)
-        bytes_processed = 0
-        start_time = time.time()
-        last_progress_time = start_time
-
+    timeout = httpx.Timeout(600.0, connect=30.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         for i, sample in enumerate(samples):
-            # Check if we need to switch keys
             if last_desc_index != sample.desc_index:
-                if last_desc_index != 255:
-                    # Send key switch signal
-                    writer.write(struct.pack("<I", 0))
-                    await writer.drain()
-
-                # Send new key info
+                await flush_crypto_batch(client)
                 key_uri = keys[min(sample.desc_index, len(keys) - 1)]
-
-                if key_uri == PREFETCH_KEY:
-                    id_bytes = b"0"
-                else:
-                    id_bytes = track_id.encode("utf-8")
-                writer.write(struct.pack("B", len(id_bytes)))
-                writer.write(id_bytes)
-
-                key_bytes = key_uri.encode("utf-8")
-                writer.write(struct.pack("B", len(key_bytes)))
-                writer.write(key_bytes)
-                await writer.drain()
-
+                segment_adam = "0" if key_uri == PREFETCH_KEY else track_id
+                segment_uri = key_uri
                 last_desc_index = sample.desc_index
 
-            # CBCS full subsample decryption: truncate to 16-byte boundary
-            sample_len = len(sample.data)
-            truncated_len = sample_len & ~0xF
+            parts = _cbcs_ciphertext_for_sample(sample)
+            if parts is None:
+                await flush_crypto_batch(client)
+                decrypted_data.extend(sample.data)
+            else:
+                aligned, tail = parts
+                if len(aligned) == 0:
+                    await flush_crypto_batch(client)
+                    _append_reassembled_sample(decrypted_data, sample, b"", tail)
+                else:
+                    crypto_batch.append((sample, aligned, tail))
+                    if len(crypto_batch) >= WRAPPER_DECRYPT_BATCH_SIZE:
+                        await flush_crypto_batch(client)
 
-            if truncated_len > 0:
-                # Send size and data
-                writer.write(struct.pack("<I", truncated_len))
-                writer.write(sample.data[:truncated_len])
-                await writer.drain()
+            bytes_processed += len(sample.data)
 
-                # Read decrypted data
-                decrypted_sample = await reader.readexactly(truncated_len)
-                if len(decrypted_sample) != truncated_len:
-                    raise IOError(
-                        f"Short read: got {len(decrypted_sample)}, expected {truncated_len}"
-                    )
-                decrypted_data.extend(decrypted_sample)
-                bytes_processed += truncated_len
-
-            # Append clear bytes
-            if truncated_len < sample_len:
-                decrypted_data.extend(sample.data[truncated_len:])
-                bytes_processed += sample_len - truncated_len
-
-            # Call progress callback every 50 samples or 0.5s
             now = time.time()
             if progress_callback and (
-                i % 50 == 0 or now - last_progress_time > 0.5 or i == total_samples - 1
+                i % 50 == 0
+                or now - last_progress_time > 0.5
+                or i == total_samples - 1
             ):
                 elapsed = now - start_time
                 speed = bytes_processed / elapsed if elapsed > 0 else 0
                 progress_callback(i + 1, total_samples, bytes_processed, speed)
                 last_progress_time = now
 
-        # Send close signal
-        writer.write(bytes([0, 0, 0, 0, 0]))
-        await writer.drain()
+        await flush_crypto_batch(client)
 
-        logger.debug(f"Decrypted {len(samples)} samples ({len(decrypted_data)} bytes)")
-        return bytes(decrypted_data)
-
-    finally:
-        writer.close()
-        await writer.wait_closed()
+    logger.debug(f"Decrypted {len(samples)} samples ({len(decrypted_data)} bytes)")
+    return bytes(decrypted_data)
 
 
 def write_decrypted_m4a(
@@ -1682,7 +1830,9 @@ async def decrypt_file(
     3. Reassemble decrypted MP4 with clean metadata
 
     Args:
-        wrapper_ip: Wrapper decrypt port address (e.g., "127.0.0.1:10020")
+        wrapper_ip: wrapper-v2 base URL (e.g. ``http://127.0.0.1:80``) or ``host:port``
+            (``http://`` is assumed). The daemon must be logged in and FairPlay init
+            must succeed (see GET /health).
         track_id: Apple Music track ID
         fairplay_key: FairPlay key URI (skd://...)
         input_path: Path to encrypted MP4 file

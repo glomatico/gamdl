@@ -27,7 +27,7 @@ class AppleMusicBaseDownloader:
         mp4decrypt_path: str = "mp4decrypt",
         ffmpeg_path: str = "ffmpeg",
         mp4box_path: str = "MP4Box",
-        wrapper_decrypt_ip: str = "127.0.0.1:10020",
+        wrapper_decrypt_url: str = "http://127.0.0.1:80",
         download_mode: DownloadMode = DownloadMode.YTDLP,
         album_folder_template: str = "{album_artist}/{album}",
         compilation_folder_template: str = "Compilations/{album}",
@@ -49,7 +49,7 @@ class AppleMusicBaseDownloader:
         self.mp4decrypt_path = mp4decrypt_path
         self.ffmpeg_path = ffmpeg_path
         self.mp4box_path = mp4box_path
-        self.wrapper_decrypt_ip = wrapper_decrypt_ip
+        self.wrapper_decrypt_url = wrapper_decrypt_url
         self.download_mode = download_mode
         self.album_folder_template = album_folder_template
         self.compilation_folder_template = compilation_folder_template

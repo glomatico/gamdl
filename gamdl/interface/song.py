@@ -290,10 +290,8 @@ class AppleMusicSongInterface:
                 )
             )["data"][0]
 
-        m3u8_master_url = (
-            await self.get_wrapper_m3u8(self.base.parse_catalog_media_id(song_metadata))
-            if self.base.use_wrapper
-            else song_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
+        m3u8_master_url = song_metadata["attributes"]["extendedAssetUrls"].get(
+            "enhancedHls"
         )
         if not m3u8_master_url:
             return None

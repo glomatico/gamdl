@@ -242,7 +242,7 @@ class AppleMusicApi:
     @classmethod
     async def create_from_wrapper(
         cls,
-        wrapper_account_url: str = "http://127.0.0.1:30020/",
+        wrapper_account_url: str = "http://127.0.0.1:80/me",
         *args,
         **kwargs,
     ) -> "AppleMusicApi":
@@ -259,8 +259,8 @@ class AppleMusicApi:
                 )
 
         return await cls.create(
-            media_user_token=wrapper_account_info["music_token"],
-            token=wrapper_account_info["dev_token"],
+            media_user_token=wrapper_account_info["auth"]["music_user_token"],
+            token=wrapper_account_info["auth"]["dev_token"],
             *args,
             **kwargs,
         )

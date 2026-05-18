@@ -190,15 +190,6 @@ class AppleMusicSongInterface:
 
         return f"[{timestamp.strftime('%M:%S.%f')[:-4]}]{text}"
 
-    async def _get_wrapper_playback(self, media_id: str) -> dict:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.base.wrapper_url}/playback",
-                params={"adam_id": media_id},
-            )
-            response.raise_for_status()
-            return response.json()
-
     def _get_m3u8_from_playback(self, playback: dict) -> str | None:
         return playback["songList"][0].get("hls-playlist-url")
 
@@ -493,10 +484,11 @@ class AppleMusicSongInterface:
         media.lyrics = await self.get_lyrics(media.media_metadata)
 
         if self.base.use_wrapper:
-            playback = await self._get_wrapper_playback(media.media_id)
-            media.tags = await self.get_tags(
+            playback = await self.base.get_wrapper_playback(media.media_id)
+            media.tags = await self.base.get_tags_from_asset_info(
                 playback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
+                self.use_album_date,
             )
             if not self.skip_stream_info:
                 m3u8_master_url = self._get_m3u8_from_playback(playback)
@@ -508,9 +500,10 @@ class AppleMusicSongInterface:
             webplayback = await self.base.apple_music_api.get_webplayback(
                 media.media_id
             )
-            media.tags = await self.get_tags(
+            media.tags = await self.base.get_tags_from_asset_info(
                 webplayback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
+                self.use_album_date,
             )
             if not self.skip_stream_info:
                 m3u8_master_url = await self._get_m3u8_from_metadata(

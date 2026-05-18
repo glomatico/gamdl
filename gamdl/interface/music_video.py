@@ -413,10 +413,17 @@ class AppleMusicMusicVideoInterface:
         media.cover = await self.base.get_cover(media.media_metadata)
 
         itunes_page_metadata = await self.get_itunes_page_metadata(media.media_metadata)
-        media.tags = await self.get_tags(
-            media.media_metadata,
-            itunes_page_metadata,
-        )
+
+        if self.base.use_wrapper:
+            playback = await self.base.get_wrapper_playback(media.media_id)
+            media.tags = await self.base.get_tags_from_asset_info(
+                playback["songList"][0]["assets"][0]["metadata"],
+            )
+        else:
+            media.tags = await self.get_tags(
+                media.media_metadata,
+                itunes_page_metadata,
+            )
 
         media.stream_info = await self.get_stream_info(
             media.media_metadata,

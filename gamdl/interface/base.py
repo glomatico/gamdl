@@ -17,7 +17,7 @@ from ..api.apple_music import AppleMusicApi
 from ..api.itunes import ItunesApi
 from .constants import IMAGE_FILE_EXTENSION_MAP
 from .enums import CoverFormat
-from .types import Cover, DecryptionKey, PlaylistTags
+from .types import Cover, DecryptionKey, PlaylistTags, MediaTags, MediaType, MediaRating
 
 logger = structlog.get_logger(__name__)
 
@@ -336,3 +336,76 @@ class AppleMusicBaseInterface:
         log.debug("success", playlist_tags=playlist_tags)
 
         return playlist_tags
+
+    async def get_tags_from_asset_info(
+        self,
+        asset_data: dict,
+        lyrics: str | None = None,
+        use_album_date: bool = False,
+    ) -> MediaTags:
+        log = logger.bind(
+            action="get_tags_from_asset_info", asset_id=asset_data["itemId"]
+        )
+
+        tags = MediaTags(
+            album=asset_data.get("playlistName"),
+            album_artist=asset_data.get("playlistArtistName"),
+            album_id=(
+                int(asset_data["playlistId"]) if asset_data.get("playlistId") else None
+            ),
+            album_sort=asset_data.get("sort-album"),
+            artist=asset_data["artistName"],
+            artist_id=int(asset_data["artistId"]),
+            artist_sort=asset_data["sort-artist"],
+            comment=asset_data.get("comments"),
+            compilation=asset_data.get("compilation"),
+            composer=asset_data.get("composerName"),
+            composer_id=(
+                int(asset_data.get("composerId"))
+                if asset_data.get("composerId")
+                else None
+            ),
+            composer_sort=asset_data.get("sort-composer"),
+            copyright=asset_data.get("copyright"),
+            date=(
+                await self.get_media_date(asset_data["playlistId"])
+                if use_album_date
+                else (
+                    self.parse_date(asset_data["releaseDate"])
+                    if asset_data.get("releaseDate")
+                    else None
+                )
+            ),
+            disc=asset_data.get("discNumber"),
+            disc_total=asset_data.get("discCount"),
+            gapless=asset_data.get("gapless"),
+            genre=asset_data.get("genre"),
+            genre_id=int(asset_data["genreId"]),
+            lyrics=lyrics if lyrics else None,
+            media_type=(
+                MediaType.SONG
+                if asset_data["kind"] == "song"
+                else MediaType.MUSIC_VIDEO
+            ),
+            rating=MediaRating(asset_data["explicit"]),
+            storefront=asset_data["s"],
+            title=asset_data["itemName"],
+            title_id=int(asset_data["itemId"]),
+            title_sort=asset_data["sort-name"],
+            track=asset_data.get("trackNumber"),
+            track_total=asset_data.get("trackCount"),
+            xid=asset_data.get("xid"),
+        )
+
+        log.debug("success", tags=tags)
+
+        return tags
+
+    async def get_wrapper_playback(self, media_id: str) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.wrapper_url}/playback",
+                params={"adam_id": media_id},
+            )
+            response.raise_for_status()
+            return response.json()

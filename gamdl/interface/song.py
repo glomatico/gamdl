@@ -257,9 +257,13 @@ class AppleMusicSongInterface:
         feat_match = _COLLAB_PATTERN.search(tags.title or "")
         if feat_match:
             featured = feat_match.group(1).strip()
+            # Parse multiple featured artists (e.g. "A, B & C")
+            feat_parts = [p.strip() for p in re.split(r"[,&]", featured) if p.strip()]
+            tags.featured_artists = feat_parts
             # Only add to artist string if not already present
-            if featured.lower() not in (tags.artist or "").lower():
-                tags.artist = f"{tags.artist} & {featured}"
+            for fp in feat_parts:
+                if fp.lower() not in (tags.artist or "").lower():
+                    tags.artist = f"{tags.artist} & {fp}"
             tags.title = _COLLAB_PATTERN.sub("", tags.title).strip()
 
         log.debug("success", tags=tags)

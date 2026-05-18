@@ -125,16 +125,28 @@ class AppleMusicBaseDownloader:
         )
         return normalized if normalized.isalpha() else "#"
 
-    def _apply_artist_separator(self, artist_str: str) -> str:
-        """Split a combined artist string on ' & ' / ', ' and rejoin with artist_separator.
-        Artists are sorted alphabetically to match OrpheusDL/Tidal convention."""
+    def _apply_artist_separator(self, artist_str: str, featured: list = None) -> str:
+        """Split and rejoin artists matching OrpheusDL/Tidal convention:
+        sorted MAIN artists first, then sorted FEATURED artists."""
         if not artist_str:
             return artist_str
-        # Split on ' & ' first, then on ', ' within each part
-        parts = []
+
+        featured_set = set(f.lower() for f in (featured or []))
+
+        # Split all artists from the combined string
+        all_parts = []
         for segment in re.split(r" & ", artist_str):
-            parts.extend(re.split(r", ", segment))
-        parts = sorted(p.strip() for p in parts if p.strip())
+            all_parts.extend(re.split(r", ", segment))
+        all_parts = [p.strip() for p in all_parts if p.strip()]
+
+        if featured_set:
+            # Separate MAIN (sorted) and FEATURED (sorted), same as Tidal module
+            main = sorted(p for p in all_parts if p.lower() not in featured_set)
+            feat = sorted(p for p in all_parts if p.lower() in featured_set)
+            parts = main + feat
+        else:
+            parts = sorted(all_parts)
+
         return self.artist_separator.join(parts)
 
     def _sanitize_string(
@@ -196,7 +208,10 @@ class AppleMusicBaseDownloader:
         formatted_parts = []
 
         _artist_initials = self._get_artist_initials(tags.album_artist or tags.artist)
-        _artists = self._apply_artist_separator(tags.artist or "")
+        _artists = self._apply_artist_separator(
+            tags.artist or "",
+            featured=tags.featured_artists if hasattr(tags, "featured_artists") else None,
+        )
         _album_artists = self._apply_artist_separator(tags.album_artist or "")
         _explicit = (
             " (explicit)" if tags.rating is not None and tags.rating.value == 1 else ""

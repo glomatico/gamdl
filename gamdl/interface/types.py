@@ -21,6 +21,7 @@ class MediaTags:
     artist: str = None
     artist_id: int = None
     artist_sort: str = None
+    featured_artists: list = None  # Featured artists extracted from title
     comment: str = None
     compilation: bool = None
     composer: str = None

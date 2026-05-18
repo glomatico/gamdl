@@ -59,7 +59,7 @@ class AppleMusicSongDownloader:
         fairplay_key: str,
     ) -> None:
         await decrypt_file(
-            self.base.interface.base.wrapper_url + "/decrypt",
+            self.base.interface.base.wrapper_url + "/sample/decrypt",
             media_id,
             fairplay_key,
             input_path,

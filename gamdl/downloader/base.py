@@ -126,14 +126,16 @@ class AppleMusicBaseDownloader:
         return normalized if normalized.isalpha() else "#"
 
     def _apply_artist_separator(self, artist_str: str) -> str:
-        """Split a combined artist string on ' & ' / ', ' and rejoin with artist_separator."""
+        """Split a combined artist string on ' & ' / ', ' and rejoin with artist_separator.
+        Artists are sorted alphabetically to match OrpheusDL/Tidal convention."""
         if not artist_str:
             return artist_str
         # Split on ' & ' first, then on ', ' within each part
         parts = []
         for segment in re.split(r" & ", artist_str):
             parts.extend(re.split(r", ", segment))
-        return self.artist_separator.join(p.strip() for p in parts if p.strip())
+        parts = sorted(p.strip() for p in parts if p.strip())
+        return self.artist_separator.join(parts)
 
     def _sanitize_string(
         self,

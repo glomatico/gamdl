@@ -2,7 +2,7 @@
 This is a modified version of https://github.com/sn0wst0rm/st0rmMusicPlayer/blob/main/scripts/amdecrypt.py
 All the modifications made here were AI generated
 
-FairPlay sample decryption talks to wrapper-v2 over HTTP POST /decrypt/sample
+FairPlay sample decryption talks to wrapper-v2 over HTTP POST /decrypt
 (binary frame), not the legacy raw TCP port used by the original wrapper (e.g. 10020).
 """
 
@@ -33,7 +33,7 @@ PREFETCH_KEY = "skd://itunes.apple.com/P000000000/s1/e1"
 # wrapper-v2 HTTP API base (no trailing slash). Override via decrypt_file(..., wrapper_ip=...).
 DEFAULT_WRAPPER_IP = "http://127.0.0.1:80"
 
-# Max ciphertext blobs per POST /decrypt/sample (same adam_id + uri). Increase for fewer
+# Max ciphertext blobs per POST /decrypt (same adam_id + uri). Increase for fewer
 # round-trips; set to 1 if a given wrapper build mis-handles CBC between chunks.
 WRAPPER_DECRYPT_BATCH_SIZE = 128
 
@@ -63,8 +63,10 @@ def _wrapper_v2_base_url(wrapper_ip: str) -> str:
     return f"http://{s}:80"
 
 
-def _build_decrypt_sample_frame(adam_id: str, skd_uri: str, ciphertexts: List[bytes]) -> bytes:
-    """Build wrapper-v2 /decrypt/sample binary request frame."""
+def _build_decrypt_sample_frame(
+    adam_id: str, skd_uri: str, ciphertexts: List[bytes]
+) -> bytes:
+    """Build wrapper-v2 /decrypt binary request frame."""
     adam_id_bytes = adam_id.encode("utf-8")
     skd_uri_bytes = skd_uri.encode("utf-8")
     if not adam_id_bytes:
@@ -75,7 +77,9 @@ def _build_decrypt_sample_frame(adam_id: str, skd_uri: str, ciphertexts: List[by
         raise ValueError("wrapper-v2: ciphertext batch must not be empty")
 
     frame = bytearray()
-    frame += struct.pack(">III", len(adam_id_bytes), len(skd_uri_bytes), len(ciphertexts))
+    frame += struct.pack(
+        ">III", len(adam_id_bytes), len(skd_uri_bytes), len(ciphertexts)
+    )
     for ciphertext in ciphertexts:
         frame += struct.pack(">I", len(ciphertext))
     frame += adam_id_bytes
@@ -86,9 +90,9 @@ def _build_decrypt_sample_frame(adam_id: str, skd_uri: str, ciphertexts: List[by
 
 
 def _parse_decrypt_sample_frame(data: bytes, expected_count: int) -> List[bytes]:
-    """Parse wrapper-v2 /decrypt/sample binary response frame."""
+    """Parse wrapper-v2 /decrypt binary response frame."""
     if len(data) < 4:
-        raise IOError("wrapper-v2: POST /decrypt/sample returned a truncated response")
+        raise IOError("wrapper-v2: POST /decrypt returned a truncated response")
     (sample_count,) = struct.unpack_from(">I", data, 0)
     if sample_count != expected_count:
         raise IOError(
@@ -97,20 +101,22 @@ def _parse_decrypt_sample_frame(data: bytes, expected_count: int) -> List[bytes]
 
     table_end = 4 + sample_count * 4
     if len(data) < table_end:
-        raise IOError("wrapper-v2: POST /decrypt/sample returned a truncated length table")
+        raise IOError("wrapper-v2: POST /decrypt returned a truncated length table")
 
-    lengths = [struct.unpack_from(">I", data, 4 + i * 4)[0] for i in range(sample_count)]
+    lengths = [
+        struct.unpack_from(">I", data, 4 + i * 4)[0] for i in range(sample_count)
+    ]
     offset = table_end
     out: List[bytes] = []
     for i, length in enumerate(lengths):
         end = offset + length
         if end > len(data):
-            raise IOError(f"wrapper-v2: POST /decrypt/sample returned truncated sample {i}")
+            raise IOError(f"wrapper-v2: POST /decrypt returned truncated sample {i}")
         out.append(data[offset:end])
         offset = end
 
     if offset != len(data):
-        raise IOError("wrapper-v2: POST /decrypt/sample returned trailing bytes")
+        raise IOError("wrapper-v2: POST /decrypt returned trailing bytes")
     return out
 
 
@@ -121,10 +127,10 @@ async def _post_decrypt_batch(
     skd_uri: str,
     ciphertexts: List[bytes],
 ) -> List[bytes]:
-    """One POST /decrypt/sample; ciphertexts and returned plaintexts are in order."""
+    """One POST /decrypt; ciphertexts and returned plaintexts are in order."""
     frame = _build_decrypt_sample_frame(adam_id, skd_uri, ciphertexts)
     r = await client.post(
-        f"{base_url}/decrypt/sample",
+        f"{base_url}/decrypt",
         content=frame,
         headers={
             "content-type": "application/octet-stream",
@@ -133,7 +139,7 @@ async def _post_decrypt_batch(
     )
     if r.status_code == 401:
         raise IOError(
-            "wrapper-v2: POST /decrypt/sample returned 401 — log in with POST /login "
+            "wrapper-v2: POST /decrypt returned 401 — log in with POST /login "
             "or restore a session on the daemon first"
         )
     if r.status_code == 503:
@@ -149,7 +155,7 @@ async def _post_decrypt_batch(
         except Exception:
             detail = (r.text or "")[:500]
         raise IOError(
-            f"wrapper-v2: POST /decrypt/sample failed HTTP {r.status_code}: {detail}"
+            f"wrapper-v2: POST /decrypt failed HTTP {r.status_code}: {detail}"
         )
 
     return _parse_decrypt_sample_frame(r.content, len(ciphertexts))
@@ -225,11 +231,15 @@ def _reassemble_cbcs_sample(sample: SampleInfo, plain: bytes, tail: bytes) -> by
     if offset < len(data):
         out.extend(data[offset:])
     if len(out) != len(data):
-        raise IOError(f"reassembled sample length mismatch: expected {len(data)}, got {len(out)}")
+        raise IOError(
+            f"reassembled sample length mismatch: expected {len(data)}, got {len(out)}"
+        )
     return bytes(out)
 
 
-def _append_reassembled_sample(decrypted_data: bytearray, sample: SampleInfo, plain: bytes, tail: bytes) -> None:
+def _append_reassembled_sample(
+    decrypted_data: bytearray, sample: SampleInfo, plain: bytes, tail: bytes
+) -> None:
     """Append one decrypted CBCS sample to the output stream."""
     decrypted_data.extend(_reassemble_cbcs_sample(sample, plain, tail))
 
@@ -427,10 +437,12 @@ def extract_song(input_path: str) -> SongInfo:
             moof_box = None
 
     # Post-process samples: if this is ALAC, ensure all samples have duration 4096.
-    # Apple Music fragments often report 1024 in trex/tfhd defaults, but 
-    # ALAC frames are actually 4096 samples long. This mismatch is the 
+    # Apple Music fragments often report 1024 in trex/tfhd defaults, but
+    # ALAC frames are actually 4096 samples long. This mismatch is the
     # root cause of the 1:16 duration reporting for 5-minute tracks.
-    is_alac = song_info.moov_data and (b"alac" in song_info.moov_data or b"ALAC" in song_info.moov_data)
+    is_alac = song_info.moov_data and (
+        b"alac" in song_info.moov_data or b"ALAC" in song_info.moov_data
+    )
     if is_alac:
         logger.debug("ALAC detected: forcing all sample durations to 4096")
         for sample in song_info.samples:
@@ -713,7 +725,7 @@ async def decrypt_samples(
     progress_callback=None,
 ) -> bytes:
     """
-    Send samples to wrapper-v2 (HTTP POST /decrypt/sample) for CBCS decryption and
+    Send samples to wrapper-v2 (HTTP POST /decrypt) for CBCS decryption and
     return decrypted bytes.
 
     Ciphertext is sent in batches of up to :data:`WRAPPER_DECRYPT_BATCH_SIZE` MP4 samples
@@ -788,9 +800,7 @@ async def decrypt_samples(
 
             now = time.time()
             if progress_callback and (
-                i % 50 == 0
-                or now - last_progress_time > 0.5
-                or i == total_samples - 1
+                i % 50 == 0 or now - last_progress_time > 0.5 or i == total_samples - 1
             ):
                 elapsed = now - start_time
                 speed = bytes_processed / elapsed if elapsed > 0 else 0
@@ -828,7 +838,7 @@ def write_decrypted_m4a(
     orig_mdhd = None
     orig_smhd = None
     orig_dinf = None
-    # We will use the actual audio sample rate from the stsd as our 
+    # We will use the actual audio sample rate from the stsd as our
     # master timescale to ensure 100% duration consistency.
     orig_hdlr = None
     timescale = 44100  # Default fallback
@@ -845,7 +855,9 @@ def write_decrypted_m4a(
     if orig_data:
         stsd_content = _extract_stsd_content(orig_data, preferred_desc_index)
         # Extract the REAL sample rate from the codec configuration
-        timescale = _extract_sample_rate_from_stsd(stsd_content) or _extract_timescale(orig_data)
+        timescale = _extract_sample_rate_from_stsd(stsd_content) or _extract_timescale(
+            orig_data
+        )
 
         # Find moov box and extract child boxes
         moov_idx = orig_data.find(b"moov")
@@ -1087,6 +1099,7 @@ def _write_moov(
     f.write(struct.pack(">I", mdat_offset))
     f.seek(0, 2)  # Back to end
 
+
 def _extract_sample_rate_from_stsd(stsd_content: bytes) -> Optional[int]:
     """Extract the actual audio sample rate from the stsd box content."""
     # Header: version(1)+flags(3)+count(4) + Entry: size(4)+type(4) = 16 bytes
@@ -1094,11 +1107,13 @@ def _extract_sample_rate_from_stsd(stsd_content: bytes) -> Optional[int]:
     # The fixed-point sample_rate field is at offset 16 + 24 = 40.
     if not stsd_content or len(stsd_content) < 44:
         return None
-        
+
     samplerate_offset = 40
-    sample_rate_fixed = struct.unpack(">I", stsd_content[samplerate_offset : samplerate_offset + 4])[0]
+    sample_rate_fixed = struct.unpack(
+        ">I", stsd_content[samplerate_offset : samplerate_offset + 4]
+    )[0]
     sample_rate = sample_rate_fixed >> 16
-    
+
     # Sanity check: standard audio sample rates should be between 8000 and 384000
     if 8000 <= sample_rate <= 384000:
         return sample_rate
@@ -1218,7 +1233,9 @@ def _write_mdat(f, data: bytes):
     f.write(data)
 
 
-def _extract_stsd_content(data: bytes, preferred_desc_index: Optional[int] = None) -> Optional[bytes]:
+def _extract_stsd_content(
+    data: bytes, preferred_desc_index: Optional[int] = None
+) -> Optional[bytes]:
     """Extract cleaned stsd box content from moov box (supports any codec)."""
     # Find stsd box in the data
     idx = data.find(b"stsd")
@@ -1237,7 +1254,9 @@ def _extract_stsd_content(data: bytes, preferred_desc_index: Optional[int] = Non
     return _clean_stsd_content(raw_content, preferred_desc_index)
 
 
-def _clean_stsd_content(stsd_content: bytes, preferred_desc_index: Optional[int] = None) -> bytes:
+def _clean_stsd_content(
+    stsd_content: bytes, preferred_desc_index: Optional[int] = None
+) -> bytes:
     """
     Clean stsd content by removing encryption metadata.
 
@@ -1548,7 +1567,6 @@ def _patch_tkhd_duration(box_data: bytes, duration: int) -> bytes:
     return bytes(data)
 
 
-
 def _patch_mdhd_duration(box_data: bytes, duration: int, timescale: int) -> bytes:
     """Return a copy of the mdhd box with its duration and timescale fields patched."""
     data = bytearray(box_data)
@@ -1643,17 +1661,19 @@ def _extract_trex_defaults(moov_data: bytes, target_track_id: int = 0) -> dict:
                 defaults["default_sample_description_index"] = struct.unpack(
                     ">I", trex_data[16:20]
                 )[0]
-                
+
                 # Extract duration and protect against Apple's dummy values
                 parsed_duration = struct.unpack(">I", trex_data[20:24])[0]
-                
+
                 # Override if the provider wrote 0, or if they incorrectly wrote 1024 for an ALAC track
                 if parsed_duration == 0 or (is_alac and parsed_duration == 1024):
                     defaults["default_sample_duration"] = fallback_duration
                 else:
                     defaults["default_sample_duration"] = parsed_duration
 
-                defaults["default_sample_size"] = struct.unpack(">I", trex_data[24:28])[0]
+                defaults["default_sample_size"] = struct.unpack(">I", trex_data[24:28])[
+                    0
+                ]
                 defaults["default_sample_flags"] = struct.unpack(
                     ">I", trex_data[28:32]
                 )[0]
@@ -1666,6 +1686,7 @@ def _extract_trex_defaults(moov_data: bytes, target_track_id: int = 0) -> dict:
         offset += size
 
     return defaults
+
 
 def _extract_encryption_info(moov_data: bytes) -> Optional[EncryptionInfo]:
     """Extract encryption scheme info from the audio track's sinf box.

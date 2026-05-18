@@ -30,7 +30,7 @@ class AppleMusicBaseInterface:
         cover_format: CoverFormat,
         cover_size: int,
         use_wrapper: bool,
-        wrapper_m3u8_ip: str,
+        wrapper_url: str,
         cdm: Cdm,
     ) -> None:
         self.apple_music_api = apple_music_api
@@ -38,7 +38,7 @@ class AppleMusicBaseInterface:
         self.cover_format = cover_format
         self.cover_size = cover_size
         self.use_wrapper = use_wrapper
-        self.wrapper_m3u8_ip = wrapper_m3u8_ip
+        self.wrapper_url = wrapper_url
         self.cdm = cdm
 
     @staticmethod
@@ -126,7 +126,7 @@ class AppleMusicBaseInterface:
         cover_format: CoverFormat = CoverFormat.JPG,
         cover_size: int = 1200,
         use_wrapper: bool = False,
-        wrapper_m3u8_ip: str = "127.0.0.1:20020",
+        wrapper_url: str = "http://127.0.0.1",
         wvd_path: str | None = None,
         itunes_api: ItunesApi | None = None,
     ):
@@ -147,7 +147,7 @@ class AppleMusicBaseInterface:
             cover_format=cover_format,
             cover_size=cover_size,
             use_wrapper=use_wrapper,
-            wrapper_m3u8_ip=wrapper_m3u8_ip,
+            wrapper_url=wrapper_url,
             cdm=cdm,
         )
         return base

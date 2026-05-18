@@ -242,14 +242,14 @@ class AppleMusicApi:
     @classmethod
     async def create_from_wrapper(
         cls,
-        wrapper_account_url: str = "http://127.0.0.1:80/me",
+        wrapper_url: str = "http://127.0.0.1",
         *args,
         **kwargs,
     ) -> "AppleMusicApi":
         response = None
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(wrapper_account_url)
+                response = await client.get(wrapper_url + "/me")
                 response.raise_for_status()
                 wrapper_account_info = response.json()
             except httpx.HTTPError:

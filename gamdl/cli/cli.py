@@ -79,7 +79,7 @@ async def main(config: CliConfig):
     if config.use_wrapper:
         try:
             apple_music_api = await AppleMusicApi.create_from_wrapper(
-                wrapper_account_url=config.wrapper_account_url,
+                wrapper_url=config.wrapper_url,
                 language=config.language,
             )
         except ConnectError:
@@ -134,7 +134,7 @@ async def main(config: CliConfig):
         cover_format=config.cover_format,
         cover_size=config.cover_size,
         use_wrapper=config.use_wrapper,
-        wrapper_m3u8_ip=config.wrapper_m3u8_ip,
+        wrapper_url=config.wrapper_url,
         wvd_path=config.wvd_path,
     )
 
@@ -176,7 +176,6 @@ async def main(config: CliConfig):
         mp4decrypt_path=config.mp4decrypt_path,
         ffmpeg_path=config.ffmpeg_path,
         mp4box_path=config.mp4box_path,
-        wrapper_decrypt_url=config.wrapper_decrypt_url,
         download_mode=config.download_mode,
         album_folder_template=config.album_folder_template,
         compilation_folder_template=config.compilation_folder_template,

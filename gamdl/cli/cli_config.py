@@ -161,12 +161,12 @@ class CliConfig:
             ),
         ),
     ]
-    wrapper_account_url: Annotated[
+    wrapper_url: Annotated[
         str,
         option(
-            "--wrapper-account-url",
-            help="Wrapper account URL",
-            default=api_from_wrapper_sig.parameters["wrapper_account_url"].default,
+            "--wrapper-url",
+            help="Wrapper URL",
+            default=api_from_wrapper_sig.parameters["wrapper_url"].default,
         ),
     ]
     language: Annotated[
@@ -216,14 +216,6 @@ class CliConfig:
             "--use-wrapper",
             help="Use wrapper for decrypting songs",
             is_flag=True,
-        ),
-    ]
-    wrapper_m3u8_ip: Annotated[
-        str,
-        option(
-            "--wrapper-m3u8-ip",
-            help="Wrapper m3u8 IP address and port",
-            default=base_interface_create_sig.parameters["wrapper_m3u8_ip"].default,
         ),
     ]
     # Song Interface Options
@@ -342,14 +334,6 @@ class CliConfig:
             "--mp4box-path",
             help="MP4Box executable path",
             default=base_downloader_sig.parameters["mp4box_path"].default,
-        ),
-    ]
-    wrapper_decrypt_url: Annotated[
-        str,
-        option(
-            "--wrapper-decrypt-url",
-            help="wrapper-v2 base URL for FairPlay decrypt (e.g. http://127.0.0.1:80 or host:port)",
-            default=base_downloader_sig.parameters["wrapper_decrypt_url"].default,
         ),
     ]
     download_mode: Annotated[

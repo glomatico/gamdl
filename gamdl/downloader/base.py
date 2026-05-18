@@ -264,6 +264,41 @@ class AppleMusicBaseDownloader:
         )
         final_path = str(Path(effective_output, *formatted_parts))
 
+        # If the computed album folder doesn't exist yet, check if a sibling folder
+        # with the same album name but different release type already has audio files.
+        # This prevents (ALBUM) vs (SINGLE) duplicates between OrpheusDL and gamdl.
+        if not playlist_tags and tags.album:
+            computed_folder = Path(effective_output, *formatted_parts[:-1])
+            if not computed_folder.exists():
+                parent = computed_folder.parent
+                file_name = formatted_parts[-1]
+                _audio_exts = {".m4a", ".flac", ".mp3", ".ogg", ".opus", ".wav", ".mp4"}
+                _release_types = {"(ALBUM)", "(SINGLE)", "(EP)", "(COMPILATION)"}
+                try:
+                    for sibling in parent.iterdir():
+                        if not sibling.is_dir() or sibling == computed_folder:
+                            continue
+                        # Same folder except for the release type suffix
+                        sib_name = sibling.name
+                        sib_stripped = sib_name
+                        for rt in _release_types:
+                            sib_stripped = sib_stripped.replace(rt, "").strip()
+                        comp_stripped = computed_folder.name
+                        for rt in _release_types:
+                            comp_stripped = comp_stripped.replace(rt, "").strip()
+                        if sib_stripped == comp_stripped:
+                            # Same album, different release type — check if it has audio
+                            candidate = sibling / file_name
+                            for ext in _audio_exts:
+                                if candidate.with_suffix(ext).exists():
+                                    final_path = str(sibling / file_name)
+                                    log.debug("reusing_existing_folder", folder=str(sibling))
+                                    break
+                            if final_path != str(Path(effective_output, *formatted_parts)):
+                                break
+                except OSError:
+                    pass
+
         log.debug("success", final_path=final_path)
 
         return final_path

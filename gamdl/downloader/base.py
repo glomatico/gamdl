@@ -273,29 +273,37 @@ class AppleMusicBaseDownloader:
                 parent = computed_folder.parent
                 file_name = formatted_parts[-1]
                 _audio_exts = {".m4a", ".flac", ".mp3", ".ogg", ".opus", ".wav", ".mp4"}
-                _release_types = {"(ALBUM)", "(SINGLE)", "(EP)", "(COMPILATION)"}
+                _rt_re = re.compile(
+                    r"\s*\((ALBUM|SINGLE|EP|COMPILATION|ANTHOLOGY)\)\s*$", re.IGNORECASE
+                )
+
+                def _norm(s: str) -> str:
+                    s = _rt_re.sub("", s).strip()
+                    decomposed = unicodedata.normalize("NFD", s)
+                    return "".join(
+                        c for c in decomposed if unicodedata.category(c) != "Mn"
+                    ).lower().strip()
+
+                comp_norm = _norm(computed_folder.name)
                 try:
                     for sibling in parent.iterdir():
                         if not sibling.is_dir() or sibling == computed_folder:
                             continue
-                        # Same folder except for the release type suffix
-                        sib_name = sibling.name
-                        sib_stripped = sib_name
-                        for rt in _release_types:
-                            sib_stripped = sib_stripped.replace(rt, "").strip()
-                        comp_stripped = computed_folder.name
-                        for rt in _release_types:
-                            comp_stripped = comp_stripped.replace(rt, "").strip()
-                        if sib_stripped == comp_stripped:
-                            # Same album, different release type — check if it has audio
-                            candidate = sibling / file_name
-                            for ext in _audio_exts:
-                                if candidate.with_suffix(ext).exists():
-                                    final_path = str(sibling / file_name)
-                                    log.debug("reusing_existing_folder", folder=str(sibling))
-                                    break
-                            if final_path != str(Path(effective_output, *formatted_parts)):
-                                break
+                        if _norm(sibling.name) != comp_norm:
+                            continue
+                        # Same album name, different release type — check for audio files
+                        try:
+                            has_audio = any(
+                                f.suffix.lower() in _audio_exts
+                                for f in sibling.iterdir()
+                                if f.is_file()
+                            )
+                        except OSError:
+                            has_audio = False
+                        if has_audio:
+                            final_path = str(sibling / file_name)
+                            log.debug("reusing_existing_folder", folder=str(sibling))
+                            break
                 except OSError:
                     pass
 

@@ -244,6 +244,23 @@ def _append_reassembled_sample(
     decrypted_data.extend(_reassemble_cbcs_sample(sample, plain, tail))
 
 
+def _decrypt_cbcs_sample_with_key(sample: SampleInfo, key: bytes, enc_info: EncryptionInfo) -> bytes:
+    """Decrypt one CBCS sample with a raw AES key."""
+    parts = _cbcs_ciphertext_for_sample(sample)
+    if parts is None:
+        return sample.data
+
+    aligned, tail = parts
+    plain = b""
+    if aligned:
+        iv = sample.iv if sample.iv else enc_info.constant_iv
+        if len(iv) < 16:
+            iv = iv + b"\x00" * (16 - len(iv))
+        cipher = AES.new(key, AES.MODE_CBC, iv=iv)
+        plain = cipher.decrypt(aligned)
+    return _reassemble_cbcs_sample(sample, plain, tail)
+
+
 @dataclass
 class SampleInfo:
     """Information about a single audio sample."""
@@ -722,11 +739,13 @@ async def decrypt_samples(
     track_id: str,
     fairplay_key: str,
     samples: List[SampleInfo],
+    encryption_info: EncryptionInfo,
+    encryption_info_per_desc: Optional[dict] = None,
     progress_callback=None,
 ) -> bytes:
     """
-    Send samples to wrapper-v2 (HTTP POST /decrypt) for CBCS decryption and
-    return decrypted bytes.
+    Send track-key samples to wrapper-v2 (HTTP POST /decrypt) for CBCS
+    decryption and decrypt default prefetch-key samples locally.
 
     Ciphertext is sent in batches of up to :data:`WRAPPER_DECRYPT_BATCH_SIZE` MP4 samples
     per request (same ``adam_id`` and ``uri``). Literal or tail-only samples are applied
@@ -781,6 +800,29 @@ async def decrypt_samples(
                 segment_adam = "0" if key_uri == PREFETCH_KEY else track_id
                 segment_uri = key_uri
                 last_desc_index = sample.desc_index
+
+            if segment_adam == "0":
+                await flush_crypto_batch(client)
+                enc_info = (
+                    encryption_info_per_desc.get(sample.desc_index)
+                    if encryption_info_per_desc and sample.desc_index in encryption_info_per_desc
+                    else encryption_info
+                )
+                decrypted_data.extend(
+                    _decrypt_cbcs_sample_with_key(sample, DEFAULT_SONG_DECRYPTION_KEY, enc_info)
+                )
+                bytes_processed += len(sample.data)
+                now = time.time()
+                if progress_callback and (
+                    i % 50 == 0
+                    or now - last_progress_time > 0.5
+                    or i == total_samples - 1
+                ):
+                    elapsed = now - start_time
+                    speed = bytes_processed / elapsed if elapsed > 0 else 0
+                    progress_callback(i + 1, total_samples, bytes_processed, speed)
+                    last_progress_time = now
+                continue
 
             parts = _cbcs_ciphertext_for_sample(sample)
             if parts is None:
@@ -1945,6 +1987,12 @@ async def decrypt_file(
 
     # Extract samples (run in thread to not block)
     song_info = await asyncio.to_thread(extract_song, input_path)
+    enc_info = song_info.encryption_info or EncryptionInfo(scheme_type="cbcs")
+    enc_info_per_desc = None
+    if song_info.moov_data:
+        enc_info_per_desc = await asyncio.to_thread(
+            _extract_encryption_info_per_stsd, song_info.moov_data
+        )
 
     # Decrypt samples via wrapper
     decrypted_data = await decrypt_samples(
@@ -1952,6 +2000,8 @@ async def decrypt_file(
         track_id,
         fairplay_key,
         song_info.samples,
+        enc_info,
+        enc_info_per_desc,
         progress_callback,
     )
 

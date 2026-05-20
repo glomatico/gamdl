@@ -10,6 +10,7 @@ from httpx import ConnectError
 
 from .. import __version__
 from ..api import AppleMusicApi
+from ..api.wrapper import WrapperApi
 from ..downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
@@ -76,17 +77,23 @@ async def main(config: CliConfig):
 
     logger.info(f"Starting Gamdl {__version__}")
 
+    interactive_prompts = InteractivePrompts(
+        artist_auto_select=config.artist_auto_select,
+    )
+
     if config.use_wrapper:
         try:
+            wrapper_api = await WrapperApi.create(
+                base_url=config.wrapper_url,
+                get_credentials_func=InteractivePrompts.get_wrapper_credentials,
+                get_2fa_code=InteractivePrompts.get_wrapper_2fa_code,
+            )
             apple_music_api = await AppleMusicApi.create_from_wrapper(
-                wrapper_url=config.wrapper_url,
+                wrapper_api=wrapper_api,
                 language=config.language,
             )
-        except ConnectError:
-            logger.critical(
-                "Could not connect to the wrapper account API. "
-                "Make sure the wrapper is running and the URL is correct."
-            )
+        except Exception as e:
+            logger.exception(f"Error: {e}")
             return
     else:
         cookies_path = prompt_path(config.cookies_path)
@@ -94,6 +101,7 @@ async def main(config: CliConfig):
             cookies_path=cookies_path,
             language=config.language,
         )
+        wrapper_api = None
 
     if not apple_music_api.active_subscription:
         logger.critical(
@@ -125,17 +133,12 @@ async def main(config: CliConfig):
         database = None
         flat_filter = None
 
-    interactive_prompts = InteractivePrompts(
-        artist_auto_select=config.artist_auto_select,
-    )
-
     base_interface = await AppleMusicBaseInterface.create(
         apple_music_api=apple_music_api,
         cover_format=config.cover_format,
         cover_size=config.cover_size,
-        use_wrapper=config.use_wrapper,
-        wrapper_url=config.wrapper_url,
         wvd_path=config.wvd_path,
+        wrapper_api=wrapper_api,
     )
 
     song_interface = AppleMusicSongInterface(

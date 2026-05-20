@@ -15,9 +15,10 @@ from gamdl.interface.wvd import WVD
 
 from ..api.apple_music import AppleMusicApi
 from ..api.itunes import ItunesApi
+from ..api.wrapper import WrapperApi
 from .constants import IMAGE_FILE_EXTENSION_MAP
 from .enums import CoverFormat
-from .types import Cover, DecryptionKey, PlaylistTags, MediaTags, MediaType, MediaRating
+from .types import Cover, DecryptionKey, MediaRating, MediaTags, MediaType, PlaylistTags
 
 logger = structlog.get_logger(__name__)
 
@@ -27,19 +28,17 @@ class AppleMusicBaseInterface:
         self,
         apple_music_api: AppleMusicApi,
         itunes_api: ItunesApi,
+        wrapper_api: WrapperApi | None,
         cover_format: CoverFormat,
         cover_size: int,
-        use_wrapper: bool,
-        wrapper_url: str,
         cdm: Cdm,
     ) -> None:
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
         self.cover_format = cover_format
         self.cover_size = cover_size
-        self.use_wrapper = use_wrapper
-        self.wrapper_url = wrapper_url
         self.cdm = cdm
+        self.wrapper_api = wrapper_api
 
     @staticmethod
     def create_cdm(wvd_path: str | None = None) -> Cdm:
@@ -125,10 +124,9 @@ class AppleMusicBaseInterface:
         apple_music_api: AppleMusicApi,
         cover_format: CoverFormat = CoverFormat.JPG,
         cover_size: int = 1200,
-        use_wrapper: bool = False,
-        wrapper_url: str = "http://127.0.0.1",
         wvd_path: str | None = None,
         itunes_api: ItunesApi | None = None,
+        wrapper_api: WrapperApi | None = None,
     ):
         itunes_api = itunes_api or await ItunesApi.create(
             storefront=apple_music_api.storefront,
@@ -146,9 +144,8 @@ class AppleMusicBaseInterface:
             itunes_api=itunes_api,
             cover_format=cover_format,
             cover_size=cover_size,
-            use_wrapper=use_wrapper,
-            wrapper_url=wrapper_url,
             cdm=cdm,
+            wrapper_api=wrapper_api,
         )
         return base
 
@@ -400,18 +397,3 @@ class AppleMusicBaseInterface:
         log.debug("success", tags=tags)
 
         return tags
-
-    async def get_wrapper_playback(self, media_id: str) -> dict:
-        log = logger.bind(action="get_wrapper_playback", media_id=media_id)
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.wrapper_url}/playback",
-                params={"adam_id": media_id},
-            )
-            response.raise_for_status()
-            playback = response.json()
-
-        log.debug("success", playback=playback)
-
-        return playback

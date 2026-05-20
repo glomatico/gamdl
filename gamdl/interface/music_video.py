@@ -414,8 +414,8 @@ class AppleMusicMusicVideoInterface:
 
         itunes_page_metadata = await self.get_itunes_page_metadata(media.media_metadata)
 
-        if self.base.use_wrapper:
-            playback = await self.base.get_wrapper_playback(media.media_id)
+        if self.base.wrapper_api:
+            playback = await self.base.wrapper_api.get_playback(media.media_id)
             media.tags = await self.base.get_tags_from_asset_info(
                 playback["songList"][0]["assets"][0]["metadata"],
             )

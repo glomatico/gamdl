@@ -17,6 +17,22 @@ class InteractivePrompts:
         return f"{minutes:02}:{seconds:02}"
 
     @staticmethod
+    async def get_wrapper_credentials() -> tuple[str, str]:
+        username = await inquirer.text(
+            message="Apple ID:",
+        ).execute_async()
+        password = await inquirer.secret(
+            message="Password:",
+        ).execute_async()
+        return username, password
+
+    @staticmethod
+    async def get_wrapper_2fa_code() -> str:
+        return await inquirer.text(
+            message="Two-factor authentication code:",
+        ).execute_async()
+
+    @staticmethod
     async def ask_song_codec(
         playlists: list[dict],
     ) -> dict:

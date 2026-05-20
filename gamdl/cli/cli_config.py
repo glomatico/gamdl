@@ -6,7 +6,7 @@ from typing import Annotated
 import click
 from dataclass_click import argument, option
 
-from ..api import AppleMusicApi
+from ..api import AppleMusicApi, WrapperApi
 from ..downloader import (
     AppleMusicBaseDownloader,
     AppleMusicDownloader,
@@ -32,7 +32,7 @@ from ..interface import (
 from .utils import Csv
 
 api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
-api_from_wrapper_sig = inspect.signature(AppleMusicApi.create_from_wrapper)
+wrapper_api_create_sig = inspect.signature(WrapperApi.create)
 api_create_sig = inspect.signature(AppleMusicApi.create)
 
 base_interface_create_sig = inspect.signature(AppleMusicBaseInterface.create)
@@ -145,6 +145,15 @@ class CliConfig:
             is_flag=True,
         ),
     ]
+    # Wrapper specific options
+    wrapper_url: Annotated[
+        str,
+        option(
+            "--wrapper-url",
+            help="Wrapper base URL",
+            default=wrapper_api_create_sig.parameters["base_url"].default,
+        ),
+    ]
     # API specific options
     cookies_path: Annotated[
         str,
@@ -159,14 +168,6 @@ class CliConfig:
                 readable=True,
                 resolve_path=True,
             ),
-        ),
-    ]
-    wrapper_url: Annotated[
-        str,
-        option(
-            "--wrapper-url",
-            help="Wrapper base URL",
-            default=api_from_wrapper_sig.parameters["wrapper_url"].default,
         ),
     ]
     language: Annotated[

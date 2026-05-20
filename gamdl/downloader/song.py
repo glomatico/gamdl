@@ -59,8 +59,12 @@ class AppleMusicSongDownloader:
         fairplay_key: str,
         use_single_content_key: bool = False,
     ) -> None:
+        wrapper_api = self.base.interface.base.wrapper_api
+        if wrapper_api is None:
+            raise ValueError("wrapper_api is required for FairPlay decrypt")
+
         decrypted_media = await decrypt_wrapper(
-            self.base.interface.base.wrapper_url + "/decrypt",
+            wrapper_api,
             media_id,
             input_path,
             fairplay_key_audio=fairplay_key,

@@ -24,6 +24,7 @@ from .constants import (
     APPLE_MUSIC_WEBPLAYBACK_API_URL,
 )
 from .exceptions import GamdlApiResponseError
+from .wrapper import WrapperApi
 
 logger = structlog.get_logger(__name__)
 
@@ -242,25 +243,22 @@ class AppleMusicApi:
     @classmethod
     async def create_from_wrapper(
         cls,
-        wrapper_url: str = "http://127.0.0.1",
+        wrapper_api: WrapperApi,
         *args,
         **kwargs,
     ) -> "AppleMusicApi":
-        response = None
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(wrapper_url + "/me")
-                response.raise_for_status()
-                wrapper_account_info = response.json()
-            except httpx.HTTPError:
-                raise GamdlApiResponseError(
-                    "Error fetching wrapper account info",
-                    status_code=response.status_code if response is not None else None,
-                )
+        auth = wrapper_api.me.get("auth", {})
+        media_user_token = auth.get("music_user_token")
+        token = auth.get("dev_token")
+        if not media_user_token or not token:
+            raise GamdlApiResponseError(
+                "Wrapper account info is missing auth tokens",
+                status_code=None,
+            )
 
         return await cls.create(
-            media_user_token=wrapper_account_info["auth"]["music_user_token"],
-            token=wrapper_account_info["auth"]["dev_token"],
+            media_user_token=media_user_token,
+            token=token,
             *args,
             **kwargs,
         )

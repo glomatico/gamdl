@@ -509,8 +509,8 @@ class AppleMusicSongInterface:
 
         media.lyrics = await self.get_lyrics(media.media_metadata)
 
-        if self.base.use_wrapper:
-            playback = await self.base.get_wrapper_playback(media.media_id)
+        if self.base.wrapper_api:
+            playback = await self.base.wrapper_api.get_playback(media.media_id)
             media.tags = await self.base.get_tags_from_asset_info(
                 playback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
@@ -549,10 +549,10 @@ class AppleMusicSongInterface:
 
         if media.stream_info:
             if (
-                not self.base.use_wrapper
+                not self.base.wrapper_api
                 and not media.stream_info.audio_track.widevine_pssh
             ) or (
-                self.base.use_wrapper
+                self.base.wrapper_api
                 and not media.stream_info.audio_track.fairplay_key
                 and not media.stream_info.audio_track.use_cenc
             ):

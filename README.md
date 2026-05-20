@@ -29,8 +29,6 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 ### Optional Dependencies
 
-The tools below are optional. Add them to your system PATH or specify their paths via command-line arguments or the config file when you need their functionality.
-
 #### Wrapper
 
 Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`, and configure the base URL with `--wrapper-url` or `wrapper_url`.

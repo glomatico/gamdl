@@ -165,7 +165,7 @@ class CliConfig:
         str,
         option(
             "--wrapper-url",
-            help="Wrapper URL",
+            help="Wrapper base URL",
             default=api_from_wrapper_sig.parameters["wrapper_url"].default,
         ),
     ]
@@ -214,7 +214,7 @@ class CliConfig:
         bool,
         option(
             "--use-wrapper",
-            help="Use wrapper for decrypting songs",
+            help="Use wrapper for account, playback, and decryption requests",
             is_flag=True,
         ),
     ]

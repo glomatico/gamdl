@@ -31,23 +31,18 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 Add these tools to your system PATH or specify their paths via command-line arguments or the config file. The tools needed depend on which audio quality, video format, and download mode you want. Use the table below to find the required tools for your use case:
 
-| Use Case | Configuration | Required Tools |
-|---|---|---|
-| **Songs in Legacy Codecs** | `song_codec_priority: aac-legacy\|aac-he-legacy` | None |
-| **Songs in Non Legacy Codecs** | `song_codec_priority: aac\|aac-he\|aac-binaural\|aac-downmix\|aac-he-binaural\|aac-he-downmix\|atmos\|ac3`<br/>`use_wrapper: true` | Wrapper |
-| **Music Videos** | `music_video_remux_mode: ffmpeg` | FFmpeg<br/>mp4decrypt |
-| | `music_video_remux_mode: mp4box` | MP4Box<br/>mp4decrypt |
-| **Faster Downloads** | `download_mode: nm3u8dlre` | N_m3u8DL-RE |
+| Use Case                       | Configuration                                                                                                                      | Required Tools |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| **Songs in Legacy Codecs**     | `song_codec_priority: aac-legacy\|aac-he-legacy`                                                                                   | None           |
+| **Songs in Non Legacy Codecs** | `song_codec_priority: aac\|aac-he\|aac-binaural\|aac-downmix\|aac-he-binaural\|aac-he-downmix\|atmos\|ac3`<br/>`use_wrapper: true` | Wrapper        |
+| **Faster Downloads**           | `download_mode: nm3u8dlre`                                                                                                         | N_m3u8DL-RE    |
 
 #### Tool Reference
 
-| Tool | Download | Purpose |
-|---|---|---|
-| **FFmpeg** | [Windows](https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases) / [Linux](https://johnvansickle.com/ffmpeg/) | Required for music video remuxing with FFmpeg mode |
-| **MP4Box** | [Download](https://gpac.io/downloads/gpac-nightly-builds/) | Alternative for music video remuxing |
-| **mp4decrypt** | [Download](https://www.bento4.com/downloads/) | Decrypts MP4 files when used with MP4Box |
-| **N_m3u8DL-RE** | [Download](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest) | Faster download alternative |
-| **Wrapper** | [Download](https://github.com/WorldObservationLog/wrapper) | For downloading songs in ALAC and other experimental codecs |
+| Tool            | Download                                                           | Purpose                                                     |
+| --------------- | ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| **N_m3u8DL-RE** | [Download](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest) | Faster download alternative                                 |
+| **Wrapper**     | [Download](https://github.com/WorldObservationLog/wrapper)         | For downloading songs in ALAC and other experimental codecs |
 
 ## 📦 Installation
 
@@ -152,7 +147,6 @@ The file is created automatically on first run. Command-line arguments override 
 | **Music Video Options**         |                                                                   |                                                |
 | `--music-video-resolution`      | Max music video resolution                                        | `1080p`                                        |
 | `--music-video-codec-priority`  | Comma-separated codec priority                                    | `h264,h265`                                    |
-| `--music-video-remux-mode`      | Remux mode                                                        | `ffmpeg`                                       |
 | `--music-video-remux-format`    | Music video remux format                                          | `m4v`                                          |
 | **Post Video Options**          |                                                                   |                                                |
 | `--uploaded-video-quality`      | Post video quality                                                | `best`                                         |
@@ -160,9 +154,6 @@ The file is created automatically on first run. Command-line arguments override 
 | `--output-path`, `-o`           | Output directory path                                             | `./Apple Music`                                |
 | `--temp-path`                   | Temporary directory path                                          | `.`                                            |
 | `--nm3u8dlre-path`              | N_m3u8DL-RE executable path                                       | `N_m3u8DL-RE`                                  |
-| `--mp4decrypt-path`             | mp4decrypt executable path                                        | `mp4decrypt`                                   |
-| `--ffmpeg-path`                 | FFmpeg executable path                                            | `ffmpeg`                                       |
-| `--mp4box-path`                 | MP4Box executable path                                            | `MP4Box`                                       |
 | `--use-wrapper`                 | Use wrapper for decrypting songs                                  | `false`                                        |
 | `--wrapper-decrypt-ip`          | Wrapper decryption server IP                                      | `127.0.0.1:10020`                              |
 | `--download-mode`               | Download mode                                                     | `ytdlp`                                        |
@@ -182,7 +173,6 @@ The file is created automatically on first run. Command-line arguments override 
 | `--overwrite`                   | Overwrite existing files                                          | `false`                                        |
 | `--save-cover`, `-s`            | Save cover as separate file                                       | `false`                                        |
 | `--save-playlist`               | Save M3U8 playlist file                                           | `false`                                        |
-
 
 ### Template Variables
 
@@ -213,12 +203,8 @@ The file is created automatically on first run. Command-line arguments override 
 - `ytdlp`, `nm3u8dlre`
 
 > [!NOTE]
+>
 > - **yt-dlp is only used as a file download library**. Media is still fetched directly from Apple Music's servers, and yt-dlp is only responsible for handling the file download process.
-
-### Remux Mode
-
-- `ffmpeg`
-- `mp4box` - Preserve the original closed caption track in music videos and some other minor metadata
 
 ### Cover Format
 
@@ -375,7 +361,7 @@ async def main():
 
     # Download from URL
     url = "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
-    
+
     download_queue = []
     async for media in downloader.get_download_item_from_url(url):
         download_queue.append(media)

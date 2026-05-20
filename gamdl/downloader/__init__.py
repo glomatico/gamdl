@@ -1,4 +1,4 @@
-from .amdecrypt import decrypt_file, decrypt_file_hex
+from .amdecrypt import decrypt_file_hex, decrypt_wrapper, write_decrypted_media
 from .base import AppleMusicBaseDownloader
 from .downloader import AppleMusicDownloader
 from .enums import *

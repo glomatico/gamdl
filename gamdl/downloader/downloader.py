@@ -6,7 +6,7 @@ import structlog
 
 from ..interface.types import AppleMusicMedia
 from .constants import TEMP_PATH_TEMPLATE
-from .enums import DownloadMode, RemuxMode
+from .enums import DownloadMode
 from .exceptions import (
     GamdlDownloaderDependencyNotFoundError,
     GamdlDownloaderMediaFileExistsError,
@@ -215,21 +215,6 @@ class AppleMusicDownloader:
                 "music-videos",
                 "library-music-videos",
             }:
-                if not self.base.full_mp4decrypt_path:
-                    raise GamdlDownloaderDependencyNotFoundError("mp4decrypt")
-
-                if (
-                    self.music_video.remux_mode == RemuxMode.FFMPEG
-                    and not self.base.full_ffmpeg_path
-                ):
-                    raise GamdlDownloaderDependencyNotFoundError("FFmpeg")
-
-                if (
-                    self.music_video.remux_mode == RemuxMode.MP4BOX
-                    and not self.base.full_mp4box_path
-                ):
-                    raise GamdlDownloaderDependencyNotFoundError("MP4Box")
-
                 await self.music_video.download(item)
 
         elif item.media.media_metadata["type"] in {"uploaded-videos"}:

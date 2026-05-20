@@ -24,9 +24,6 @@ class AppleMusicBaseDownloader:
         output_path: str = "./Apple Music",
         temp_path: str = ".",
         nm3u8dlre_path: str = "N_m3u8DL-RE",
-        mp4decrypt_path: str = "mp4decrypt",
-        ffmpeg_path: str = "ffmpeg",
-        mp4box_path: str = "MP4Box",
         download_mode: DownloadMode = DownloadMode.YTDLP,
         album_folder_template: str = "{album_artist}/{album}",
         compilation_folder_template: str = "Compilations/{album}",
@@ -45,9 +42,6 @@ class AppleMusicBaseDownloader:
         self.output_path = output_path
         self.temp_path = temp_path
         self.nm3u8dlre_path = nm3u8dlre_path
-        self.mp4decrypt_path = mp4decrypt_path
-        self.ffmpeg_path = ffmpeg_path
-        self.mp4box_path = mp4box_path
         self.download_mode = download_mode
         self.album_folder_template = album_folder_template
         self.compilation_folder_template = compilation_folder_template
@@ -68,16 +62,10 @@ class AppleMusicBaseDownloader:
         log = logger.bind(action="initialize_binary_paths")
 
         self.full_nm3u8dlre_path = shutil.which(self.nm3u8dlre_path)
-        self.full_mp4decrypt_path = shutil.which(self.mp4decrypt_path)
-        self.full_ffmpeg_path = shutil.which(self.ffmpeg_path)
-        self.full_mp4box_path = shutil.which(self.mp4box_path)
 
         log = log.debug(
             "success",
             full_nm3u8dlre_path=self.full_nm3u8dlre_path,
-            full_mp4decrypt_path=self.full_mp4decrypt_path,
-            full_ffmpeg_path=self.full_ffmpeg_path,
-            full_mp4box_path=self.full_mp4box_path,
         )
 
     def get_temp_path(
@@ -244,8 +232,6 @@ class AppleMusicBaseDownloader:
             "--no-log",
             "--log-level",
             "off",
-            "--ffmpeg-binary-path",
-            self.full_ffmpeg_path,
             "--save-name",
             download_path_obj.stem,
             "--save-dir",

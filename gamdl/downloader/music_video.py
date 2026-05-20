@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from ..utils import async_subprocess
+from .amdecrypt import decrypt_file_hex, write_decrypted_media
 from .base import AppleMusicBaseDownloader
 from .enums import RemuxFormatMusicVideo, RemuxMode
 from .types import DownloadItem
@@ -12,106 +12,30 @@ class AppleMusicMusicVideoDownloader:
     def __init__(
         self,
         base: AppleMusicBaseDownloader,
-        remux_mode: RemuxMode = RemuxMode.FFMPEG,
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
     ):
         self.base = base
-        self.remux_mode = remux_mode
         self.remux_format = remux_format
-
-    async def _remux_mp4box(
-        self,
-        input_path_video: str,
-        input_path_audio: str,
-        output_path: str,
-    ):
-        await async_subprocess(
-            self.base.full_mp4box_path,
-            "-quiet",
-            "-add",
-            input_path_audio,
-            "-add",
-            input_path_video,
-            "-itags",
-            "artist=placeholder",
-            "-keep-utc",
-            "-new",
-            output_path,
-            silent=self.base.silent,
-        )
-
-    async def _remux_ffmpeg(
-        self,
-        input_path_video: str,
-        input_path_audio: str,
-        output_path: str,
-    ):
-        await async_subprocess(
-            self.base.full_ffmpeg_path,
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            input_path_video,
-            "-i",
-            input_path_audio,
-            "-c",
-            "copy",
-            "-c:s",
-            "mov_text",
-            "-movflags",
-            "+faststart",
-            output_path,
-            silent=self.base.silent,
-        )
-
-    async def _decrypt_mp4decrypt(
-        self,
-        input_path: str,
-        output_path: str,
-        decryption_key: str,
-    ):
-        await async_subprocess(
-            self.base.full_mp4decrypt_path,
-            "--key",
-            f"1:{decryption_key}",
-            input_path,
-            output_path,
-            silent=self.base.silent,
-        )
 
     async def stage(
         self,
         encrypted_path_video: str,
         encrypted_path_audio: str,
-        decrypted_path_video: str,
-        decrypted_path_audio: str,
         staged_path: str,
         decryption_key: DecryptionKeyAv,
+        is_m4v: bool = False,
     ):
-        await self._decrypt_mp4decrypt(
-            encrypted_path_video,
-            decrypted_path_video,
-            decryption_key.video_track.key,
-        )
-        await self._decrypt_mp4decrypt(
-            encrypted_path_audio,
-            decrypted_path_audio,
+        decrypted_media = await decrypt_file_hex(
             decryption_key.audio_track.key,
+            encrypted_path_audio,
+            decryption_key.video_track.key,
+            encrypted_path_video,
         )
-
-        if self.remux_mode == RemuxMode.MP4BOX:
-            await self._remux_mp4box(
-                decrypted_path_video,
-                decrypted_path_audio,
-                staged_path,
-            )
-        else:
-            await self._remux_ffmpeg(
-                decrypted_path_video,
-                decrypted_path_audio,
-                staged_path,
-            )
+        await write_decrypted_media(
+            decrypted_media,
+            staged_path,
+            m4v_brand=is_m4v,
+        )
 
     def get_cover_path(
         self,
@@ -177,26 +101,12 @@ class AppleMusicMusicVideoDownloader:
             encrypted_path_audio,
         )
 
-        decrypted_path_video = self.base.get_temp_path(
-            download_item.media.media_metadata["id"],
-            download_item.uuid_,
-            "decrypted_video",
-            ".mp4",
-        )
-        decrypted_path_audio = self.base.get_temp_path(
-            download_item.media.media_metadata["id"],
-            download_item.uuid_,
-            "decrypted_audio",
-            ".m4a",
-        )
-
         await self.stage(
             encrypted_path_video,
             encrypted_path_audio,
-            decrypted_path_video,
-            decrypted_path_audio,
             download_item.staged_path,
             download_item.media.decryption_key,
+            download_item.staged_path.endswith(".m4v"),
         )
 
         cover_bytes = (

@@ -173,9 +173,6 @@ async def main(config: CliConfig):
         output_path=config.output_path,
         temp_path=config.temp_path,
         nm3u8dlre_path=config.nm3u8dlre_path,
-        mp4decrypt_path=config.mp4decrypt_path,
-        ffmpeg_path=config.ffmpeg_path,
-        mp4box_path=config.mp4box_path,
         download_mode=config.download_mode,
         album_folder_template=config.album_folder_template,
         compilation_folder_template=config.compilation_folder_template,
@@ -195,7 +192,6 @@ async def main(config: CliConfig):
     )
     music_video_downloader = AppleMusicMusicVideoDownloader(
         base=base_downloader,
-        remux_mode=config.music_video_remux_mode,
         remux_format=config.music_video_remux_format,
     )
     uploaded_video_downloader = AppleMusicUploadedVideoDownloader(

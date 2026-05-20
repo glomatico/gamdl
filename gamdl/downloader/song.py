@@ -4,7 +4,7 @@ import structlog
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from .amdecrypt import decrypt_file, decrypt_file_hex
+from .amdecrypt import decrypt_file_hex, decrypt_wrapper, write_decrypted_media
 from .base import AppleMusicBaseDownloader
 from .types import DownloadItem
 
@@ -58,13 +58,13 @@ class AppleMusicSongDownloader:
         media_id: str,
         fairplay_key: str,
     ) -> None:
-        await decrypt_file(
+        decrypted_media = await decrypt_wrapper(
             self.base.interface.base.wrapper_url + "/decrypt",
             media_id,
-            fairplay_key,
             input_path,
-            output_path,
+            fairplay_key_audio=fairplay_key,
         )
+        await write_decrypted_media(decrypted_media, output_path)
 
     async def _decrypt_amdecrypt_hex(
         self,
@@ -73,12 +73,12 @@ class AppleMusicSongDownloader:
         decryption_key: str,
         legacy: bool = False,
     ) -> None:
-        await decrypt_file_hex(
-            input_path,
-            output_path,
+        decrypted_media = await decrypt_file_hex(
             decryption_key,
+            input_path,
             legacy=legacy,
         )
+        await write_decrypted_media(decrypted_media, output_path)
 
     async def stage(
         self,

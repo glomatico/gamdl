@@ -312,30 +312,6 @@ class CliConfig:
             default=base_downloader_sig.parameters["nm3u8dlre_path"].default,
         ),
     ]
-    mp4decrypt_path: Annotated[
-        str,
-        option(
-            "--mp4decrypt-path",
-            help="mp4decrypt executable path",
-            default=base_downloader_sig.parameters["mp4decrypt_path"].default,
-        ),
-    ]
-    ffmpeg_path: Annotated[
-        str,
-        option(
-            "--ffmpeg-path",
-            help="FFmpeg executable path",
-            default=base_downloader_sig.parameters["ffmpeg_path"].default,
-        ),
-    ]
-    mp4box_path: Annotated[
-        str,
-        option(
-            "--mp4box-path",
-            help="MP4Box executable path",
-            default=base_downloader_sig.parameters["mp4box_path"].default,
-        ),
-    ]
     download_mode: Annotated[
         DownloadMode,
         option(
@@ -437,15 +413,6 @@ class CliConfig:
         ),
     ]
     # DownloaderMusicVideo specific options
-    music_video_remux_mode: Annotated[
-        RemuxMode,
-        option(
-            "--music-video-remux-mode",
-            help="Remux mode",
-            default=music_video_downloader_sig.parameters["remux_mode"].default,
-            type=RemuxMode,
-        ),
-    ]
     music_video_remux_format: Annotated[
         RemuxFormatMusicVideo,
         option(

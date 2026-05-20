@@ -1,6 +1,9 @@
 import asyncio
+import multiprocessing
+import queue
 import re
 import shutil
+import traceback
 from pathlib import Path
 
 import structlog
@@ -15,6 +18,30 @@ from .constants import ILLEGAL_CHAR_REPLACEMENT, ILLEGAL_CHARS_RE, TEMP_PATH_TEM
 from .enums import DownloadMode
 
 logger = structlog.get_logger(__name__)
+
+
+def _download_ytdlp_process(
+    stream_url: str,
+    download_path: str,
+    silent: bool,
+    result_queue,
+) -> None:
+    try:
+        with YoutubeDL(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "outtmpl": download_path,
+                "allow_unplayable_formats": True,
+                "overwrites": True,
+                "fixup": "never",
+                "noprogress": silent,
+                "allowed_extractors": ["generic"],
+            }
+        ) as ydl:
+            ydl.download(stream_url)
+    except Exception as e:
+        result_queue.put(("error", repr(e), traceback.format_exc()))
 
 
 class AppleMusicBaseDownloader:
@@ -200,26 +227,40 @@ class AppleMusicBaseDownloader:
         log.debug("success")
 
     async def _download_ytdlp_async(self, stream_url: str, download_path: str) -> None:
-        await asyncio.to_thread(
-            self._download_ytdlp_sync,
-            stream_url,
-            download_path,
+        ctx = multiprocessing.get_context()
+        result_queue = ctx.Queue()
+        process = ctx.Process(
+            target=_download_ytdlp_process,
+            args=(stream_url, download_path, self.silent, result_queue),
         )
+        process.start()
 
-    def _download_ytdlp_sync(self, stream_url: str, download_path: str) -> None:
-        with YoutubeDL(
-            {
-                "quiet": True,
-                "no_warnings": True,
-                "outtmpl": download_path,
-                "allow_unplayable_formats": True,
-                "overwrites": True,
-                "fixup": "never",
-                "noprogress": self.silent,
-                "allowed_extractors": ["generic"],
-            }
-        ) as ydl:
-            ydl.download(stream_url)
+        try:
+            while process.is_alive():
+                await asyncio.sleep(0.1)
+
+            process.join()
+
+            try:
+                status, error_repr, error_traceback = result_queue.get_nowait()
+            except queue.Empty:
+                status = None
+
+            if status == "error":
+                raise RuntimeError(
+                    f"yt-dlp failed: {error_repr}\n{error_traceback}"
+                ) from None
+
+            if process.exitcode != 0:
+                raise RuntimeError(f"yt-dlp exited with code {process.exitcode}")
+        finally:
+            if process.is_alive():
+                process.terminate()
+                await asyncio.to_thread(process.join, 5)
+                if process.is_alive():
+                    process.kill()
+                    await asyncio.to_thread(process.join)
+            process.close()
 
     async def _download_nm3u8dlre(self, stream_url: str, download_path: str):
         download_path_obj = Path(download_path)

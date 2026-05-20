@@ -6,6 +6,7 @@ from .constants import (
     FOURCC_MAP,
     MEDIA_RATING_STR_MAP,
     MEDIA_TYPE_STR_MAP,
+    SONG_CODEC_FLAVOR_MAP,
 )
 
 
@@ -47,6 +48,9 @@ class MediaFileFormat(Enum):
 class SongCodec(Enum):
     AAC_WEB = "aac-web"
     AAC_HE_WEB = "aac-he-web"
+    # doesnt work with wrapper, gives ckc error
+    # AAC_FPS_WEB = "aac-fps-web"
+    # AAC_HE_FPS_WEB = "aac-he-fps-web"
     AAC = "aac"
     AAC_HE = "aac-he"
     AAC_BINAURAL = "aac-binaural"
@@ -61,6 +65,14 @@ class SongCodec(Enum):
     @property
     def is_web(self) -> bool:
         return self.value.endswith("-web")
+
+    @property
+    def flavor(self) -> str | None:
+        return SONG_CODEC_FLAVOR_MAP.get(self.value)
+
+    @property
+    def is_cenc(self) -> bool:
+        return self.flavor is not None and "ctrp" in self.flavor
 
 
 class MusicVideoCodec(Enum):

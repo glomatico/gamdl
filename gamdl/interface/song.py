@@ -281,6 +281,8 @@ class AppleMusicSongInterface:
                 formats=[codec.value for codec in self.codec_priority],
             )
 
+        return stream_info
+
     async def _get_stream_info(
         self,
         m3u8_master_url: str | None,

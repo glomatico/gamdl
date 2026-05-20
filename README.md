@@ -46,9 +46,11 @@ The wrapper is recommended when using these non-web song codecs:
 - `ac3`
 - `alac`
 
-Web song codecs such as `aac-web` and `aac-he-web` do not require the wrapper.
+**Note:**
 
-Cookies can be skipped when using the wrapper.
+- When using the Wrapper, you'll be asked to insert your credentials to login if you haven't already.
+- Web song codecs such as `aac-web` and `aac-he-web` do not require the wrapper.
+- Cookies can be skipped when using the wrapper.
 
 #### N_m3u8DL-RE
 

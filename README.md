@@ -27,22 +27,33 @@ A command-line app for downloading Apple Music songs, music videos and post vide
   - **Firefox**: [Export Cookies](https://addons.mozilla.org/addon/export-cookies-txt)
   - **Chromium**: [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
 
-### Dependencies
+### Optional Dependencies
 
-Add these tools to your system PATH or specify their paths via command-line arguments or the config file. The tools needed depend on which audio quality, video format, and download mode you want. Use the table below to find the required tools for your use case:
+The tools below are optional. Add them to your system PATH or specify their paths via command-line arguments or the config file when you need their functionality.
 
-| Use Case                       | Configuration                                                                                                                      | Required Tools |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **Songs in Legacy Codecs**     | `song_codec_priority: aac-legacy\|aac-he-legacy`                                                                                   | None           |
-| **Songs in Non Legacy Codecs** | `song_codec_priority: aac\|aac-he\|aac-binaural\|aac-downmix\|aac-he-binaural\|aac-he-downmix\|atmos\|ac3`<br/>`use_wrapper: true` | Wrapper        |
-| **Faster Downloads**           | `download_mode: nm3u8dlre`                                                                                                         | N_m3u8DL-RE    |
+#### Wrapper
 
-#### Tool Reference
+Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`, and configure the base URL with `--wrapper-url` or `wrapper_url`.
 
-| Tool            | Download                                                           | Purpose                                                     |
-| --------------- | ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| **N_m3u8DL-RE** | [Download](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest) | Faster download alternative                                 |
-| **Wrapper**     | [Download](https://github.com/WorldObservationLog/wrapper)         | For downloading songs in ALAC and other experimental codecs |
+The wrapper is recommended when using these non-web song codecs:
+
+- `aac`
+- `aac-he`
+- `aac-binaural`
+- `aac-downmix`
+- `aac-he-binaural`
+- `aac-he-downmix`
+- `atmos`
+- `ac3`
+- `alac`
+
+Web song codecs such as `aac-web` and `aac-he-web` do not require the wrapper.
+
+#### N_m3u8DL-RE
+
+Use [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest) as a faster download alternative to the default yt-dlp download mode. Enable it with `--download-mode nm3u8dlre` or `download_mode = nm3u8dlre`.
+
+If the executable is not available in your system PATH, set its location with `--nm3u8dlre-path` or `nm3u8dlre_path`.
 
 ## 📦 Installation
 
@@ -56,9 +67,9 @@ Add these tools to your system PATH or specify their paths via command-line argu
    - Place the cookies file in the working directory as `cookies.txt`, or
    - Specify the path using `--cookies-path` or in the config file
 
-3. **Optional: Set up tools** (only if you need the functionality)
+3. **Optional: Set up dependencies** (only if you need the functionality)
 
-   See the [Dependencies](#dependencies) section to determine which tools you need based on your use case, then follow the [Tool Reference](#tool-reference) for download and installation instructions.
+   See the [Optional Dependencies](#optional-dependencies) section to determine which optional tools you need.
 
 ## 🚀 Usage
 
@@ -118,61 +129,59 @@ The file is created automatically on first run. Command-line arguments override 
 
 ### Configuration Options
 
-| Option                          | Description                                                       | Default                                        |
-| ------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------- |
-| **General Options**             |                                                                   |                                                |
-| `--read-urls-as-txt`, `-r`      | Read URLs from text files                                         | `false`                                        |
-| `--config-path`                 | Config file path                                                  | `<home>/.gamdl/config.ini`                     |
-| `--log-level`                   | Logging level                                                     | `INFO`                                         |
-| `--log-file`                    | Log file path                                                     | -                                              |
-| `--no-exceptions`               | Don't print exceptions                                            | `false`                                        |
-| `--artist-auto-select`          | Automatically select artist content to download (artist URLs)     | -                                              |
-| `--database-path`               | Path to the SQLite database file for registering downloaded media | -                                              |
-| `--no-config-file`, `-n`        | Don't use a config file                                           | `false`                                        |
-| **Apple Music Options**         |                                                                   |                                                |
-| `--cookies-path`, `-c`          | Cookies file path                                                 | `./cookies.txt`                                |
-| `--wrapper-account-url`         | Wrapper account URL                                               | `http://127.0.0.1:30020`                       |
-| `--language`, `-l`              | Metadata language                                                 | `en-US`                                        |
-| **Output Options**              |                                                                   |                                                |
-| `--cover-format`                | Cover format                                                      | `jpg`                                          |
-| `--cover-size`                  | Cover size in pixels                                              | `1200`                                         |
-| `--wvd-path`                    | .wvd file path                                                    | -                                              |
-| `--wrapper-m3u8-ip`             | Wrapper m3u8 IP address and port                                  | -                                              |
-| **Song Options**                |                                                                   |                                                |
-| `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                                          |
-| `--song-codec-priority`         | Comma-separated codec priority                                    | `aac-legacy`                                   |
-| `--use-album-date`              | Use album release date for songs                                  | `false`                                        |
-| `--no-synced-lyrics`            | Don't download synced lyrics                                      | `false`                                        |
-| `--synced-lyrics-only`          | Download only synced lyrics                                       | `false`                                        |
-| **Music Video Options**         |                                                                   |                                                |
-| `--music-video-resolution`      | Max music video resolution                                        | `1080p`                                        |
-| `--music-video-codec-priority`  | Comma-separated codec priority                                    | `h264,h265`                                    |
-| `--music-video-remux-format`    | Music video remux format                                          | `m4v`                                          |
-| **Post Video Options**          |                                                                   |                                                |
-| `--uploaded-video-quality`      | Post video quality                                                | `best`                                         |
-| **Download & Path Options**     |                                                                   |                                                |
-| `--output-path`, `-o`           | Output directory path                                             | `./Apple Music`                                |
-| `--temp-path`                   | Temporary directory path                                          | `.`                                            |
-| `--nm3u8dlre-path`              | N_m3u8DL-RE executable path                                       | `N_m3u8DL-RE`                                  |
-| `--use-wrapper`                 | Use wrapper for decrypting songs                                  | `false`                                        |
-| `--wrapper-decrypt-ip`          | Wrapper decryption server IP                                      | `127.0.0.1:10020`                              |
-| `--download-mode`               | Download mode                                                     | `ytdlp`                                        |
-| **Template Options**            |                                                                   |                                                |
-| `--album-folder-template`       | Album folder template                                             | `{album_artist}/{album}`                       |
-| `--compilation-folder-template` | Compilation folder template                                       | `Compilations/{album}`                         |
-| `--no-album-folder-template`    | No album folder template                                          | `{artist}/Unknown Album`                       |
-| `--playlist-folder-template`    | Playlist folder template                                          | `Playlists/{playlist_artist}/{playlist_title}` |
-| `--single-disc-file-template`   | Single disc file template                                         | `{track:02d} {title}`                          |
-| `--multi-disc-file-template`    | Multi disc file template                                          | `{disc}-{track:02d} {title}`                   |
-| `--no-album-file-template`      | No album file template                                            | `{title}`                                      |
-| `--playlist-file-template`      | Playlist file template                                            | `Playlists/{playlist_artist}/{playlist_title}` |
-| `--date-tag-template`           | Date tag template                                                 | `%Y-%m-%dT%H:%M:%SZ`                           |
-| `--exclude-tags`                | Comma-separated tags to exclude                                   | -                                              |
-| `--truncate`                    | Max filename length                                               | -                                              |
-| **File Output Options**         |                                                                   |                                                |
-| `--overwrite`                   | Overwrite existing files                                          | `false`                                        |
-| `--save-cover`, `-s`            | Save cover as separate file                                       | `false`                                        |
-| `--save-playlist`               | Save M3U8 playlist file                                           | `false`                                        |
+| Option                          | Description                                                       | Default                       |
+| ------------------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| **General Options**             |                                                                   |                               |
+| `--read-urls-as-txt`, `-r`      | Read URLs from text files                                         | `false`                       |
+| `--config-path`                 | Config file path                                                  | `<home>/.gamdl/config.ini`    |
+| `--log-level`                   | Logging level                                                     | `INFO`                        |
+| `--log-file`                    | Log file path                                                     | -                             |
+| `--no-exceptions`               | Don't print exceptions                                            | `false`                       |
+| `--artist-auto-select`          | Automatically select artist content to download (artist URLs)     | -                             |
+| `--database-path`               | Path to the SQLite database file for registering downloaded media | -                             |
+| `--no-config-file`, `-n`        | Don't use a config file                                           | `false`                       |
+| **Apple Music Options**         |                                                                   |                               |
+| `--cookies-path`, `-c`          | Cookies file path                                                 | `./cookies.txt`               |
+| `--wrapper-url`                 | Wrapper base URL                                                  | `http://127.0.0.1`            |
+| `--language`, `-l`              | Metadata language                                                 | `en-US`                       |
+| **Interface Options**           |                                                                   |                               |
+| `--cover-format`                | Cover format                                                      | `jpg`                         |
+| `--cover-size`                  | Cover size in pixels                                              | `1200`                        |
+| `--wvd-path`                    | .wvd file path                                                    | -                             |
+| `--use-wrapper`                 | Use wrapper for account, playback, and decryption requests        | `false`                       |
+| **Song Options**                |                                                                   |                               |
+| `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                         |
+| `--song-codec-priority`         | Comma-separated codec priority                                    | `aac-web`                     |
+| `--use-album-date`              | Use album release date for songs                                  | `false`                       |
+| `--no-synced-lyrics`            | Don't download synced lyrics                                      | `false`                       |
+| `--synced-lyrics-only`          | Download only synced lyrics                                       | `false`                       |
+| **Music Video Options**         |                                                                   |                               |
+| `--music-video-resolution`      | Max music video resolution                                        | `1080p`                       |
+| `--music-video-codec-priority`  | Comma-separated codec priority                                    | `h264,h265`                   |
+| `--music-video-remux-format`    | Music video remux format                                          | `m4v`                         |
+| **Post Video Options**          |                                                                   |                               |
+| `--uploaded-video-quality`      | Post video quality                                                | `best`                        |
+| **Download & Path Options**     |                                                                   |                               |
+| `--output-path`, `-o`           | Output directory path                                             | `./Apple Music`               |
+| `--temp-path`                   | Temporary directory path                                          | `.`                           |
+| `--nm3u8dlre-path`              | N_m3u8DL-RE executable path                                       | `N_m3u8DL-RE`                 |
+| `--download-mode`               | Download mode                                                     | `ytdlp`                       |
+| **Template Options**            |                                                                   |                               |
+| `--album-folder-template`       | Album folder template                                             | `{album_artist}/{album}`      |
+| `--compilation-folder-template` | Compilation folder template                                       | `Compilations/{album}`        |
+| `--no-album-folder-template`    | No album folder template                                          | `{artist}/Unknown Album`      |
+| `--playlist-folder-template`    | Playlist folder template                                          | `Playlists/{playlist_artist}` |
+| `--single-disc-file-template`   | Single disc file template                                         | `{track:02d} {title}`         |
+| `--multi-disc-file-template`    | Multi disc file template                                          | `{disc}-{track:02d} {title}`  |
+| `--no-album-file-template`      | No album file template                                            | `{title}`                     |
+| `--playlist-file-template`      | Playlist file template                                            | `{playlist_title}`            |
+| `--date-tag-template`           | Date tag template                                                 | `%Y-%m-%dT%H:%M:%SZ`          |
+| `--exclude-tags`                | Comma-separated tags to exclude                                   | -                             |
+| `--truncate`                    | Max filename length                                               | -                             |
+| **File Output Options**         |                                                                   |                               |
+| `--overwrite`                   | Overwrite existing files                                          | `false`                       |
+| `--save-cover`, `-s`            | Save cover as separate file                                       | `false`                       |
+| `--save-playlist`               | Save M3U8 playlist file                                           | `false`                       |
 
 ### Template Variables
 
@@ -218,12 +227,12 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 
 ### Song Codecs
 
-**Stable:**
+**Web:**
 
-- `aac-legacy` - AAC 256kbps 44.1kHz
-- `aac-he-legacy` - AAC-HE 64kbps 44.1kHz
+- `aac-web` - AAC 256kbps 44.1kHz
+- `aac-he-web` - AAC-HE 64kbps 44.1kHz
 
-**Experimental** (may not work due to API limitations):
+**Non-web** (wrapper recommended; may not work without wrapper due to API limitations):
 
 - `aac` - AAC 256kbps up to 48kHz
 - `aac-he` - AAC-HE 64kbps up to 48kHz
@@ -233,8 +242,8 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `aac-he-downmix` - AAC-HE 64kbps downmix
 - `atmos` - Dolby Atmos 768kbps
 - `ac3` - AC3 640kbps
-- `alac` - ALAC up to 24-bit/192kHz (unsupported)
-- `ask` - Interactive experimental codec selection
+- `alac` - ALAC up to 24-bit/192kHz
+- `ask` - Interactive codec selection
 
 ### Synced Lyrics Format
 
@@ -271,16 +280,6 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `all-albums`
 - `top-songs`
 - `music-videos`
-
-## ⚙️ Wrapper
-
-Use the [wrapper](https://github.com/WorldObservationLog/wrapper) to download songs in ALAC and other experimental codecs without API limitations. Cookies are not required when using the wrapper.
-
-### Setup Instructions
-
-1. **Start the wrapper server** - Run the wrapper server
-2. **Enable wrapper in Gamdl** - Use `--use-wrapper` flag or set `use_wrapper = true` in config
-3. **Run Gamdl** - Download as usual with the wrapper enabled
 
 ## 🐍 Embedding
 

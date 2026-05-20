@@ -402,10 +402,16 @@ class AppleMusicBaseInterface:
         return tags
 
     async def get_wrapper_playback(self, media_id: str) -> dict:
+        log = logger.bind(action="get_wrapper_playback", media_id=media_id)
+
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.wrapper_url}/playback",
                 params={"adam_id": media_id},
             )
             response.raise_for_status()
-            return response.json()
+            playback = response.json()
+
+        log.debug("success", playback=playback)
+
+        return playback

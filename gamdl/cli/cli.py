@@ -109,7 +109,7 @@ async def main(config: CliConfig):
         )
 
     if (
-        any(not codec.is_legacy() for codec in config.song_codec_piority)
+        any(not codec.is_web for codec in config.song_codec_piority)
         and not config.use_wrapper
     ):
         logger.warning(

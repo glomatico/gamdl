@@ -260,14 +260,26 @@ class AppleMusicSongInterface:
 
     async def get_stream_info(
         self,
+        media_id: str,
         m3u8_master_url: str | None = None,
         webplayback: dict | None = None,
-    ) -> StreamInfoAv | None:
+    ) -> StreamInfoAv:
+        stream_info = None
+
         for codec in self.codec_priority:
             if codec.is_legacy():
-                return await self._get_stream_info_legacy(webplayback, codec)
+                stream_info = await self._get_stream_info_legacy(webplayback, codec)
             else:
-                return await self._get_stream_info(m3u8_master_url, codec)
+                stream_info = await self._get_stream_info(m3u8_master_url, codec)
+
+            if stream_info:
+                break
+
+        if not stream_info:
+            raise GamdlInterfaceFormatNotAvailableError(
+                media_id=media_id,
+                formats=[codec.value for codec in self.codec_priority],
+            )
 
     async def _get_stream_info(
         self,
@@ -492,9 +504,15 @@ class AppleMusicSongInterface:
             )
             if not self.skip_stream_info:
                 m3u8_master_url = self._get_m3u8_from_playback(playback)
+                webplayback = (
+                    await self.base.apple_music_api.get_webplayback(media.media_id)
+                    if any(codec.is_legacy() for codec in self.codec_priority)
+                    else None
+                )
                 media.stream_info = await self.get_stream_info(
+                    media.media_id,
                     m3u8_master_url,
-                    playback,
+                    webplayback,
                 )
         else:
             webplayback = await self.base.apple_music_api.get_webplayback(
@@ -510,6 +528,7 @@ class AppleMusicSongInterface:
                     media.media_metadata
                 )
                 media.stream_info = await self.get_stream_info(
+                    media.media_id,
                     m3u8_master_url,
                     webplayback,
                 )

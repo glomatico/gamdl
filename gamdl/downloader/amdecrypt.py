@@ -1584,7 +1584,7 @@ async def _decrypt_track_hex(
     input_path: str,
     decryption_key: str,
     handler_type: bytes,
-    legacy: bool = False,
+    use_prefetch_key: bool = False,
     use_track_key_for_all_descriptions: bool = False,
     file_backed: bool = False,
 ) -> DecryptedTrack:
@@ -1594,7 +1594,7 @@ async def _decrypt_track_hex(
 
     if use_track_key_for_all_descriptions:
         keys = {sample.desc_index: track_key for sample in track_info.samples}
-    elif handler_type == b"soun" and legacy:
+    elif handler_type == b"soun" and use_prefetch_key:
         keys = {0: track_key}
     elif handler_type == b"soun":
         keys = {0: DEFAULT_SONG_DECRYPTION_KEY, 1: track_key}
@@ -1602,10 +1602,10 @@ async def _decrypt_track_hex(
         keys = {sample.desc_index: track_key for sample in track_info.samples}
 
     enc_info = track_info.encryption_info or EncryptionInfo(
-        scheme_type="cenc" if legacy else "cbcs"
+        scheme_type="cenc" if use_prefetch_key else "cbcs"
     )
     enc_info_per_desc = None
-    if track_info.moov_data and not legacy:
+    if track_info.moov_data and not use_prefetch_key:
         enc_info_per_desc = await asyncio.to_thread(
             _extract_encryption_info_per_stsd,
             track_info.moov_data,
@@ -1659,14 +1659,14 @@ async def decrypt_file_hex(
     input_audio_path: str,
     decryption_key_video: str | None = None,
     input_video_path: str | None = None,
-    legacy: bool = False,
+    use_prefetch_key: bool = False,
 ) -> DecryptedMedia:
     """Decrypt audio and optional video with raw AES hex keys."""
     audio = await _decrypt_track_hex(
         input_audio_path,
         decryption_key_audio,
         b"soun",
-        legacy,
+        use_prefetch_key,
         use_track_key_for_all_descriptions=input_video_path is not None,
         file_backed=input_video_path is not None,
     )

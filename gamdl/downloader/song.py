@@ -71,12 +71,12 @@ class AppleMusicSongDownloader:
         input_path: str,
         output_path: str,
         decryption_key: str,
-        legacy: bool = False,
+        use_prefetch_key: bool = False,
     ) -> None:
         decrypted_media = await decrypt_file_hex(
             decryption_key,
             input_path,
-            legacy=legacy,
+            use_prefetch_key=use_prefetch_key,
         )
         await write_decrypted_media(decrypted_media, output_path)
 
@@ -84,10 +84,10 @@ class AppleMusicSongDownloader:
         self,
         encrypted_path: str,
         staged_path: str,
-        decryption_key: DecryptionKeyAv,
-        legacy: bool,
         media_id: str,
-        fairplay_key: str,
+        web_song_codec: bool,
+        decryption_key: DecryptionKeyAv | None = None,
+        fairplay_key: str = None,
     ):
         log = logger.bind(
             action="stage_song",
@@ -96,19 +96,19 @@ class AppleMusicSongDownloader:
             staged_path=staged_path,
         )
 
-        if self.base.interface.base.use_wrapper and not legacy:
+        if decryption_key:
+            await self._decrypt_amdecrypt_hex(
+                encrypted_path,
+                staged_path,
+                decryption_key.audio_track.key,
+                web_song_codec,
+            )
+        else:
             await self._decrypt_amdecrypt(
                 encrypted_path,
                 staged_path,
                 media_id,
                 fairplay_key,
-            )
-        else:
-            await self._decrypt_amdecrypt_hex(
-                encrypted_path,
-                staged_path,
-                decryption_key.audio_track.key,
-                legacy,
             )
 
         log.debug("success")
@@ -161,9 +161,9 @@ class AppleMusicSongDownloader:
         await self.stage(
             encrypted_path,
             download_item.staged_path,
+            download_item.media.media_id,
+            download_item.media.stream_info.audio_track.web_song_codec,
             download_item.media.decryption_key,
-            download_item.media.stream_info.audio_track.legacy,
-            download_item.media.media_metadata["id"],
             download_item.media.stream_info.audio_track.fairplay_key,
         )
 

@@ -48,6 +48,8 @@ The wrapper is recommended when using these non-web song codecs:
 
 Web song codecs such as `aac-web` and `aac-he-web` do not require the wrapper.
 
+Cookies can be skipped when using the wrapper.
+
 #### N_m3u8DL-RE
 
 Use [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest) as a faster download alternative to the default yt-dlp download mode. Enable it with `--download-mode nm3u8dlre` or `download_mode = nm3u8dlre`.

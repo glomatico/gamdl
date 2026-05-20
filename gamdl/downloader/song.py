@@ -57,12 +57,14 @@ class AppleMusicSongDownloader:
         output_path: str,
         media_id: str,
         fairplay_key: str,
+        use_single_content_key: bool = False,
     ) -> None:
         decrypted_media = await decrypt_wrapper(
             self.base.interface.base.wrapper_url + "/decrypt",
             media_id,
             input_path,
             fairplay_key_audio=fairplay_key,
+            use_single_content_key=use_single_content_key,
         )
         await write_decrypted_media(decrypted_media, output_path)
 
@@ -71,12 +73,15 @@ class AppleMusicSongDownloader:
         input_path: str,
         output_path: str,
         decryption_key: str,
-        use_prefetch_key: bool = False,
+        *,
+        use_cenc: bool = False,
+        use_single_content_key: bool = False,
     ) -> None:
         decrypted_media = await decrypt_file_hex(
             decryption_key,
             input_path,
-            use_prefetch_key=use_prefetch_key,
+            use_cenc=use_cenc,
+            use_single_content_key=use_single_content_key,
         )
         await write_decrypted_media(decrypted_media, output_path)
 
@@ -85,9 +90,10 @@ class AppleMusicSongDownloader:
         encrypted_path: str,
         staged_path: str,
         media_id: str,
-        web_song_codec: bool,
         decryption_key: DecryptionKeyAv | None = None,
         fairplay_key: str = None,
+        use_cenc: bool = False,
+        use_single_content_key: bool = False,
     ):
         log = logger.bind(
             action="stage_song",
@@ -101,7 +107,8 @@ class AppleMusicSongDownloader:
                 encrypted_path,
                 staged_path,
                 decryption_key.audio_track.key,
-                web_song_codec,
+                use_cenc=use_cenc,
+                use_single_content_key=use_single_content_key,
             )
         else:
             await self._decrypt_amdecrypt(
@@ -109,6 +116,7 @@ class AppleMusicSongDownloader:
                 staged_path,
                 media_id,
                 fairplay_key,
+                use_single_content_key=use_single_content_key,
             )
 
         log.debug("success")
@@ -162,9 +170,10 @@ class AppleMusicSongDownloader:
             encrypted_path,
             download_item.staged_path,
             download_item.media.media_id,
-            download_item.media.stream_info.audio_track.web_song_codec,
             download_item.media.decryption_key,
             download_item.media.stream_info.audio_track.fairplay_key,
+            download_item.media.stream_info.audio_track.use_cenc,
+            download_item.media.stream_info.audio_track.use_single_content_key,
         )
 
         cover_bytes = (

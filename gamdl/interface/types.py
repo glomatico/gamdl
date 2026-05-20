@@ -122,7 +122,8 @@ class StreamInfo:
     codec: str = None
     width: int = None
     height: int = None
-    web_song_codec: bool = False
+    use_cenc: bool = False
+    use_single_content_key: bool = True
 
 
 @dataclass

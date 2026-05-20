@@ -311,7 +311,7 @@ class AppleMusicSongInterface:
             log.debug("no_matching_playlist", codec=codec.value)
             return None
 
-        stream_info = StreamInfo(legacy=False)
+        stream_info = StreamInfo(use_single_content_key=False)
         stream_info.stream_url = (
             f"{m3u8_master_url.rpartition('/')[0]}/{playlist['uri']}"
         )
@@ -448,17 +448,29 @@ class AppleMusicSongInterface:
     ) -> StreamInfoAv:
         log = logger.bind(action="get_web_song_stream_info")
 
-        flavor = "32:ctrp64" if codec == SongCodec.AAC_HE_WEB else "28:ctrp256"
+        flavor = codec.flavor
 
-        stream_info = StreamInfo(web_song_codec=True)
-        stream_info.stream_url = next(
-            i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor
-        )["URL"]
+        stream_info = StreamInfo(
+            use_cenc=codec.is_cenc,
+        )
+        asset = next(
+            (i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor),
+            None,
+        )
+        if not asset:
+            log.debug("no_matching_asset", codec=codec.value, flavor=flavor)
+            return None
+
+        stream_info.stream_url = asset["URL"]
 
         m3u8_obj = m3u8.loads(
             (await self.base.get_response(stream_info.stream_url)).text
         )
-        stream_info.widevine_pssh = m3u8_obj.keys[0].uri
+
+        if stream_info.use_cenc:
+            stream_info.widevine_pssh = m3u8_obj.keys[0].uri
+        else:
+            stream_info.fairplay_key = m3u8_obj.keys[0].uri
 
         stream_info_av = StreamInfoAv(
             media_id=webplayback["songList"][0]["songId"],
@@ -542,7 +554,7 @@ class AppleMusicSongInterface:
             ) or (
                 self.base.use_wrapper
                 and not media.stream_info.audio_track.fairplay_key
-                and not media.stream_info.audio_track.web_song_codec
+                and not media.stream_info.audio_track.use_cenc
             ):
                 raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
 

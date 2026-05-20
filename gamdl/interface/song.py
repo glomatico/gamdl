@@ -38,7 +38,7 @@ class AppleMusicSongInterface:
         self,
         base: AppleMusicBaseInterface,
         synced_lyrics_format: SyncedLyricsFormat = SyncedLyricsFormat.LRC,
-        codec_priority: list[SongCodec] = [SongCodec.AAC_LEGACY],
+        codec_priority: list[SongCodec] = [SongCodec.AAC_WEB],
         use_album_date: bool = False,
         skip_stream_info: bool = False,
         ask_codec_function: Callable[[list[dict]], dict | None] | None = None,
@@ -267,8 +267,8 @@ class AppleMusicSongInterface:
         stream_info = None
 
         for codec in self.codec_priority:
-            if codec.is_legacy():
-                stream_info = await self._get_stream_info_legacy(webplayback, codec)
+            if codec.is_web:
+                stream_info = await self._get_web_stream_info(webplayback, codec)
             else:
                 stream_info = await self._get_stream_info(m3u8_master_url, codec)
 
@@ -441,16 +441,16 @@ class AppleMusicSongInterface:
                 return key.uri
         return None
 
-    async def _get_stream_info_legacy(
+    async def _get_web_stream_info(
         self,
         webplayback: dict,
         codec: SongCodec,
     ) -> StreamInfoAv:
-        log = logger.bind(action="get_legacy_song_stream_info")
+        log = logger.bind(action="get_web_song_stream_info")
 
-        flavor = "32:ctrp64" if codec == SongCodec.AAC_HE_LEGACY else "28:ctrp256"
+        flavor = "32:ctrp64" if codec == SongCodec.AAC_HE_WEB else "28:ctrp256"
 
-        stream_info = StreamInfo(legacy=True)
+        stream_info = StreamInfo(web_song_codec=True)
         stream_info.stream_url = next(
             i for i in webplayback["songList"][0]["assets"] if i["flavor"] == flavor
         )["URL"]
@@ -508,7 +508,7 @@ class AppleMusicSongInterface:
                 m3u8_master_url = self._get_m3u8_from_playback(playback)
                 webplayback = (
                     await self.base.apple_music_api.get_webplayback(media.media_id)
-                    if any(codec.is_legacy() for codec in self.codec_priority)
+                    if any(codec.is_web for codec in self.codec_priority)
                     else None
                 )
                 media.stream_info = await self.get_stream_info(
@@ -540,14 +540,13 @@ class AppleMusicSongInterface:
                 not self.base.use_wrapper
                 and not media.stream_info.audio_track.widevine_pssh
             ) or (
-                self.base.use_wrapper and not media.stream_info.audio_track.fairplay_key
+                self.base.use_wrapper
+                and not media.stream_info.audio_track.fairplay_key
+                and not media.stream_info.audio_track.web_song_codec
             ):
                 raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
 
-            if (
-                media.stream_info.audio_track.widevine_pssh
-                and not self.base.use_wrapper
-            ) or media.stream_info.audio_track.legacy:
+            elif media.stream_info.audio_track.widevine_pssh:
                 media.decryption_key = DecryptionKeyAv(
                     audio_track=await self.base.get_decryption_key(
                         media.stream_info.audio_track.widevine_pssh,

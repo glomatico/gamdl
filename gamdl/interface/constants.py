@@ -11,8 +11,6 @@ MEDIA_RATING_STR_MAP = {
     2: "Clean",
 }
 
-LEGACY_SONG_CODECS = {"aac-legacy", "aac-he-legacy"}
-
 DRM_DEFAULT_KEY_MAPPING = {
     "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed": (
         "data:text/plain;base64,AAAAOHBzc2gAAAAA7e+LqXnWSs6jyCfc1R0h7QAAABgSEAAAAAA"

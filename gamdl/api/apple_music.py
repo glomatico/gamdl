@@ -15,10 +15,14 @@ from .constants import (
     APPLE_MUSIC_HOMEPAGE_URL,
     APPLE_MUSIC_LIBRARY_ALBUM_API_URI,
     APPLE_MUSIC_LIBRARY_PLAYLIST_API_URI,
+    APPLE_MUSIC_LIBRARY_PLAYLISTS_API_URI,
     APPLE_MUSIC_LICENSE_API_URL,
     APPLE_MUSIC_MUSIC_VIDEO_API_URI,
+    APPLE_MUSIC_LIBRARY_ALBUMS_API_URI,
     APPLE_MUSIC_PLAYLIST_API_URI,
     APPLE_MUSIC_SEARCH_API_URI,
+    APPLE_MUSIC_LIBRARY_MUSIC_VIDEOS_API_URI,
+    APPLE_MUSIC_LIBRARY_SONGS_API_URI,
     APPLE_MUSIC_SONG_API_URI,
     APPLE_MUSIC_UPLOADED_VIDEO_API_URL,
     APPLE_MUSIC_WEBPLAYBACK_API_URL,
@@ -469,6 +473,84 @@ class AppleMusicApi:
         log.debug("success", playlist=playlist)
 
         return playlist
+
+    async def get_library_songs(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        extend: str = "extendedAssetUrls",
+    ) -> dict:
+        log = logger.bind(action="get_library_songs")
+
+        library_songs = await self._amp_request(
+            APPLE_MUSIC_LIBRARY_SONGS_API_URI,
+            {
+                "limit": limit,
+                "offset": offset,
+                "extend": extend,
+            },
+        )
+
+        log.debug("success", library_songs=library_songs)
+
+        return library_songs
+
+    async def get_library_music_videos(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        log = logger.bind(action="get_library_music_videos")
+
+        library_music_videos = await self._amp_request(
+            APPLE_MUSIC_LIBRARY_MUSIC_VIDEOS_API_URI,
+            {
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+
+        log.debug("success", library_music_videos=library_music_videos)
+
+        return library_music_videos
+
+    async def get_library_albums(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        log = logger.bind(action="get_library_albums")
+
+        library_albums = await self._amp_request(
+            APPLE_MUSIC_LIBRARY_ALBUMS_API_URI,
+            {
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+
+        log.debug("success", library_albums=library_albums)
+
+        return library_albums
+
+    async def get_library_playlists(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        log = logger.bind(action="get_library_playlists")
+
+        library_playlists = await self._amp_request(
+            APPLE_MUSIC_LIBRARY_PLAYLISTS_API_URI,
+            {
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+
+        log.debug("success", library_playlists=library_playlists)
+
+        return library_playlists
 
     async def get_search_results(
         self,

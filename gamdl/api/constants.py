@@ -17,6 +17,10 @@ APPLE_MUSIC_ARTIST_API_URI = "/v1/catalog/{storefront}/artists/{artist_id}"
 APPLE_MUSIC_LIBRARY_ALBUM_API_URI = "/v1/me/library/albums/{album_id}"
 APPLE_MUSIC_LIBRARY_PLAYLIST_API_URI = "/v1/me/library/playlists/{playlist_id}"
 APPLE_MUSIC_SEARCH_API_URI = "/v1/catalog/{storefront}/search"
+APPLE_MUSIC_LIBRARY_SONGS_API_URI = "/v1/me/library/songs"
+APPLE_MUSIC_LIBRARY_MUSIC_VIDEOS_API_URI = "/v1/me/library/music-videos"
+APPLE_MUSIC_LIBRARY_ALBUMS_API_URI = "/v1/me/library/albums"
+APPLE_MUSIC_LIBRARY_PLAYLISTS_API_URI = "/v1/me/library/playlists"
 
 APPLE_MUSIC_WEBPLAYBACK_API_URL = (
     "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"

@@ -3,7 +3,6 @@ import base64
 import datetime
 import json
 import re
-import struct
 from typing import AsyncGenerator, Callable
 from xml.dom import minidom
 from xml.etree import ElementTree
@@ -28,7 +27,6 @@ from .types import (
     StreamInfo,
     StreamInfoAv,
 )
-import httpx
 
 logger = structlog.get_logger(__name__)
 
@@ -56,8 +54,12 @@ class AppleMusicSongInterface:
     ) -> Lyrics | None:
         log = logger.bind(
             action="get_lyrics",
-            song_id=self.base.parse_catalog_media_id(song_metadata),
+            song_id=song_metadata["id"],
         )
+
+        if song_metadata["attributes"]["playParams"]["isLibrary"]:
+            log.debug("library_song_no_lyrics")
+            return None
 
         if not song_metadata["attributes"]["hasLyrics"]:
             log.debug("no_lyrics")
@@ -69,7 +71,7 @@ class AppleMusicSongInterface:
         ):
             song_metadata = (
                 await self.base.apple_music_api.get_song(
-                    self.base.parse_catalog_media_id(song_metadata)
+                    song_metadata["id"],
                 )
             )["data"][0]
 
@@ -248,32 +250,55 @@ class AppleMusicSongInterface:
 
         return tags
 
-    async def _get_m3u8_from_metadata(self, song_metadata: dict) -> str | None:
+    async def _get_m3u8_master_url_from_metadata(
+        self,
+        song_metadata: dict,
+    ) -> str | None:
+        log = logger.bind(
+            action="get_m3u8_master_url_from_metadata",
+            song_id=song_metadata["id"],
+        )
+
+        if song_metadata["attributes"]["playParams"]["isLibrary"]:
+            log.debug("library_song_no_m3u8_master_url")
+            return None
+
         if "extendedAssetUrls" not in song_metadata["attributes"]:
             song_metadata = (
                 await self.base.apple_music_api.get_song(
-                    self.base.parse_catalog_media_id(song_metadata),
+                    song_metadata["id"],
                 )
             )["data"][0]
 
-        return song_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
+        enhanced = song_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
+
+        if enhanced:
+            log.debug("success", m3u8_master_url=enhanced)
+            return enhanced
+
+        log.debug("no_m3u8_master_url")
+        return None
 
     async def get_stream_info(
         self,
         media_id: str,
+        is_library: bool,
         m3u8_master_url: str | None = None,
         webplayback: dict | None = None,
     ) -> StreamInfoAv:
         stream_info = None
 
-        for codec in self.codec_priority:
-            if codec.is_web:
-                stream_info = await self._get_web_stream_info(webplayback, codec)
-            else:
-                stream_info = await self._get_stream_info(m3u8_master_url, codec)
+        if is_library and webplayback:
+            stream_info = await self._get_library_stream_info(webplayback)
+        elif webplayback or m3u8_master_url:
+            for codec in self.codec_priority:
+                if codec.is_web:
+                    stream_info = await self._get_web_stream_info(webplayback, codec)
+                else:
+                    stream_info = await self._get_stream_info(m3u8_master_url, codec)
 
-            if stream_info:
-                break
+                if stream_info:
+                    break
 
         if not stream_info:
             raise GamdlInterfaceFormatNotAvailableError(
@@ -481,16 +506,51 @@ class AppleMusicSongInterface:
 
         return stream_info_av
 
+    async def _get_library_stream_info(
+        self,
+        webplayback: dict,
+    ) -> StreamInfoAv | None:
+        log = logger.bind(action="get_library_song_stream_info")
+
+        stream_info = StreamInfo(drm_free=True)
+
+        if len(webplayback["songList"][0]["assets"]) == 0:
+            log.debug("no_matching_asset")
+            return None
+        asset = webplayback["songList"][0]["assets"][0]
+
+        stream_info.stream_url = asset["URL"]
+
+        stream_info_av = StreamInfoAv(
+            media_id=webplayback["songList"][0]["songId"],
+            audio_track=stream_info,
+            file_format=MediaFileFormat.M4A,
+        )
+        log.debug("success", stream_info=stream_info_av)
+
+        return stream_info_av
+
     async def get_media(
         self,
         media: AppleMusicMedia,
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         if not media.media_metadata:
             media.media_metadata = (
-                await self.base.apple_music_api.get_song(media.media_id)
+                await (
+                    self.base.apple_music_api.get_library_song(media.media_id)
+                    if media.is_library
+                    else self.base.apple_music_api.get_song(media.media_id)
+                )
             )["data"][0]
 
-        media.media_id = self.base.parse_catalog_media_id(media.media_metadata)
+        if media.media_metadata["attributes"]["playParams"]["isLibrary"]:
+            catalog_metadata = self.base.get_catalog_metadata_from_library(
+                media.media_metadata
+            )
+            if catalog_metadata:
+                media.media_id = catalog_metadata["id"]
+                media.is_library = False
+                media.media_metadata = catalog_metadata
 
         yield media
 
@@ -510,45 +570,56 @@ class AppleMusicSongInterface:
         media.lyrics = await self.get_lyrics(media.media_metadata)
 
         if self.base.wrapper_api:
-            playback = await self.base.wrapper_api.get_playback(media.media_id)
-            media.tags = await self.base.get_tags_from_asset_info(
+            playback = (
+                await self.base.wrapper_api.get_playback(media.media_id)
+                if not media.is_library
+                else None
+            )
+            webplayback = (
+                await self.base.apple_music_api.get_webplayback(
+                    media.media_id,
+                    media.is_library,
+                )
+                if media.is_library
+                or any(codec.is_web for codec in self.codec_priority)
+                else None
+            )
+        else:
+            playback = None
+            webplayback = await self.base.apple_music_api.get_webplayback(
+                media.media_id,
+                media.is_library,
+            )
+
+        if playback:
+            media.tags = self.base.get_tags_from_asset_info(
                 playback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
-                self.use_album_date,
             )
-            if not self.skip_stream_info:
-                m3u8_master_url = self._get_m3u8_from_playback(playback)
-                webplayback = (
-                    await self.base.apple_music_api.get_webplayback(media.media_id)
-                    if any(codec.is_web for codec in self.codec_priority)
-                    else None
-                )
-                media.stream_info = await self.get_stream_info(
-                    media.media_id,
-                    m3u8_master_url,
-                    webplayback,
-                )
         else:
-            webplayback = await self.base.apple_music_api.get_webplayback(
-                media.media_id
-            )
             media.tags = await self.base.get_tags_from_asset_info(
                 webplayback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
-                self.use_album_date,
             )
-            if not self.skip_stream_info:
-                m3u8_master_url = await self._get_m3u8_from_metadata(
+
+        if not self.skip_stream_info:
+            if playback:
+                m3u8_master_url = self._get_m3u8_from_playback(playback)
+            else:
+                m3u8_master_url = await self._get_m3u8_master_url_from_metadata(
                     media.media_metadata
                 )
-                media.stream_info = await self.get_stream_info(
-                    media.media_id,
-                    m3u8_master_url,
-                    webplayback,
-                )
 
-        if media.stream_info:
-            if (
+            media.stream_info = await self.get_stream_info(
+                media.media_id,
+                media.is_library,
+                m3u8_master_url,
+                webplayback,
+            )
+
+            if media.stream_info.audio_track.drm_free:
+                pass
+            elif (
                 not self.base.wrapper_api
                 and not media.stream_info.audio_track.widevine_pssh
             ) or (
@@ -557,7 +628,6 @@ class AppleMusicSongInterface:
                 and not media.stream_info.audio_track.use_cenc
             ):
                 raise GamdlInterfaceDecryptionNotAvailableError(media_id=media.media_id)
-
             elif media.stream_info.audio_track.widevine_pssh:
                 media.decryption_key = DecryptionKeyAv(
                     audio_track=await self.base.get_decryption_key(

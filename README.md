@@ -81,10 +81,10 @@ gamdl [OPTIONS] URLS...
 
 ### Supported URL Types
 
-- Songs
-- Albums (Public/Library)
-- Playlists (Public/Library)
-- Music Videos
+- Songs (Catalog/Library)
+- Albums (Catalog/Library)
+- Playlists (Catalog/Library)
+- Music Videos (Catalog/Library)
 - Artists
 - Post Videos
 - Apple Music Classical

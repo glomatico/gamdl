@@ -58,6 +58,8 @@ Use [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE/releases/latest) as a f
 
 If the executable is not available in your system PATH, set its location with `--nm3u8dlre-path` or `nm3u8dlre_path`.
 
+N_m3u8DL-RE also needs FFmpeg. If the FFmpeg executable is not available in your system PATH, set its location with `--ffmpeg-path` or `ffmpeg_path`.
+
 ## 📦 Installation
 
 1. **Install Gamdl via pip:**
@@ -167,6 +169,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--output-path`, `-o`           | Output directory path                                             | `./Apple Music`               |
 | `--temp-path`                   | Temporary directory path                                          | `.`                           |
 | `--nm3u8dlre-path`              | N_m3u8DL-RE executable path                                       | `N_m3u8DL-RE`                 |
+| `--ffmpeg-path`                 | FFmpeg executable path                                            | `ffmpeg`                      |
 | `--download-mode`               | Download mode                                                     | `ytdlp`                       |
 | **Template Options**            |                                                                   |                               |
 | `--album-folder-template`       | Album folder template                                             | `{album_artist}/{album}`      |

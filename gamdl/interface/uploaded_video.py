@@ -113,7 +113,7 @@ class AppleMusicUploadedVideoInterface:
                 await self.base.apple_music_api.get_uploaded_video(media.media_id)
             )["data"][0]
 
-        media.media_id = self.base.parse_catalog_media_id(media.media_metadata)
+        media.media_id = media["id"]
 
         yield media
 

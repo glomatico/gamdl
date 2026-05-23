@@ -669,17 +669,26 @@ class AppleMusicApi:
     async def get_webplayback(
         self,
         track_id: str,
+        is_library: bool = False,
     ) -> dict:
         log = logger.bind(action="get_webplayback", track_id=track_id)
 
         response = None
+
+        if is_library:
+            request_body = {
+                "universalLibraryId": track_id,
+            }
+        else:
+            request_body = {
+                "salableAdamId": track_id,
+            }
+        request_body["language"] = self.language
+
         try:
             response = await self.client.post(
                 APPLE_MUSIC_WEBPLAYBACK_API_URL,
-                json={
-                    "salableAdamId": track_id,
-                    "language": self.language,
-                },
+                json=request_body,
             )
             response.raise_for_status()
             webplayback = response.json()

@@ -97,7 +97,7 @@ class AppleMusicMusicVideoInterface:
     ) -> MediaTags:
         log = logger.bind(
             action="get_music_video_tags",
-            media_id=self.base.parse_catalog_media_id(metadata),
+            media_id=metadata["id"],
         )
 
         url_media_id = self.base.parse_media_id_from_url(metadata)
@@ -154,7 +154,7 @@ class AppleMusicMusicVideoInterface:
     ) -> StreamInfoAv | None:
         log = logger.bind(
             action="get_music_video_stream_info",
-            media_id=self.base.parse_catalog_media_id(metadata),
+            media_id=metadata["id"],
         )
 
         url_media_id = self.base.parse_media_id_from_url(metadata)
@@ -394,10 +394,24 @@ class AppleMusicMusicVideoInterface:
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         if not media.media_metadata:
             media.media_metadata = (
-                await self.base.apple_music_api.get_music_video(media.media_id)
+                await (
+                    self.base.apple_music_api.get_library_music_video(media.media_id)
+                    if media.is_library
+                    else self.base.apple_music_api.get_music_video(media.media_id)
+                )
             )["data"][0]
 
-        media.media_id = self.base.parse_catalog_media_id(media.media_metadata)
+        if media.media_metadata["attributes"]["playParams"].get("isLibrary"):
+            catalog_metadata = self.base.get_catalog_metadata_from_library(
+                media.media_metadata
+            )
+            if catalog_metadata:
+                media.media_id = catalog_metadata["id"]
+                media.is_library = False
+                media.media_metadata = catalog_metadata
+
+        if media.is_library:
+            raise GamdlInterfaceMediaNotStreamableError(media.media_id)
 
         yield media
 

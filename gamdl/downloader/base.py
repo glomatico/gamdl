@@ -11,6 +11,7 @@ from mutagen.mp4 import MP4, MP4Cover
 from yt_dlp import YoutubeDL
 
 from ..interface.enums import CoverFormat
+from yt_dlp.downloader.http import HttpFD
 from ..interface.interface import AppleMusicInterface
 from ..interface.types import MediaTags, PlaylistTags
 from ..utils import CustomStringFormatter, async_subprocess
@@ -27,19 +28,34 @@ def _download_ytdlp_process(
     result_queue,
 ) -> None:
     try:
-        with YoutubeDL(
-            {
-                "quiet": True,
-                "no_warnings": True,
-                "outtmpl": download_path,
-                "allow_unplayable_formats": True,
-                "overwrites": True,
-                "fixup": "never",
-                "noprogress": silent,
-                "allowed_extractors": ["generic"],
-            }
-        ) as ydl:
-            ydl.download(stream_url)
+        common_args = {
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": silent,
+        }
+
+        if stream_url.split("?")[0].endswith(".m3u8"):
+            with YoutubeDL(
+                {
+                    **common_args,
+                    "outtmpl": download_path,
+                    "allow_unplayable_formats": True,
+                    "overwrites": True,
+                    "fixup": "never",
+                    "allowed_extractors": ["generic"],
+                }
+            ) as ydl:
+                ydl.download(stream_url)
+        else:
+            Path(download_path).parent.mkdir(parents=True, exist_ok=True)
+            with YoutubeDL(common_args) as ydl:
+                http_downloader = HttpFD(ydl, ydl.params)
+                http_downloader.download(
+                    download_path,
+                    {
+                        "url": stream_url,
+                    },
+                )
     except Exception as e:
         result_queue.put(("error", repr(e), traceback.format_exc()))
 
@@ -222,10 +238,12 @@ class AppleMusicBaseDownloader:
             action="download_stream", stream_url=stream_url, download_path=download_path
         )
 
-        if self.download_mode == DownloadMode.YTDLP:
+        if self.download_mode == DownloadMode.YTDLP or not stream_url.split("?")[
+            0
+        ].endswith(".m3u8"):
             await self._download_ytdlp_async(stream_url, download_path)
 
-        if self.download_mode == DownloadMode.NM3U8DLRE:
+        elif self.download_mode == DownloadMode.NM3U8DLRE:
             await self._download_nm3u8dlre(stream_url, download_path)
 
         log.debug("success")

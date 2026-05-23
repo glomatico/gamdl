@@ -101,19 +101,16 @@ class AppleMusicInterface:
         total: int | None = None,
         media_metadata: dict | None = None,
         playlist_metadata: dict | None = None,
+        is_library: bool = False,
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         media = AppleMusicMedia(
             media_id=media_id,
+            is_library=is_library,
+            index=index,
+            total=total,
+            media_metadata=media_metadata,
+            playlist_metadata=playlist_metadata,
         )
-
-        if index is not None:
-            media.index = index
-        if total is not None:
-            media.total = total
-
-        media.media_metadata = media_metadata
-        media.playlist_metadata = playlist_metadata
-
         try:
             async for media in self.song.get_media(media):
                 yield media
@@ -133,15 +130,16 @@ class AppleMusicInterface:
         total: int | None = None,
         media_metadata: dict | None = None,
         playlist_metadata: dict | None = None,
+        is_library: bool = False,
     ) -> AsyncGenerator[AppleMusicMedia, None]:
         media = AppleMusicMedia(
             media_id=media_id,
+            is_library=is_library,
+            index=index,
+            total=total,
+            media_metadata=media_metadata,
+            playlist_metadata=playlist_metadata,
         )
-
-        if index is not None:
-            media.index = index
-        if total is not None:
-            media.total = total
 
         media.media_metadata = media_metadata
         media.playlist_metadata = playlist_metadata
@@ -187,12 +185,14 @@ class AppleMusicInterface:
 
         try:
             base_media.media_metadata = (
-                await self.base.apple_music_api.get_library_album(
-                    media_id,
-                )
-                if is_library
-                else await self.base.apple_music_api.get_album(
-                    media_id,
+                await (
+                    self.base.apple_music_api.get_library_album(
+                        media_id,
+                    )
+                    if is_library
+                    else self.base.apple_music_api.get_album(
+                        media_id,
+                    )
                 )
             )["data"][0]
 
@@ -214,6 +214,7 @@ class AppleMusicInterface:
                     index=index,
                     total=base_media.media_metadata["attributes"]["trackCount"],
                     media_metadata=track,
+                    is_library=is_library,
                 )
                 if track["type"] in {"songs", "library-songs"}
                 else self._get_music_video_media(
@@ -221,6 +222,7 @@ class AppleMusicInterface:
                     index=index,
                     total=base_media.media_metadata["attributes"]["trackCount"],
                     media_metadata=track,
+                    is_library=is_library,
                 )
             )
             for index, track in enumerate(tracks)
@@ -246,12 +248,14 @@ class AppleMusicInterface:
 
         try:
             base_media.media_metadata = (
-                await self.base.apple_music_api.get_library_playlist(
-                    media_id,
-                )
-                if is_library
-                else await self.base.apple_music_api.get_playlist(
-                    media_id,
+                await (
+                    self.base.apple_music_api.get_library_playlist(
+                        media_id,
+                    )
+                    if is_library
+                    else self.base.apple_music_api.get_playlist(
+                        media_id,
+                    )
                 )
             )["data"][0]
 
@@ -283,6 +287,7 @@ class AppleMusicInterface:
                     index=index,
                     media_metadata=track,
                     playlist_metadata=base_media.media_metadata,
+                    is_library=is_library,
                 )
                 if track["type"] in {"songs", "library-songs"}
                 else self._get_music_video_media(
@@ -290,6 +295,7 @@ class AppleMusicInterface:
                     index=index,
                     media_metadata=track,
                     playlist_metadata=base_media.media_metadata,
+                    is_library=is_library,
                 )
             )
             for index, track in enumerate(tracks)
@@ -425,32 +431,38 @@ class AppleMusicInterface:
                 url_info.type,
             )
 
-        if url_info.type == "song" or url_info.sub_id:
+        if (
+            url_info.type == "song"
+            or url_info.library_type == "songs"
+            or url_info.sub_id
+        ):
             async for media in self._get_song_media(
-                media_id=url_info.sub_id or url_info.id,
+                media_id=url_info.sub_id or url_info.id or url_info.library_id,
                 index=0,
                 total=1,
+                is_library=bool(url_info.library_type),
             ):
                 yield media
 
-        elif url_info.type == "music-video":
+        elif url_info.type == "music-video" or url_info.library_type == "music-videos":
             async for media in self._get_music_video_media(
-                media_id=url_info.id,
+                media_id=url_info.id or url_info.library_id,
                 index=0,
                 total=1,
+                is_library=bool(url_info.library_type),
             ):
                 yield media
 
         elif url_info.type == "album" or url_info.library_type == "albums":
             async for media in self._get_album_media(
-                media_id=url_info.library_id or url_info.id,
+                media_id=url_info.id or url_info.library_id,
                 is_library=bool(url_info.library_type),
             ):
                 yield media
 
         elif url_info.type == "playlist" or url_info.library_type == "playlist":
             async for media in self._get_playlist_media(
-                media_id=url_info.library_id or url_info.id,
+                media_id=url_info.id or url_info.library_id,
                 is_library=bool(url_info.library_type),
             ):
                 yield media

@@ -17,11 +17,13 @@ from .constants import (
     APPLE_MUSIC_LIBRARY_PLAYLIST_API_URI,
     APPLE_MUSIC_LIBRARY_PLAYLISTS_API_URI,
     APPLE_MUSIC_LICENSE_API_URL,
+    APPLE_MUSIC_LIBRARY_MUSIC_VIDEO_API_URI,
     APPLE_MUSIC_MUSIC_VIDEO_API_URI,
     APPLE_MUSIC_LIBRARY_ALBUMS_API_URI,
     APPLE_MUSIC_PLAYLIST_API_URI,
     APPLE_MUSIC_SEARCH_API_URI,
     APPLE_MUSIC_LIBRARY_MUSIC_VIDEOS_API_URI,
+    APPLE_MUSIC_LIBRARY_SONG_API_URI,
     APPLE_MUSIC_LIBRARY_SONGS_API_URI,
     APPLE_MUSIC_SONG_API_URI,
     APPLE_MUSIC_UPLOADED_VIDEO_API_URL,
@@ -430,9 +432,54 @@ class AppleMusicApi:
 
         return artist
 
+    async def get_library_song(
+        self,
+        song_id: str,
+        include: str = "catalog",
+        extend: str = "extendedAssetUrls",
+    ) -> dict:
+        log = logger.bind(action="get_library_song", song_id=song_id)
+
+        song = await self._amp_request(
+            APPLE_MUSIC_LIBRARY_SONG_API_URI.format(
+                song_id=song_id,
+            ),
+            {
+                "include": include,
+                "extend": extend,
+            },
+        )
+
+        log.debug("success", song=song)
+
+        return song
+
+    async def get_library_music_video(
+        self,
+        music_video_id: str,
+        include: str = "catalog",
+    ) -> dict:
+        log = logger.bind(
+            action="get_library_music_video", music_video_id=music_video_id
+        )
+
+        music_video = await self._amp_request(
+            APPLE_MUSIC_LIBRARY_MUSIC_VIDEO_API_URI.format(
+                music_video_id=music_video_id,
+            ),
+            {
+                "include": include,
+            },
+        )
+
+        log.debug("success", music_video=music_video)
+
+        return music_video
+
     async def get_library_album(
         self,
         album_id: str,
+        include: str = "catalog",
         extend: str = "extendedAssetUrls",
     ) -> dict:
         log = logger.bind(action="get_library_album", album_id=album_id)
@@ -442,6 +489,7 @@ class AppleMusicApi:
                 album_id=album_id,
             ),
             {
+                "include": include,
                 "extend": extend,
             },
         )
@@ -453,7 +501,7 @@ class AppleMusicApi:
     async def get_library_playlist(
         self,
         playlist_id: str,
-        include: str = "tracks",
+        include: str = "catalog,tracks",
         limit: int = 100,
         extend: str = "extendedAssetUrls",
     ) -> dict:

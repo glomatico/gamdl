@@ -14,6 +14,10 @@ APPLE_MUSIC_UPLOADED_VIDEO_API_URL = (
 APPLE_MUSIC_ALBUM_API_URI = "/v1/catalog/{storefront}/albums/{album_id}"
 APPLE_MUSIC_PLAYLIST_API_URI = "/v1/catalog/{storefront}/playlists/{playlist_id}"
 APPLE_MUSIC_ARTIST_API_URI = "/v1/catalog/{storefront}/artists/{artist_id}"
+APPLE_MUSIC_LIBRARY_SONG_API_URI = "/v1/me/library/songs/{song_id}"
+APPLE_MUSIC_LIBRARY_MUSIC_VIDEO_API_URI = (
+    "/v1/me/library/music-videos/{music_video_id}"
+)
 APPLE_MUSIC_LIBRARY_ALBUM_API_URI = "/v1/me/library/albums/{album_id}"
 APPLE_MUSIC_LIBRARY_PLAYLIST_API_URI = "/v1/me/library/playlists/{playlist_id}"
 APPLE_MUSIC_SEARCH_API_URI = "/v1/catalog/{storefront}/search"

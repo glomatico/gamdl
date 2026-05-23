@@ -313,6 +313,14 @@ class CliConfig:
             default=base_downloader_sig.parameters["nm3u8dlre_path"].default,
         ),
     ]
+    ffmpeg_path: Annotated[
+        str,
+        option(
+            "--ffmpeg-path",
+            help="FFmpeg executable path",
+            default=base_downloader_sig.parameters["ffmpeg_path"].default,
+        ),
+    ]
     download_mode: Annotated[
         DownloadMode,
         option(

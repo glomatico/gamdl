@@ -79,6 +79,7 @@ class AppleMusicUploadedVideoInterface:
             file_format=MediaFileFormat.M4V,
             video_track=StreamInfo(
                 stream_url=stream_url,
+                drm_free=True,
             ),
         )
 

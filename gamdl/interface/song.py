@@ -57,7 +57,7 @@ class AppleMusicSongInterface:
             song_id=song_metadata["id"],
         )
 
-        if song_metadata["attributes"]["playParams"]["isLibrary"]:
+        if song_metadata["attributes"]["playParams"].get("isLibrary"):
             log.debug("library_song_no_lyrics")
             return None
 
@@ -259,7 +259,7 @@ class AppleMusicSongInterface:
             song_id=song_metadata["id"],
         )
 
-        if song_metadata["attributes"]["playParams"]["isLibrary"]:
+        if song_metadata["attributes"]["playParams"].get("isLibrary"):
             log.debug("library_song_no_m3u8_master_url")
             return None
 
@@ -277,6 +277,7 @@ class AppleMusicSongInterface:
             return enhanced
 
         log.debug("no_m3u8_master_url")
+
         return None
 
     async def get_stream_info(
@@ -543,7 +544,7 @@ class AppleMusicSongInterface:
                 )
             )["data"][0]
 
-        if media.media_metadata["attributes"]["playParams"]["isLibrary"]:
+        if media.media_metadata["attributes"]["playParams"].get("isLibrary"):
             catalog_metadata = self.base.get_catalog_metadata_from_library(
                 media.media_metadata
             )

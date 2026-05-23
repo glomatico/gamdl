@@ -195,61 +195,6 @@ class AppleMusicSongInterface:
     def _get_m3u8_from_playback(self, playback: dict) -> str | None:
         return playback["songList"][0].get("hls-playlist-url")
 
-    async def get_tags(
-        self,
-        asset_data: dict,
-        lyrics: str | None = None,
-    ) -> MediaTags:
-        log = logger.bind(action="get_song_tags")
-
-        tags = MediaTags(
-            album=asset_data["playlistName"],
-            album_artist=asset_data["playlistArtistName"],
-            album_id=int(asset_data["playlistId"]),
-            album_sort=asset_data["sort-album"],
-            artist=asset_data["artistName"],
-            artist_id=int(asset_data["artistId"]),
-            artist_sort=asset_data["sort-artist"],
-            comment=asset_data.get("comments"),
-            compilation=asset_data["compilation"],
-            composer=asset_data.get("composerName"),
-            composer_id=(
-                int(asset_data.get("composerId"))
-                if asset_data.get("composerId")
-                else None
-            ),
-            composer_sort=asset_data.get("sort-composer"),
-            copyright=asset_data.get("copyright"),
-            date=(
-                await self.base.get_media_date(asset_data["playlistId"])
-                if self.use_album_date
-                else (
-                    self.base.parse_date(asset_data["releaseDate"])
-                    if asset_data.get("releaseDate")
-                    else None
-                )
-            ),
-            disc=asset_data["discNumber"],
-            disc_total=asset_data["discCount"],
-            gapless=asset_data["gapless"],
-            genre=asset_data.get("genre"),
-            genre_id=int(asset_data["genreId"]),
-            lyrics=lyrics if lyrics else None,
-            media_type=MediaType.SONG,
-            rating=MediaRating(asset_data["explicit"]),
-            storefront=asset_data["s"],
-            title=asset_data["itemName"],
-            title_id=int(asset_data["itemId"]),
-            title_sort=asset_data["sort-name"],
-            track=asset_data["trackNumber"],
-            track_total=asset_data["trackCount"],
-            xid=asset_data.get("xid"),
-        )
-
-        log.debug("success", tags=tags)
-
-        return tags
-
     async def _get_m3u8_master_url_from_metadata(
         self,
         song_metadata: dict,

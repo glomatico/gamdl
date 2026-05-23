@@ -478,6 +478,7 @@ class AppleMusicApi:
         self,
         limit: int = 100,
         offset: int = 0,
+        include: str = "catalog",
         extend: str = "extendedAssetUrls",
     ) -> dict:
         log = logger.bind(action="get_library_songs")
@@ -487,6 +488,7 @@ class AppleMusicApi:
             {
                 "limit": limit,
                 "offset": offset,
+                "include": include,
                 "extend": extend,
             },
         )
@@ -499,6 +501,7 @@ class AppleMusicApi:
         self,
         limit: int = 100,
         offset: int = 0,
+        include: str = "catalog",
     ) -> dict:
         log = logger.bind(action="get_library_music_videos")
 
@@ -507,6 +510,7 @@ class AppleMusicApi:
             {
                 "limit": limit,
                 "offset": offset,
+                "include": include,
             },
         )
 
@@ -518,6 +522,7 @@ class AppleMusicApi:
         self,
         limit: int = 100,
         offset: int = 0,
+        include: str = "catalog",
     ) -> dict:
         log = logger.bind(action="get_library_albums")
 
@@ -526,6 +531,7 @@ class AppleMusicApi:
             {
                 "limit": limit,
                 "offset": offset,
+                "include": include,
             },
         )
 
@@ -537,6 +543,7 @@ class AppleMusicApi:
         self,
         limit: int = 100,
         offset: int = 0,
+        include: str = "catalog",
     ) -> dict:
         log = logger.bind(action="get_library_playlists")
 
@@ -545,6 +552,7 @@ class AppleMusicApi:
             {
                 "limit": limit,
                 "offset": offset,
+                "include": include,
             },
         )
 

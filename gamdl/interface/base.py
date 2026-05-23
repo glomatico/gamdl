@@ -57,11 +57,6 @@ class AppleMusicBaseInterface:
         return bool(media_metadata["attributes"].get("playParams"))
 
     @staticmethod
-    def parse_catalog_media_id(media_metadata: dict) -> str:
-        play_params = media_metadata["attributes"].get("playParams", {})
-        return play_params.get("catalogId", media_metadata["id"])
-
-    @staticmethod
     def parse_media_id_from_url(media_metadata: dict) -> str | None:
         media_url = media_metadata["attributes"].get("url")
         if media_url is None:
@@ -117,6 +112,14 @@ class AppleMusicBaseInterface:
             f"/{cover_size}x{cover_size}bb.{cover_format.value}",
             template_cover_url,
         )
+
+    @staticmethod
+    def get_catalog_metadata_from_library(library_metadata: dict) -> dict | None:
+        data = library_metadata.get("relationships", {}).get("catalog", {}).get("data")
+        if not data:
+            return None
+
+        return data[0]
 
     @classmethod
     async def create(
@@ -263,9 +266,7 @@ class AppleMusicBaseInterface:
         self,
         metadata: dict,
     ) -> str:
-        log = logger.bind(
-            action="get_cover", media_id=self.parse_catalog_media_id(metadata)
-        )
+        log = logger.bind(action="get_cover", media_id=metadata["id"])
 
         template_url = self._get_cover_template_url(metadata)
 
@@ -352,7 +353,9 @@ class AppleMusicBaseInterface:
             ),
             album_sort=asset_data.get("sort-album"),
             artist=asset_data["artistName"],
-            artist_id=int(asset_data["artistId"]),
+            artist_id=(
+                int(asset_data["artistId"]) if asset_data.get("artistId") else None
+            ),
             artist_sort=asset_data["sort-artist"],
             comment=asset_data.get("comments"),
             compilation=asset_data.get("compilation"),
@@ -377,7 +380,9 @@ class AppleMusicBaseInterface:
             disc_total=asset_data.get("discCount"),
             gapless=asset_data.get("gapless"),
             genre=asset_data.get("genre"),
-            genre_id=int(asset_data["genreId"]),
+            genre_id=(
+                int(asset_data["genreId"]) if asset_data.get("genreId") else None
+            ),
             lyrics=lyrics if lyrics else None,
             media_type=(
                 MediaType.SONG
@@ -385,7 +390,7 @@ class AppleMusicBaseInterface:
                 else MediaType.MUSIC_VIDEO
             ),
             rating=MediaRating(asset_data["explicit"]),
-            storefront=asset_data["s"],
+            storefront=(int(asset_data["s"]) if asset_data.get("s") else None),
             title=asset_data["itemName"],
             title_id=int(asset_data["itemId"]),
             title_sort=asset_data["sort-name"],

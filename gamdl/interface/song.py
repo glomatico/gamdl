@@ -195,6 +195,16 @@ class AppleMusicSongInterface:
     def _get_m3u8_from_playback(self, playback: dict) -> str | None:
         return playback["songList"][0].get("hls-playlist-url")
 
+    async def get_m3u8_master_url(
+        self,
+        playback: dict | None,
+        song_metadata: dict | None,
+    ) -> str | None:
+        if playback:
+            return self._get_m3u8_from_playback(playback)
+        else:
+            return await self._get_m3u8_master_url_from_metadata(song_metadata)
+
     async def _get_m3u8_master_url_from_metadata(
         self,
         song_metadata: dict,
@@ -549,12 +559,10 @@ class AppleMusicSongInterface:
             )
 
         if not self.skip_stream_info:
-            if playback:
-                m3u8_master_url = self._get_m3u8_from_playback(playback)
-            else:
-                m3u8_master_url = await self._get_m3u8_master_url_from_metadata(
-                    media.media_metadata
-                )
+            m3u8_master_url = await self.get_m3u8_master_url(
+                playback,
+                media.media_metadata,
+            )
 
             media.stream_info = await self.get_stream_info(
                 media.media_id,

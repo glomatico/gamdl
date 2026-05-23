@@ -159,26 +159,32 @@ class AppleMusicSongDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        encrypted_path = self.base.get_temp_path(
-            download_item.media.media_metadata["id"],
-            download_item.uuid_,
-            "encrypted",
-            ".m4a",
-        )
-        await self.base.download_stream(
-            download_item.media.stream_info.audio_track.stream_url,
-            encrypted_path,
-        )
+        if download_item.media.stream_info.audio_track.drm_free:
+            await self.base.download_stream(
+                download_item.media.stream_info.audio_track.stream_url,
+                download_item.staged_path,
+            )
+        else:
+            encrypted_path = self.base.get_temp_path(
+                download_item.media.media_metadata["id"],
+                download_item.uuid_,
+                "encrypted",
+                ".m4a",
+            )
+            await self.base.download_stream(
+                download_item.media.stream_info.audio_track.stream_url,
+                encrypted_path,
+            )
 
-        await self.stage(
-            encrypted_path,
-            download_item.staged_path,
-            download_item.media.media_id,
-            download_item.media.decryption_key,
-            download_item.media.stream_info.audio_track.fairplay_key,
-            download_item.media.stream_info.audio_track.use_cenc,
-            download_item.media.stream_info.audio_track.use_single_content_key,
-        )
+            await self.stage(
+                encrypted_path,
+                download_item.staged_path,
+                download_item.media.media_id,
+                download_item.media.decryption_key,
+                download_item.media.stream_info.audio_track.fairplay_key,
+                download_item.media.stream_info.audio_track.use_cenc,
+                download_item.media.stream_info.audio_track.use_single_content_key,
+            )
 
         cover_bytes = (
             await self.base.interface.base.get_cover_bytes(

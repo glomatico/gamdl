@@ -258,7 +258,7 @@ class AppleMusicSongInterface:
         if not stream_info:
             raise GamdlInterfaceFormatNotAvailableError(
                 media_id=media_id,
-                formats=[codec.value for codec in self.codec_priority],
+                codec=[codec.value for codec in self.codec_priority],
             )
 
         return stream_info

@@ -147,31 +147,32 @@ class AppleMusicMusicVideoInterface:
 
         return tags
 
-    async def get_stream_info(
+    async def get_m3u8_master_url(
         self,
         metadata: dict,
         itunes_page_metadata: dict,
-    ) -> StreamInfoAv | None:
-        log = logger.bind(
-            action="get_music_video_stream_info",
-            media_id=metadata["id"],
-        )
-
+    ) -> str | None:
         url_media_id = self.base.parse_media_id_from_url(metadata)
-        m3u8_master_url = None
 
         if url_media_id == metadata["id"]:
-            m3u8_master_url = self._get_m3u8_master_url_from_itunes_page_metadata(
+            return self._get_m3u8_master_url_from_itunes_page_metadata(
                 itunes_page_metadata,
             )
 
-        if not m3u8_master_url:
-            webplayback_response = await self.base.apple_music_api.get_webplayback(
-                metadata["id"]
-            )
-            m3u8_master_url = self._get_m3u8_master_url_from_webplayback(
-                webplayback_response["songList"][0],
-            )
+        webplayback_response = await self.base.apple_music_api.get_webplayback(
+            metadata["id"]
+        )
+        return self._get_m3u8_master_url_from_webplayback(
+            webplayback_response["songList"][0],
+        )
+
+    async def _get_stream_info(
+        self,
+        m3u8_master_url: str,
+    ) -> StreamInfoAv | None:
+        log = logger.bind(
+            action="get_music_video_stream_info", m3u8_master_url=m3u8_master_url
+        )
 
         playlist_master_m3u8_obj = m3u8.loads(
             (await self.base.get_response(m3u8_master_url)).text
@@ -368,6 +369,21 @@ class AppleMusicMusicVideoInterface:
 
         return stream_info
 
+    async def get_stream_info(
+        self,
+        media_id: str,
+        m3u8_master_url: str | None,
+    ) -> StreamInfoAv:
+        stream_info = None
+
+        if m3u8_master_url:
+            stream_info = await self._get_stream_info(m3u8_master_url)
+
+        if not stream_info:
+            raise GamdlInterfaceFormatNotAvailableError(media_id, self.codec_priority)
+
+        return stream_info
+
     async def get_decryption_key(
         self,
         stream_info: StreamInfoAv,
@@ -434,20 +450,20 @@ class AppleMusicMusicVideoInterface:
                 playback["songList"][0]["assets"][0]["metadata"],
             )
         else:
+            playback = None
             media.tags = await self.get_tags(
                 media.media_metadata,
                 itunes_page_metadata,
             )
 
-        media.stream_info = await self.get_stream_info(
+        m3u8_master_url = await self.get_m3u8_master_url(
             media.media_metadata,
             itunes_page_metadata,
         )
-        if not media.stream_info:
-            raise GamdlInterfaceFormatNotAvailableError(
-                media.media_id,
-                self.codec_priority,
-            )
+        media.stream_info = await self.get_stream_info(
+            media.media_id,
+            m3u8_master_url,
+        )
 
         if (
             not media.stream_info.video_track.widevine_pssh

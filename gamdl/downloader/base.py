@@ -366,7 +366,6 @@ class AppleMusicBaseDownloader:
         skip_tagging: bool,
     ):
         mp4 = MP4(media_path)
-        mp4.clear()
 
         if not skip_tagging:
             if cover_bytes is not None:

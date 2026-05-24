@@ -12,7 +12,7 @@ import structlog
 
 from .base import AppleMusicBaseInterface
 from .constants import DRM_DEFAULT_KEY_MAPPING, MP4_FORMAT_CODECS, SONG_CODEC_REGEX_MAP
-from .enums import MediaRating, MediaType, SongCodec, SyncedLyricsFormat
+from .enums import SongCodec, SyncedLyricsFormat
 from .exceptions import (
     GamdlInterfaceDecryptionNotAvailableError,
     GamdlInterfaceFormatNotAvailableError,
@@ -23,7 +23,6 @@ from .types import (
     DecryptionKeyAv,
     Lyrics,
     MediaFileFormat,
-    MediaTags,
     StreamInfo,
     StreamInfoAv,
 )
@@ -244,9 +243,9 @@ class AppleMusicSongInterface:
     ) -> StreamInfoAv:
         stream_info = None
 
-        if is_library and webplayback:
+        if is_library:
             stream_info = await self._get_library_stream_info(webplayback)
-        elif webplayback or m3u8_master_url:
+        else:
             for codec in self.codec_priority:
                 if codec.is_web:
                     stream_info = await self._get_web_stream_info(webplayback, codec)
@@ -464,9 +463,13 @@ class AppleMusicSongInterface:
 
     async def _get_library_stream_info(
         self,
-        webplayback: dict,
+        webplayback: dict | None,
     ) -> StreamInfoAv | None:
         log = logger.bind(action="get_library_song_stream_info")
+
+        if not webplayback:
+            log.debug("no_webplayback")
+            return None
 
         stream_info = StreamInfo(drm_free=True)
 

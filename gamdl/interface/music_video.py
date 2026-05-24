@@ -168,7 +168,7 @@ class AppleMusicMusicVideoInterface:
 
     async def _get_stream_info(
         self,
-        m3u8_master_url: str,
+        m3u8_master_url: str | None,
         codec: MusicVideoCodec,
     ) -> StreamInfoAv | None:
         log = logger.bind(
@@ -176,6 +176,10 @@ class AppleMusicMusicVideoInterface:
             m3u8_master_url=m3u8_master_url,
             codec=codec.value,
         )
+
+        if not m3u8_master_url:
+            log.debug("no_m3u8_master_url")
+            return None
 
         playlist_master_m3u8_obj = m3u8.loads(
             (await self.base.get_response(m3u8_master_url)).text
@@ -385,12 +389,11 @@ class AppleMusicMusicVideoInterface:
     ) -> StreamInfoAv:
         stream_info = None
 
-        if m3u8_master_url:
-            for codec in self.codec_priority:
-                stream_info = await self._get_stream_info(m3u8_master_url, codec)
+        for codec in self.codec_priority:
+            stream_info = await self._get_stream_info(m3u8_master_url, codec)
 
-                if stream_info:
-                    break
+            if stream_info:
+                break
 
         if not stream_info:
             raise GamdlInterfaceFormatNotAvailableError(

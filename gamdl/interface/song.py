@@ -289,13 +289,16 @@ class AppleMusicSongInterface:
 
     async def get_wrapper_m3u8(self, adam_id: str) -> str | None:
         host, port = self.base.wrapper_m3u8_ip.split(":")
-        reader, writer = await asyncio.open_connection(host, port)
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=30,
+        )
 
         data = struct.pack("B", len(adam_id)) + adam_id.encode()
         writer.write(data)
         await writer.drain()
 
-        response = await reader.readuntil(b"\n")
+        response = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=30)
         m3u8_url = response.decode().strip()
 
         writer.close()

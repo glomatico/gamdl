@@ -18,3 +18,8 @@ class GamdlDownloaderMediaFileExistsError(GamdlDownloaderError):
 class GamdlDownloaderDependencyNotFoundError(GamdlDownloaderError):
     def __init__(self, dependency_name: str) -> None:
         super().__init__(f"Required dependency not found: {dependency_name}")
+
+
+class GamdlDownloaderDecryptionError(GamdlDownloaderError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"Decryption failed: {reason}")

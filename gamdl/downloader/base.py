@@ -342,10 +342,13 @@ class AppleMusicBaseDownloader:
         log.debug("success")
 
     async def _download_ytdlp_async(self, stream_url: str, download_path: str) -> None:
-        await asyncio.to_thread(
-            self._download_ytdlp_sync,
-            stream_url,
-            download_path,
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                self._download_ytdlp_sync,
+                stream_url,
+                download_path,
+            ),
+            timeout=300,
         )
 
     def _download_ytdlp_sync(self, stream_url: str, download_path: str) -> None:

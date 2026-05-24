@@ -17,10 +17,12 @@ from ..downloader import (
     AppleMusicMusicVideoDownloader,
     AppleMusicSongDownloader,
     AppleMusicUploadedVideoDownloader,
+    GamdlDownloaderDecryptionError,
     GamdlDownloaderDependencyNotFoundError,
     GamdlDownloaderMediaFileExistsError,
     GamdlDownloaderSyncedLyricsOnlyError,
 )
+from ..api.exceptions import GamdlApiResponseError
 from ..interface import (
     AppleMusicBaseInterface,
     AppleMusicInterface,
@@ -295,7 +297,10 @@ async def main(config: CliConfig):
                     GamdlDownloaderSyncedLyricsOnlyError,
                     GamdlDownloaderMediaFileExistsError,
                     GamdlDownloaderDependencyNotFoundError,
+                    GamdlDownloaderDecryptionError,
                     GamdlInterfaceFlatFilterExcludedError,
+                    GamdlApiResponseError,
+                    TimeoutError,
                 ) as e:
                     track_log.warning(f'Skipping "{media_title}": {e}')
                     continue

@@ -3,7 +3,7 @@ import string
 import typing
 
 
-async def async_subprocess(*args: str, silent: bool = False) -> None:
+async def async_subprocess(*args: str, silent: bool = False, timeout: float = 300) -> None:
     if silent:
         additional_args = {
             "stdout": asyncio.subprocess.PIPE,
@@ -17,7 +17,14 @@ async def async_subprocess(*args: str, silent: bool = False) -> None:
         **additional_args,
     )
 
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise asyncio.TimeoutError(
+            f"Subprocess timed out after {timeout}s: {' '.join(str(arg) for arg in args)}"
+        )
 
     if proc.returncode != 0:
         msg = (

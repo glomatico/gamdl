@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import structlog
@@ -6,6 +7,7 @@ from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
 from .amdecrypt import decrypt_file, decrypt_file_hex
 from .base import AppleMusicBaseDownloader
+from .exceptions import GamdlDownloaderDecryptionError
 from .types import DownloadItem
 
 logger = structlog.get_logger(__name__)
@@ -96,20 +98,36 @@ class AppleMusicSongDownloader:
             staged_path=staged_path,
         )
 
-        if self.base.interface.base.use_wrapper and not legacy:
-            await self._decrypt_amdecrypt(
-                encrypted_path,
-                staged_path,
-                media_id,
-                fairplay_key,
-            )
+        max_attempts = 3
+        decrypt_timeout = 120
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if self.base.interface.base.use_wrapper and not legacy:
+                    await asyncio.wait_for(
+                        self._decrypt_amdecrypt(
+                            encrypted_path,
+                            staged_path,
+                            media_id,
+                            fairplay_key,
+                        ),
+                        timeout=decrypt_timeout,
+                    )
+                else:
+                    await self._decrypt_amdecrypt_hex(
+                        encrypted_path,
+                        staged_path,
+                        decryption_key.audio_track.key,
+                        legacy,
+                    )
+                break
+            except (asyncio.IncompleteReadError, asyncio.TimeoutError, EOFError, OSError) as e:
+                last_error = e
+                if attempt < max_attempts:
+                    log.warning("decryption failed, retrying", attempt=attempt, error=str(e))
+                    await asyncio.sleep(2)
         else:
-            await self._decrypt_amdecrypt_hex(
-                encrypted_path,
-                staged_path,
-                decryption_key.audio_track.key,
-                legacy,
-            )
+            raise GamdlDownloaderDecryptionError(str(last_error)) from last_error
 
         log.debug("success")
 

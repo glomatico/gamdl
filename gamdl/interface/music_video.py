@@ -57,7 +57,12 @@ class AppleMusicMusicVideoInterface:
         return itunes_page["storePlatformData"]["product-dv"]["results"][url_media_id]
 
     def _get_m3u8_master_url_from_webplayback(self, webplayback: dict) -> str:
+        log = logger.bind(action="get_m3u8_master_url_from_webplayback")
+
         m3u8_master_url = webplayback["hls-playlist-url"]
+
+        log.debug("success", m3u8_master_url=m3u8_master_url)
+
         return m3u8_master_url
 
     def _get_m3u8_master_url_from_itunes_page_metadata(

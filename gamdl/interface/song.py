@@ -423,10 +423,14 @@ class AppleMusicSongInterface:
 
     async def _get_web_stream_info(
         self,
-        webplayback: dict,
+        webplayback: dict | None,
         codec: SongCodec,
     ) -> StreamInfoAv:
         log = logger.bind(action="get_web_song_stream_info")
+
+        if not webplayback:
+            log.debug("no_webplayback")
+            return None
 
         flavor = codec.flavor
 

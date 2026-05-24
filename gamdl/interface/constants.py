@@ -95,7 +95,7 @@ ARTIST_AUTO_SELECT_STR_MAP = {
     "music-videos": "Music Videos",
 }
 
-SONG_CODEC_FLAVOR_MAP = {
+MEDIA_CODEC_FLAVOR_MAP = {
     "aac-web": "28:ctrp256",
     "aac-he-web": "32:ctrp64",
     "aac-fps-web": "30:cbcp256",

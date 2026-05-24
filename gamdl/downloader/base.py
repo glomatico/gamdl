@@ -9,9 +9,10 @@ from pathlib import Path
 import structlog
 from mutagen.mp4 import MP4, MP4Cover
 from yt_dlp import YoutubeDL
+from yt_dlp.downloader.hls import HlsFD
+from yt_dlp.downloader.http import HttpFD
 
 from ..interface.enums import CoverFormat
-from yt_dlp.downloader.http import HttpFD
 from ..interface.interface import AppleMusicInterface
 from ..interface.types import MediaTags, PlaylistTags
 from ..utils import CustomStringFormatter, async_subprocess
@@ -28,34 +29,40 @@ def _download_ytdlp_process(
     result_queue,
 ) -> None:
     try:
-        common_args = {
-            "quiet": True,
-            "no_warnings": True,
-            "noprogress": silent,
-        }
+        Path(download_path).parent.mkdir(parents=True, exist_ok=True)
 
-        if stream_url.split("?")[0].endswith(".m3u8"):
-            with YoutubeDL(
-                {
-                    **common_args,
-                    "outtmpl": download_path,
-                    "allow_unplayable_formats": True,
-                    "overwrites": True,
-                    "fixup": "never",
-                    "allowed_extractors": ["generic"],
-                }
-            ) as ydl:
-                ydl.download(stream_url)
-        else:
-            Path(download_path).parent.mkdir(parents=True, exist_ok=True)
-            with YoutubeDL(common_args) as ydl:
+        with YoutubeDL(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "overwrites": True,
+                "noprogress": silent,
+                "allow_unplayable_formats": True,
+                "concurrent_fragment_downloads": 8,
+            }
+        ) as ydl:
+            if stream_url.split("?")[0].endswith(".m3u8"):
+                hls_downloader = HlsFD(ydl, ydl.params)
+                success, _ = hls_downloader.download(
+                    download_path,
+                    {
+                        "url": stream_url,
+                        "ext": "mp4",
+                        "protocol": "m3u8",
+                    },
+                )
+                if not success:
+                    raise RuntimeError("yt-dlp HLS download failed")
+            else:
                 http_downloader = HttpFD(ydl, ydl.params)
-                http_downloader.download(
+                success, _ = http_downloader.download(
                     download_path,
                     {
                         "url": stream_url,
                     },
                 )
+                if not success:
+                    raise RuntimeError("yt-dlp HTTP download failed")
     except Exception as e:
         result_queue.put(("error", repr(e), traceback.format_exc()))
 
@@ -233,22 +240,36 @@ class AppleMusicBaseDownloader:
 
         return final_path
 
-    async def download_stream(self, stream_url: str, download_path: str):
+    async def download_stream(
+        self,
+        stream_url: str,
+        download_path: str,
+    ):
         log = logger.bind(
             action="download_stream", stream_url=stream_url, download_path=download_path
         )
 
-        if self.download_mode == DownloadMode.YTDLP or not stream_url.split("?")[
-            0
-        ].endswith(".m3u8"):
-            await self._download_ytdlp_async(stream_url, download_path)
+        stream_url_stripped = stream_url.split("?")[0]
+
+        if (
+            self.download_mode == DownloadMode.YTDLP
+            or not stream_url_stripped.endswith(".m3u8")
+        ):
+            await self._download_ytdlp_async(
+                stream_url,
+                download_path,
+            )
 
         elif self.download_mode == DownloadMode.NM3U8DLRE:
             await self._download_nm3u8dlre(stream_url, download_path)
 
         log.debug("success")
 
-    async def _download_ytdlp_async(self, stream_url: str, download_path: str) -> None:
+    async def _download_ytdlp_async(
+        self,
+        stream_url: str,
+        download_path: str,
+    ) -> None:
         ctx = multiprocessing.get_context()
         result_queue = ctx.Queue()
         process = ctx.Process(

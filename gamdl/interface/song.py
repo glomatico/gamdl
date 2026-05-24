@@ -548,7 +548,7 @@ class AppleMusicSongInterface:
             )
 
         if playback:
-            media.tags = self.base.get_tags_from_asset_info(
+            media.tags = await self.base.get_tags_from_asset_info(
                 playback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
             )

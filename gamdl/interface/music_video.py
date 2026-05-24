@@ -169,18 +169,25 @@ class AppleMusicMusicVideoInterface:
     async def _get_stream_info(
         self,
         m3u8_master_url: str,
+        codec: MusicVideoCodec,
     ) -> StreamInfoAv | None:
         log = logger.bind(
-            action="get_music_video_stream_info", m3u8_master_url=m3u8_master_url
+            action="get_music_video_stream_info",
+            m3u8_master_url=m3u8_master_url,
+            codec=codec.value,
         )
 
         playlist_master_m3u8_obj = m3u8.loads(
             (await self.base.get_response(m3u8_master_url)).text
         )
         playlist_master_m3u8_obj.base_uri = m3u8_master_url.rpartition("/")[0]
-        stream_info_video = await self._get_stream_info_video(playlist_master_m3u8_obj)
+        stream_info_video = await self._get_stream_info_video(
+            playlist_master_m3u8_obj,
+            codec,
+        )
         stream_info_audio = await self._get_stream_info_audio(
             playlist_master_m3u8_obj.data,
+            codec,
         )
         if not stream_info_video or not stream_info_audio:
             return None
@@ -208,20 +215,20 @@ class AppleMusicMusicVideoInterface:
     def _get_video_playlist_from_resolution(
         self,
         video_playlists: list[m3u8.Playlist],
+        codec: MusicVideoCodec,
     ) -> m3u8.Playlist | None:
-        playlist_results = []
-        for codec_index, codec in enumerate(self.codec_priority):
-            for playlist in video_playlists:
-                if playlist.stream_info.codecs.startswith(codec.fourcc()):
-                    playlist_results.append((codec_index, playlist))
+        playlist_results = [
+            playlist
+            for playlist in video_playlists
+            if playlist.stream_info.codecs.startswith(codec.fourcc())
+        ]
 
         if not playlist_results:
             return None
 
         def sort_key(
-            item: tuple[int, m3u8.Playlist],
-        ) -> tuple[bool, int, int, int, int]:
-            codec_index, playlist = item
+            playlist: m3u8.Playlist,
+        ) -> tuple[bool, int, int, int]:
             playlist_resolution = playlist.stream_info.resolution[-1]
             bandwidth = playlist.stream_info.bandwidth
             exceeds_resolution = playlist_resolution > int(self.resolution)
@@ -230,13 +237,12 @@ class AppleMusicMusicVideoInterface:
             return (
                 exceeds_resolution,
                 resolution_difference,
-                codec_index,
                 -playlist_resolution,
                 -bandwidth,
             )
 
         playlist_results.sort(key=sort_key)
-        return playlist_results[0][1]
+        return playlist_results[0]
 
     def _get_best_stereo_audio_playlist(
         self,
@@ -315,12 +321,14 @@ class AppleMusicMusicVideoInterface:
     async def _get_stream_info_video(
         self,
         playlist_master_m3u8_obj: m3u8.M3U8,
+        codec: MusicVideoCodec,
     ) -> StreamInfo | None:
         stream_info = StreamInfo()
 
-        if MusicVideoCodec.ASK not in self.codec_priority:
+        if codec != MusicVideoCodec.ASK:
             playlist = self._get_video_playlist_from_resolution(
                 playlist_master_m3u8_obj.playlists,
+                codec,
             )
         else:
             playlist = await self._get_video_playlist_from_user(
@@ -346,10 +354,11 @@ class AppleMusicMusicVideoInterface:
     async def _get_stream_info_audio(
         self,
         playlist_master_data: dict,
+        codec: MusicVideoCodec,
     ) -> StreamInfo | None:
         stream_info = StreamInfo()
 
-        if MusicVideoCodec.ASK not in self.codec_priority:
+        if codec != MusicVideoCodec.ASK:
             playlist = self._get_best_stereo_audio_playlist(playlist_master_data)
         else:
             playlist = await self._get_audio_playlist_from_user(playlist_master_data)
@@ -377,10 +386,17 @@ class AppleMusicMusicVideoInterface:
         stream_info = None
 
         if m3u8_master_url:
-            stream_info = await self._get_stream_info(m3u8_master_url)
+            for codec in self.codec_priority:
+                stream_info = await self._get_stream_info(m3u8_master_url, codec)
+
+                if stream_info:
+                    break
 
         if not stream_info:
-            raise GamdlInterfaceFormatNotAvailableError(media_id, self.codec_priority)
+            raise GamdlInterfaceFormatNotAvailableError(
+                media_id=media_id,
+                codec=[codec.value for codec in self.codec_priority],
+            )
 
         return stream_info
 

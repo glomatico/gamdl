@@ -46,7 +46,7 @@ class AppleMusicUploadedVideoDownloader:
         self,
         download_item: DownloadItem,
     ) -> None:
-        await self.base._download_ytdlp_async(
+        await self.base.download_stream(
             download_item.media.stream_info.video_track.stream_url,
             download_item.staged_path,
         )

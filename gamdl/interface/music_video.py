@@ -224,7 +224,7 @@ class AppleMusicMusicVideoInterface:
         playlist_results = [
             playlist
             for playlist in video_playlists
-            if playlist.stream_info.codecs.startswith(codec.fourcc())
+            if playlist.stream_info.codecs.startswith(codec.fourcc)
         ]
 
         if not playlist_results:

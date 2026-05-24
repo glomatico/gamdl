@@ -80,6 +80,7 @@ class MusicVideoCodec(Enum):
     H265 = "h265"
     ASK = "ask"
 
+    @property
     def fourcc(self) -> str:
         return FOURCC_MAP[self.value]
 

@@ -443,7 +443,7 @@ class AppleMusicMusicVideoInterface:
                 )
             )["data"][0]
 
-        if media.media_metadata["attributes"]["playParams"].get("isLibrary"):
+        if media.media_metadata["attributes"].get("playParams", {}).get("isLibrary"):
             catalog_metadata = self.base.get_catalog_metadata_from_library(
                 media.media_metadata
             )

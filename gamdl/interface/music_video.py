@@ -127,7 +127,8 @@ class AppleMusicMusicVideoInterface:
             genre_id=int(itunes_page_metadata["genres"][0]["genreId"]),
             media_type=MediaType.MUSIC_VIDEO,
             storefront=self.base.itunes_api.storefront_id,
-            title=lookup_metadata[0]["trackCensoredName"],
+            title=lookup_metadata[0]["trackName"],
+            title_sort=lookup_metadata[0]["trackCensoredName"],
             title_id=int(metadata["id"]),
             rating=rating,
         )
@@ -139,7 +140,8 @@ class AppleMusicMusicVideoInterface:
             if not album:
                 return tags
 
-            tags.album = lookup_metadata[1]["collectionCensoredName"]
+            tags.album = lookup_metadata[1]["collectionName"]
+            tags.album_sort = lookup_metadata[1]["collectionCensoredName"]
             tags.album_artist = lookup_metadata[1]["artistName"]
             tags.album_id = int(itunes_page_metadata["collectionId"])
             tags.disc = lookup_metadata[0]["discNumber"]

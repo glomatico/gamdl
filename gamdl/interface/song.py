@@ -558,11 +558,13 @@ class AppleMusicSongInterface:
             media.tags = await self.base.get_tags_from_asset_info(
                 playback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
+                self.use_album_date,
             )
         else:
             media.tags = await self.base.get_tags_from_asset_info(
                 webplayback["songList"][0]["assets"][0]["metadata"],
                 media.lyrics.unsynced if media.lyrics else None,
+                self.use_album_date,
             )
 
         if not self.skip_stream_info:

@@ -191,18 +191,24 @@ class AppleMusicSongInterface:
 
         return f"[{timestamp.strftime('%M:%S.%f')[:-4]}]{text}"
 
-    def _get_m3u8_from_playback(self, playback: dict) -> str | None:
-        return playback["songList"][0].get("hls-playlist-url")
+    def _switch_m3u8_master_url_to_default(self, m3u8_master_url: str) -> str:
+        return re.sub(
+            r"(P\d+)_[^/]+(\.m3u8)",
+            r"\1_default\2",
+            m3u8_master_url,
+        )
 
-    async def get_m3u8_master_url(
-        self,
-        playback: dict | None,
-        song_metadata: dict | None,
-    ) -> str | None:
-        if playback:
-            return self._get_m3u8_from_playback(playback)
-        else:
-            return await self._get_m3u8_master_url_from_metadata(song_metadata)
+    def _get_m3u8_from_playback(self, playback: dict) -> str | None:
+        log = logger.bind(action="get_m3u8_master_url_from_playback")
+
+        m3u8_master_url = playback["songList"][0].get("hls-playlist-url")
+
+        if m3u8_master_url:
+            m3u8_master_url = self._switch_m3u8_master_url_to_default(m3u8_master_url)
+            log.debug("success", m3u8_master_url=m3u8_master_url)
+            return m3u8_master_url
+
+        log.debug("no_m3u8_master_url")
 
     async def _get_m3u8_master_url_from_metadata(
         self,
@@ -227,12 +233,23 @@ class AppleMusicSongInterface:
         enhanced = song_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
 
         if enhanced:
+            enhanced = self._switch_m3u8_master_url_to_default(enhanced)
             log.debug("success", m3u8_master_url=enhanced)
             return enhanced
 
         log.debug("no_m3u8_master_url")
 
         return None
+
+    async def get_m3u8_master_url(
+        self,
+        playback: dict | None,
+        song_metadata: dict | None,
+    ) -> str | None:
+        if playback:
+            return self._get_m3u8_from_playback(playback)
+        else:
+            return await self._get_m3u8_master_url_from_metadata(song_metadata)
 
     async def get_stream_info(
         self,

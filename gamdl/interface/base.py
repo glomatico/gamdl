@@ -205,8 +205,8 @@ class AppleMusicBaseInterface:
     async def get_cover_bytes(self, cover_url: str) -> bytes | None:
         log = logger.bind(action="get_cover_bytes", cover_url=cover_url)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(cover_url)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(cover_url, follow_redirects=True)
 
             if response.status_code == 404:
                 log.debug("cover_not_found")

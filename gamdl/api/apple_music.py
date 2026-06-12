@@ -93,7 +93,7 @@ class AppleMusicApi:
                 )
 
         index_js_uri_match = re.search(
-            r"/(assets/index-legacy[~-][^/\"]+\.js)",
+            r"/(assets/index[~-][^/\"]+\.js)",
             home_page,
         )
         if not index_js_uri_match:
@@ -116,7 +116,7 @@ class AppleMusicApi:
                     status_code=response.status_code if response is not None else None,
                 )
 
-        token_match = re.search('(?=eyJh)(.*?)(?=")', index_js_page)
+        token_match = re.search(r'"(eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)"', index_js_page)
         if not token_match:
             raise GamdlApiResponseError("Error finding token in index.js page")
         token = token_match.group(1)

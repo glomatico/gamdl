@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 from ..utils import GamdlError
 
 
@@ -9,7 +12,7 @@ class GamdlApiResponseError(GamdlApiError):
     def __init__(
         self,
         message: str,
-        content: str | None = None,
+        content: Any | None = None,
         status_code: int | None = None,
     ):
         self.message = message
@@ -19,7 +22,16 @@ class GamdlApiResponseError(GamdlApiError):
         if status_code is not None:
             message = f"{message} (Status code: {status_code})"
 
-        if content:
-            message += f": {content}"
+        if content is not None:
+            if isinstance(content, str):
+                content_text = content
+            else:
+                try:
+                    content_text = json.dumps(content)
+                except TypeError:
+                    content_text = str(content)
+
+            if content_text:
+                message += f": {content_text}"
 
         super().__init__(message)

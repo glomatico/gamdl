@@ -165,8 +165,8 @@ class AppleMusicInterface:
         )
 
         try:
-            async for media in self.music_video.get_media(media):
-                yield
+            async for media in self.uploaded_video.get_media(media):
+                yield media
 
                 self._run_media_type_filter(media)
                 await self._run_flat_filter(media)

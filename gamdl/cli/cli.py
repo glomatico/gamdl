@@ -34,6 +34,7 @@ from ..interface import (
     GamdlInterfaceMediaNotStreamableError,
     GamdlInterfaceUrlParseError,
 )
+from ..interface.enums import SongCodec
 from .cli_config import CliConfig
 from .config_file import ConfigFile
 from .database import Database
@@ -116,14 +117,11 @@ async def main(config: CliConfig):
             " downloadable"
         )
 
-    if (
-        any(not codec.is_web for codec in config.song_codec_piority)
-        and not config.use_wrapper
-    ):
+    if SongCodec.ALAC in config.song_codec_piority and not config.use_wrapper:
         logger.warning(
-            "You have chosen an experimental song codec "
-            "without enabling wrapper. "
-            "They're not guaranteed to work due to API limitations."
+            "You have chosen ALAC without enabling wrapper. "
+            "ALAC may be attempted without wrapper, but it probably won't work due "
+            "to API limitations."
         )
 
     if config.database_path:

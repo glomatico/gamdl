@@ -34,22 +34,12 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`, and configure the base URL with `--wrapper-url` or `wrapper_url`.
 
-The wrapper is recommended when using these non-web song codecs:
-
-- `aac`
-- `aac-he`
-- `aac-binaural`
-- `aac-downmix`
-- `aac-he-binaural`
-- `aac-he-downmix`
-- `atmos`
-- `ac3`
-- `alac`
+The wrapper is recommended when using the `alac` song codec. ALAC can be attempted without wrapper, but it probably won't work due to API limitations.
 
 **Note:**
 
 - When using the Wrapper, you'll be asked to insert your credentials to login if you haven't already.
-- Web song codecs such as `aac-web` and `aac-he-web` do not require the wrapper.
+- Song codecs other than `alac` do not require the wrapper.
 - Cookies can be skipped when using the wrapper.
 
 #### N_m3u8DL-RE
@@ -237,7 +227,7 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `aac-web` - AAC 256kbps 44.1kHz
 - `aac-he-web` - AAC-HE 64kbps 44.1kHz
 
-**Non-web** (wrapper recommended; may not work without wrapper due to API limitations):
+**Non-web** (`alac` can be attempted without wrapper, but it probably won't work due to API limitations):
 
 - `aac` - AAC 256kbps up to 48kHz
 - `aac-he` - AAC-HE 64kbps up to 48kHz

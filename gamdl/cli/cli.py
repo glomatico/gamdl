@@ -66,12 +66,13 @@ async def main(config: CliConfig):
     if config.log_file:
         log_output.add_file(config.log_file)
 
+    processors = [structlog.processors.add_log_level]
+    if not config.no_exceptions:
+        processors.append(structlog.processors.ExceptionPrettyPrinter())
+    processors.append(custom_structlog_formatter)
+
     structlog.configure(
-        processors=[
-            structlog.processors.add_log_level,
-            structlog.processors.ExceptionPrettyPrinter(),
-            custom_structlog_formatter,
-        ],
+        processors=processors,
         logger_factory=structlog.PrintLoggerFactory(file=log_output),
         wrapper_class=structlog.make_filtering_bound_logger(config.log_level),
     )

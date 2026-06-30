@@ -210,12 +210,12 @@ class AppleMusicSongInterface:
 
         log.debug("no_m3u8_master_url")
 
-    async def _get_m3u8_master_url_from_metadata(
+    async def _get_m3u8_master_url_from_assets(
         self,
         song_metadata: dict,
     ) -> str | None:
         log = logger.bind(
-            action="get_m3u8_master_url_from_metadata",
+            action="get_m3u8_master_url_from_assets",
             song_id=song_metadata["id"],
         )
 
@@ -223,14 +223,21 @@ class AppleMusicSongInterface:
             log.debug("library_song_no_m3u8_master_url")
             return None
 
-        if "extendedAssetUrls" not in song_metadata["attributes"]:
-            song_metadata = (
-                await self.base.apple_music_api.get_song(
-                    song_metadata["id"],
-                )
-            )["data"][0]
+        play_params = song_metadata["attributes"].get("playParams", {})
+        assets = await self.base.apple_music_api.get_assets(
+            play_params.get("id") or song_metadata["id"],
+            play_params.get("kind", "song"),
+        )
 
-        enhanced = song_metadata["attributes"]["extendedAssetUrls"].get("enhancedHls")
+        asset = next(
+            (
+                asset
+                for asset in assets.get("results", {}).get("assets", [])
+                if asset.get("url")
+            ),
+            None,
+        )
+        enhanced = asset["url"] if asset else None
 
         if enhanced:
             enhanced = self._switch_m3u8_master_url_to_default(enhanced)
@@ -249,7 +256,7 @@ class AppleMusicSongInterface:
         if playback:
             return self._get_m3u8_from_playback(playback)
         else:
-            return await self._get_m3u8_master_url_from_metadata(song_metadata)
+            return await self._get_m3u8_master_url_from_assets(song_metadata)
 
     async def get_stream_info(
         self,

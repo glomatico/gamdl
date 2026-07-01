@@ -51,8 +51,13 @@ class Database:
         if not result:
             return None
 
+        try:
+            path_exists = Path(result).exists()
+        except OSError:
+            return None
+
         return (
             "Registered in database"
-            if Path(result).exists() and not self.overwrite
+            if path_exists and not self.overwrite
             else None
         )

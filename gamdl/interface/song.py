@@ -274,7 +274,10 @@ class AppleMusicSongInterface:
                 if codec.is_web:
                     stream_info = await self._get_web_stream_info(webplayback, codec)
                 else:
-                    stream_info = await self._get_stream_info(m3u8_master_url, codec)
+                    stream_info = await self._get_stream_info_nonweb(
+                        m3u8_master_url,
+                        codec,
+                    )
 
                 if stream_info:
                     break
@@ -287,7 +290,7 @@ class AppleMusicSongInterface:
 
         return stream_info
 
-    async def _get_stream_info(
+    async def _get_stream_info_nonweb(
         self,
         m3u8_master_url: str | None,
         codec: SongCodec,
@@ -302,11 +305,48 @@ class AppleMusicSongInterface:
             (await self.base.get_response(m3u8_master_url)).text
         )
         m3u8_master_data = m3u8_master_obj.data
+        is_enhanced = self._is_enhanced_m3u8_master(m3u8_master_data)
+
+        if is_enhanced:
+            stream_info = await self._get_stream_info_enhanced(
+                m3u8_master_url,
+                m3u8_master_data,
+                codec,
+            )
+        else:
+            stream_info = await self._get_stream_info_nonenhanced(
+                m3u8_master_url,
+                m3u8_master_data,
+                codec,
+            )
+
+        if stream_info:
+            log.debug(
+                "success",
+                stream_info=stream_info,
+                is_enhanced=is_enhanced,
+            )
+
+        return stream_info
+
+    def _is_enhanced_m3u8_master(self, m3u8_master_data: dict) -> bool:
+        return any(
+            playlist.get("stream_info", {}).get("audio")
+            for playlist in m3u8_master_data.get("playlists", [])
+        )
+
+    async def _get_stream_info_enhanced(
+        self,
+        m3u8_master_url: str,
+        m3u8_master_data: dict,
+        codec: SongCodec,
+    ) -> StreamInfoAv | None:
+        log = logger.bind(action="get_song_stream_info_enhanced")
 
         if codec == SongCodec.ASK:
             playlist = await self._get_playlist_from_user(m3u8_master_data)
         else:
-            playlist = self._get_playlist_from_codec(
+            playlist = self._get_playlist_from_codec_enhanced(
                 m3u8_master_data,
                 codec,
             )
@@ -315,7 +355,55 @@ class AppleMusicSongInterface:
             log.debug("no_matching_playlist", codec=codec.value)
             return None
 
-        stream_info = StreamInfo(use_single_content_key=False)
+        stream_info = await self._get_stream_info_from_playlist(
+            m3u8_master_url,
+            m3u8_master_data,
+            playlist,
+        )
+
+        log.debug("success", stream_info=stream_info)
+
+        return stream_info
+
+    async def _get_stream_info_nonenhanced(
+        self,
+        m3u8_master_url: str,
+        m3u8_master_data: dict,
+        codec: SongCodec,
+    ) -> StreamInfoAv | None:
+        log = logger.bind(action="get_song_stream_info_nonenhanced")
+
+        if codec == SongCodec.ASK:
+            playlist = await self._get_playlist_from_user(m3u8_master_data)
+        else:
+            playlist = self._get_playlist_from_codec_nonenhanced(
+                m3u8_master_data,
+                codec,
+            )
+
+        if playlist is None:
+            log.debug("no_matching_playlist", codec=codec.value)
+            return None
+
+        stream_info = await self._get_stream_info_from_playlist(
+            m3u8_master_url,
+            m3u8_master_data,
+            playlist,
+            True,
+        )
+
+        log.debug("success", stream_info=stream_info)
+
+        return stream_info
+
+    async def _get_stream_info_from_playlist(
+        self,
+        m3u8_master_url: str,
+        m3u8_master_data: dict,
+        playlist: dict,
+        use_single_content_key: bool = False,
+    ) -> StreamInfoAv:
+        stream_info = StreamInfo(use_single_content_key=use_single_content_key)
         stream_info.stream_url = (
             f"{m3u8_master_url.rpartition('/')[0]}/{playlist['uri']}"
         )
@@ -367,8 +455,6 @@ class AppleMusicSongInterface:
             file_format=MediaFileFormat.MP4 if is_mp4 else MediaFileFormat.M4A,
         )
 
-        log.debug("success", stream_info=stream_info_av)
-
         return stream_info_av
 
     def _get_m3u8_metadata(self, m3u8_data: dict, data_id: str) -> dict | None:
@@ -391,7 +477,7 @@ class AppleMusicSongInterface:
             "com.apple.hls.audioAssetMetadata",
         )
 
-    def _get_playlist_from_codec(
+    def _get_playlist_from_codec_enhanced(
         self, m3u8_data: dict, codec: SongCodec
     ) -> dict | None:
         matching_playlists = [
@@ -400,6 +486,30 @@ class AppleMusicSongInterface:
             if re.fullmatch(
                 SONG_CODEC_REGEX_MAP[codec.value], playlist["stream_info"]["audio"]
             )
+        ]
+
+        if not matching_playlists:
+            return None
+
+        return max(
+            matching_playlists,
+            key=lambda x: x["stream_info"]["average_bandwidth"],
+        )
+
+    def _get_playlist_from_codec_nonenhanced(
+        self, m3u8_data: dict, codec: SongCodec
+    ) -> dict | None:
+        codec_values = {
+            SongCodec.AAC: {"mp4a.40.2"},
+            SongCodec.AAC_HE: {"mp4a.40.5"},
+        }.get(codec)
+        if not codec_values:
+            return None
+
+        matching_playlists = [
+            playlist
+            for playlist in m3u8_data["playlists"]
+            if playlist["stream_info"].get("codecs") in codec_values
         ]
 
         if not matching_playlists:

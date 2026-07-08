@@ -892,7 +892,51 @@ fn decrypt_sample_hex(
         } else {
             &sample.iv
         });
-        return decrypt_cbcs_pattern(&data, key, iv, enc.crypt_byte_block, enc.skip_byte_block);
+        if sample.subsamples.is_empty() {
+            return decrypt_cbcs_pattern(&data, key, iv, enc.crypt_byte_block, enc.skip_byte_block);
+        }
+        let mut out = Vec::with_capacity(data.len());
+        let mut offset = 0usize;
+        for (clear, enc_bytes) in &sample.subsamples {
+            let clear_end = offset.checked_add(*clear).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "subsample clear range overflow")
+            })?;
+            if clear_end > data.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "subsample clear range exceeds sample size",
+                ));
+            }
+            out.extend_from_slice(&data[offset..clear_end]);
+            offset = clear_end;
+
+            let enc_end = offset.checked_add(*enc_bytes).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "subsample encrypted range overflow",
+                )
+            })?;
+            if enc_end > data.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "subsample encrypted range exceeds sample size",
+                ));
+            }
+            if *enc_bytes > 0 {
+                out.extend_from_slice(&decrypt_cbcs_pattern(
+                    &data[offset..enc_end],
+                    key,
+                    iv,
+                    enc.crypt_byte_block,
+                    enc.skip_byte_block,
+                )?);
+            }
+            offset = enc_end;
+        }
+        if offset < data.len() {
+            out.extend_from_slice(&data[offset..]);
+        }
+        return Ok(out);
     }
 
     let Some((aligned, tail)) = cbcs_ciphertext_for_sample(&data, &sample.subsamples) else {
@@ -1597,10 +1641,60 @@ mod tests {
         assert_eq!(plain, hex_bytes("6bc1bee22e409f96e93d7e117393172a"));
     }
 
+    #[test]
+    fn decrypts_cbcs_pattern_per_subsample_range() {
+        let key = [
+            0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
+            0x4f, 0x3c,
+        ];
+        let clear_a = hex_bytes("00000004");
+        let cipher = hex_bytes("7649abac8119b246cee98e9b12e9197d");
+        let clear_b = hex_bytes("0909");
+        let tail = hex_bytes("aabbcc");
+        let mut data = Vec::new();
+        data.extend_from_slice(&clear_a);
+        data.extend_from_slice(&cipher);
+        data.extend_from_slice(&clear_b);
+        data.extend_from_slice(&cipher);
+        data.extend_from_slice(&tail);
+        let sample = Sample {
+            data,
+            duration: 1,
+            desc_index: 0,
+            iv: hex_bytes("000102030405060708090a0b0c0d0e0f"),
+            subsamples: vec![(4, 16), (2, 16)],
+            composition_time_offset: 0,
+            is_sync: true,
+            size: 41,
+            data_path: None,
+            data_offset: 0,
+        };
+        let enc = EncryptionInfo {
+            scheme_type: "cbcs".to_string(),
+            crypt_byte_block: 1,
+            skip_byte_block: 9,
+            ..Default::default()
+        };
+
+        let plain = decrypt_sample_hex(&sample, Some(&key), &enc).unwrap();
+
+        assert_eq!(
+            plain,
+            hex_bytes(
+                "00000004\
+                 6bc1bee22e409f96e93d7e117393172a\
+                 0909\
+                 6bc1bee22e409f96e93d7e117393172a\
+                 aabbcc"
+            )
+        );
+    }
+
     fn hex_bytes(value: &str) -> Vec<u8> {
-        (0..value.len())
+        let compact: String = value.chars().filter(|c| !c.is_whitespace()).collect();
+        (0..compact.len())
             .step_by(2)
-            .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+            .map(|i| u8::from_str_radix(&compact[i..i + 2], 16).unwrap())
             .collect()
     }
 }

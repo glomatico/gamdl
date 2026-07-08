@@ -1,4 +1,5 @@
 mod decrypt;
+mod media;
 mod mp4;
 mod mux;
 mod python;

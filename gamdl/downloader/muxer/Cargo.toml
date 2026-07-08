@@ -8,4 +8,9 @@ name = "_amdecrypt"
 crate-type = ["cdylib"]
 
 [dependencies]
+aes = "0.8"
+cbc = { version = "0.1", features = ["block-padding"] }
+ctr = "0.9"
+cipher = "0.4"
 pyo3 = { version = "0.23.5", features = ["extension-module"] }
+tempfile = "3"

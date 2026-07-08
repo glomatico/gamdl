@@ -2,6 +2,9 @@
 name = "gamdl-amdecrypt"
 version = "0.1.0"
 edition = "2021"
+description = "Native media decrypt and mux engine for gamdl"
+license = "MIT"
+repository = "https://github.com/glomatico/gamdl"
 
 [lib]
 name = "_amdecrypt"

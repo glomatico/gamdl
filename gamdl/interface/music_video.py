@@ -175,6 +175,7 @@ class AppleMusicMusicVideoInterface:
 
     async def _get_stream_info(
         self,
+        media_id: str,
         m3u8_master_url: str | None,
         codec: MusicVideoCodec,
     ) -> StreamInfoAv | None:
@@ -398,7 +399,7 @@ class AppleMusicMusicVideoInterface:
         stream_info = None
 
         for codec in self.codec_priority:
-            stream_info = await self._get_stream_info(m3u8_master_url, codec)
+            stream_info = await self._get_stream_info(media_id, m3u8_master_url, codec)
 
             if stream_info:
                 break

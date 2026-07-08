@@ -34,7 +34,7 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`. Configure wrapper HTTP account/playback calls with `--wrapper-url` or `wrapper_url`, and configure WV2D batch TCP decrypt with `--wrapper-decrypt-host` / `--wrapper-decrypt-port`.
 
-gamdl builds a private Rust extension from `gamdl/muxer` as `gamdl._amdecrypt`. That native media engine handles wrapper TCP decrypt/reassembly plus MP4/M4A writing and muxing; Python remains responsible for the CLI, downloads, metadata tagging, and high-level orchestration.
+gamdl builds a private Rust extension from `gamdl/downloader/muxer` as `gamdl._amdecrypt`. That native media engine handles wrapper TCP decrypt/reassembly plus MP4/M4A writing and muxing; Python remains responsible for the CLI, downloads, metadata tagging, and high-level orchestration.
 
 The wrapper is recommended when using the `alac` song codec. ALAC can be attempted without wrapper, but it probably won't work due to API limitations.
 

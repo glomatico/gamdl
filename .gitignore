@@ -1,9 +1,11 @@
 /*
 __pycache__
 !gamdl
-!gamdl/muxer
-!gamdl/muxer/**
-gamdl/muxer/target/
+!gamdl/downloader
+!gamdl/downloader/**
+gamdl/downloader/muxer/target/
+gamdl/downloader/**/__pycache__/
+gamdl/muxer/
 !.gitignore
 !.python-version
 !pyproject.toml

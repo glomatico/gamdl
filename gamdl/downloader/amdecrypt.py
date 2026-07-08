@@ -1029,6 +1029,10 @@ async def decrypt_samples(
     segment_uri: Optional[str] = None
     # Pending (sample, aligned_cbc, tail) for one SKD segment, flushed in batches.
     crypto_batch: List[tuple] = []
+    wrapper_decrypt_session = _amdecrypt.WrapperDecryptSession(
+        wrapper_api.decrypt_host,
+        wrapper_api.decrypt_port,
+    )
 
     def emit(data: bytes) -> None:
         nonlocal decrypted_bytes
@@ -1048,9 +1052,7 @@ async def decrypt_samples(
             for sample, aligned, tail in crypto_batch
         ]
         reassembled = await asyncio.to_thread(
-            _amdecrypt.wrapper_decrypt_reassemble,
-            wrapper_api.decrypt_host,
-            wrapper_api.decrypt_port,
+            wrapper_decrypt_session.decrypt_reassemble,
             segment_adam,
             segment_uri,
             native_items,
@@ -1144,6 +1146,7 @@ async def decrypt_samples(
 
         await flush_crypto_batch()
     finally:
+        wrapper_decrypt_session.close()
         if decrypted_output:
             decrypted_output.close()
 

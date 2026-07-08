@@ -32,14 +32,14 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 #### Wrapper
 
-Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`. Configure wrapper HTTP account/playback calls with `--wrapper-url` or `wrapper_url`, and configure raw TCP decrypt with `--wrapper-decrypt-host` / `--wrapper-decrypt-port`.
+Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`. Configure wrapper HTTP account/playback calls with `--wrapper-url` or `wrapper_url`, and configure WV2D batch TCP decrypt with `--wrapper-decrypt-host` / `--wrapper-decrypt-port`.
 
 The wrapper is recommended when using the `alac` song codec. ALAC can be attempted without wrapper, but it probably won't work due to API limitations.
 
 **Note:**
 
 - When using the Wrapper, you'll be asked to insert your credentials to login if you haven't already.
-- Newer wrapper-v2 builds use HTTP JSON for account/playback and TCP port `10020` for decrypt.
+- Newer wrapper-v2 builds use HTTP JSON for account/playback and WV2D batch TCP port `10020` for decrypt.
 - Song codecs other than `alac` do not require the wrapper.
 - Cookies can be skipped when using the wrapper.
 

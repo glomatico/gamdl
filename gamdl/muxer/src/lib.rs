@@ -1,4 +1,6 @@
 mod decrypt;
+mod mp4;
+mod mux;
 mod python;
 
 use pyo3::prelude::*;

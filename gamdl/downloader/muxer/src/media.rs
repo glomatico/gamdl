@@ -1157,112 +1157,11 @@ impl Drop for WrapperTcpSession {
     }
 }
 
-#[derive(Debug)]
-struct PatternWindow {
-    offset: usize,
-    len: usize,
-}
-
-#[derive(Debug)]
-struct PatternChunk {
-    ciphertext: Vec<u8>,
-    windows: Vec<PatternWindow>,
-}
-
-enum PendingWrapperSample {
-    Simple {
-        data: Vec<u8>,
-        aligned: Vec<u8>,
-        tail: Vec<u8>,
-        subsamples: Vec<(usize, usize)>,
-    },
-    Pattern {
-        data: Vec<u8>,
-        chunks: Vec<PatternChunk>,
-    },
-}
-
-fn cbcs_pattern_chunks_for_sample(
-    sample_data: &[u8],
-    subsamples: &[(usize, usize)],
-    crypt_blocks: u8,
-    skip_blocks: u8,
-) -> io::Result<Vec<PatternChunk>> {
-    let crypt_bytes = crypt_blocks as usize * 16;
-    let skip_bytes = skip_blocks as usize * 16;
-    if crypt_bytes == 0 {
-        return Ok(Vec::new());
-    }
-
-    let mut protected_ranges = Vec::new();
-    if subsamples.is_empty() {
-        protected_ranges.push((0usize, sample_data.len()));
-    } else {
-        let mut offset = 0usize;
-        for (clear, enc) in subsamples {
-            let clear_end = offset.checked_add(*clear).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "subsample clear range overflow")
-            })?;
-            if clear_end > sample_data.len() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "subsample clear range exceeds sample size",
-                ));
-            }
-            offset = clear_end;
-            let enc_end = offset.checked_add(*enc).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "subsample encrypted range overflow",
-                )
-            })?;
-            if enc_end > sample_data.len() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "subsample encrypted range exceeds sample size",
-                ));
-            }
-            if *enc > 0 {
-                protected_ranges.push((offset, *enc));
-            }
-            offset = enc_end;
-        }
-    }
-
-    let mut chunks = Vec::new();
-    for (range_start, range_len) in protected_ranges {
-        let mut offset = 0usize;
-        let mut ciphertext = Vec::new();
-        let mut windows = Vec::new();
-        while offset < range_len {
-            let remaining = range_len - offset;
-            let crypt_window = crypt_bytes.min(remaining);
-            let aligned = crypt_window & !0x0f;
-            if aligned > 0 {
-                let window_offset = range_start + offset;
-                ciphertext.extend_from_slice(&sample_data[window_offset..window_offset + aligned]);
-                windows.push(PatternWindow {
-                    offset: window_offset,
-                    len: aligned,
-                });
-            }
-            offset += crypt_window;
-            if offset >= range_len {
-                break;
-            }
-            if skip_bytes == 0 {
-                break;
-            }
-            offset += skip_bytes.min(range_len - offset);
-        }
-        if !windows.is_empty() {
-            chunks.push(PatternChunk {
-                ciphertext,
-                windows,
-            });
-        }
-    }
-    Ok(chunks)
+struct PendingWrapperSample {
+    data: Vec<u8>,
+    aligned: Vec<u8>,
+    tail: Vec<u8>,
+    subsamples: Vec<(usize, usize)>,
 }
 
 fn decrypt_track_wrapper(
@@ -1307,72 +1206,15 @@ fn decrypt_track_wrapper(
                 "wrapper-v2: missing skd uri",
             ))
         })?;
-        let mut ciphertexts = Vec::new();
-        for item in batch.iter() {
-            match item {
-                PendingWrapperSample::Simple { aligned, .. } => {
-                    ciphertexts.push(aligned.clone());
-                }
-                PendingWrapperSample::Pattern { chunks, .. } => {
-                    for chunk in chunks {
-                        ciphertexts.push(chunk.ciphertext.clone());
-                    }
-                }
-            }
-        }
+        let ciphertexts: Vec<Vec<u8>> = batch.iter().map(|item| item.aligned.clone()).collect();
         let plains = wrapper
             .decrypt_batch(adam, uri, &ciphertexts)
             .map_err(py_io_error)?;
-        let mut plains = plains.into_iter();
-        for item in batch.drain(..) {
-            let sample = match item {
-                PendingWrapperSample::Simple {
-                    data,
-                    tail,
-                    subsamples,
-                    ..
-                } => {
-                    let plain = plains.next().ok_or_else(|| {
-                        py_io_error(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            "wrapper-v2: missing plaintext sample",
-                        ))
-                    })?;
-                    reassemble_sample(&data, &plain, &tail, &subsamples).map_err(py_io_error)?
-                }
-                PendingWrapperSample::Pattern { data, chunks } => {
-                    let mut out = data;
-                    for chunk in chunks {
-                        let plain = plains.next().ok_or_else(|| {
-                            py_io_error(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "wrapper-v2: missing plaintext pattern chunk",
-                            ))
-                        })?;
-                        if plain.len() != chunk.ciphertext.len() {
-                            return Err(py_io_error(io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                "wrapper-v2: plaintext pattern chunk length mismatch",
-                            )));
-                        }
-                        let mut plain_offset = 0usize;
-                        for window in chunk.windows {
-                            out[window.offset..window.offset + window.len]
-                                .copy_from_slice(&plain[plain_offset..plain_offset + window.len]);
-                            plain_offset += window.len;
-                        }
-                    }
-                    out
-                }
-            };
+        for (item, plain) in batch.drain(..).zip(plains) {
+            let sample = reassemble_sample(&item.data, &plain, &item.tail, &item.subsamples)
+                .map_err(py_io_error)?;
             temp.write_all(&sample).map_err(py_io_error)?;
             *written += sample.len() as u64;
-        }
-        if plains.next().is_some() {
-            return Err(py_io_error(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "wrapper-v2: trailing plaintext samples",
-            )));
         }
         Ok(())
     };
@@ -1411,17 +1253,23 @@ fn decrypt_track_wrapper(
                 .map_err(py_io_error)?
         } else {
             if effective.crypt_byte_block > 0 && effective.skip_byte_block > 0 {
-                let chunks = cbcs_pattern_chunks_for_sample(
-                    &data,
-                    &sample.subsamples,
-                    effective.crypt_byte_block,
-                    effective.skip_byte_block,
-                )
-                .map_err(py_io_error)?;
-                if chunks.is_empty() {
-                    data
-                } else {
-                    batch.push(PendingWrapperSample::Pattern { data, chunks });
+                return Err(py_io_error(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "wrapper-v2 pattern CBCS decrypt is not supported by wrapper batch path",
+                )));
+            }
+            match cbcs_ciphertext_for_sample(&data, &sample.subsamples) {
+                None => data,
+                Some((aligned, tail)) if aligned.is_empty() => {
+                    reassemble_sample(&data, &[], &tail, &sample.subsamples).map_err(py_io_error)?
+                }
+                Some((aligned, tail)) => {
+                    batch.push(PendingWrapperSample {
+                        data,
+                        aligned,
+                        tail,
+                        subsamples: sample.subsamples.clone(),
+                    });
                     if batch.len() >= WRAPPER_DECRYPT_BATCH_SIZE {
                         flush(
                             &mut batch,
@@ -1439,48 +1287,8 @@ fn decrypt_track_wrapper(
                     }
                     continue;
                 }
-            } else {
-                match cbcs_ciphertext_for_sample(&data, &sample.subsamples) {
-                    None => data,
-                    Some((aligned, tail)) if aligned.is_empty() => {
-                        reassemble_sample(&data, &[], &tail, &sample.subsamples)
-                            .map_err(py_io_error)?
-                    }
-                    Some((aligned, tail)) => {
-                        batch.push(PendingWrapperSample::Simple {
-                            data,
-                            aligned,
-                            tail,
-                            subsamples: sample.subsamples.clone(),
-                        });
-                        if batch.len() >= WRAPPER_DECRYPT_BATCH_SIZE {
-                            flush(
-                                &mut batch,
-                                &mut wrapper,
-                                &mut temp,
-                                &mut written,
-                                &current_adam,
-                                &current_uri,
-                            )?;
-                        }
-                        if file_backed {
-                            sample.data.clear();
-                            sample.subsamples.clear();
-                            sample.iv.clear();
-                        }
-                        continue;
-                    }
-                }
             }
         };
-        flush(
-            &mut batch,
-            &mut wrapper,
-            &mut temp,
-            &mut written,
-            &current_adam,
-            &current_uri,
-        )?;
         temp.write_all(&decrypted).map_err(py_io_error)?;
         sample.size = decrypted.len();
         written += decrypted.len() as u64;
@@ -1880,49 +1688,6 @@ mod tests {
                  aabbcc"
             )
         );
-    }
-
-    #[test]
-    fn computes_cbcs_pattern_chunks_per_subsample_range() {
-        let data: Vec<u8> = (0..4 + 16 + 144 + 2 + 32 + 3)
-            .map(|value| value as u8)
-            .collect();
-        let chunks = cbcs_pattern_chunks_for_sample(&data, &[(4, 160), (2, 32)], 1, 9).unwrap();
-
-        assert_eq!(chunks.len(), 2);
-        assert_eq!(chunks[0].windows.len(), 1);
-        assert_eq!(chunks[0].windows[0].offset, 4);
-        assert_eq!(chunks[0].windows[0].len, 16);
-        assert_eq!(chunks[0].ciphertext, data[4..20]);
-        assert_eq!(chunks[1].windows.len(), 1);
-        assert_eq!(chunks[1].windows[0].offset, 166);
-        assert_eq!(chunks[1].windows[0].len, 16);
-        assert_eq!(chunks[1].ciphertext, data[166..182]);
-    }
-
-    #[test]
-    fn concatenates_pattern_windows_within_one_protected_range() {
-        let data: Vec<u8> = (0..208).map(|value| value as u8).collect();
-        let chunks = cbcs_pattern_chunks_for_sample(&data, &[], 1, 9).unwrap();
-
-        assert_eq!(chunks.len(), 1);
-        assert_eq!(chunks[0].windows.len(), 2);
-        assert_eq!(chunks[0].windows[0].offset, 0);
-        assert_eq!(chunks[0].windows[0].len, 16);
-        assert_eq!(chunks[0].windows[1].offset, 160);
-        assert_eq!(chunks[0].windows[1].len, 16);
-        assert_eq!(
-            chunks[0].ciphertext,
-            [data[0..16].to_vec(), data[160..176].to_vec()].concat()
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_cbcs_pattern_subsample_ranges() {
-        let err = cbcs_pattern_chunks_for_sample(&[0u8; 8], &[(4, 8)], 1, 9)
-            .expect_err("invalid subsample range should fail");
-
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     fn hex_bytes(value: &str) -> Vec<u8> {

@@ -9,5 +9,7 @@ __pycache__
 !README.md
 !src
 !src/**
+!tests
+!tests/**
 !uv.lock
 gamdl/*.so

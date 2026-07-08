@@ -1,6 +1,9 @@
 /*
 __pycache__
 !gamdl
+!gamdl/muxer
+!gamdl/muxer/**
+gamdl/muxer/target/
 !.gitignore
 !.python-version
 !Cargo.lock

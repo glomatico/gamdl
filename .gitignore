@@ -6,12 +6,8 @@ __pycache__
 gamdl/muxer/target/
 !.gitignore
 !.python-version
-!Cargo.lock
-!Cargo.toml
 !pyproject.toml
 !README.md
-!src
-!src/**
 !tests
 !tests/**
 tests/__pycache__/

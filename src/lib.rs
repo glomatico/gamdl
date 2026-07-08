@@ -87,7 +87,9 @@ fn reassemble_sample(
             .checked_add(*enc_b)
             .ok_or_else(|| value_error("subsample encrypted range overflow"))?;
         if dec_end > full_dec.len() {
-            return Err(value_error("subsample decrypt range exceeds plaintext size"));
+            return Err(value_error(
+                "subsample decrypt range exceeds plaintext size",
+            ));
         }
         if enc_end > data.len() {
             return Err(value_error("subsample encrypted range exceeds sample size"));
@@ -128,10 +130,18 @@ fn tcp_decrypt_reassemble(
         .map_err(|e| io_error(format!("wrapper-v2: TCP decrypt connect failed: {e}")))?;
     stream
         .set_read_timeout(Some(Duration::from_secs(600)))
-        .map_err(|e| io_error(format!("wrapper-v2: TCP decrypt read timeout setup failed: {e}")))?;
+        .map_err(|e| {
+            io_error(format!(
+                "wrapper-v2: TCP decrypt read timeout setup failed: {e}"
+            ))
+        })?;
     stream
         .set_write_timeout(Some(Duration::from_secs(600)))
-        .map_err(|e| io_error(format!("wrapper-v2: TCP decrypt write timeout setup failed: {e}")))?;
+        .map_err(|e| {
+            io_error(format!(
+                "wrapper-v2: TCP decrypt write timeout setup failed: {e}"
+            ))
+        })?;
 
     stream
         .write_all(&[adam_id.len() as u8])
@@ -165,9 +175,11 @@ fn tcp_decrypt_reassemble(
         out.push(reassemble_sample(&data, &plain, &tail, &subsamples)?);
     }
 
-    stream
-        .write_all(&0u32.to_ne_bytes())
-        .map_err(|e| io_error(format!("wrapper-v2: TCP decrypt terminator write failed: {e}")))?;
+    stream.write_all(&0u32.to_ne_bytes()).map_err(|e| {
+        io_error(format!(
+            "wrapper-v2: TCP decrypt terminator write failed: {e}"
+        ))
+    })?;
 
     Ok(out)
 }

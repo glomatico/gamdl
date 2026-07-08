@@ -11,11 +11,6 @@ const DECRYPT_KIND_OK: u16 = 2;
 const DECRYPT_KIND_ERROR: u16 = 3;
 const DECRYPT_KIND_CLOSE: u16 = 9;
 
-#[pyfunction]
-fn native_available() -> bool {
-    true
-}
-
 type BatchItem = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<(usize, usize)>);
 
 fn value_error(message: impl Into<String>) -> PyErr {
@@ -256,7 +251,7 @@ fn write_frame(stream: &mut TcpStream, kind: u16, request_id: u32, payload: &[u8
 }
 
 #[pyclass]
-struct WrapperDecryptSession {
+pub struct WrapperDecryptSession {
     stream: Option<TcpStream>,
     next_request_id: u32,
 }
@@ -349,11 +344,4 @@ impl Drop for WrapperDecryptSession {
     fn drop(&mut self) {
         let _ = self.close();
     }
-}
-
-#[pymodule]
-fn _amdecrypt(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(native_available, m)?)?;
-    m.add_class::<WrapperDecryptSession>()?;
-    Ok(())
 }

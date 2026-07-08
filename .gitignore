@@ -3,6 +3,11 @@ __pycache__
 !gamdl
 !.gitignore
 !.python-version
+!Cargo.lock
+!Cargo.toml
 !pyproject.toml
 !README.md
+!src
+!src/**
 !uv.lock
+gamdl/*.so

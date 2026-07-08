@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from .amdecrypt import decrypt_and_mux_hex
+from .amdecrypt import decrypt_and_mux_hex, decrypt_and_mux_wrapper
 from .base import AppleMusicBaseDownloader
 from .enums import RemuxFormatMusicVideo, RemuxMode
 from .types import DownloadItem
@@ -22,15 +22,38 @@ class AppleMusicMusicVideoDownloader:
         encrypted_path_video: str,
         encrypted_path_audio: str,
         staged_path: str,
-        decryption_key: DecryptionKeyAv,
+        media_id: str,
+        decryption_key: DecryptionKeyAv | None = None,
+        fairplay_key_video: str | None = None,
+        fairplay_key_audio: str | None = None,
         is_m4v: bool = False,
     ):
-        await decrypt_and_mux_hex(
-            decryption_key.audio_track.key,
+        if decryption_key:
+            await decrypt_and_mux_hex(
+                decryption_key.audio_track.key,
+                encrypted_path_audio,
+                staged_path,
+                decryption_key.video_track.key,
+                encrypted_path_video,
+                m4v_brand=is_m4v,
+            )
+            return
+
+        wrapper_api = self.base.interface.base.wrapper_api
+        if wrapper_api is None:
+            raise ValueError("wrapper_api is required for FairPlay decrypt")
+        if not fairplay_key_audio or not fairplay_key_video:
+            raise ValueError("music video FairPlay keys are required for wrapper decrypt")
+
+        await decrypt_and_mux_wrapper(
+            wrapper_api,
+            media_id,
             encrypted_path_audio,
             staged_path,
-            decryption_key.video_track.key,
-            encrypted_path_video,
+            fairplay_key_audio=fairplay_key_audio,
+            input_video_path=encrypted_path_video,
+            fairplay_key_video=fairplay_key_video,
+            use_single_content_key=True,
             m4v_brand=is_m4v,
         )
 
@@ -102,7 +125,10 @@ class AppleMusicMusicVideoDownloader:
             encrypted_path_video,
             encrypted_path_audio,
             download_item.staged_path,
+            download_item.media.media_id,
             download_item.media.decryption_key,
+            download_item.media.stream_info.video_track.fairplay_key,
+            download_item.media.stream_info.audio_track.fairplay_key,
             download_item.staged_path.endswith(".m4v"),
         )
 

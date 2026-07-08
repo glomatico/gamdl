@@ -214,6 +214,7 @@ class AppleMusicMusicVideoInterface:
             file_format = MediaFileFormat.M4V
 
         stream_info = StreamInfoAv(
+            media_id=media_id,
             video_track=stream_info_video,
             audio_track=stream_info_audio,
             file_format=file_format,
@@ -491,13 +492,20 @@ class AppleMusicMusicVideoInterface:
             m3u8_master_url,
         )
 
-        if (
+        if self.base.wrapper_api:
+            if (
+                not media.stream_info.video_track.fairplay_key
+                or not media.stream_info.audio_track.fairplay_key
+            ):
+                raise GamdlInterfaceDecryptionNotAvailableError(media.media_id)
+        elif (
             not media.stream_info.video_track.widevine_pssh
             or not media.stream_info.audio_track.widevine_pssh
         ):
             raise GamdlInterfaceDecryptionNotAvailableError(media.media_id)
 
-        media.decryption_key = await self.get_decryption_key(media.stream_info)
+        if not self.base.wrapper_api:
+            media.decryption_key = await self.get_decryption_key(media.stream_info)
 
         media.partial = False
 

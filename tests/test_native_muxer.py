@@ -1,14 +1,9 @@
 import struct
+from types import SimpleNamespace
 
 import pytest
 
-from gamdl.downloader.amdecrypt import (
-    SampleInfo,
-    SongInfo,
-    mux_decrypted_mp4_tracks,
-    write_decrypted_m4a,
-    write_decrypted_mp4_track,
-)
+from gamdl import _amdecrypt
 
 
 def _top_box(data: bytes, box_type: bytes) -> bytes:
@@ -32,15 +27,17 @@ def _mdat_payload(path) -> bytes:
 def test_native_m4a_writer_creates_flat_mp4(tmp_path):
     output = tmp_path / "song.m4a"
     payload = b"aaaabbbbcccc"
-    track = SongInfo(
+    track = SimpleNamespace(
         samples=[
-            SampleInfo(data=b"", duration=1024, desc_index=0, size=4),
-            SampleInfo(data=b"", duration=1024, desc_index=0, size=8),
+            SimpleNamespace(duration=1024, desc_index=0, size=4, composition_time_offset=0, is_sync=True),
+            SimpleNamespace(duration=1024, desc_index=0, size=8, composition_time_offset=0, is_sync=True),
         ],
+        moov_data=b"",
+        ftyp_data=b"",
         handler_type=b"soun",
     )
 
-    write_decrypted_m4a(str(output), track, payload)
+    _amdecrypt.write_decrypted_m4a_native(str(output), track, payload)
     data = output.read_bytes()
 
     assert _top_box(data, b"ftyp")[8:12] == b"M4A "
@@ -55,18 +52,26 @@ def test_native_mp4_track_mux_preserves_payload_order(tmp_path):
     video_payload = b"vvvvvvvv"
     audio_payload = b"aaaa"
 
-    video = SongInfo(
-        samples=[SampleInfo(data=b"", duration=3000, desc_index=0, size=8)],
+    video = SimpleNamespace(
+        samples=[
+            SimpleNamespace(duration=3000, desc_index=0, size=8, composition_time_offset=0, is_sync=True)
+        ],
+        moov_data=b"",
+        ftyp_data=b"",
         handler_type=b"vide",
     )
-    audio = SongInfo(
-        samples=[SampleInfo(data=b"", duration=1024, desc_index=0, size=4)],
+    audio = SimpleNamespace(
+        samples=[
+            SimpleNamespace(duration=1024, desc_index=0, size=4, composition_time_offset=0, is_sync=True)
+        ],
+        moov_data=b"",
+        ftyp_data=b"",
         handler_type=b"soun",
     )
 
-    write_decrypted_mp4_track(str(video_path), video, video_payload)
-    write_decrypted_mp4_track(str(audio_path), audio, audio_payload)
-    mux_decrypted_mp4_tracks(str(video_path), str(audio_path), str(output))
+    _amdecrypt.write_decrypted_mp4_track_native(str(video_path), video, video_payload)
+    _amdecrypt.write_decrypted_mp4_track_native(str(audio_path), audio, audio_payload)
+    _amdecrypt.mux_decrypted_mp4_tracks_native(str(video_path), str(audio_path), str(output))
 
     data = output.read_bytes()
     assert _top_box(data, b"ftyp")[8:12] == b"mp42"
@@ -82,4 +87,4 @@ def test_native_mp4_track_mux_rejects_missing_mdat(tmp_path):
     audio_path.write_bytes(struct.pack(">I4s", 8, b"moov"))
 
     with pytest.raises(OSError, match="missing mdat"):
-        mux_decrypted_mp4_tracks(str(video_path), str(audio_path), str(output))
+        _amdecrypt.mux_decrypted_mp4_tracks_native(str(video_path), str(audio_path), str(output))

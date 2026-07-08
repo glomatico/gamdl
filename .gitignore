@@ -11,5 +11,6 @@ __pycache__
 !src/**
 !tests
 !tests/**
+tests/__pycache__/
 !uv.lock
 gamdl/*.so

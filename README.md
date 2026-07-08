@@ -32,13 +32,14 @@ A command-line app for downloading Apple Music songs, music videos and post vide
 
 #### Wrapper
 
-Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`, and configure the base URL with `--wrapper-url` or `wrapper_url`.
+Run the [Wrapper v2](https://github.com/glomatico/wrapper-v2) server for wrapper-backed account, playback, and decryption requests. Enable it with `--use-wrapper` or `use_wrapper = true`. Configure wrapper HTTP account/playback calls with `--wrapper-url` or `wrapper_url`, and configure raw TCP decrypt with `--wrapper-decrypt-host` / `--wrapper-decrypt-port`.
 
 The wrapper is recommended when using the `alac` song codec. ALAC can be attempted without wrapper, but it probably won't work due to API limitations.
 
 **Note:**
 
 - When using the Wrapper, you'll be asked to insert your credentials to login if you haven't already.
+- Newer wrapper-v2 builds use HTTP JSON for account/playback and TCP port `10020` for decrypt.
 - Song codecs other than `alac` do not require the wrapper.
 - Cookies can be skipped when using the wrapper.
 
@@ -136,7 +137,9 @@ The file is created automatically on first run. Command-line arguments override 
 | `--no-config-file`, `-n`        | Don't use a config file                                           | `false`                       |
 | **Apple Music Options**         |                                                                   |                               |
 | `--cookies-path`, `-c`          | Cookies file path                                                 | `./cookies.txt`               |
-| `--wrapper-url`                 | Wrapper base URL                                                  | `http://127.0.0.1`            |
+| `--wrapper-url`                 | Wrapper HTTP control base URL                                     | `http://127.0.0.1`            |
+| `--wrapper-decrypt-host`        | Wrapper TCP decrypt host                                          | `127.0.0.1`                   |
+| `--wrapper-decrypt-port`        | Wrapper TCP decrypt port                                          | `10020`                       |
 | `--language`, `-l`              | Metadata language                                                 | `en-US`                       |
 | **Interface Options**           |                                                                   |                               |
 | `--cover-format`                | Cover format                                                      | `jpg`                         |

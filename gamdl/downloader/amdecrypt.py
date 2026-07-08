@@ -2,8 +2,8 @@
 This is a modified version of https://github.com/sn0wst0rm/st0rmMusicPlayer/blob/main/scripts/amdecrypt.py
 All the modifications made here were AI generated
 
-FairPlay sample decryption talks to wrapper-v2 over HTTP POST /decrypt
-(binary frame), not the legacy raw TCP port used by the original wrapper (e.g. 10020).
+FairPlay sample decryption talks to wrapper-v2 over the raw TCP decrypt port
+while HTTP remains reserved for account/playback control calls.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import structlog
 
 from Crypto.Cipher import AES
 
+from .. import _amdecrypt
 from ..api.wrapper import WrapperApi
 
 logger = structlog.get_logger(__name__)
@@ -32,8 +33,8 @@ DEFAULT_SONG_DECRYPTION_KEY = b"2\xb8\xad\xe1v\x9e&\xb1\xff\xb8\x98cRy?\xc6"
 # Pre-fetch key used for first sample description
 PREFETCH_KEY = "skd://itunes.apple.com/P000000000/s1/e1"
 
-# Max ciphertext blobs per POST /decrypt (same adam_id + uri). Increase for fewer
-# round-trips; set to 1 if a given wrapper build mis-handles CBC between chunks.
+# Max ciphertext blobs per TCP decrypt batch (same adam_id + uri). Increase for
+# fewer round-trips; set to 1 if a given wrapper build mis-handles CBC between chunks.
 WRAPPER_DECRYPT_BATCH_SIZE = 128
 
 # wrapper-v2: use one SKD segment per ``adam_id``+``uri`` (do not interleave prefetch
@@ -995,8 +996,8 @@ async def decrypt_samples(
     decrypted_data_path: Optional[str] = None,
 ) -> bytes:
     """
-    Send track-key samples to wrapper-v2 (HTTP POST /decrypt) for CBCS
-    decryption and decrypt default prefetch-key samples locally.
+    Send track-key samples to wrapper-v2 over raw TCP for CBCS decryption and
+    decrypt default prefetch-key samples locally.
 
     Ciphertext is sent in batches of up to :data:`WRAPPER_DECRYPT_BATCH_SIZE` MP4 samples
     per request (same ``adam_id`` and ``uri``). Literal or tail-only samples are applied
@@ -1042,14 +1043,22 @@ async def decrypt_samples(
             return
         if segment_adam is None or segment_uri is None:
             raise IOError("wrapper-v2: internal error (segment without adam/uri)")
-        chunks = [t[1] for t in crypto_batch]
-        tails = [t[2] for t in crypto_batch]
-        sources = [t[0] for t in crypto_batch]
-        plains = await wrapper_api.decrypt(segment_adam, segment_uri, chunks)
-        if len(plains) != len(chunks):
+        native_items = [
+            (sample.data, aligned, tail, sample.subsamples)
+            for sample, aligned, tail in crypto_batch
+        ]
+        reassembled = await asyncio.to_thread(
+            _amdecrypt.wrapper_decrypt_reassemble,
+            wrapper_api.decrypt_host,
+            wrapper_api.decrypt_port,
+            segment_adam,
+            segment_uri,
+            native_items,
+        )
+        if len(reassembled) != len(crypto_batch):
             raise IOError("wrapper-v2: plaintext batch count mismatch")
-        for s, plain, tail in zip(sources, plains, tails):
-            emit(_reassemble_cbcs_sample(s, plain, tail))
+        for sample_data in reassembled:
+            emit(sample_data)
         crypto_batch.clear()
 
     try:

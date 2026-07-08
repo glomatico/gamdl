@@ -154,6 +154,22 @@ class CliConfig:
             default=wrapper_api_create_sig.parameters["base_url"].default,
         ),
     ]
+    wrapper_decrypt_host: Annotated[
+        str,
+        option(
+            "--wrapper-decrypt-host",
+            help="Wrapper TCP decrypt host",
+            default=wrapper_api_create_sig.parameters["decrypt_host"].default,
+        ),
+    ]
+    wrapper_decrypt_port: Annotated[
+        int,
+        option(
+            "--wrapper-decrypt-port",
+            help="Wrapper TCP decrypt port",
+            default=wrapper_api_create_sig.parameters["decrypt_port"].default,
+        ),
+    ]
     # API specific options
     cookies_path: Annotated[
         str,

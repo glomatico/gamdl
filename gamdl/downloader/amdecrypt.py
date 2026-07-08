@@ -1172,87 +1172,13 @@ def write_decrypted_m4a(
     This matches the output format of Go's amdecrypt which is required
     for ALAC playback.
     """
-    # Extract original boxes for faithful reproduction
-    # Note: _extract_stsd_content automatically cleans encryption metadata
-    stsd_content = None
-    orig_mvhd = None
-    orig_tkhd = None
-    orig_mdhd = None
-    orig_smhd = None
-    orig_dinf = None
-    # We will use the actual audio sample rate from the stsd as our
-    # master timescale to ensure 100% duration consistency.
-    orig_hdlr = None
-    timescale = 44100  # Default fallback
-    preferred_desc_index = _preferred_sample_description_index(song_info.samples)
-
-    if song_info.moov_data:
-        orig_data = song_info.ftyp_data + song_info.moov_data
-    elif original_path:
-        with open(original_path, "rb") as f:
-            orig_data = f.read()
-    else:
-        orig_data = None
-
-    if orig_data:
-        stsd_content = _extract_stsd_content(orig_data, preferred_desc_index)
-        # Extract the REAL sample rate from the codec configuration
-        timescale = _extract_sample_rate_from_stsd(stsd_content) or _extract_timescale(
-            orig_data
-        )
-
-        # Find moov box and extract child boxes
-        moov_idx = orig_data.find(b"moov")
-        if moov_idx >= 4:
-            moov_size = struct.unpack(">I", orig_data[moov_idx - 4 : moov_idx])[0]
-            moov_data = orig_data[moov_idx - 4 : moov_idx - 4 + moov_size]
-
-            orig_mvhd = _find_child_box(moov_data, b"mvhd")
-
-            audio_trak = _find_audio_trak(moov_data)
-            if audio_trak:
-                orig_tkhd = _find_child_box(audio_trak, b"tkhd")
-                mdia = _find_child_box(audio_trak, b"mdia")
-                if mdia:
-                    orig_mdhd = _find_child_box(mdia, b"mdhd")
-                    orig_hdlr = _find_child_box(mdia, b"hdlr")
-                    minf = _find_child_box(mdia, b"minf")
-                    if minf:
-                        orig_smhd = _find_child_box(minf, b"smhd")
-                        orig_dinf = _find_child_box(minf, b"dinf")
-
-    with open(output_path, "wb") as f:
-        # Write ftyp
-        _write_ftyp(f)
-
-        # Calculate total duration
-        total_duration = sum(s.duration for s in song_info.samples)
-
-        # Write moov with sample tables
-        _write_moov(
-            f,
-            song_info.samples,
-            total_duration,
-            timescale,
-            stsd_content,
-            decrypted_data,
-            orig_mvhd=orig_mvhd,
-            orig_tkhd=orig_tkhd,
-            orig_mdhd=orig_mdhd,
-            orig_hdlr=orig_hdlr,
-            orig_smhd=orig_smhd,
-            orig_dinf=orig_dinf,
-        )
-
-        # Write mdat
-        if decrypted_data_path:
-            _write_mdat_from_sources(
-                f,
-                [(decrypted_data_path, 0, os.path.getsize(decrypted_data_path))],
-            )
-        else:
-            _write_mdat(f, decrypted_data)
-
+    _amdecrypt.write_decrypted_m4a_native(
+        output_path,
+        song_info,
+        decrypted_data,
+        original_path,
+        decrypted_data_path,
+    )
     logger.debug(f"Wrote decrypted file to {output_path}")
 
 
@@ -1264,93 +1190,13 @@ def write_decrypted_mp4_track(
     decrypted_data_path: str | None = None,
 ) -> None:
     """Write one decrypted audio or video track as a flat MP4 file."""
-    stsd_content = None
-    orig_mvhd = None
-    orig_tkhd = None
-    orig_mdhd = None
-    orig_hdlr = None
-    orig_smhd = None
-    orig_vmhd = None
-    orig_nmhd = None
-    orig_dinf = None
-    timescale = 44100 if track_info.handler_type == b"soun" else 90000
-    preferred_desc_index = _preferred_sample_description_index(track_info.samples)
-
-    if track_info.moov_data:
-        orig_data = track_info.ftyp_data + track_info.moov_data
-    elif original_path:
-        with open(original_path, "rb") as f:
-            orig_data = f.read()
-    else:
-        orig_data = None
-
-    if orig_data:
-        stsd_content = _extract_stsd_content(
-            orig_data,
-            preferred_desc_index,
-            track_info.handler_type,
-        )
-        if track_info.handler_type == b"soun":
-            timescale = _extract_sample_rate_from_stsd(
-                stsd_content
-            ) or _extract_track_timescale(orig_data, track_info.handler_type, timescale)
-        else:
-            timescale = _extract_track_timescale(
-                orig_data, track_info.handler_type, timescale
-            )
-
-        moov_idx = orig_data.find(b"moov")
-        if moov_idx >= 4:
-            moov_size = struct.unpack(">I", orig_data[moov_idx - 4 : moov_idx])[0]
-            moov_data = orig_data[moov_idx - 4 : moov_idx - 4 + moov_size]
-
-            orig_mvhd = _find_child_box(moov_data, b"mvhd")
-            trak = _find_track_by_handler(moov_data, track_info.handler_type)
-            if trak:
-                orig_tkhd = _find_child_box(trak, b"tkhd")
-                mdia = _find_child_box(trak, b"mdia")
-                if mdia:
-                    orig_mdhd = _find_child_box(mdia, b"mdhd")
-                    orig_hdlr = _find_child_box(mdia, b"hdlr")
-                    minf = _find_child_box(mdia, b"minf")
-                    if minf:
-                        orig_smhd = _find_child_box(minf, b"smhd")
-                        orig_vmhd = _find_child_box(minf, b"vmhd")
-                        orig_nmhd = _find_child_box(minf, b"nmhd")
-                        orig_dinf = _find_child_box(minf, b"dinf")
-
-    with open(output_path, "wb") as f:
-        if track_info.handler_type == b"soun":
-            _write_ftyp(f)
-        else:
-            _write_ftyp_mp4(f)
-
-        total_duration = sum(s.duration for s in track_info.samples)
-        _write_moov(
-            f,
-            track_info.samples,
-            total_duration,
-            timescale,
-            stsd_content,
-            decrypted_data,
-            orig_mvhd=orig_mvhd,
-            orig_tkhd=orig_tkhd,
-            orig_mdhd=orig_mdhd,
-            orig_hdlr=orig_hdlr,
-            orig_smhd=orig_smhd,
-            orig_vmhd=orig_vmhd,
-            orig_nmhd=orig_nmhd,
-            orig_dinf=orig_dinf,
-            handler_type=track_info.handler_type,
-        )
-        if decrypted_data_path:
-            _write_mdat_from_sources(
-                f,
-                [(decrypted_data_path, 0, os.path.getsize(decrypted_data_path))],
-            )
-        else:
-            _write_mdat(f, decrypted_data)
-
+    _amdecrypt.write_decrypted_mp4_track_native(
+        output_path,
+        track_info,
+        decrypted_data,
+        original_path,
+        decrypted_data_path,
+    )
     logger.debug(f"Wrote decrypted track file to {output_path}")
 
 
@@ -1455,67 +1301,11 @@ def mux_decrypted_media_direct(
     m4v_brand: bool = False,
 ) -> None:
     """Mux decrypted media directly to the final file without temp MP4 tracks."""
-    if decrypted_media.video is None:
-        raise ValueError("direct AV mux requires a video track")
-
-    video_moov = _build_decrypted_track_moov(decrypted_media.video.track_info)
-    audio_moov = _build_decrypted_track_moov(decrypted_media.audio.track_info)
-    extra_track_files = [
-        (
-            _build_decrypted_track_moov(caption.track_info),
-            _decrypted_track_payload_source(caption),
-        )
-        for caption in decrypted_media.captions
-    ]
-
-    mvhd = _find_child_box(video_moov, b"mvhd")
-    video_trak = _find_track_by_handler(video_moov, b"vide")
-    audio_trak = _find_track_by_handler(audio_moov, b"soun")
-    if not mvhd or not video_trak or not audio_trak:
-        raise IOError("mux: missing required audio/video track metadata")
-
-    movie_timescale = _extract_mvhd_timescale(mvhd)
-    audio_trak = _patch_trak_track_id(audio_trak, 2)
-    audio_trak = _patch_trak_duration_to_movie_timescale(audio_trak, movie_timescale)
-    extra_traks = []
-    for index, (extra_moov, extra_source) in enumerate(extra_track_files, start=3):
-        extra_trak = _find_first_trak(extra_moov)
-        if extra_trak:
-            extra_trak = _patch_trak_track_id(extra_trak, index)
-            extra_trak = _patch_trak_duration_to_movie_timescale(
-                extra_trak, movie_timescale
-            )
-            extra_traks.append((extra_trak, extra_source))
-
-    ftyp = _build_ftyp_m4v_bytes() if m4v_brand else _build_ftyp_mp4_bytes()
-    moov = _build_muxed_moov(
-        mvhd, [video_trak, audio_trak] + [t for t, _ in extra_traks]
+    _amdecrypt.mux_decrypted_media_direct_native(
+        decrypted_media,
+        output_path,
+        m4v_brand,
     )
-    mdat_data_offset = len(ftyp) + len(moov) + 8
-
-    video_source = _decrypted_track_payload_source(decrypted_media.video)
-    audio_source = _decrypted_track_payload_source(decrypted_media.audio)
-    video_trak = _patch_first_chunk_offset(video_trak, mdat_data_offset)
-    next_mdat_offset = mdat_data_offset + video_source[2]
-    audio_trak = _patch_first_chunk_offset(audio_trak, next_mdat_offset)
-    next_mdat_offset += audio_source[2]
-    patched_extra_traks = []
-    for extra_trak, extra_source in extra_traks:
-        patched_extra_traks.append(
-            _patch_first_chunk_offset(extra_trak, next_mdat_offset)
-        )
-        next_mdat_offset += extra_source[2]
-
-    moov = _build_muxed_moov(mvhd, [video_trak, audio_trak] + patched_extra_traks)
-
-    with open(output_path, "wb") as f:
-        f.write(ftyp)
-        f.write(moov)
-        _write_mdat_from_sources(
-            f,
-            [video_source, audio_source] + [source for _, source in extra_traks],
-        )
-
     logger.debug(f"Muxed decrypted AV file to {output_path}")
 
 
@@ -1527,79 +1317,13 @@ def mux_decrypted_mp4_tracks(
     m4v_brand: bool = False,
 ) -> None:
     """Mux one flat video MP4 and one flat audio MP4 into a single MP4/M4V."""
-    with open(input_path_video, "rb") as f:
-        video_data = f.read()
-    with open(input_path_audio, "rb") as f:
-        audio_data = f.read()
-    input_path_extra_tracks = input_path_extra_tracks or []
-    extra_track_files = []
-    for input_path_extra_track in input_path_extra_tracks:
-        with open(input_path_extra_track, "rb") as f:
-            extra_track_data = f.read()
-        extra_track_files.append(
-            (
-                _extract_top_level_box(extra_track_data, b"moov"),
-                _extract_mdat_payload(extra_track_data),
-            )
-        )
-
-    video_moov = _extract_top_level_box(video_data, b"moov")
-    audio_moov = _extract_top_level_box(audio_data, b"moov")
-    video_mdat_payload = _extract_mdat_payload(video_data)
-    audio_mdat_payload = _extract_mdat_payload(audio_data)
-    if not video_moov or not audio_moov:
-        raise IOError("mux: missing moov box in decrypted track file")
-
-    mvhd = _find_child_box(video_moov, b"mvhd")
-    video_trak = _find_track_by_handler(video_moov, b"vide")
-    audio_trak = _find_track_by_handler(audio_moov, b"soun")
-    if not mvhd or not video_trak or not audio_trak:
-        raise IOError("mux: missing required audio/video track metadata")
-
-    movie_timescale = _extract_mvhd_timescale(mvhd)
-    audio_trak = _patch_trak_track_id(audio_trak, 2)
-    audio_trak = _patch_trak_duration_to_movie_timescale(audio_trak, movie_timescale)
-    extra_traks = []
-    for index, (extra_moov, extra_mdat_payload) in enumerate(
-        extra_track_files, start=3
-    ):
-        if not extra_moov:
-            continue
-        extra_trak = _find_first_trak(extra_moov)
-        if extra_trak:
-            extra_trak = _patch_trak_track_id(extra_trak, index)
-            extra_trak = _patch_trak_duration_to_movie_timescale(
-                extra_trak, movie_timescale
-            )
-            extra_traks.append((extra_trak, extra_mdat_payload))
-    ftyp = _build_ftyp_m4v_bytes() if m4v_brand else _build_ftyp_mp4_bytes()
-
-    moov = _build_muxed_moov(
-        mvhd, [video_trak, audio_trak] + [t for t, _ in extra_traks]
+    _amdecrypt.mux_decrypted_mp4_tracks_native(
+        input_path_video,
+        input_path_audio,
+        output_path,
+        input_path_extra_tracks,
+        m4v_brand,
     )
-    mdat_data_offset = len(ftyp) + len(moov) + 8
-    video_trak = _patch_first_chunk_offset(video_trak, mdat_data_offset)
-    next_mdat_offset = mdat_data_offset + len(video_mdat_payload)
-    audio_trak = _patch_first_chunk_offset(audio_trak, next_mdat_offset)
-    next_mdat_offset += len(audio_mdat_payload)
-    patched_extra_traks = []
-    for extra_trak, extra_mdat_payload in extra_traks:
-        patched_extra_traks.append(
-            _patch_first_chunk_offset(extra_trak, next_mdat_offset)
-        )
-        next_mdat_offset += len(extra_mdat_payload)
-    moov = _build_muxed_moov(mvhd, [video_trak, audio_trak] + patched_extra_traks)
-
-    with open(output_path, "wb") as f:
-        f.write(ftyp)
-        f.write(moov)
-        _write_mdat(
-            f,
-            video_mdat_payload
-            + audio_mdat_payload
-            + b"".join(payload for _, payload in extra_traks),
-        )
-
     logger.debug(f"Muxed decrypted AV file to {output_path}")
 
 

@@ -1540,3 +1540,67 @@ pub fn decrypt_and_mux_wrapper_native(
         .map_err(py_io_error)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decrypts_cenc_sample() {
+        let key = [
+            0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
+            0x4f, 0x3c,
+        ];
+        let sample = Sample {
+            data: hex_bytes("874d6191b620e3261bef6864990db6ce"),
+            duration: 1,
+            desc_index: 0,
+            iv: hex_bytes("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"),
+            subsamples: Vec::new(),
+            composition_time_offset: 0,
+            is_sync: true,
+            size: 16,
+            data_path: None,
+            data_offset: 0,
+        };
+        let enc = EncryptionInfo {
+            scheme_type: "cenc".to_string(),
+            ..Default::default()
+        };
+        let plain = decrypt_sample_hex(&sample, Some(&key), &enc).unwrap();
+        assert_eq!(plain, hex_bytes("6bc1bee22e409f96e93d7e117393172a"));
+    }
+
+    #[test]
+    fn decrypts_cbcs_sample() {
+        let key = [
+            0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
+            0x4f, 0x3c,
+        ];
+        let sample = Sample {
+            data: hex_bytes("7649abac8119b246cee98e9b12e9197d"),
+            duration: 1,
+            desc_index: 0,
+            iv: hex_bytes("000102030405060708090a0b0c0d0e0f"),
+            subsamples: Vec::new(),
+            composition_time_offset: 0,
+            is_sync: true,
+            size: 16,
+            data_path: None,
+            data_offset: 0,
+        };
+        let enc = EncryptionInfo {
+            scheme_type: "cbcs".to_string(),
+            ..Default::default()
+        };
+        let plain = decrypt_sample_hex(&sample, Some(&key), &enc).unwrap();
+        assert_eq!(plain, hex_bytes("6bc1bee22e409f96e93d7e117393172a"));
+    }
+
+    fn hex_bytes(value: &str) -> Vec<u8> {
+        (0..value.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+            .collect()
+    }
+}

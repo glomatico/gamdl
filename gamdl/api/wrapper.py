@@ -11,6 +11,8 @@ from .exceptions import GamdlApiResponseError
 
 logger = structlog.get_logger(__name__)
 
+TARGET_WRAPPER_API_VERSION = "0.0.2"
+
 T = TypeVar("T")
 
 CredentialsFunc = (
@@ -57,6 +59,7 @@ class WrapperApi:
         base_url = base_url.rstrip("/")
 
         me = await cls.get_me(client, base_url)
+        cls.validate_api_version(me)
         if get_credentials_func is not None and me["auth"]["state"] == "logged_out":
             username, password = await _invoke(get_credentials_func)
             await cls.login(
@@ -67,6 +70,7 @@ class WrapperApi:
                 get_2fa_code,
             )
             me = await cls.get_me(client, base_url)
+            cls.validate_api_version(me)
 
         if me.get("auth", {}).get("state") == "logged_out":
             raise GamdlApiResponseError(
@@ -75,6 +79,18 @@ class WrapperApi:
             )
 
         return cls(base_url, decrypt_host, decrypt_port, client, me)
+
+    @staticmethod
+    def validate_api_version(me: dict) -> None:
+        version = me.get("version")
+        if version == TARGET_WRAPPER_API_VERSION:
+            return
+
+        raise GamdlApiResponseError(
+            f"Unsupported wrapper-v2 API version. "
+            f"gamdl requires wrapper-v2 {TARGET_WRAPPER_API_VERSION}",
+            content={"detected_version": version},
+        )
 
     @staticmethod
     async def login(

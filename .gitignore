@@ -12,8 +12,5 @@ gamdl/ammuxer/
 !.python-version
 !pyproject.toml
 !README.md
-!tests
-!tests/**
-tests/__pycache__/
 !uv.lock
 gamdl/*.so

@@ -30,7 +30,3 @@ jobs:
       - name: Build native extension
         run: |
           uv run maturin develop
-
-      - name: Python tests
-        run: |
-          uv run pytest

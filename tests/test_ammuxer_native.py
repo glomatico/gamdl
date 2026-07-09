@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from gamdl import _amdecrypt
+from gamdl import _ammuxer
 
 MAGIC = b"WV2D"
 VERSION = 1
@@ -120,7 +120,7 @@ def test_wrapper_decrypt_session_wire_reassemble_and_persist():
         [[b"AAAA", b"BBBBCCCC"], [b"ZZZZ"]]
     )
 
-    session = _amdecrypt.WrapperDecryptSession("127.0.0.1", port)
+    session = _ammuxer.WrapperDecryptSession("127.0.0.1", port)
     out1 = session.decrypt_reassemble(
         "12345",
         "skd://example",
@@ -158,7 +158,7 @@ def test_wrapper_decrypt_session_wire_reassemble_and_persist():
 )
 def test_wrapper_decrypt_session_rejects_bad_inputs(adam, uri, items):
     port, _, _, _, thread = _start_fake_wrapper([])
-    session = _amdecrypt.WrapperDecryptSession("127.0.0.1", port)
+    session = _ammuxer.WrapperDecryptSession("127.0.0.1", port)
     with pytest.raises((OSError, ValueError)):
         session.decrypt_reassemble(adam, uri, items)
     session.close()
@@ -187,7 +187,7 @@ def test_wrapper_decrypt_session_rejects_error_frame():
     thread.start()
     assert ready.wait(5)
 
-    session = _amdecrypt.WrapperDecryptSession("127.0.0.1", port)
+    session = _ammuxer.WrapperDecryptSession("127.0.0.1", port)
     with pytest.raises(OSError, match="nope"):
         session.decrypt_reassemble("1", "skd://x", [(b"x" * 16, b"x" * 16, b"", [])])
     session.close()

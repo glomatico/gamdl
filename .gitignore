@@ -3,9 +3,9 @@ __pycache__
 !gamdl
 !gamdl/downloader
 !gamdl/downloader/**
-gamdl/downloader/muxer/target/
+gamdl/downloader/ammuxer/target/
 gamdl/downloader/**/__pycache__/
-gamdl/muxer/
+gamdl/ammuxer/
 !.gitignore
 !.github
 !.github/**

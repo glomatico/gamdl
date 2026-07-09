@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from .amdecrypt import decrypt_and_mux_hex
+from .ammuxer import decrypt_and_mux_hex
 from .base import AppleMusicBaseDownloader
 from .enums import RemuxFormatMusicVideo, RemuxMode
 from .types import DownloadItem

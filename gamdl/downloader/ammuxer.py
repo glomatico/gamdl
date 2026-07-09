@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from .. import _amdecrypt
+from .. import _ammuxer
 from ..api.wrapper import WrapperApi
 
 
@@ -21,7 +21,7 @@ async def decrypt_and_mux_hex(
 ) -> None:
     """Decrypt local-key media and mux the final file in one Rust call."""
     await asyncio.to_thread(
-        _amdecrypt.decrypt_and_mux_hex_native,
+        _ammuxer.decrypt_and_mux_hex_native,
         decryption_key_audio,
         input_audio_path,
         output_path,
@@ -47,7 +47,7 @@ async def decrypt_and_mux_wrapper(
 ) -> None:
     """Decrypt wrapper-v2 FairPlay media and mux the final file in one Rust call."""
     await asyncio.to_thread(
-        _amdecrypt.decrypt_and_mux_wrapper_native,
+        _ammuxer.decrypt_and_mux_wrapper_native,
         wrapper_api.decrypt_host,
         wrapper_api.decrypt_port,
         track_id,
@@ -59,4 +59,3 @@ async def decrypt_and_mux_wrapper(
         use_single_content_key,
         m4v_brand,
     )
-

@@ -25,7 +25,7 @@ jobs:
 
       - name: Rust tests
         run: |
-          PYO3_PYTHON=python cargo test --manifest-path gamdl/downloader/muxer/Cargo.toml
+          PYO3_PYTHON=python cargo test --manifest-path gamdl/downloader/ammuxer/Cargo.toml
 
       - name: Build native extension
         run: |

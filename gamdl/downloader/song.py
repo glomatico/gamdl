@@ -4,7 +4,7 @@ import structlog
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from .amdecrypt import decrypt_and_mux_hex, decrypt_and_mux_wrapper
+from .ammuxer import decrypt_and_mux_hex, decrypt_and_mux_wrapper
 from .base import AppleMusicBaseDownloader
 from .types import DownloadItem
 
@@ -51,7 +51,7 @@ class AppleMusicSongDownloader:
 
         return download_item
 
-    async def _decrypt_amdecrypt(
+    async def _decrypt_ammuxer(
         self,
         input_path: str,
         output_path: str,
@@ -72,7 +72,7 @@ class AppleMusicSongDownloader:
             use_single_content_key=use_single_content_key,
         )
 
-    async def _decrypt_amdecrypt_hex(
+    async def _decrypt_ammuxer_hex(
         self,
         input_path: str,
         output_path: str,
@@ -107,7 +107,7 @@ class AppleMusicSongDownloader:
         )
 
         if decryption_key:
-            await self._decrypt_amdecrypt_hex(
+            await self._decrypt_ammuxer_hex(
                 encrypted_path,
                 staged_path,
                 decryption_key.audio_track.key,
@@ -115,7 +115,7 @@ class AppleMusicSongDownloader:
                 use_single_content_key=use_single_content_key,
             )
         else:
-            await self._decrypt_amdecrypt(
+            await self._decrypt_ammuxer(
                 encrypted_path,
                 staged_path,
                 media_id,

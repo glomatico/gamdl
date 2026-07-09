@@ -1,5 +1,5 @@
 [package]
-name = "gamdl-amdecrypt"
+name = "gamdl-ammuxer"
 version = "0.1.0"
 edition = "2021"
 description = "Native media decrypt and mux engine for gamdl"
@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/glomatico/gamdl"
 
 [lib]
-name = "_amdecrypt"
+name = "_ammuxer"
 crate-type = ["cdylib"]
 
 [dependencies]

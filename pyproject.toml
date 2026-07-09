@@ -39,7 +39,7 @@ dev = [
 ]
 
 [tool.maturin]
-manifest-path = "gamdl/downloader/muxer/Cargo.toml"
-module-name = "gamdl._amdecrypt"
+manifest-path = "gamdl/downloader/ammuxer/Cargo.toml"
+module-name = "gamdl._ammuxer"
 python-source = "."
 features = ["pyo3/extension-module"]

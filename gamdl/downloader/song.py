@@ -4,7 +4,7 @@ import structlog
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from .amdecrypt import decrypt_file_hex, decrypt_wrapper, write_decrypted_media
+from .ammuxer import decrypt_and_mux_hex, decrypt_and_mux_wrapper
 from .base import AppleMusicBaseDownloader
 from .types import DownloadItem
 
@@ -51,7 +51,7 @@ class AppleMusicSongDownloader:
 
         return download_item
 
-    async def _decrypt_amdecrypt(
+    async def _decrypt_ammuxer(
         self,
         input_path: str,
         output_path: str,
@@ -63,16 +63,16 @@ class AppleMusicSongDownloader:
         if wrapper_api is None:
             raise ValueError("wrapper_api is required for FairPlay decrypt")
 
-        decrypted_media = await decrypt_wrapper(
+        await decrypt_and_mux_wrapper(
             wrapper_api,
             media_id,
             input_path,
+            output_path,
             fairplay_key_audio=fairplay_key,
             use_single_content_key=use_single_content_key,
         )
-        await write_decrypted_media(decrypted_media, output_path)
 
-    async def _decrypt_amdecrypt_hex(
+    async def _decrypt_ammuxer_hex(
         self,
         input_path: str,
         output_path: str,
@@ -81,13 +81,13 @@ class AppleMusicSongDownloader:
         use_cenc: bool = False,
         use_single_content_key: bool = False,
     ) -> None:
-        decrypted_media = await decrypt_file_hex(
+        await decrypt_and_mux_hex(
             decryption_key,
             input_path,
+            output_path,
             use_cenc=use_cenc,
             use_single_content_key=use_single_content_key,
         )
-        await write_decrypted_media(decrypted_media, output_path)
 
     async def stage(
         self,
@@ -107,7 +107,7 @@ class AppleMusicSongDownloader:
         )
 
         if decryption_key:
-            await self._decrypt_amdecrypt_hex(
+            await self._decrypt_ammuxer_hex(
                 encrypted_path,
                 staged_path,
                 decryption_key.audio_track.key,
@@ -115,7 +115,7 @@ class AppleMusicSongDownloader:
                 use_single_content_key=use_single_content_key,
             )
         else:
-            await self._decrypt_amdecrypt(
+            await self._decrypt_ammuxer(
                 encrypted_path,
                 staged_path,
                 media_id,

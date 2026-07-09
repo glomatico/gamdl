@@ -87,6 +87,8 @@ async def main(config: CliConfig):
         try:
             wrapper_api = await WrapperApi.create(
                 base_url=config.wrapper_url,
+                decrypt_host=config.wrapper_decrypt_host,
+                decrypt_port=config.wrapper_decrypt_port,
                 get_credentials_func=InteractivePrompts.get_wrapper_credentials,
                 get_2fa_code=InteractivePrompts.get_wrapper_2fa_code,
             )

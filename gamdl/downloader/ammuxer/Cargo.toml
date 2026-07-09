@@ -1,0 +1,19 @@
+[package]
+name = "gamdl-ammuxer"
+version = "0.1.0"
+edition = "2021"
+description = "Native media decrypt and mux engine for gamdl"
+license = "MIT"
+repository = "https://github.com/glomatico/gamdl"
+
+[lib]
+name = "_ammuxer"
+crate-type = ["cdylib"]
+
+[dependencies]
+aes = "0.8"
+cbc = { version = "0.1", features = ["block-padding"] }
+ctr = "0.9"
+cipher = "0.4"
+pyo3 = { version = "0.23.5", features = ["extension-module"] }
+tempfile = "3"

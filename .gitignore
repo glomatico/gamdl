@@ -1,8 +1,16 @@
 /*
 __pycache__
 !gamdl
+!gamdl/downloader
+!gamdl/downloader/**
+gamdl/downloader/ammuxer/target/
+gamdl/downloader/**/__pycache__/
+gamdl/ammuxer/
 !.gitignore
+!.github
+!.github/**
 !.python-version
 !pyproject.toml
 !README.md
 !uv.lock
+gamdl/*.so

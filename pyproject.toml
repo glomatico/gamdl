@@ -1,3 +1,7 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
 [project]
 name = "gamdl"
 version = "3.8.1"
@@ -29,6 +33,13 @@ gamdl = "gamdl.cli.cli:main"
 
 [dependency-groups]
 dev = [
+    "maturin>=1.8",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
 ]
+
+[tool.maturin]
+manifest-path = "gamdl/downloader/ammuxer/Cargo.toml"
+module-name = "gamdl._ammuxer"
+python-source = "."
+features = ["pyo3/extension-module"]

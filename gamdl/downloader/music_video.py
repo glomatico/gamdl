@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
-from .amdecrypt import decrypt_file_hex, write_decrypted_media
+from .ammuxer import decrypt_and_mux_hex
 from .base import AppleMusicBaseDownloader
 from .enums import RemuxFormatMusicVideo, RemuxMode
 from .types import DownloadItem
@@ -25,15 +25,12 @@ class AppleMusicMusicVideoDownloader:
         decryption_key: DecryptionKeyAv,
         is_m4v: bool = False,
     ):
-        decrypted_media = await decrypt_file_hex(
+        await decrypt_and_mux_hex(
             decryption_key.audio_track.key,
             encrypted_path_audio,
+            staged_path,
             decryption_key.video_track.key,
             encrypted_path_video,
-        )
-        await write_decrypted_media(
-            decrypted_media,
-            staged_path,
             m4v_brand=is_m4v,
         )
 

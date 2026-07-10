@@ -51,8 +51,14 @@ jobs:
           - name: linux-x86_64
             os: ubuntu-latest
             args: ""
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            args: ""
           - name: windows-x86_64
             os: windows-latest
+            args: ""
+          - name: windows-arm64
+            os: windows-11-arm
             args: ""
           - name: macos-universal2
             os: macos-latest

@@ -15,5 +15,5 @@ aes = "0.8"
 cbc = { version = "0.1", features = ["block-padding"] }
 ctr = "0.9"
 cipher = "0.4"
-pyo3 = { version = "0.23.5", features = ["extension-module"] }
+pyo3 = { version = "0.23.5", features = ["extension-module", "abi3-py310"] }
 tempfile = "3"

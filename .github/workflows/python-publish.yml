@@ -50,12 +50,13 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-latest
+            args: ""
           - name: windows-x86_64
             os: windows-latest
-          - name: macos-x86_64
-            os: macos-13
-          - name: macos-arm64
-            os: macos-14
+            args: ""
+          - name: macos-universal2
+            os: macos-latest
+            args: "--universal2"
 
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +70,7 @@ jobs:
       - name: Build wheel
         run: |
           python -m pip install maturin
-          maturin build --release --out dist
+          maturin build --release --out dist ${{ matrix.args }}
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4

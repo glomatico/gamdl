@@ -67,6 +67,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Install macOS universal2 Rust target
+        if: matrix.name == 'macos-universal2'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Build wheel
         run: |
           python -m pip install maturin

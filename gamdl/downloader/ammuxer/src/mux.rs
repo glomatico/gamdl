@@ -47,7 +47,7 @@ fn handler_attr(obj: &Bound<'_, PyAny>) -> PyResult<[u8; 4]> {
 
 fn extract_samples(track_info: &Bound<'_, PyAny>) -> PyResult<Vec<SampleInfo>> {
     let samples = track_info.getattr("samples")?;
-    let list = samples.downcast::<PyList>()?;
+    let list = samples.cast::<PyList>()?;
     let mut out = Vec::with_capacity(list.len());
     for item in list.iter() {
         let size = item.getattr("size")?.extract::<u64>().or_else(|_| {
@@ -121,7 +121,7 @@ pub fn write_decrypted_m4a_native(
     let track = extract_track_info(&song_info)?;
     let payload =
         payload_source_from_parts(decrypted_data.as_bytes().to_vec(), decrypted_data_path, 0)?;
-    py.allow_threads(move || {
+    py.detach(move || {
         write_m4a_file(&output_path, &track, original_path.as_deref(), &payload)
             .map_err(py_io_error)
     })
@@ -140,7 +140,7 @@ pub fn write_decrypted_mp4_track_native(
     let track = extract_track_info(&track_info)?;
     let payload =
         payload_source_from_parts(decrypted_data.as_bytes().to_vec(), decrypted_data_path, 0)?;
-    py.allow_threads(move || {
+    py.detach(move || {
         write_track_file(&output_path, &track, original_path.as_deref(), &payload)
             .map_err(py_io_error)
     })
@@ -171,14 +171,14 @@ pub fn mux_decrypted_media_direct_native(
     let (video_moov, video_source) = build_track_moov_for_decrypted_track(&video_obj)?;
     let (audio_moov, audio_source) = build_track_moov_for_decrypted_track(&audio_obj)?;
 
-    let captions = captions_obj.downcast::<PyList>()?;
+    let captions = captions_obj.cast::<PyList>()?;
     let mut extra_tracks = Vec::new();
     for caption in captions.iter() {
         let (moov, source) = build_track_moov_for_decrypted_track(&caption)?;
         extra_tracks.push((moov, source));
     }
 
-    py.allow_threads(move || {
+    py.detach(move || {
         let mvhd = find_child_box(&video_moov, b"mvhd", 8).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -250,7 +250,7 @@ pub fn mux_decrypted_mp4_tracks_native(
     input_path_extra_tracks: Option<Vec<String>>,
     m4v_brand: bool,
 ) -> PyResult<()> {
-    py.allow_threads(move || {
+    py.detach(move || {
         let video_data = std::fs::read(&input_path_video)?;
         let audio_data = std::fs::read(&input_path_audio)?;
         let video_moov = extract_top_level_box(&video_data, b"moov").ok_or_else(|| {

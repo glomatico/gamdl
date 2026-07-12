@@ -1446,7 +1446,7 @@ pub fn decrypt_and_mux_hex_native(
     use_single_content_key: bool,
     m4v_brand: bool,
 ) -> PyResult<()> {
-    py.allow_threads(move || {
+    py.detach(move || {
         let audio = decrypt_track_hex(
             &input_audio_path,
             &decryption_key_audio,
@@ -1522,7 +1522,7 @@ pub fn decrypt_and_mux_wrapper_native(
     use_single_content_key: bool,
     m4v_brand: bool,
 ) -> PyResult<()> {
-    py.allow_threads(move || {
+    py.detach(move || {
         let audio = decrypt_track_wrapper(
             &wrapper_decrypt_host,
             wrapper_decrypt_port,

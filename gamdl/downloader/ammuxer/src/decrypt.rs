@@ -300,7 +300,7 @@ impl WrapperDecryptSession {
             .stream
             .as_mut()
             .ok_or_else(|| PyRuntimeError::new_err("wrapper-v2: decrypt session is closed"))?;
-        py.allow_threads(move || {
+        py.detach(move || {
             let payload = build_decrypt_batch_payload(&adam_id, &skd_uri, &items)?;
             write_frame(stream, DECRYPT_KIND_BATCH, request_id, &payload)?;
             let (kind, response_id, response_payload) = read_frame(stream)?;

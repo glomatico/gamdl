@@ -44,3 +44,4 @@ module-name = "gamdl._ammuxer"
 python-source = "."
 features = ["pyo3/extension-module"]
 include = ["LICENSE"]
+exclude = ["**/target/**"]

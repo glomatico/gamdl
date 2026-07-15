@@ -21,6 +21,8 @@ from .enums import DownloadMode
 
 logger = structlog.get_logger(__name__)
 
+MAX_FILENAME_BYTES = 255
+
 
 def _download_ytdlp_process(
     stream_url: str,
@@ -154,14 +156,29 @@ class AppleMusicBaseDownloader:
 
         if file_ext is None:
             sanitized_string = sanitized_string[: self.truncate]
+            sanitized_string = self._truncate_to_bytes(sanitized_string, MAX_FILENAME_BYTES)
             if sanitized_string.endswith("."):
                 sanitized_string = sanitized_string[:-1] + ILLEGAL_CHAR_REPLACEMENT
         else:
             if self.truncate is not None:
-                sanitized_string = sanitized_string[: self.truncate - len(file_ext)]
+                sanitized_string = sanitized_string[: max(self.truncate - len(file_ext), 0)]
+            
+            file_ext_bytes = len(file_ext.encode("utf-8"))
+            sanitized_string = self._truncate_to_bytes(
+                sanitized_string,
+                max(MAX_FILENAME_BYTES - file_ext_bytes, 0),
+            )
             sanitized_string += file_ext
 
         return sanitized_string.strip()
+
+    @staticmethod
+    def _truncate_to_bytes(value: str, max_bytes: int) -> str:
+        encoded_value = value.encode("utf-8")
+        if len(encoded_value) <= max_bytes:
+            return value
+
+        return encoded_value[:max_bytes].decode("utf-8", errors="ignore")
 
     def get_final_path(
         self,

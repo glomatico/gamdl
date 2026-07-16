@@ -1164,6 +1164,22 @@ struct PendingWrapperSample {
     subsamples: Vec<(usize, usize)>,
 }
 
+fn flush_then_write_immediate<W, F>(
+    batch: &mut Vec<PendingWrapperSample>,
+    writer: &mut W,
+    data: &[u8],
+    mut flush: F,
+) -> PyResult<()>
+where
+    W: Write,
+    F: FnMut(&mut Vec<PendingWrapperSample>, &mut W) -> PyResult<()>,
+{
+    if !batch.is_empty() {
+        flush(batch, writer)?;
+    }
+    writer.write_all(data).map_err(py_io_error)
+}
+
 fn decrypt_track_wrapper(
     host: &str,
     port: u16,
@@ -1289,7 +1305,18 @@ fn decrypt_track_wrapper(
                 }
             }
         };
-        temp.write_all(&decrypted).map_err(py_io_error)?;
+        // Samples without a complete encrypted block bypass the wrapper. Flush
+        // older queued samples first so their payload order still matches stsz.
+        flush_then_write_immediate(&mut batch, &mut temp, &decrypted, |batch, temp| {
+            flush(
+                batch,
+                &mut wrapper,
+                temp,
+                &mut written,
+                &current_adam,
+                &current_uri,
+            )
+        })?;
         sample.size = decrypted.len();
         written += decrypted.len() as u64;
         if file_backed {
@@ -1696,5 +1723,27 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&compact[i..i + 2], 16).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn flushes_pending_wrapper_samples_before_immediate_sample() {
+        let mut batch = vec![PendingWrapperSample {
+            data: b"queued".to_vec(),
+            aligned: b"ciphertext-block".to_vec(),
+            tail: Vec::new(),
+            subsamples: Vec::new(),
+        }];
+        let mut output = Vec::new();
+
+        flush_then_write_immediate(&mut batch, &mut output, b"clear", |batch, writer| {
+            for sample in batch.drain(..) {
+                writer.write_all(&sample.data).map_err(py_io_error)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(output, b"queuedclear");
+        assert!(batch.is_empty());
     }
 }

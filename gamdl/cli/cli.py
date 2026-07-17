@@ -285,6 +285,7 @@ async def main(config: CliConfig):
                 except Exception as e:
                     error_count += 1
                     track_log.exception(f'Error downloading "{media_title}"')
+                    continue
 
                 if (
                     database

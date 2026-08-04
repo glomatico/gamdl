@@ -228,7 +228,7 @@ class AppleMusicBaseInterface:
 
     def _get_raw_cover_url(self, cover_url_template: str) -> str:
         return re.sub(
-            r"/\{w\}x\{h\}bb\.jpg",
+            r"/\{w\}x\{h\}(?:bb|mv)\.jpg",
             "",
             re.sub(
                 r"image/thumb/",

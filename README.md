@@ -119,8 +119,10 @@ Configure Gamdl using command-line arguments or a config file.
 
 **Config file location:**
 
-- Linux: `~/.gamdl/config.ini`
+- Linux: `$XDG_CONFIG_HOME/.config/gamdl/config.ini` with fallback of `$HOME/.config/gamdl/config.ini`
+- MacOS, other Posix systems: `$HOME/.config/gamdl/config.ini`
 - Windows: `%USERPROFILE%\.gamdl\config.ini`
+- Other: `$HOME/.config/gamdl/config.ini` with fallback of `<CWD>/.gamdl/config.ini`
 
 The file is created automatically on first run. Command-line arguments override config values.
 
@@ -130,7 +132,7 @@ The file is created automatically on first run. Command-line arguments override 
 | ------------------------------- | ----------------------------------------------------------------- | ----------------------------- |
 | **General Options**             |                                                                   |                               |
 | `--read-urls-as-txt`, `-r`      | Read URLs from text files                                         | `false`                       |
-| `--config-path`                 | Config file path                                                  | `<home>/.gamdl/config.ini`    |
+| `--config-path`                 | Config file path                                                  | `(Above) PLATFORM DEPENDENT`  |
 | `--log-level`                   | Logging level                                                     | `INFO`                        |
 | `--log-file`                    | Log file path                                                     | -                             |
 | `--no-exceptions`               | Don't print exceptions                                            | `false`                       |

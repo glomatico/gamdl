@@ -1,6 +1,5 @@
 import inspect
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated
 
 import click
@@ -29,7 +28,7 @@ from ..interface import (
     SyncedLyricsFormat,
     UploadedVideoQuality,
 )
-from .utils import Csv
+from .utils import Csv, get_default_config_path
 
 api_from_cookies_sig = inspect.signature(AppleMusicApi.create_from_netscape_cookies)
 wrapper_api_create_sig = inspect.signature(WrapperApi.create)
@@ -73,7 +72,7 @@ class CliConfig:
         option(
             "--config-path",
             help="Config file path",
-            default=str(Path.home() / ".gamdl" / "config.ini"),
+            default=get_default_config_path(),
             type=click.Path(
                 file_okay=True,
                 dir_okay=False,

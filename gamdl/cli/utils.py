@@ -1,4 +1,5 @@
 import atexit
+import os
 import sys
 from datetime import datetime
 from enum import Enum
@@ -121,3 +122,39 @@ def prompt_path(
             input_path = input_path.strip('"')
 
     return result_path
+
+def get_default_config_path() -> str:
+    platform = sys.platform
+
+    # win32, but shouldn't have a conflict + future compat perhaps
+    if platform.startswith("win"):
+        return str(Path.home() / ".gamdl" / "config.ini")
+
+    if platform.startswith("linux"):
+        if cfg_dir := os.environ.get("XDG_CONFIG_HOME"):
+            return str(Path(cfg_dir) / "gamdl" / "config.ini")
+
+        # Path.home() calls expanduser which already checks $HOME, so it
+        # should get the preferred home directory
+        return str(
+            Path.home() / ".config" / "gamdl" / "config.ini",
+        )
+
+    if os.name == "posix":
+        # Although I found this from Apple: "The Application Support
+        # directory ... stores any type of file that supports the app
+        #  ... such as ... configuration files."
+        #
+        # It seems like this is the case for installed apps, not a
+        # python script, thus darwin has been grouped with posix
+        return str(Path.home() / ".config" / "gamdl" / "config.ini")
+
+    try:
+        return str(Path.home() / ".gamdl" / "config.ini")
+    except RuntimeError:
+        # Note: Path.home() failing is only checked here because gamdl
+        # failing would be the least of their problems in the above
+        # cases. It is checked here because gamdl may be running in an
+        # environment that doesn't support Path.home(). In that case,
+        # default to <cwd>/.gamdl/config.ini
+        return str(Path(".gamdl") / "config.ini")

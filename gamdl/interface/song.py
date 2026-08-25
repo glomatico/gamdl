@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import re
+from html import escape as xml_escape
 from typing import AsyncGenerator, Callable
 from xml.dom import minidom
 from xml.etree import ElementTree
@@ -28,6 +29,111 @@ from .types import (
 logger = structlog.get_logger(__name__)
 
 
+def _get_ttml_attrs(node: minidom.Node) -> str:
+    return "".join(
+        f' {name}="{_escape_ttml_attr(value)}"'
+        for name, value in node.attributes.items()
+    )
+
+
+def _get_ttml_children(node: minidom.Node) -> list:
+    return [
+        child
+        for child in node.childNodes
+        if child.nodeType in (minidom.Node.ELEMENT_NODE, minidom.Node.TEXT_NODE)
+    ]
+
+
+def _serialize_ttml_text_content(children: list) -> str:
+    return _escape_ttml_text("".join(child.data for child in children))
+
+
+def _serialize_ttml_inline(node: minidom.Node) -> str:
+    attrs = _get_ttml_attrs(node)
+    children = _get_ttml_children(node)
+
+    if not children:
+        return f"<{node.tagName}{attrs}/>"
+
+    if all(child.nodeType == minidom.Node.TEXT_NODE for child in children):
+        text = _serialize_ttml_text_content(children)
+        return f"<{node.tagName}{attrs}>{text}</{node.tagName}>"
+
+    parts = []
+    for child in children:
+        if child.nodeType == minidom.Node.ELEMENT_NODE:
+            parts.append(_serialize_ttml_inline(child))
+        elif child.data:
+            parts.append(_escape_ttml_separator(child.data))
+    return f"<{node.tagName}{attrs}>{''.join(parts)}</{node.tagName}>"
+
+
+def _serialize_ttml_node(
+    node: minidom.Node,
+    indent: int = 0,
+    indent_str: str = "  ",
+) -> str:
+    if node.nodeType == minidom.Node.TEXT_NODE:
+        return _escape_ttml_text(node.data)
+
+    if node.nodeType == minidom.Node.ELEMENT_NODE:
+        attrs = _get_ttml_attrs(node)
+        children = _get_ttml_children(node)
+
+        if not children:
+            return f"<{node.tagName}{attrs}/>"
+
+        if all(child.nodeType == minidom.Node.TEXT_NODE for child in children):
+            return f"<{node.tagName}{attrs}>{_serialize_ttml_text_content(children)}</{node.tagName}>"
+
+        child_elements = [
+            child
+            for child in children
+            if child.nodeType == minidom.Node.ELEMENT_NODE
+        ]
+        if child_elements and all(
+            child.tagName == "span" for child in child_elements
+        ):
+            return _serialize_ttml_inline(node)
+
+        lines = [f"<{node.tagName}{attrs}>"]
+        for child in children:
+            if child.nodeType == minidom.Node.ELEMENT_NODE:
+                lines.append(
+                    indent_str * (indent + 1)
+                    + _serialize_ttml_node(child, indent + 1, indent_str)
+                )
+            elif child.data.strip():
+                lines.append(
+                    indent_str * (indent + 1) + _escape_ttml_text(child.data.strip())
+                )
+        lines.append(indent_str * indent + f"</{node.tagName}>")
+        return "\n".join(lines)
+
+    return ""
+
+
+def _escape_ttml_text(value: str) -> str:
+    return xml_escape(value, quote=False).replace("\xa0", "&#x00A0;")
+
+
+def _escape_ttml_attr(value: str) -> str:
+    return xml_escape(value, quote=True).replace("\xa0", "&#x00A0;")
+
+
+def _escape_ttml_separator(value: str) -> str:
+    separator = "".join(char for char in value if char not in "\r\n\t")
+    return _escape_ttml_text(separator)
+
+
+def _serialize_ttml_pretty(lyrics_ttml: str) -> str:
+    document = minidom.parseString(lyrics_ttml)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        + _serialize_ttml_node(document.documentElement)
+    )
+
+
 class AppleMusicSongInterface:
     def __init__(
         self,
@@ -36,6 +142,7 @@ class AppleMusicSongInterface:
         codec_priority: list[SongCodec] = [SongCodec.AAC_WEB],
         use_album_date: bool = False,
         skip_stream_info: bool = False,
+        use_syllable_lyrics: bool = False,
         ask_codec_function: Callable[[list[dict]], dict | None] | None = None,
     ):
         self.base = base
@@ -43,6 +150,7 @@ class AppleMusicSongInterface:
         self.codec_priority = codec_priority
         self.use_album_date = use_album_date
         self.skip_stream_info = skip_stream_info
+        self.use_syllable_lyrics = use_syllable_lyrics
         self.ask_codec_function = ask_codec_function
 
     async def get_lyrics(
@@ -62,37 +170,49 @@ class AppleMusicSongInterface:
             log.debug("no_lyrics")
             return None
 
+        lyrics_relationship_key = (
+            "syllable-lyrics" if self.use_syllable_lyrics else "lyrics"
+        )
+
         if (
             "relationships" not in song_metadata
-            or "lyrics" not in song_metadata["relationships"]
+            or lyrics_relationship_key not in song_metadata["relationships"]
         ):
             song_metadata = (
                 await self.base.apple_music_api.get_song(
                     song_metadata["id"],
+                    include_syllable_lyrics=self.use_syllable_lyrics,
                 )
             )["data"][0]
 
         if (
-            "lyrics" in song_metadata["relationships"]
-            and "data" in song_metadata["relationships"]["lyrics"]
-            and len(song_metadata["relationships"]["lyrics"]["data"]) > 0
-            and "attributes" in song_metadata["relationships"]["lyrics"]["data"][0]
-            and song_metadata["relationships"]["lyrics"]["data"][0]["attributes"].get(
-                "ttml"
-            )
+            lyrics_relationship_key in song_metadata["relationships"]
+            and "data" in song_metadata["relationships"][lyrics_relationship_key]
+            and len(song_metadata["relationships"][lyrics_relationship_key]["data"]) > 0
+            and "attributes"
+            in song_metadata["relationships"][lyrics_relationship_key]["data"][0]
+            and song_metadata["relationships"][lyrics_relationship_key]["data"][0][
+                "attributes"
+            ].get("ttml")
             is not None
         ):
             lyrics = self._get_lyrics(
-                song_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
-                    "ttml"
-                ],
+                song_metadata["relationships"][lyrics_relationship_key]["data"][0][
+                    "attributes"
+                ]["ttml"],
             )
 
             log.debug("success", lyrics=lyrics)
 
             return lyrics
         else:
-            log.debug("no_lyrics_data")
+            if self.use_syllable_lyrics:
+                log.warning(
+                    "no_syllable_lyrics_data",
+                    song_id=song_metadata["id"],
+                )
+            else:
+                log.debug("no_lyrics_data")
 
     def _get_lyrics(
         self,
@@ -108,22 +228,31 @@ class AppleMusicSongInterface:
             unsynced_lyrics.append(stanza)
 
             for p in div.iter("{http://www.w3.org/ns/ttml}p"):
-                if p.text is not None:
-                    stanza.append(p.text)
+                elements = p.findall("{http://www.w3.org/ns/ttml}span")
+                if not elements:
+                    elements = [p]
+                    if p.text is not None:
+                        stanza.append(p.text)
+                else:
+                    stanza.append("".join(p.itertext()).strip())
 
-                if p.attrib.get("begin"):
+                if self.synced_lyrics_format == SyncedLyricsFormat.TTML:
+                    if not synced_lyrics:
+                        synced_lyrics.append(_serialize_ttml_pretty(lyrics_ttml))
+                    continue
+
+                for element in elements:
+                    if not element.attrib.get("begin"):
+                        continue
+
                     if self.synced_lyrics_format == SyncedLyricsFormat.LRC:
-                        synced_lyrics.append(self._get_lyrics_line_lrc(p))
+                        synced_lyrics.append(self._get_lyrics_line_lrc(element))
 
                     if self.synced_lyrics_format == SyncedLyricsFormat.SRT:
-                        synced_lyrics.append(self._get_lyrics_line_srt(index, p))
-
-                    if self.synced_lyrics_format == SyncedLyricsFormat.TTML:
-                        if not synced_lyrics:
-                            synced_lyrics.append(
-                                minidom.parseString(lyrics_ttml).toprettyxml()
-                            )
-                        continue
+                        srt_line = self._get_lyrics_line_srt(index, element)
+                        if srt_line is None:
+                            continue
+                        synced_lyrics.append(srt_line)
 
                     index += 1
 
@@ -159,13 +288,19 @@ class AppleMusicSongInterface:
             tz=datetime.timezone.utc,
         )
 
-    def _get_lyrics_line_srt(self, index: int, element: ElementTree.Element) -> str:
+    def _get_lyrics_line_srt(self, index: int, element: ElementTree.Element) -> str | None:
         timestamp_begin_ttml = element.attrib.get("begin")
-        timestamp_end_ttml = element.attrib.get("end")
         text = element.text
 
         timestamp_begin = self._parse_ttml_timestamp(timestamp_begin_ttml)
-        timestamp_end = self._parse_ttml_timestamp(timestamp_end_ttml)
+
+        timestamp_end_ttml = element.attrib.get("end")
+        if timestamp_end_ttml is None:
+            timestamp_end = self._get_timestamp_end_from_dur(element, timestamp_begin)
+            if timestamp_end is None:
+                return None
+        else:
+            timestamp_end = self._parse_ttml_timestamp(timestamp_end_ttml)
 
         return (
             f"{index}\n"
@@ -173,6 +308,35 @@ class AppleMusicSongInterface:
             f"{timestamp_end.strftime('%H:%M:%S,%f')[:-3]}\n"
             f"{text}\n"
         )
+
+    def _get_timestamp_end_from_dur(
+        self,
+        element: ElementTree.Element,
+        timestamp_begin: datetime.datetime,
+    ) -> datetime.datetime | None:
+        duration_ttml = element.attrib.get("dur")
+        if not duration_ttml:
+            return None
+
+        if ":" in duration_ttml:
+            duration = self._parse_ttml_timestamp(duration_ttml)
+            duration = duration - datetime.datetime.fromtimestamp(
+                0,
+                tz=datetime.timezone.utc,
+            )
+        else:
+            duration_match = re.fullmatch(
+                r"(\d+(?:\.\d+)?)(ms|s|m|h)?",
+                duration_ttml.strip(),
+            )
+            if not duration_match:
+                return None
+            value = float(duration_match.group(1))
+            unit = duration_match.group(2) or "s"
+            multiplier = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[unit]
+            duration = datetime.timedelta(seconds=value * multiplier)
+
+        return timestamp_begin + duration
 
     def _get_lyrics_line_lrc(self, element: ElementTree.Element) -> str:
         timestamp_ttml = element.attrib.get("begin")
@@ -584,7 +748,10 @@ class AppleMusicSongInterface:
                 await (
                     self.base.apple_music_api.get_library_song(media.media_id)
                     if media.is_library
-                    else self.base.apple_music_api.get_song(media.media_id)
+                    else self.base.apple_music_api.get_song(
+                        media.media_id,
+                        include_syllable_lyrics=self.use_syllable_lyrics,
+                    )
                 )
             )["data"][0]
 

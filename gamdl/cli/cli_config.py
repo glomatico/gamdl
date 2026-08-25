@@ -245,6 +245,14 @@ class CliConfig:
             type=SyncedLyricsFormat,
         ),
     ]
+    use_syllable_lyrics: Annotated[
+        bool,
+        option(
+            "--syllable-lyrics",
+            help="Download syllable (word-by-word) synced lyrics",
+            is_flag=True,
+        ),
+    ]
     song_codec_piority: Annotated[
         list[SongCodec],
         option(

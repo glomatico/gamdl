@@ -1,4 +1,9 @@
+import re
+from collections.abc import Callable
 from pathlib import Path
+
+from mutagen import MutagenError
+from mutagen.mp4 import MP4
 
 from ..interface.enums import CoverFormat
 from ..interface.types import AppleMusicMedia, DecryptionKeyAv
@@ -13,9 +18,89 @@ class AppleMusicMusicVideoDownloader:
         self,
         base: AppleMusicBaseDownloader,
         remux_format: RemuxFormatMusicVideo = RemuxFormatMusicVideo.M4V,
+        get_registered_media_id_by_path: Callable[[str], str | None] | None = None,
     ):
         self.base = base
         self.remux_format = remux_format
+        self.get_registered_media_id_by_path = get_registered_media_id_by_path
+
+    @staticmethod
+    def _get_media_id_from_path(path: Path) -> str | None:
+        try:
+            mp4 = MP4(path)
+        except (MutagenError, OSError):
+            return None
+
+        if not mp4.tags:
+            return None
+
+        title_id = mp4.tags.get("cnID")
+        if not title_id:
+            return None
+
+        if isinstance(title_id, (list, tuple)):
+            title_id = title_id[0] if title_id else None
+
+        return str(title_id) if title_id is not None else None
+
+    def resolve_final_path(
+        self,
+        final_path: str,
+        media_id: str | int,
+    ) -> str:
+        final_path_obj = Path(final_path)
+        parent = final_path_obj.parent
+        if not parent.exists():
+            return final_path
+
+        pattern = re.compile(
+            rf"^{re.escape(final_path_obj.stem)}(?: (?P<index>[2-9][0-9]*))?"
+            rf"{re.escape(final_path_obj.suffix)}$"
+        )
+        candidates: dict[int, Path] = {}
+
+        for path in parent.iterdir():
+            if not path.is_file():
+                continue
+
+            match = pattern.fullmatch(path.name)
+            if not match:
+                continue
+
+            index = int(match.group("index") or 1)
+            candidates[index] = path
+
+        media_id = str(media_id)
+        occupied_indexes = set(candidates)
+
+        for index in sorted(candidates):
+            path = candidates[index]
+            registered_media_id = (
+                self.get_registered_media_id_by_path(str(path))
+                if self.get_registered_media_id_by_path
+                else None
+            )
+            if registered_media_id is not None:
+                if str(registered_media_id) == media_id:
+                    return str(path)
+                continue
+
+            existing_media_id = self._get_media_id_from_path(path)
+            if existing_media_id == media_id:
+                return str(path)
+
+        index = 1
+        while index in occupied_indexes:
+            index += 1
+
+        if index == 1:
+            return final_path
+
+        return str(
+            final_path_obj.with_name(
+                f"{final_path_obj.stem} {index}{final_path_obj.suffix}"
+            )
+        )
 
     async def stage(
         self,
@@ -58,6 +143,10 @@ class AppleMusicMusicVideoDownloader:
             media.tags,
             "." + media.stream_info.file_format.value,
             media.playlist_tags,
+        )
+        download_item.final_path = self.resolve_final_path(
+            download_item.final_path,
+            media.tags.title_id,
         )
 
         if media.playlist_tags:

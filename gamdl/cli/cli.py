@@ -204,6 +204,9 @@ async def main(config: CliConfig):
     music_video_downloader = AppleMusicMusicVideoDownloader(
         base=base_downloader,
         remux_format=config.music_video_remux_format,
+        get_registered_media_id_by_path=(
+            database.get_media_id_by_path if database else None
+        ),
     )
     uploaded_video_downloader = AppleMusicUploadedVideoDownloader(
         base=base_downloader,

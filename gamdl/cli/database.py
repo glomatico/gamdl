@@ -23,10 +23,21 @@ class Database:
             )
             """
         )
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS media_path_idx ON media(path)"
+        )
         self.connection.commit()
 
     def get(self, media_id: str) -> str | None:
         self.cursor.execute("SELECT path FROM media WHERE id = ?", (media_id,))
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
+    def get_media_id_by_path(self, path: str) -> str | None:
+        self.cursor.execute(
+            "SELECT id FROM media WHERE path = ? LIMIT 1",
+            (str(Path(path).absolute()),),
+        )
         row = self.cursor.fetchone()
         return row[0] if row else None
 

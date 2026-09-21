@@ -6,7 +6,7 @@ import m3u8
 import structlog
 
 from .base import AppleMusicBaseInterface
-from .constants import MP4_FORMAT_CODECS
+from .constants import MP4_FORMAT_CODECS, MUSIC_VIDEO_STEREO_AUDIO_PRIORITY
 from .enums import MediaRating, MediaType, MusicVideoCodec, MusicVideoResolution
 from .exceptions import (
     GamdlInterfaceDecryptionNotAvailableError,
@@ -258,15 +258,19 @@ class AppleMusicMusicVideoInterface:
         self,
         playlist_master_data: dict,
     ) -> dict | None:
-        audio_playlist = next(
-            (
-                media
-                for media in playlist_master_data["media"]
-                if media["group_id"] == "audio-stereo-256"
-            ),
-            None,
-        )
-        return audio_playlist
+        for group_id in MUSIC_VIDEO_STEREO_AUDIO_PRIORITY:
+            audio_playlist = next(
+                (
+                    media
+                    for media in playlist_master_data["media"]
+                    if media.get("group_id") == group_id and media.get("uri")
+                ),
+                None,
+            )
+            if audio_playlist:
+                return audio_playlist
+
+        return None
 
     async def _get_video_playlist_from_user(
         self,

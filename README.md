@@ -42,6 +42,7 @@ The wrapper is recommended when using the `alac` song codec. ALAC can be attempt
 
 - When using the Wrapper, you'll be asked to insert your credentials to login if you haven't already.
 - Newer wrapper-v2 builds use HTTP JSON for account/playback and WV2D batch TCP port `10020` for decrypt.
+- For music videos, wrapper playback can provide additional metadata when available from Apple, including sort title (`sonm`), sort artist (`soar`), sort album (`soal`), composer (`©wrt`), composer ID (`cmID`), composer sort (`soco`), comments (`©cmt`), gapless (`pgap`), and XID (`xid `).
 - Song codecs other than `alac` do not require the wrapper.
 - Cookies can be skipped when using the wrapper.
 

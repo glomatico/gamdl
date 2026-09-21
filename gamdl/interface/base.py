@@ -379,18 +379,41 @@ class AppleMusicBaseInterface:
         return cover
 
     @alru_cache()
+    async def get_itunes_album_metadata(
+        self,
+        album_id: str | int,
+    ) -> dict | None:
+        log = logger.bind(action="get_itunes_album_metadata", album_id=album_id)
+
+        lookup_result = await self.itunes_api.get_lookup_result(str(album_id))
+        album_metadata = next(
+            (
+                result
+                for result in lookup_result["results"]
+                if result.get("wrapperType") == "collection"
+            ),
+            None,
+        )
+        if album_metadata is None:
+            log.debug("no_album_metadata")
+            return None
+
+        log.debug("success")
+
+        return album_metadata
+
     async def get_media_date(
         self,
         media_id: str,
     ) -> datetime.datetime | None:
         log = logger.bind(action="get_media_date", media_id=media_id)
 
-        lookup_result = await self.itunes_api.get_lookup_result(media_id)
-        if not lookup_result["results"]:
+        album_metadata = await self.get_itunes_album_metadata(media_id)
+        if album_metadata is None:
             log.debug("no_media_id")
             return None
 
-        release_date = lookup_result["results"][0].get("releaseDate")
+        release_date = album_metadata.get("releaseDate")
         if not release_date:
             log.debug("no_release_date")
             return None
@@ -434,23 +457,48 @@ class AppleMusicBaseInterface:
             action="get_tags_from_asset_info", asset_id=asset_data["itemId"]
         )
 
+        album_id = (
+            int(asset_data["playlistId"]) if asset_data.get("playlistId") else None
+        )
+        album_metadata = None
+
+        if not asset_data.get("playlistName"):
+            album_lookup_id = album_id
+            if (
+                album_lookup_id is None
+                and asset_data.get("kind") == "music-video"
+                and asset_data.get("trackNumber") is not None
+            ):
+                album_lookup_id = asset_data["itemId"]
+
+            if album_lookup_id is not None:
+                album_metadata = await self.get_itunes_album_metadata(str(album_lookup_id))
+                if album_id is None and album_metadata and album_metadata.get("collectionId"):
+                    album_id = int(album_metadata["collectionId"])
+
         date = None
 
         if use_album_date:
-            if asset_data.get("playlistId"):
-                date = await self.get_media_date(asset_data["playlistId"])
+            if album_id:
+                album_metadata = album_metadata or await self.get_itunes_album_metadata(
+                    str(album_id)
+                )
+                if album_metadata and album_metadata.get("releaseDate"):
+                    date = self.parse_date(album_metadata["releaseDate"])
             else:
                 log.debug("no_playlist_id_for_album_date")
 
         if date is None and asset_data.get("releaseDate"):
             date = self.parse_date(asset_data["releaseDate"])
+        elif date is None and album_metadata and album_metadata.get("releaseDate"):
+            date = self.parse_date(album_metadata["releaseDate"])
 
         tags = MediaTags(
-            album=asset_data.get("playlistName"),
-            album_artist=asset_data.get("playlistArtistName"),
-            album_id=(
-                int(asset_data["playlistId"]) if asset_data.get("playlistId") else None
-            ),
+            album=asset_data.get("playlistName")
+            or (album_metadata.get("collectionName") if album_metadata else None),
+            album_artist=asset_data.get("playlistArtistName")
+            or (album_metadata.get("artistName") if album_metadata else None),
+            album_id=album_id,
             album_sort=asset_data.get("sort-album"),
             artist=asset_data["artistName"],
             artist_id=(
@@ -466,12 +514,14 @@ class AppleMusicBaseInterface:
                 else None
             ),
             composer_sort=asset_data.get("sort-composer"),
-            copyright=asset_data.get("copyright"),
+            copyright=asset_data.get("copyright")
+            or (album_metadata.get("copyright") if album_metadata else None),
             date=date,
             disc=asset_data.get("discNumber"),
             disc_total=asset_data.get("discCount"),
             gapless=asset_data.get("gapless"),
-            genre=asset_data.get("genre"),
+            genre=asset_data.get("genre")
+            or (album_metadata.get("primaryGenreName") if album_metadata else None),
             genre_id=(
                 int(asset_data["genreId"]) if asset_data.get("genreId") else None
             ),
@@ -487,7 +537,8 @@ class AppleMusicBaseInterface:
             title_id=int(asset_data["itemId"]),
             title_sort=asset_data["sort-name"],
             track=asset_data.get("trackNumber"),
-            track_total=asset_data.get("trackCount"),
+            track_total=asset_data.get("trackCount")
+            or (album_metadata.get("trackCount") if album_metadata else None),
             xid=asset_data.get("xid"),
         )
 

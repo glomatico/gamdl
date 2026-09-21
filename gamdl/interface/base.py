@@ -379,13 +379,21 @@ class AppleMusicBaseInterface:
         return cover
 
     @alru_cache()
-    async def get_itunes_album_metadata(
+    async def get_itunes_lookup_metadata(
         self,
-        album_id: str | int,
-    ) -> dict | None:
-        log = logger.bind(action="get_itunes_album_metadata", album_id=album_id)
+        media_id: str | int,
+    ) -> tuple[dict | None, dict | None]:
+        log = logger.bind(action="get_itunes_lookup_metadata", media_id=media_id)
 
-        lookup_result = await self.itunes_api.get_lookup_result(str(album_id))
+        lookup_result = await self.itunes_api.get_lookup_result(str(media_id))
+        track_metadata = next(
+            (
+                result
+                for result in lookup_result["results"]
+                if result.get("wrapperType") == "track"
+            ),
+            None,
+        )
         album_metadata = next(
             (
                 result
@@ -394,6 +402,18 @@ class AppleMusicBaseInterface:
             ),
             None,
         )
+
+        log.debug("success")
+
+        return track_metadata, album_metadata
+
+    async def get_itunes_album_metadata(
+        self,
+        album_id: str | int,
+    ) -> dict | None:
+        log = logger.bind(action="get_itunes_album_metadata", album_id=album_id)
+
+        _, album_metadata = await self.get_itunes_lookup_metadata(album_id)
         if album_metadata is None:
             log.debug("no_album_metadata")
             return None
@@ -460,20 +480,20 @@ class AppleMusicBaseInterface:
         album_id = (
             int(asset_data["playlistId"]) if asset_data.get("playlistId") else None
         )
+        track_metadata = None
         album_metadata = None
 
         if not asset_data.get("playlistName"):
-            album_lookup_id = album_id
-            if (
-                album_lookup_id is None
-                and asset_data.get("kind") == "music-video"
+            if album_id is not None:
+                album_metadata = await self.get_itunes_album_metadata(album_id)
+            elif (
+                asset_data.get("kind") == "music-video"
                 and asset_data.get("trackNumber") is not None
             ):
-                album_lookup_id = asset_data["itemId"]
-
-            if album_lookup_id is not None:
-                album_metadata = await self.get_itunes_album_metadata(str(album_lookup_id))
-                if album_id is None and album_metadata and album_metadata.get("collectionId"):
+                track_metadata, album_metadata = await self.get_itunes_lookup_metadata(
+                    asset_data["itemId"]
+                )
+                if album_metadata and album_metadata.get("collectionId"):
                     album_id = int(album_metadata["collectionId"])
 
         date = None
@@ -517,8 +537,10 @@ class AppleMusicBaseInterface:
             copyright=asset_data.get("copyright")
             or (album_metadata.get("copyright") if album_metadata else None),
             date=date,
-            disc=asset_data.get("discNumber"),
-            disc_total=asset_data.get("discCount"),
+            disc=asset_data.get("discNumber")
+            or (track_metadata.get("discNumber") if track_metadata else None),
+            disc_total=asset_data.get("discCount")
+            or (track_metadata.get("discCount") if track_metadata else None),
             gapless=asset_data.get("gapless"),
             genre=asset_data.get("genre")
             or (album_metadata.get("primaryGenreName") if album_metadata else None),
@@ -538,6 +560,7 @@ class AppleMusicBaseInterface:
             title_sort=asset_data["sort-name"],
             track=asset_data.get("trackNumber"),
             track_total=asset_data.get("trackCount")
+            or (track_metadata.get("trackCount") if track_metadata else None)
             or (album_metadata.get("trackCount") if album_metadata else None),
             xid=asset_data.get("xid"),
         )

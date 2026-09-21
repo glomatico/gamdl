@@ -784,6 +784,6 @@ class AppleMusicApi:
                 status_code=response.status_code,
             )
 
-        log.debug("success", license_exchange=license_exchange)
+        log.debug("success")
 
         return license_exchange

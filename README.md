@@ -146,7 +146,9 @@ The file is created automatically on first run. Command-line arguments override 
 | **Interface Options**           |                                                                   |                               |
 | `--cover-format`                | Cover format                                                      | `jpg`                         |
 | `--cover-size`                  | Cover size in pixels                                              | `1200`                        |
+| `--drm-backend`                 | DRM backend (`widevine` or `playready`)                           | `widevine`                    |
 | `--wvd-path`                    | .wvd file path                                                    | -                             |
+| `--prd-path`                    | .prd file path                                                    | -                             |
 | `--use-wrapper`                 | Use wrapper for account, playback, and decryption requests        | `false`                       |
 | **Song Options**                |                                                                   |                               |
 | `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                         |
@@ -182,6 +184,8 @@ The file is created automatically on first run. Command-line arguments override 
 | `--overwrite`                   | Overwrite existing files                                          | `false`                       |
 | `--save-cover`, `-s`            | Save cover as separate file                                       | `false`                       |
 | `--save-playlist`               | Save M3U8 playlist file                                           | `false`                       |
+
+Widevine is the default DRM backend and uses the built-in WVD when `--wvd-path` is not set. PlayReady requires `--prd-path`. When `--use-wrapper` is enabled, compatible FairPlay streams are decrypted through wrapper; streams that cannot use wrapper fall back to the selected `--drm-backend`.
 
 ### Template Variables
 

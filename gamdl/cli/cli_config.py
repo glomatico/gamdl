@@ -23,6 +23,7 @@ from ..interface import (
     AppleMusicUploadedVideoInterface,
     ArtistMediaType,
     CoverFormat,
+    DrmBackend,
     MusicVideoCodec,
     MusicVideoResolution,
     SongCodec,
@@ -213,12 +214,35 @@ class CliConfig:
             default=base_interface_create_sig.parameters["cover_size"].default,
         ),
     ]
+    drm_backend: Annotated[
+        DrmBackend,
+        option(
+            "--drm-backend",
+            help="DRM backend",
+            default=base_interface_create_sig.parameters["drm_backend"].default,
+            type=DrmBackend,
+        ),
+    ]
     wvd_path: Annotated[
         str | None,
         option(
             "--wvd-path",
             help=".wvd file path",
             default=base_interface_create_sig.parameters["wvd_path"].default,
+            type=click.Path(
+                file_okay=True,
+                dir_okay=False,
+                writable=False,
+                resolve_path=True,
+            ),
+        ),
+    ]
+    prd_path: Annotated[
+        str | None,
+        option(
+            "--prd-path",
+            help=".prd file path",
+            default=base_interface_create_sig.parameters["prd_path"].default,
             type=click.Path(
                 file_okay=True,
                 dir_okay=False,

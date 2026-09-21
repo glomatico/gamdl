@@ -8,7 +8,12 @@ import httpx
 import structlog
 from async_lru import alru_cache
 from PIL import Image
-from pywidevine import PSSH, Cdm, Device
+from pyplayready.cdm import Cdm as PlayReadyCdm
+from pyplayready.device import Device as PlayReadyDevice
+from pyplayready.system.pssh import PSSH as PlayReadyPSSH
+from pywidevine import Cdm as WidevineCdm
+from pywidevine import Device as WidevineDevice
+from pywidevine import PSSH as WidevinePSSH
 from pywidevine.license_protocol_pb2 import WidevinePsshData
 
 from gamdl.interface.wvd import WVD
@@ -17,8 +22,16 @@ from ..api.apple_music import AppleMusicApi
 from ..api.itunes import ItunesApi
 from ..api.wrapper import WrapperApi
 from .constants import IMAGE_FILE_EXTENSION_MAP
-from .enums import CoverFormat
-from .types import Cover, DecryptionKey, MediaRating, MediaTags, MediaType, PlaylistTags
+from .enums import CoverFormat, DrmBackend
+from .types import (
+    Cover,
+    DecryptionKey,
+    MediaRating,
+    MediaTags,
+    MediaType,
+    PlaylistTags,
+    StreamInfo,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -31,21 +44,32 @@ class AppleMusicBaseInterface:
         wrapper_api: WrapperApi | None,
         cover_format: CoverFormat,
         cover_size: int,
-        cdm: Cdm,
+        cdm: WidevineCdm | PlayReadyCdm,
+        drm_backend: DrmBackend = DrmBackend.WIDEVINE,
     ) -> None:
         self.apple_music_api = apple_music_api
         self.itunes_api = itunes_api
         self.cover_format = cover_format
         self.cover_size = cover_size
+        self.drm_backend = drm_backend
         self.cdm = cdm
         self.wrapper_api = wrapper_api
 
     @staticmethod
-    def create_cdm(wvd_path: str | None = None) -> Cdm:
+    def create_cdm(
+        wvd_path: str | None = None,
+        prd_path: str | None = None,
+        drm_backend: DrmBackend = DrmBackend.WIDEVINE,
+    ) -> WidevineCdm | PlayReadyCdm:
+        if drm_backend == DrmBackend.PLAYREADY:
+            if not prd_path:
+                raise ValueError("prd_path is required for the PlayReady DRM backend")
+            return PlayReadyCdm.from_device(PlayReadyDevice.load(prd_path))
+
         if wvd_path:
-            cdm = Cdm.from_device(Device.load(wvd_path))
+            cdm = WidevineCdm.from_device(WidevineDevice.load(wvd_path))
         else:
-            cdm = Cdm.from_device(Device.loads(WVD))
+            cdm = WidevineCdm.from_device(WidevineDevice.loads(WVD))
         cdm.MAX_NUM_OF_SESSIONS = float("inf")
 
         return cdm
@@ -84,6 +108,9 @@ class AppleMusicBaseInterface:
         )
 
         return widevine_pssh_data.SerializeToString()
+
+    def get_drm_pssh(self, stream_info: StreamInfo) -> str | None:
+        return getattr(stream_info, f"{self.drm_backend.value}_pssh")
 
     @staticmethod
     async def get_response(
@@ -130,6 +157,8 @@ class AppleMusicBaseInterface:
         wvd_path: str | None = None,
         itunes_api: ItunesApi | None = None,
         wrapper_api: WrapperApi | None = None,
+        prd_path: str | None = None,
+        drm_backend: DrmBackend = DrmBackend.WIDEVINE,
     ):
         itunes_api = itunes_api or await ItunesApi.create(
             storefront=apple_music_api.storefront,
@@ -140,13 +169,18 @@ class AppleMusicBaseInterface:
                 else {}
             ),
         )
-        cdm = cls.create_cdm(wvd_path)
+        cdm = cls.create_cdm(
+            wvd_path=wvd_path,
+            prd_path=prd_path,
+            drm_backend=drm_backend,
+        )
 
         base = cls(
             apple_music_api=apple_music_api,
             itunes_api=itunes_api,
             cover_format=cover_format,
             cover_size=cover_size,
+            drm_backend=drm_backend,
             cdm=cdm,
             wrapper_api=wrapper_api,
         )
@@ -159,45 +193,98 @@ class AppleMusicBaseInterface:
     ) -> dict | None:
         return (await self.apple_music_api.get_album(album_id))["data"][0]
 
-    async def get_decryption_key(
+    async def _get_widevine_decryption_key(
         self,
         pssh: str,
         track_id: str,
     ) -> DecryptionKey:
-        log = logger.bind(action="get_decryption_key", track_id=track_id)
+        cdm = self.cdm
+        if not isinstance(cdm, WidevineCdm):
+            raise TypeError("Widevine CDM is not configured")
 
         reconstructed_pssh = self.reconstruct_pssh(pssh)
-        cdm_session = self.cdm.open()
+        cdm_session = cdm.open()
 
         try:
-            pssh_obj = PSSH(reconstructed_pssh)
-
+            pssh_obj = WidevinePSSH(reconstructed_pssh)
             challenge = base64.b64encode(
                 await asyncio.to_thread(
-                    self.cdm.get_license_challenge, cdm_session, pssh_obj
+                    cdm.get_license_challenge,
+                    cdm_session,
+                    pssh_obj,
                 )
             ).decode()
             license = await self.apple_music_api.get_license_exchange(
                 track_id,
                 pssh,
                 challenge,
+                key_system=DrmBackend.WIDEVINE.key_system,
             )
 
-            await asyncio.to_thread(
-                self.cdm.parse_license, cdm_session, license["license"]
-            )
-            decryption_key_info = next(
-                i for i in self.cdm.get_keys(cdm_session) if i.type == "CONTENT"
-            )
+            await asyncio.to_thread(cdm.parse_license, cdm_session, license["license"])
+            key = next(i for i in cdm.get_keys(cdm_session) if i.type == "CONTENT")
         finally:
-            self.cdm.close(cdm_session)
+            cdm.close(cdm_session)
 
-        decryption_key = DecryptionKey(
-            key=decryption_key_info.key.hex(),
-            kid=decryption_key_info.kid.hex,
+        return DecryptionKey(
+            key=key.key.hex(),
+            kid=key.kid.hex,
         )
 
-        log.debug("success", decryption_key=decryption_key)
+    async def _get_playready_decryption_key(
+        self,
+        pssh: str,
+        track_id: str,
+    ) -> DecryptionKey:
+        cdm = self.cdm
+        if not isinstance(cdm, PlayReadyCdm):
+            raise TypeError("PlayReady CDM is not configured")
+
+        pssh_obj = PlayReadyPSSH(pssh.split(",")[-1])
+        cdm_session = cdm.open()
+
+        try:
+            challenge_xml = await asyncio.to_thread(
+                cdm.get_license_challenge,
+                cdm_session,
+                pssh_obj.wrm_headers[0],
+            )
+            challenge = base64.b64encode(challenge_xml.encode()).decode()
+            license = await self.apple_music_api.get_license_exchange(
+                track_id,
+                pssh,
+                challenge,
+                key_system=DrmBackend.PLAYREADY.key_system,
+            )
+
+            license_xml = base64.b64decode(license["license"]).decode("utf-8-sig")
+            await asyncio.to_thread(cdm.parse_license, cdm_session, license_xml)
+            key = next(iter(cdm.get_keys(cdm_session)))
+        finally:
+            cdm.close(cdm_session)
+
+        return DecryptionKey(
+            key=key.key.hex(),
+            kid=key.key_id.hex,
+        )
+
+    async def get_decryption_key(
+        self,
+        pssh: str,
+        track_id: str,
+    ) -> DecryptionKey:
+        log = logger.bind(
+            action="get_decryption_key",
+            track_id=track_id,
+            drm_backend=self.drm_backend.value,
+        )
+
+        if self.drm_backend == DrmBackend.PLAYREADY:
+            decryption_key = await self._get_playready_decryption_key(pssh, track_id)
+        else:
+            decryption_key = await self._get_widevine_decryption_key(pssh, track_id)
+
+        log.debug("success")
 
         return decryption_key
 

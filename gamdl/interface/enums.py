@@ -10,6 +10,18 @@ from .constants import (
 )
 
 
+class DrmBackend(Enum):
+    WIDEVINE = "widevine"
+    PLAYREADY = "playready"
+
+    @property
+    def key_system(self) -> str:
+        return {
+            DrmBackend.WIDEVINE: "com.widevine.alpha",
+            DrmBackend.PLAYREADY: "com.microsoft.playready",
+        }[self]
+
+
 class SyncedLyricsFormat(Enum):
     LRC = "lrc"
     SRT = "srt"

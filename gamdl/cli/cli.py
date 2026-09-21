@@ -34,7 +34,7 @@ from ..interface import (
     GamdlInterfaceMediaNotStreamableError,
     GamdlInterfaceUrlParseError,
 )
-from ..interface.enums import SongCodec
+from ..interface.enums import DrmBackend, SongCodec
 from .cli_config import CliConfig
 from .config_file import ConfigFile
 from .database import Database
@@ -78,6 +78,10 @@ async def main(config: CliConfig):
     )
 
     logger.info(f"Starting Gamdl {__version__}")
+
+    if config.drm_backend == DrmBackend.PLAYREADY and not config.prd_path:
+        logger.critical("--prd-path is required when --drm-backend is playready")
+        return
 
     interactive_prompts = InteractivePrompts(
         artist_auto_select=config.artist_auto_select,
@@ -140,6 +144,8 @@ async def main(config: CliConfig):
         cover_size=config.cover_size,
         wvd_path=config.wvd_path,
         wrapper_api=wrapper_api,
+        prd_path=config.prd_path,
+        drm_backend=config.drm_backend,
     )
 
     song_interface = AppleMusicSongInterface(

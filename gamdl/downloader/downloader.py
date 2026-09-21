@@ -1,3 +1,4 @@
+import os
 import shutil
 from pathlib import Path
 from typing import AsyncGenerator
@@ -5,7 +6,7 @@ from typing import AsyncGenerator
 import structlog
 
 from ..interface.types import AppleMusicMedia
-from .constants import TEMP_PATH_TEMPLATE
+from .constants import PLAYLIST_HEADER, TEMP_PATH_TEMPLATE
 from .enums import DownloadMode
 from .exceptions import (
     GamdlDownloaderDependencyNotFoundError,
@@ -46,11 +47,15 @@ class AppleMusicDownloader:
         self.skip_processing = skip_processing
 
         self.base = song.base
+        self._playlist_last_tracks: dict[Path, int] = {}
 
     async def get_download_item_from_url(
         self,
         url: str,
     ) -> AsyncGenerator[DownloadItem, None]:
+        # A URL starts a new playlist-writing session. The first playable
+        # entry will replace any stale playlist from an earlier run.
+        self._playlist_last_tracks.clear()
         async for media in self.base.interface.get_media_from_url(url):
             yield await self.parse_download_item(media)
 
@@ -106,29 +111,59 @@ class AppleMusicDownloader:
 
         playlist_file_path_obj = Path(playlist_file_path)
         final_path_obj = Path(final_path)
-        output_dir_obj = Path(self.base.output_path)
+
+        if playlist_track < 1:
+            raise ValueError("playlist_track must be one-based")
 
         playlist_file_path_obj.parent.mkdir(parents=True, exist_ok=True)
-        playlist_file_path_parent_parts_len = len(playlist_file_path_obj.parent.parts)
-        output_path_parts_len = len(output_dir_obj.parts)
+        final_path_relative = os.path.relpath(
+            final_path_obj.absolute(),
+            start=playlist_file_path_obj.parent.absolute(),
+        )
+        playlist_line = final_path_relative.replace(os.sep, "/") + "\n"
+        last_track = self._playlist_last_tracks.get(playlist_file_path_obj)
 
-        final_path_relative = Path(
-            ("../" * (playlist_file_path_parent_parts_len - output_path_parts_len)),
-            *final_path_obj.parts[output_path_parts_len:],
-        )
-        playlist_file_lines = (
-            playlist_file_path_obj.open("r", encoding="utf8").readlines()
-            if playlist_file_path_obj.exists()
-            else []
-        )
-        if len(playlist_file_lines) < playlist_track:
-            playlist_file_lines.extend(
-                "\n" for _ in range(playlist_track - len(playlist_file_lines))
+        if last_track is None:
+            # Playlist items normally arrive in order. Start a fresh file and
+            # retain blank slots for any items that could not be prepared.
+            with playlist_file_path_obj.open(
+                "w", encoding="utf8", newline="\n"
+            ) as playlist_file:
+                playlist_file.write(PLAYLIST_HEADER)
+                playlist_file.write("\n" * (playlist_track - 1))
+                playlist_file.write(playlist_line)
+        elif playlist_track > last_track:
+            # Appending makes a full playlist O(n) instead of repeatedly
+            # reading and rewriting an ever-growing file (O(n²)).
+            with playlist_file_path_obj.open(
+                "a", encoding="utf8", newline="\n"
+            ) as playlist_file:
+                playlist_file.write("\n" * (playlist_track - last_track - 1))
+                playlist_file.write(playlist_line)
+        else:
+            # Keep the helper correct for callers that supply entries out of
+            # order, while leaving the common ordered path append-only.
+            playlist_file_lines = playlist_file_path_obj.read_text(
+                encoding="utf8"
+            ).splitlines(keepends=True)
+            if not playlist_file_lines or playlist_file_lines[0] != PLAYLIST_HEADER:
+                playlist_file_lines.insert(0, PLAYLIST_HEADER)
+            if len(playlist_file_lines) <= playlist_track:
+                playlist_file_lines.extend(
+                    "\n"
+                    for _ in range(playlist_track - len(playlist_file_lines) + 1)
+                )
+            playlist_file_lines[playlist_track] = playlist_line
+            playlist_file_path_obj.write_text(
+                "".join(playlist_file_lines),
+                encoding="utf8",
+                newline="\n",
             )
 
-        playlist_file_lines[playlist_track - 1] = final_path_relative.as_posix() + "\n"
-        with playlist_file_path_obj.open("w", encoding="utf8") as playlist_file:
-            playlist_file.writelines(playlist_file_lines)
+        self._playlist_last_tracks[playlist_file_path_obj] = max(
+            last_track or 0,
+            playlist_track,
+        )
 
         log.debug("success")
 

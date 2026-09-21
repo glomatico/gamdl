@@ -1,3 +1,4 @@
 TEMP_PATH_TEMPLATE = "gamdl_temp_{}"
+PLAYLIST_HEADER = "#EXTM3U\n"
 ILLEGAL_CHARS_RE = r'[\\/:*?"<>|;]'
 ILLEGAL_CHAR_REPLACEMENT = "_"

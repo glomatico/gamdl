@@ -422,7 +422,7 @@ class AppleMusicBaseDownloader:
                 playlist_title=(tags.title, "Unknown Playlist Title"),
                 playlist_track=(tags.track, ""),
             )
-            file_ext = None if is_folder else ".m3u"
+            file_ext = None if is_folder else ".m3u8"
             sanitized_formatted_part = self._sanitize_string(
                 formatted_part,
                 file_ext,

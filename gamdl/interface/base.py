@@ -328,7 +328,9 @@ class AppleMusicBaseInterface:
             artist=playlist_metadata["attributes"].get("curatorName", "Unknown"),
             playlist_id=playlist_metadata["attributes"]["playParams"]["id"],
             title=playlist_metadata["attributes"]["name"],
-            track=playlist_track,
+            # Media indexes are zero-based, while playlist positions and the
+            # user-facing {playlist_track} template field are one-based.
+            track=playlist_track + 1,
         )
 
         log.debug("success", playlist_tags=playlist_tags)

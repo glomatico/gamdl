@@ -79,7 +79,8 @@ class AppleMusicApi:
         log = logger.bind(action="get_token")
 
         response = None
-        async with httpx.AsyncClient() as client:
+        timeout = 30.0
+        async with httpx.AsyncClient(timeout=timeout) as client:
             try:
                 response = await client.get(
                     APPLE_MUSIC_HOMEPAGE_URL,

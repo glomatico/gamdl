@@ -3,6 +3,7 @@ import base64
 import datetime
 import re
 from io import BytesIO
+from uuid import UUID
 
 import httpx
 import structlog
@@ -11,6 +12,7 @@ from PIL import Image
 from pyplayready.cdm import Cdm as PlayReadyCdm
 from pyplayready.device import Device as PlayReadyDevice
 from pyplayready.system.pssh import PSSH as PlayReadyPSSH
+from pyplayready.system.wrmheader import WRMHeader as PlayReadyWRMHeader
 from pywidevine import Cdm as WidevineCdm
 from pywidevine import Device as WidevineDevice
 from pywidevine import PSSH as WidevinePSSH
@@ -108,6 +110,21 @@ class AppleMusicBaseInterface:
         )
 
         return widevine_pssh_data.SerializeToString()
+
+    @staticmethod
+    def reconstruct_playready_wrm_header(pssh: str) -> PlayReadyWRMHeader:
+        pssh_data = pssh.split(",")[-1]
+        decoded_pssh = base64.b64decode(pssh_data)
+        if len(decoded_pssh) != 16:
+            return PlayReadyPSSH(pssh_data).wrm_headers[0]
+
+        kid = base64.b64encode(UUID(bytes=decoded_pssh).bytes_le).decode()
+        return PlayReadyWRMHeader(
+            '<WRMHEADER xmlns="http://schemas.microsoft.com/DRM/2007/03/PlayReadyHeader" '
+            'version="4.3.0.0"><DATA><PROTECTINFO><KIDS>'
+            f'<KID ALGID="AESCTR" VALUE="{kid}"></KID>'
+            '</KIDS></PROTECTINFO></DATA></WRMHEADER>'
+        )
 
     def get_drm_pssh(self, stream_info: StreamInfo) -> str | None:
         return getattr(stream_info, f"{self.drm_backend.value}_pssh")
@@ -240,14 +257,14 @@ class AppleMusicBaseInterface:
         if not isinstance(cdm, PlayReadyCdm):
             raise TypeError("PlayReady CDM is not configured")
 
-        pssh_obj = PlayReadyPSSH(pssh.split(",")[-1])
+        wrm_header = self.reconstruct_playready_wrm_header(pssh)
         cdm_session = cdm.open()
 
         try:
             challenge_xml = await asyncio.to_thread(
                 cdm.get_license_challenge,
                 cdm_session,
-                pssh_obj.wrm_headers[0],
+                wrm_header,
             )
             challenge = base64.b64encode(challenge_xml.encode()).decode()
             license = await self.apple_music_api.get_license_exchange(

@@ -494,9 +494,9 @@ class AppleMusicSongInterface:
     def _get_drm_uri_from_m3u8_keys(
         self,
         m3u8_obj: m3u8.M3U8,
-        drm_key: str,
+        drm_key: str | None,
     ) -> str | None:
-        default_uri = DRM_DEFAULT_KEY_MAPPING[drm_key]
+        default_uri = DRM_DEFAULT_KEY_MAPPING.get(drm_key)
 
         for key in m3u8_obj.keys:
             if key.keyformat == drm_key and key.uri != default_uri:
@@ -534,14 +534,15 @@ class AppleMusicSongInterface:
         )
 
         if stream_info.use_cenc:
+            untyped_drm_uri = self._get_drm_uri_from_m3u8_keys(m3u8_obj, None)
             stream_info.widevine_pssh = self._get_drm_uri_from_m3u8_keys(
                 m3u8_obj,
                 "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed",
-            )
+            ) or untyped_drm_uri
             stream_info.playready_pssh = self._get_drm_uri_from_m3u8_keys(
                 m3u8_obj,
                 "com.microsoft.playready",
-            )
+            ) or untyped_drm_uri
         else:
             stream_info.fairplay_key = self._get_drm_uri_from_m3u8_keys(
                 m3u8_obj,

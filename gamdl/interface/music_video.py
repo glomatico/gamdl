@@ -472,7 +472,7 @@ class AppleMusicMusicVideoInterface:
         if media.playlist_metadata:
             media.playlist_tags = self.base.get_playlist_tags(
                 media.playlist_metadata,
-                media.index,
+                media.index + 1,
             )
 
         media.cover = await self.base.get_cover(media.media_metadata)

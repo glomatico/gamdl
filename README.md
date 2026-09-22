@@ -153,6 +153,7 @@ The file is created automatically on first run. Command-line arguments override 
 | `--use-wrapper`                 | Use wrapper for account, playback, and decryption requests        | `false`                       |
 | **Song Options**                |                                                                   |                               |
 | `--synced-lyrics-format`        | Synced lyrics format                                              | `lrc`                         |
+| `--syllable-lyrics`             | Download syllable (word-by-word) synced lyrics                    | `false`                       |
 | `--song-codec-priority`         | Comma-separated codec priority                                    | `aac-web`                     |
 | `--use-album-date`              | Use album release date for songs                                  | `false`                       |
 | `--no-synced-lyrics`            | Don't download synced lyrics                                      | `false`                       |
@@ -265,6 +266,8 @@ Use ISO 639-1 language codes (e.g., `en-US`, `es-ES`, `ja-JP`, `pt-BR`). Don't a
 - `lrc`
 - `srt` - SubRip subtitle format (more accurate timing)
 - `ttml` - Native Apple Music format (not compatible with most media players)
+
+Use `--syllable-lyrics` to download syllable (word-by-word) synced lyrics instead of line-by-line lyrics (only available when the track has syllable lyrics). It works with any synced lyrics format; with `ttml` you get the original Apple Music syllable TTML file.
 
 ### Music Video Codecs
 

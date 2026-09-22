@@ -14,3 +14,4 @@ gamdl/ammuxer/
 !README.md
 !uv.lock
 gamdl/*.so
+gamdl/*.pyd

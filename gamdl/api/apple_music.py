@@ -303,8 +303,12 @@ class AppleMusicApi:
         song_id: str,
         extend: str = "extendedAssetUrls",
         include: str = "lyrics,albums",
+        include_syllable_lyrics: bool = False,
     ) -> dict:
         log = logger.bind(action="get_song", song_id=song_id)
+
+        if include_syllable_lyrics:
+            include = f"{include},syllable-lyrics"
 
         song = await self._amp_request(
             APPLE_MUSIC_SONG_API_URI.format(

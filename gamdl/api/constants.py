@@ -5,6 +5,7 @@ APPLE_MUSIC_COOKIE_DOMAIN = ".music.apple.com"
 APPLE_MUSIC_AMP_API_URL = "https://amp-api.music.apple.com"
 APPLE_MUSIC_ACCOUNT_INFO_API_URI = "/v1/me/account"
 APPLE_MUSIC_SONG_API_URI = "/v1/catalog/{storefront}/songs/{song_id}"
+APPLE_MUSIC_SYLLABLE_LYRICS_API_URI = "/v1/catalog/{storefront}/songs/{song_id}/syllable-lyrics"
 APPLE_MUSIC_MUSIC_VIDEO_API_URI = (
     "/v1/catalog/{storefront}/music-videos/{music_video_id}"
 )

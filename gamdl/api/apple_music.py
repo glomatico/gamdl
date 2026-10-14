@@ -11,6 +11,7 @@ from .constants import (
     APPLE_MUSIC_ALBUM_API_URI,
     APPLE_MUSIC_AMP_API_URL,
     APPLE_MUSIC_ARTIST_API_URI,
+    APPLE_MUSIC_SYLLABLE_LYRICS_API_URI,
     APPLE_MUSIC_ASSETS_API_URI,
     APPLE_MUSIC_COOKIE_DOMAIN,
     APPLE_MUSIC_HOMEPAGE_URL,
@@ -320,6 +321,20 @@ class AppleMusicApi:
         log.debug("success", song=song)
 
         return song
+
+    async def get_syllable_lyrics(self, song_id: str) -> dict:
+        log = logger.bind(action="get_syllable_lyrics", song_id=song_id)
+
+        syllable_lyrics = await self._amp_request(
+            APPLE_MUSIC_SYLLABLE_LYRICS_API_URI.format(
+                storefront=self.storefront,
+                song_id=song_id,
+            ),
+        )
+
+        log.debug("success", syllable_lyrics=syllable_lyrics)
+
+        return syllable_lyrics
 
     async def get_music_video(
         self,

@@ -82,15 +82,34 @@ class AppleMusicSongInterface:
             )
             is not None
         ):
-            lyrics = self._get_lyrics(
-                song_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
-                    "ttml"
-                ],
-            )
+            try:
+                syllable_lyrics_metadata = (
+                    await self.base.apple_music_api.get_syllable_lyrics(
+                        song_metadata["id"]
+                    )
+                )
 
-            log.debug("success", lyrics=lyrics)
+                lyrics = self._get_lyrics(
+                    syllable_lyrics_metadata["data"][0]["attributes"].get("ttmlLocalizations")
+                    or
+                    syllable_lyrics_metadata["data"][0]["attributes"].get("ttml")
+                )
 
-            return lyrics
+
+                log.debug("success", lyrics=lyrics)
+
+                return lyrics
+            except:
+                lyrics = self._get_lyrics(
+                    song_metadata["relationships"]["lyrics"]["data"][0]["attributes"][
+                        "ttml"
+                    ],
+                )
+
+
+                log.debug("success", lyrics=lyrics)
+
+                return lyrics
         else:
             log.debug("no_lyrics_data")
 

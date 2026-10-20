@@ -6,12 +6,11 @@ Media/CDN transfers should use a separate transport and concurrency policy.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from time import monotonic
 from typing import Any
 
 import httpx
+from httpx_retries import Retry
 
 from ..logging import get_logger
 from .exceptions import (
@@ -54,21 +53,6 @@ class RequestPacer:
         self._lock.release()
 
 
-def _retry_after(value: str | None) -> float | None:
-    if not value:
-        return None
-    try:
-        return max(0.0, float(value))
-    except ValueError:
-        try:
-            date = parsedate_to_datetime(value)
-            if date.tzinfo is None:
-                date = date.replace(tzinfo=timezone.utc)
-            return max(0.0, (date - datetime.now(timezone.utc)).total_seconds())
-        except (ValueError, TypeError, OverflowError):
-            return None
-
-
 class ApiHttpClient:
     """Owns an HTTPX client unless one was injected by the caller.
 
@@ -93,7 +77,14 @@ class ApiHttpClient:
             client if client is not None else httpx.AsyncClient(timeout=timeout)
         )
         self.pacer = pacer
-        self.retries = retries
+        self.retry = Retry(
+            total=retries,
+            allowed_methods={"GET", "HEAD"},
+            status_forcelist={429, 500, 502, 503, 504},
+            backoff_factor=0.5,
+            backoff_jitter=0,
+            max_backoff_wait=60,
+        )
 
     async def __aenter__(self) -> ApiHttpClient:
         return self
@@ -114,9 +105,11 @@ class ApiHttpClient:
         **kwargs: Any,
     ) -> httpx.Response:
         method = method.upper()
-        max_attempts = self.retries + 1 if method in {"GET", "HEAD"} else 1
+        retry = self.retry
+        attempt = 0
 
-        for attempt in range(1, max_attempts + 1):
+        while True:
+            attempt += 1
             start = monotonic()
             try:
                 if self.pacer is None:
@@ -132,13 +125,18 @@ class ApiHttpClient:
                     attempt=attempt,
                     error_type=type(exc).__name__,
                 )
-                if attempt == max_attempts:
-                    raise GamdlTransportError(
-                        f"{self.service}: network request failed",
-                        service=self.service,
-                    ) from exc
-                await asyncio.sleep(min(2 ** (attempt - 1), 8))
-                continue
+                if (
+                    retry.is_retryable_method(method)
+                    and retry.is_retryable_exception(exc)
+                    and not retry.is_exhausted()
+                ):
+                    retry = retry.increment()
+                    await retry.asleep(exc)
+                    continue
+                raise GamdlTransportError(
+                    f"{self.service}: network request failed",
+                    service=self.service,
+                ) from exc
 
             status = response.status_code
             logger.debug(
@@ -151,25 +149,30 @@ class ApiHttpClient:
                 elapsed_ms=round((monotonic() - start) * 1000),
             )
 
-            retry_after = _retry_after(response.headers.get("Retry-After"))
-            if status in {429, 500, 502, 503, 504} and attempt < max_attempts:
-                delay = (
-                    retry_after
-                    if retry_after is not None
-                    else min(2 ** (attempt - 1), 8)
-                )
+            if (
+                retry.is_retryable_method(method)
+                and retry.is_retryable_status_code(status)
+                and not retry.is_exhausted()
+            ):
                 logger.warning(
                     "request_retry",
                     service=self.service,
                     operation=operation,
                     status_code=status,
                     attempt=attempt,
-                    wait_seconds=delay,
                 )
-                await asyncio.sleep(delay)
+                retry = retry.increment()
+                await response.aclose()
+                await retry.asleep(response)
                 continue
 
             if status == 429:
+                retry_after = None
+                if header := response.headers.get("Retry-After"):
+                    try:
+                        retry_after = retry.parse_retry_after(header)
+                    except ValueError:
+                        pass
                 raise GamdlRateLimitError(service=self.service, retry_after=retry_after)
             if status in {401, 403}:
                 raise GamdlAuthenticationError(
@@ -184,8 +187,6 @@ class ApiHttpClient:
                     status_code=status,
                 )
             return response
-
-        raise AssertionError("Unreachable request retry state")
 
     async def request_json(
         self,

@@ -6,6 +6,7 @@ import logging
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
@@ -15,6 +16,7 @@ from gamdl.api import (
     GamdlApiResponseError,
     GamdlAuthenticationError,
     GamdlRateLimitError,
+    GamdlTransportError,
     ItunesApi,
     RequestPacer,
     WrapperApi,
@@ -79,6 +81,96 @@ class HttpTests(unittest.IsolatedAsyncioTestCase):
                 {"ok": True},
             )
         self.assertEqual(attempts, 2)
+
+    async def test_retry_exhaustion_keeps_safe_api_exception(self):
+        calls = 0
+
+        def handler(request):
+            nonlocal calls
+            calls += 1
+            return httpx.Response(503, text="sensitive response body")
+
+        async with mock_client(handler) as client:
+            api = ApiHttpClient("apple", client=client, retries=1)
+            with self.assertRaises(GamdlApiResponseError) as result:
+                await api.request("GET", "https://example.test/", operation="test")
+
+        self.assertEqual(calls, 2)
+        self.assertEqual(result.exception.status_code, 503)
+        self.assertNotIn("sensitive", str(result.exception))
+
+    async def test_get_transport_retry_and_post_no_retry(self):
+        calls = {"GET": 0, "POST": 0}
+
+        def handler(request):
+            calls[request.method] += 1
+            if request.method == "POST" or calls["GET"] == 1:
+                raise httpx.ConnectError("do not log remote error bodies")
+            return httpx.Response(200, json={"ok": True})
+
+        async with mock_client(handler) as client:
+            api = ApiHttpClient("apple", client=client)
+            self.assertEqual(
+                await api.request_json("GET", "https://example.test", operation="test"),
+                {"ok": True},
+            )
+            with self.assertRaises(GamdlTransportError) as result:
+                await api.request("POST", "https://example.test", operation="license")
+
+        self.assertEqual(calls, {"GET": 2, "POST": 1})
+        self.assertNotIn("do not log", str(result.exception))
+
+    async def test_pacer_does_not_block_other_requests_while_retry_sleeps(self):
+        """A retry must free the shared lock before backoff, unlike RetryTransport
+        wrapped *inside* a locked high-level client request.
+        """
+        retry_is_sleeping = asyncio.Event()
+        resume_retry = asyncio.Event()
+        slow_attempts = 0
+
+        def handler(request):
+            nonlocal slow_attempts
+            if request.url.path == "/slow":
+                slow_attempts += 1
+                if slow_attempts == 1:
+                    return httpx.Response(503)
+            return httpx.Response(200, json={"ok": True})
+
+        async def controlled_backoff(_retry, _response):
+            retry_is_sleeping.set()
+            await resume_retry.wait()
+
+        pacer = RequestPacer()
+        async with mock_client(handler) as client:
+            api = ApiHttpClient("apple", client=client, pacer=pacer)
+            with patch("gamdl.api.http.Retry.asleep", new=controlled_backoff):
+                slow = asyncio.create_task(
+                    api.request_json(
+                        "GET", "https://example.test/slow", operation="slow"
+                    )
+                )
+                try:
+                    await asyncio.wait_for(retry_is_sleeping.wait(), timeout=3)
+                    fast = await asyncio.wait_for(
+                        api.request_json(
+                            "GET", "https://example.test/fast", operation="fast"
+                        ),
+                        timeout=3,
+                    )
+                    self.assertEqual(fast, {"ok": True})
+                finally:
+                    resume_retry.set()
+                    await asyncio.wait_for(slow, timeout=3)
+        self.assertEqual(slow_attempts, 2)
+
+    async def test_invalid_retry_after_does_not_hide_rate_limit(self):
+        async with mock_client(
+            lambda request: httpx.Response(429, headers={"Retry-After": "invalid"})
+        ) as client:
+            api = ApiHttpClient("apple", client=client, retries=0)
+            with self.assertRaises(GamdlRateLimitError) as result:
+                await api.request("GET", "https://example.test", operation="test")
+        self.assertIsNone(result.exception.retry_after)
 
     async def test_invalid_json_and_array_payload(self):
         responses = iter(

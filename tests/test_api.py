@@ -270,6 +270,120 @@ class AppleMusicTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(api.credentials.developer_token, "eyJabc.eyJdef.ghijk")
         self.assertEqual(visited, ["/", "/assets/index-test.js"])
 
+    async def test_get_lyrics_fetches_standard_ttml(self):
+        requests = []
+        ttml = '<tt xmlns="http://www.w3.org/ns/ttml"><body /></tt>'
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "123", "attributes": {"ttml": ttml}}]},
+            )
+
+        async with mock_client(handler) as client:
+            async with await AppleMusicApi.create(
+                client=client,
+                storefront="br",
+                token="test-token",
+                media_user_token="test-user-token",
+            ) as api:
+                lyrics = await api.get_lyrics("123", language="pt-BR")
+
+        # The authenticated constructor also requests account info.
+        self.assertEqual(len(requests), 2)
+        request = requests[1]
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.url.host, "amp-api.music.apple.com")
+        self.assertEqual(request.url.path, "/v1/catalog/br/songs/123/lyrics")
+        self.assertEqual(request.url.params["l"], "pt-BR")
+        self.assertEqual(request.headers["authorization"], "Bearer test-token")
+        self.assertIn("media-user-token=test-user-token", request.headers["cookie"])
+        self.assertEqual(lyrics["data"][0]["attributes"]["ttml"], ttml)
+
+    async def test_get_syllable_lyrics_localization_and_raw_response(self):
+        requests = []
+        ttml = (
+            '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p>'
+            '<span begin="00:01.000" end="00:01.500">Hello</span>'
+            "</p></div></body></tt>"
+        )
+        payload = {
+            "data": [
+                {
+                    "id": "456",
+                    "attributes": {
+                        "ttml": ttml,
+                        "ttmlLocalizations": {"pt-BR": "localized TTML"},
+                    },
+                }
+            ],
+        }
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json=payload)
+
+        async with mock_client(handler) as client:
+            async with await AppleMusicApi.create(
+                client=client, token="test-token", storefront="us"
+            ) as api:
+                result = await api.get_syllable_lyrics(
+                    "456",
+                    language="en-US",
+                    lyrics_language="pt-BR",
+                    script="Latn",
+                    extend="ttmlLocalizations",
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(len(requests), 1)
+        request = requests[0]
+        self.assertEqual(request.url.path, "/v1/catalog/us/songs/456/syllable-lyrics")
+        self.assertEqual(
+            dict(request.url.params),
+            {
+                "l": "en-US",
+                "l[lyrics]": "pt-BR",
+                "l[script]": "Latn",
+                "extend": "ttmlLocalizations",
+            },
+        )
+
+    async def test_syllable_lyrics_omits_unspecified_localization(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json={"data": []})
+
+        async with mock_client(handler) as client:
+            async with await AppleMusicApi.create(client=client, token="x") as api:
+                self.assertEqual(await api.get_syllable_lyrics("123"), {"data": []})
+                self.assertEqual(await api.get_lyrics("123"), {"data": []})
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(str(requests[0].url.query, "ascii"), "")
+        self.assertEqual(str(requests[1].url.query, "ascii"), "")
+
+    async def test_lyrics_unavailable_and_api_errors_are_preserved(self):
+        responses = iter(
+            [
+                httpx.Response(404, json={"errors": [{"detail": "private"}]}),
+                httpx.Response(200, json={"errors": [{"detail": "private"}]}),
+            ]
+        )
+        async with mock_client(lambda request: next(responses)) as client:
+            async with await AppleMusicApi.create(client=client, token="x") as api:
+                with self.assertRaises(GamdlApiResponseError) as missing:
+                    await api.get_syllable_lyrics("123")
+                self.assertEqual(missing.exception.status_code, 404)
+                self.assertNotIn("private", str(missing.exception))
+
+                with self.assertRaises(GamdlApiResponseError) as error:
+                    await api.get_lyrics("123")
+                self.assertNotIn("private", str(error.exception))
+
     async def test_pagination_preserves_order_and_validates_host(self):
         first = {"data": [{"id": "1"}], "next": "/v1/me/library/playlists?offset=1"}
         second = {"data": [{"id": "2"}], "next": None}

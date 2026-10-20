@@ -365,29 +365,95 @@ class AppleMusicApi:
         )
 
     async def iter_library_playlists(
-        self, *, limit: int = 100
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include: str = "catalog",
     ) -> AsyncIterator[dict[str, Any]]:
         """Yield all user playlists in server order, transparently following `next`."""
-        page = await self.get_library_playlists(limit=limit)
+        page = await self.get_library_playlists(
+            limit=limit, offset=offset, include=include
+        )
+        async for item in self._iterate_pages(page):
+            yield item
+
+    async def iter_library_songs(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include: str = "catalog",
+        extend: str = "extendedAssetUrls",
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield the user's songs across all pages, in library order."""
+        page = await self.get_library_songs(
+            limit=limit, offset=offset, include=include, extend=extend
+        )
+        async for item in self._iterate_pages(page):
+            yield item
+
+    async def iter_library_music_videos(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include: str = "catalog",
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield all music videos in the user's library."""
+        page = await self.get_library_music_videos(
+            limit=limit, offset=offset, include=include
+        )
+        async for item in self._iterate_pages(page):
+            yield item
+
+    async def iter_library_albums(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include: str = "catalog",
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield all albums in the user's library."""
+        page = await self.get_library_albums(
+            limit=limit, offset=offset, include=include
+        )
         async for item in self._iterate_pages(page):
             yield item
 
     async def _iterate_pages(
-        self, page: dict[str, Any]
+        self,
+        page: dict[str, Any],
+        *,
+        result_type: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        """Iterate plain collections or type-grouped search result pages."""
         seen: set[str] = set()
         while True:
-            data = page.get("data")
+            collection = page
+            if result_type is not None:
+                results = page.get("results")
+                if not isinstance(results, dict):
+                    raise GamdlApiResponseError(
+                        "Apple Music search pagination response has no results object"
+                    )
+                collection = results.get(result_type)
+                if not isinstance(collection, dict):
+                    raise GamdlApiResponseError(
+                        "Apple Music search pagination response has no requested type"
+                    )
+
+            data = collection.get("data")
             if not isinstance(data, list):
                 raise GamdlApiResponseError(
                     "Apple Music API pagination response has no data list"
                 )
             for item in data:
                 yield item
-            next_url = page.get("next")
-            if not next_url:
+            next_url = collection.get("next")
+            if next_url is None:
                 return
-            if not isinstance(next_url, str) or next_url in seen:
+            if not isinstance(next_url, str) or not next_url or next_url in seen:
                 raise GamdlApiResponseError("Invalid Apple Music API pagination cursor")
             seen.add(next_url)
             page = await self.get_extended_api_data(next_url)
@@ -408,6 +474,95 @@ class AppleMusicApi:
             operation="get_search_results",
             params={"term": term, "types": types, "limit": limit, "offset": offset},
         )
+
+    async def iter_search_results(
+        self,
+        term: str,
+        *,
+        types: str = "songs,music-videos,albums,playlists,artists",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield catalog search resources across pages for each requested type.
+
+        Apple returns independent result groups per type, each with its own
+        pagination cursor. Groups are emitted in the order given in ``types``;
+        results within a group preserve Apple's ordering. An absent group
+        simply means no results for that type.
+        """
+        page = await self.get_search_results(
+            term, types=types, limit=limit, offset=offset
+        )
+        results = page.get("results")
+        if not isinstance(results, dict):
+            raise GamdlApiResponseError("Apple Music search response has no results")
+        for result_type in dict.fromkeys(
+            t.strip() for t in types.split(",") if t.strip()
+        ):
+            if result_type not in results:
+                continue
+            async for item in self._iterate_pages(page, result_type=result_type):
+                yield item
+
+    async def iter_playlist_tracks(
+        self,
+        playlist_id: str,
+        *,
+        is_library: bool = False,
+        limit: int = 100,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield every track of a catalog or user-library playlist in order."""
+        base = (
+            f"/v1/me/library/playlists/{playlist_id}"
+            if is_library
+            else f"/v1/catalog/{self.storefront}/playlists/{playlist_id}"
+        )
+        page = await self._get(
+            f"{base}/tracks",
+            operation="iter_playlist_tracks",
+            params={"limit": limit},
+        )
+        async for item in self._iterate_pages(page):
+            yield item
+
+    async def iter_album_tracks(
+        self,
+        album_id: str,
+        *,
+        is_library: bool = False,
+        limit: int = 100,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield every track in a catalog or user-library album in order."""
+        base = (
+            f"/v1/me/library/albums/{album_id}"
+            if is_library
+            else f"/v1/catalog/{self.storefront}/albums/{album_id}"
+        )
+        page = await self._get(
+            f"{base}/tracks",
+            operation="iter_album_tracks",
+            params={"limit": limit},
+        )
+        async for item in self._iterate_pages(page):
+            yield item
+
+    async def iter_artist_view(
+        self,
+        artist_id: str,
+        view: str,
+        *,
+        limit: int = 100,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield a catalog artist's view, e.g. ``full-albums`` or ``top-songs``."""
+        if not view or any(c in view for c in "/?#"):
+            raise ValueError("Invalid artist view")
+        page = await self._get(
+            f"/v1/catalog/{self.storefront}/artists/{artist_id}/view/{view}",
+            operation="iter_artist_view",
+            params={"limit": limit},
+        )
+        async for item in self._iterate_pages(page):
+            yield item
 
     async def get_assets(
         self,

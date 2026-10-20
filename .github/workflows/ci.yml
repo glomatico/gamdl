@@ -38,5 +38,11 @@ jobs:
         run: |
           uv run --no-sync --python ${{ matrix.python-version }} python -c "import gamdl; from importlib.metadata import version; assert version('gamdl') == '4.0.0a0'"
 
+      - name: Run offline API tests
+        run: uv run --no-sync --python ${{ matrix.python-version }} python -m unittest discover -s tests -v
+
+      - name: Check formatting
+        run: uv format --check
+
       - name: Build source and wheel distributions
         run: uv build

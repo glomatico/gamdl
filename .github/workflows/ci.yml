@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      - name: Install package
+        run: uv sync --locked --python ${{ matrix.python-version }}
+
+      - name: Verify import and version
+        run: |
+          uv run --no-sync --python ${{ matrix.python-version }} python -c "import gamdl; from importlib.metadata import version; assert version('gamdl') == '4.0.0a0'"
+
+      - name: Build source and wheel distributions
+        run: uv build

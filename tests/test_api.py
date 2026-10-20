@@ -287,6 +287,211 @@ class AppleMusicTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(GamdlApiResponseError):
                     await api.get_extended_api_data("https://malicious.example/steal")
 
+    async def test_search_iterator_paginates_each_resource_type(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            self.assertEqual(request.url.host, "amp-api.music.apple.com")
+            self.assertEqual(request.headers["authorization"], "Bearer test-token")
+            self.assertEqual(request.url.path, "/v1/catalog/br/search")
+
+            if request.url.params.get("offset") == "2":
+                self.assertEqual(request.url.params["types"], "songs")
+                return httpx.Response(
+                    200,
+                    json={
+                        "results": {"songs": {"data": [{"id": "s3", "type": "songs"}]}}
+                    },
+                )
+            if request.url.params.get("offset") == "1":
+                self.assertEqual(request.url.params["types"], "albums")
+                return httpx.Response(
+                    200,
+                    json={
+                        "results": {
+                            "albums": {"data": [{"id": "a2", "type": "albums"}]}
+                        }
+                    },
+                )
+
+            self.assertEqual(request.url.params["types"], "songs,albums,artists")
+            self.assertEqual(request.url.params["limit"], "2")
+            return httpx.Response(
+                200,
+                json={
+                    "results": {
+                        "songs": {
+                            "data": [
+                                {"id": "s1", "type": "songs"},
+                                {"id": "s2", "type": "songs"},
+                            ],
+                            "next": "/v1/catalog/br/search?types=songs&offset=2",
+                        },
+                        "albums": {
+                            "data": [{"id": "a1", "type": "albums"}],
+                            "next": "/v1/catalog/br/search?types=albums&offset=1",
+                        },
+                        # Artists intentionally missing: Apple can omit empty groups.
+                    }
+                },
+            )
+
+        async with mock_client(handler) as client:
+            async with await AppleMusicApi.create(
+                client=client, token="test-token", storefront="br"
+            ) as api:
+                results = [
+                    item["id"]
+                    async for item in api.iter_search_results(
+                        "test", types="songs,albums,artists", limit=2
+                    )
+                ]
+
+        self.assertEqual(results, ["s1", "s2", "s3", "a1", "a2"])
+        self.assertEqual(len(requests), 3)
+
+    async def test_search_iterator_is_lazy(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "results": {
+                        "songs": {
+                            "data": [{"id": "first"}],
+                            "next": "/v1/catalog/us/search?types=songs&offset=1",
+                        }
+                    }
+                },
+            )
+
+        async with mock_client(handler) as client:
+            async with await AppleMusicApi.create(client=client, token="x") as api:
+                async for item in api.iter_search_results("test", types="songs"):
+                    self.assertEqual(item["id"], "first")
+                    break
+        self.assertEqual(len(requests), 1)
+
+    async def test_search_iterator_rejects_bad_result_shapes_and_cycles(self):
+        responses = iter(
+            [
+                {"results": []},
+                {"results": {"songs": {"data": "not-a-list"}}},
+                {"results": {"songs": {"data": [{"id": "first"}], "next": "/loop"}}},
+                {"results": {"songs": {"data": [], "next": "/loop"}}},
+            ]
+        )
+
+        async with mock_client(
+            lambda _: httpx.Response(200, json=next(responses))
+        ) as client:
+            async with await AppleMusicApi.create(client=client, token="x") as api:
+                for _ in range(2):
+                    with self.assertRaises(GamdlApiResponseError):
+                        [
+                            item
+                            async for item in api.iter_search_results(
+                                "test", types="songs"
+                            )
+                        ]
+                with self.assertRaises(GamdlApiResponseError):
+                    [
+                        item
+                        async for item in api.iter_search_results("test", types="songs")
+                    ]
+
+    async def test_library_collection_iterators_with_offsets(self):
+        for kind in ("songs", "music-videos", "albums", "playlists"):
+            with self.subTest(kind=kind):
+                requests = []
+
+                def handler(request):
+                    requests.append(request)
+                    self.assertEqual(request.url.path, f"/v1/me/library/{kind}")
+                    if request.url.params.get("offset") == "5":
+                        return httpx.Response(
+                            200,
+                            json={"data": [{"id": f"{kind}-2"}]},
+                        )
+                    self.assertEqual(request.url.params["offset"], "4")
+                    self.assertEqual(request.url.params["limit"], "1")
+                    return httpx.Response(
+                        200,
+                        json={
+                            "data": [{"id": f"{kind}-1"}],
+                            "next": f"/v1/me/library/{kind}?limit=1&offset=5",
+                        },
+                    )
+
+                async with mock_client(handler) as client:
+                    async with await AppleMusicApi.create(
+                        client=client, token="x"
+                    ) as api:
+                        iterator = getattr(
+                            api, f"iter_library_{kind.replace('-', '_')}"
+                        )
+                        values = [i["id"] async for i in iterator(limit=1, offset=4)]
+                self.assertEqual(values, [f"{kind}-1", f"{kind}-2"])
+                self.assertEqual(len(requests), 2)
+
+    async def test_playlist_album_and_artist_iterators(self):
+        for kind, kwargs, path in (
+            (
+                "playlist_tracks",
+                {"playlist_id": "123"},
+                "/v1/catalog/br/playlists/123/tracks",
+            ),
+            (
+                "playlist_tracks",
+                {"playlist_id": "123", "is_library": True},
+                "/v1/me/library/playlists/123/tracks",
+            ),
+            ("album_tracks", {"album_id": "456"}, "/v1/catalog/br/albums/456/tracks"),
+            (
+                "album_tracks",
+                {"album_id": "456", "is_library": True},
+                "/v1/me/library/albums/456/tracks",
+            ),
+            (
+                "artist_view",
+                {"artist_id": "789", "view": "top-songs"},
+                "/v1/catalog/br/artists/789/view/top-songs",
+            ),
+        ):
+            with self.subTest(kind=kind, kwargs=kwargs):
+                calls = []
+
+                def handler(request):
+                    calls.append(request)
+                    self.assertEqual(request.url.path, path)
+                    if request.url.params.get("offset") == "1":
+                        return httpx.Response(200, json={"data": [{"id": "second"}]})
+                    self.assertEqual(request.url.params["limit"], "1")
+                    return httpx.Response(
+                        200,
+                        json={"data": [{"id": "first"}], "next": f"{path}?offset=1"},
+                    )
+
+                async with mock_client(handler) as client:
+                    async with await AppleMusicApi.create(
+                        client=client, token="x", storefront="br"
+                    ) as api:
+                        iterator = getattr(api, f"iter_{kind}")
+                        results = [i["id"] async for i in iterator(**kwargs, limit=1)]
+                self.assertEqual(results, ["first", "second"])
+                self.assertEqual(len(calls), 2)
+
+    async def test_rejects_unsafe_artist_view(self):
+        async with mock_client(
+            lambda req: self.fail("unexpected API request")
+        ) as client:
+            async with await AppleMusicApi.create(client=client, token="x") as api:
+                with self.assertRaises(ValueError):
+                    [i async for i in api.iter_artist_view("123", "../../private")]
+
     async def test_license_exchange_never_retries_post(self):
         requests = []
 

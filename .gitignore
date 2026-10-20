@@ -1,0 +1,18 @@
+# Virtual environments, build and Python caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+
+# Local configuration and private development diary
+.env
+.env.*
+!.env.example
+/.local/

@@ -1,0 +1,37 @@
+[project]
+name = "gamdl"
+version = "4.0.0a0"
+description = "An Apple Music command-line toolkit."
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Glomatico" },
+]
+dependencies = [
+    "httpx>=0.28.1,<1",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/glomatico/gamdl"
+Repository = "https://github.com/glomatico/gamdl"
+Issues = "https://github.com/glomatico/gamdl/issues"
+
+[build-system]
+requires = ["uv_build>=0.9,<0.14"]
+build-backend = "uv_build"

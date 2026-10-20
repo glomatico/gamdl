@@ -247,6 +247,87 @@ class AppleMusicApi:
             params={"extend": extend, "include": include},
         )
 
+    async def get_lyrics(
+        self,
+        song_id: str,
+        *,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch a catalog song's standard lyrics resource.
+
+        Uses the AMP ``/songs/{id}/lyrics`` endpoint rather than relying on
+        the optional ``lyrics`` relationship included by :meth:`get_song`.
+        The returned JSON usually contains TTML in
+        ``data[0]["attributes"]["ttml"]``; the caller can decide how to
+        parse or convert the document.
+
+        Args:
+            song_id: Catalog song identifier, not a personal-library ID.
+            language: Optional Apple Music localization tag (``l`` parameter).
+
+        Returns:
+            Raw lyrics API response, including its ``data`` resources.
+
+        Notes:
+            Lyrics availability and access depend on the track, storefront,
+            and account authorization. This is a private Apple Music endpoint
+            and may change independently of the supported catalog API.
+        """
+        return await self._get(
+            f"/v1/catalog/{self.storefront}/songs/{song_id}/lyrics",
+            operation="get_lyrics",
+            params={"l": language} if language is not None else None,
+        )
+
+    async def get_syllable_lyrics(
+        self,
+        song_id: str,
+        *,
+        language: str | None = None,
+        lyrics_language: str | None = None,
+        script: str | None = None,
+        extend: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch a catalog song's syllable- or word-timed lyrics resource.
+
+        Uses the AMP ``/songs/{id}/syllable-lyrics`` endpoint. Apple may
+        return TTML with timestamped ``<span>`` elements, supporting
+        syllable-level highlighting. The response is returned unchanged;
+        converting TTML to LRC/SRT belongs to a separate lyrics processor.
+
+        Args:
+            song_id: Catalog song identifier, not a personal-library ID.
+            language: Optional general localization tag (``l``).
+            lyrics_language: Optional lyrics-specific locale (``l[lyrics]``).
+            script: Optional lyrics script preference (``l[script]``), such as
+                ``"en-Latn"``.
+            extend: Optional extension, e.g. ``"ttmlLocalizations"`` to
+                request available translated/transliterated lyric metadata.
+
+        Returns:
+            Raw JSON response, typically with TTML at
+            ``data[0]["attributes"]["ttml"]`` or localized lyric fields.
+
+        Notes:
+            Not all songs have syllable timing. This is a private endpoint;
+            it may return an error for tracks without accessible lyrics.
+        """
+        params: dict[str, str] = {}
+        if language is not None:
+            params["l"] = language
+        if lyrics_language is not None:
+            params["l[lyrics]"] = lyrics_language
+        if script is not None:
+            params["l[script]"] = script
+        if extend is not None:
+            params["extend"] = extend
+
+        return await self._get(
+            f"/v1/catalog/{self.storefront}/songs/{song_id}/syllable-lyrics",
+            operation="get_syllable_lyrics",
+            params=params or None,
+        )
+
     async def get_music_video(
         self, music_video_id: str, *, include: str = "albums"
     ) -> dict[str, Any]:

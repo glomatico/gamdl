@@ -24,13 +24,18 @@ logger = get_logger(__name__)
 
 
 class RequestPacer:
-    """Serialize protected API operations and delay between completions.
+    """Serialize protected API attempts with a delay between completions.
 
-    Pass the *same* instance to multiple API clients to coordinate them.
-    This is deliberately not used for parallel CDN/media downloads.
+    Share one instance across API clients to coordinate calls to remote
+    services. ``interval`` specifies the minimum delay, in seconds, after
+    the end of one attempt before the next starts. A retry releases the lock
+    while backing off, allowing other waiting requests to proceed.
+
+    Do not use this pacer for concurrent CDN/media transfers.
     """
 
     def __init__(self, interval: float = 0.0) -> None:
+        """Set the nonnegative delay between protected request attempts."""
         if interval < 0:
             raise ValueError("Request interval must be nonnegative")
         self.interval = interval
@@ -54,10 +59,15 @@ class RequestPacer:
 
 
 class ApiHttpClient:
-    """Owns an HTTPX client unless one was injected by the caller.
+    """Wrap HTTPX with request pacing, retry policy, and sanitized API errors.
 
-    GETs are retried for common transient statuses and transport problems.
-    POSTs (especially DRM licenses and login) are never retried implicitly.
+    Automatically retry GET/HEAD for selected transient status codes and
+    transport errors, using ``httpx-retries`` for backoff and ``Retry-After``.
+    POSTs, including login and DRM license requests, are never retried.
+    Optional pacing is applied to each network attempt, not to backoff time.
+
+    An internally created HTTPX client is closed by :meth:`aclose` or the
+    async context manager. An injected client remains caller-owned.
     """
 
     def __init__(
@@ -69,6 +79,19 @@ class ApiHttpClient:
         retries: int = 2,
         timeout: float = 30.0,
     ) -> None:
+        """Configure the transport, retry policy, and optional shared pacer.
+
+        Args:
+            service: Safe service label for exceptions and diagnostics.
+            client: Optional externally managed HTTPX async client. When
+                supplied, its transport settings and lifetime are unchanged.
+            pacer: Optional shared API request pacer.
+            retries: Number of additional GET/HEAD attempts after the first.
+            timeout: Default request timeout for an internally created client.
+
+        Raises:
+            ValueError: If ``retries`` is negative.
+        """
         if retries < 0:
             raise ValueError("Retry count must be nonnegative")
         self.service = service
@@ -93,6 +116,7 @@ class ApiHttpClient:
         await self.aclose()
 
     async def aclose(self) -> None:
+        """Close the HTTPX client if this wrapper created it."""
         if self._owns_client and not self.client.is_closed:
             await self.client.aclose()
 
@@ -104,6 +128,25 @@ class ApiHttpClient:
         operation: str,
         **kwargs: Any,
     ) -> httpx.Response:
+        """Execute an HTTP request with safe error translation and retries.
+
+        Args:
+            method: HTTP method, such as ``"GET"`` or ``"POST"``.
+            url: Target URL. Caller is responsible for validating which host
+                can receive authentication headers.
+            operation: Non-sensitive label used for structured diagnostics.
+            **kwargs: HTTPX request arguments such as ``params``, ``headers``
+                or ``json``. Their values are never deliberately logged.
+
+        Returns:
+            Successful HTTPX response, without decoding its body.
+
+        Raises:
+            GamdlTransportError: Network request failed after allowed retries.
+            GamdlAuthenticationError: Service returned HTTP 401 or 403.
+            GamdlRateLimitError: Service returned HTTP 429 after retries.
+            GamdlApiResponseError: Service returned another HTTP error status.
+        """
         method = method.upper()
         retry = self.retry
         attempt = 0
@@ -196,6 +239,16 @@ class ApiHttpClient:
         operation: str,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        """Execute a request and require a JSON object response.
+
+        Returns:
+            Decoded JSON dictionary (including any application-specific
+            fields, whose validation belongs to the service client).
+
+        Raises:
+            GamdlApiResponseError: Body is not valid JSON or is not an object.
+            GamdlApiError: HTTP or transport errors from :meth:`request`.
+        """
         response = await self.request(method, url, operation=operation, **kwargs)
         try:
             data = response.json()
@@ -214,5 +267,6 @@ class ApiHttpClient:
         return data
 
     async def get_text(self, url: str, *, operation: str, **kwargs: Any) -> str:
+        """Fetch and decode a text response using the standard request policy."""
         response = await self.request("GET", url, operation=operation, **kwargs)
         return response.text

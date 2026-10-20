@@ -17,7 +17,12 @@ TwoFactorPrompt = Callable[[], str | Awaitable[str]]
 
 
 class WrapperApi:
-    """Thin wrapper API client; prompts are supplied by the host application."""
+    """Access a wrapper-v2 instance for authentication and playback metadata.
+
+    Credential and 2FA callbacks belong to the calling application, not this
+    API. The wrapper's HTTP base URL is separate from the host/port used by
+    the eventual native decryption engine.
+    """
 
     def __init__(
         self,
@@ -42,10 +47,16 @@ class WrapperApi:
         await self.aclose()
 
     async def aclose(self) -> None:
+        """Release the HTTP client if it is owned by this wrapper instance."""
         await self.http.aclose()
 
     @staticmethod
     def validate_api_version(me: dict[str, Any]) -> None:
+        """Require the wrapper's current API contract version.
+
+        Raises:
+            GamdlApiResponseError: ``/me`` reports an incompatible version.
+        """
         if me.get("version") != TARGET_WRAPPER_API_VERSION:
             raise GamdlApiResponseError(
                 f"Unsupported wrapper API version (expected {TARGET_WRAPPER_API_VERSION})"
@@ -63,6 +74,29 @@ class WrapperApi:
         client: httpx.AsyncClient | None = None,
         pacer: RequestPacer | None = None,
     ) -> WrapperApi:
+        """Connect to a wrapper instance and optionally complete authentication.
+
+        Queries ``/me``, checks API compatibility, and invokes the supplied
+        callbacks if the wrapper reports ``logged_out``. Callback functions
+        can be synchronous or asynchronous; no interactive UI is required.
+
+        Args:
+            base_url: Base URL for wrapper HTTP endpoints.
+            decrypt_host: Host used later by the native decryption engine.
+            decrypt_port: Port used later by the native decryption engine.
+            get_credentials: Optional callback returning username/password.
+            get_2fa_code: Optional callback providing a two-factor code when
+                the login endpoint requests one.
+            client: Optional caller-owned HTTPX client.
+            pacer: Optional shared request pacer.
+
+        Returns:
+            Authenticated and version-checked wrapper client.
+
+        Raises:
+            GamdlAuthenticationError: Login is required or failed.
+            GamdlApiResponseError: Wrapper API version is incompatible.
+        """
         http = ApiHttpClient("wrapper", client=client, pacer=pacer, timeout=600.0)
         base_url = base_url.rstrip("/")
         try:
@@ -90,7 +124,11 @@ class WrapperApi:
 
     @staticmethod
     async def get_me(http: ApiHttpClient, base_url: str) -> dict[str, Any]:
-        # Response may contain credentials. Never log it.
+        """Fetch the wrapper's account and API status response.
+
+        This response may include authentication tokens. Never log it or
+        display the raw dictionary to users.
+        """
         return await http.request_json(
             "GET", f"{base_url}/me", operation="wrapper_get_me"
         )
@@ -103,6 +141,15 @@ class WrapperApi:
         password: str,
         get_2fa_code: TwoFactorPrompt | None = None,
     ) -> None:
+        """Submit wrapper credentials and handle the optional 2FA challenge.
+
+        An HTTP 202 from the login endpoint requests a second POST to
+        ``/login/2fa``. Neither POST is retried automatically by our HTTP
+        wrapper. Callback results are not logged or stored.
+
+        Raises:
+            GamdlAuthenticationError: Missing 2FA callback or rejected login.
+        """
         response = await http.request(
             "POST",
             f"{base_url}/login",
@@ -133,6 +180,7 @@ class WrapperApi:
             )
 
     async def get_playback(self, media_id: str) -> dict[str, Any]:
+        """Fetch raw wrapper playback metadata for an Apple Music media ID."""
         return await self.http.request_json(
             "GET",
             f"{self.base_url}/playback",

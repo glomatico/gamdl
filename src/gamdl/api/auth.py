@@ -22,7 +22,11 @@ T = TypeVar("T")
 
 @dataclass(frozen=True, repr=False)
 class AppleMusicCredentials:
-    """In-memory credentials. Their values are intentionally hidden from repr."""
+    """Hold Apple Music credentials in memory without exposing them in repr.
+
+    These fields are not persisted or automatically refreshed. Avoid logging
+    the attributes individually, even at debug level.
+    """
 
     developer_token: str
     media_user_token: str | None = None
@@ -32,7 +36,16 @@ class AppleMusicCredentials:
 
 
 def media_user_token_from_cookies(path: str) -> str:
-    """Load a current Apple Music token from a Netscape-format cookies file."""
+    """Read a music-user token from an exported Netscape-format cookies file.
+
+    The file must contain a ``media-user-token`` cookie for
+    ``music.apple.com``. Cookie expiry is not validated at load time;
+    authentication is checked when the API requests account metadata.
+
+    Raises:
+        GamdlAuthenticationError: Cookie file cannot be loaded or the token
+            cannot be found.
+    """
     jar = MozillaCookieJar(path)
     try:
         jar.load(ignore_discard=True, ignore_expires=True)
@@ -50,6 +63,11 @@ def media_user_token_from_cookies(path: str) -> str:
 
 
 def credentials_from_wrapper(account: dict) -> AppleMusicCredentials:
+    """Extract both Apple Music tokens from a wrapper ``/me`` response.
+
+    Raises:
+        GamdlAuthenticationError: Wrapper authentication data is incomplete.
+    """
     auth = account.get("auth", {})
     if not isinstance(auth, dict):
         raise GamdlAuthenticationError("Wrapper did not provide valid authentication")
@@ -61,7 +79,21 @@ def credentials_from_wrapper(account: dict) -> AppleMusicCredentials:
 
 
 async def fetch_developer_token(http: ApiHttpClient) -> str:
-    """Discover the current web-player developer token (best-effort)."""
+    """Discover an Apple Music web-player developer token (best-effort).
+
+    Fetches the public homepage, locates the bundled player JavaScript, and
+    extracts a JWT-shaped token. This depends on Apple's current web-player
+    layout and may require updates when their frontend changes.
+
+    Args:
+        http: Shared HTTP client used for both discovery requests.
+
+    Returns:
+        Discovered developer-token string; no session is saved to disk.
+
+    Raises:
+        GamdlApiResponseError: Script URL or token cannot be located.
+    """
     homepage = await http.get_text(
         APPLE_MUSIC_URL,
         operation="discover_developer_token_home",
@@ -84,7 +116,11 @@ async def fetch_developer_token(http: ApiHttpClient) -> str:
 async def invoke_prompt(
     callback: Callable[[], T | Awaitable[T]],
 ) -> T:
-    """Invoke a host-provided synchronous or asynchronous auth callback."""
+    """Run a host-supplied credential/2FA callback and await it if necessary.
+
+    This helper is UI-agnostic: the callback may use a CLI prompt, a bot, or
+    an external authentication interface. It does not create prompts itself.
+    """
     result = callback()
     if inspect.isawaitable(result):
         return await result

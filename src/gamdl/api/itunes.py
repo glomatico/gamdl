@@ -13,7 +13,12 @@ from .http import ApiHttpClient, RequestPacer
 
 
 class ItunesApi:
-    """The iTunes metadata API, independent of the Apple Music auth session."""
+    """Fetch public iTunes metadata for a specific country and language.
+
+    A country code (e.g. ``"br"``) and Apple's numeric storefront ID are
+    distinct identifiers. The ID is needed by the metadata-page endpoint.
+    No Apple Music user authentication is required for these requests.
+    """
 
     def __init__(
         self,
@@ -35,11 +40,19 @@ class ItunesApi:
         await self.aclose()
 
     async def aclose(self) -> None:
+        """Release the HTTP client if this API instance created it."""
         await self.http.aclose()
 
     @staticmethod
     async def get_storefront_id(http: ApiHttpClient, storefront: str) -> int:
-        """Discover numeric storefront from MusicKit without assuming US IDs."""
+        """Resolve a two-letter storefront code to Apple's numeric store ID.
+
+        Parses the public MusicKit JavaScript mapping, which can change when
+        Apple updates its frontend. The caller supplies an HTTP client.
+
+        Raises:
+            GamdlApiResponseError: Country code or numeric ID cannot be found.
+        """
         js = await http.get_text(MUSICKIT_URL, operation="resolve_storefront")
         country = re.search(rf'{re.escape(storefront.upper())}:"([A-Z]{{3}})"', js)
         if country is None:
@@ -59,6 +72,20 @@ class ItunesApi:
         client: httpx.AsyncClient | None = None,
         pacer: RequestPacer | None = None,
     ) -> ItunesApi:
+        """Create an iTunes API client for the requested storefront.
+
+        Args:
+            storefront: Two-letter country code, such as ``"br"``.
+            storefront_id: Optional numeric Apple store ID. If omitted, the
+                known US ID is used for ``"us"``; other countries are resolved
+                from Apple's MusicKit mapping.
+            language: Language tag for lookup requests.
+            client: Optional caller-owned HTTPX client.
+            pacer: Optional request pacer shared with other API clients.
+
+        Returns:
+            Initialized iTunes client; use ``async with`` to release resources.
+        """
         http = ApiHttpClient("itunes", client=client, pacer=pacer, timeout=60.0)
         try:
             if storefront_id is None:
@@ -80,6 +107,12 @@ class ItunesApi:
     async def get_lookup_result(
         self, media_id: str, *, entity: str = "album"
     ) -> dict[str, Any]:
+        """Look up a media ID using Apple's public iTunes lookup endpoint.
+
+        ``entity`` specifies related result types (for example ``"album"``).
+        Returns the raw JSON response, including ``resultCount`` and
+        ``results``; an empty result set is not treated as a request failure.
+        """
         return await self.http.request_json(
             "GET",
             ITUNES_LOOKUP_URL,
@@ -93,7 +126,19 @@ class ItunesApi:
         )
 
     async def get_itunes_page(self, media_type: str, media_id: str) -> dict[str, Any]:
-        # Only allow a single path segment in user-supplied media IDs and types.
+        """Fetch an Apple Music metadata page with its numeric storefront ID.
+
+        Args:
+            media_type: One URL path segment identifying the content type.
+            media_id: The final media identifier path segment.
+
+        Returns:
+            Raw JSON metadata response; redirects are followed.
+
+        Raises:
+            ValueError: ``media_type`` or ``media_id`` is not a safe path
+                segment according to the current endpoint validation.
+        """
         if "/" in media_type or "/" in media_id or "?" in media_id or "#" in media_id:
             raise ValueError("Invalid iTunes media type or ID")
         return await self.http.request_json(

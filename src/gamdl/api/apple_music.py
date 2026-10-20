@@ -30,11 +30,16 @@ logger = get_logger(__name__)
 
 
 class AppleMusicApi:
-    """High-level endpoint methods returning raw JSON dictionaries.
+    """Access Apple Music catalog, library, search, and playback endpoints.
 
-    Clients created with ``create`` or ``from_cookies`` own their internally
-    created HTTPX connection and can be used with ``async with``. Injected HTTPX
-    clients remain owned by their callers.
+    Endpoint methods return the unmodified JSON response as a dictionary.
+    ``iter_*`` methods instead yield individual resource dictionaries, fetching
+    additional pages on demand. API calls are not made until an iterator is
+    consumed.
+
+    Create instances with ``create()``, ``from_cookies()``, or
+    ``from_wrapper()``. Use them as asynchronous context managers to release
+    internally owned connections. Injected HTTPX clients remain caller-owned.
     """
 
     def __init__(
@@ -58,10 +63,16 @@ class AppleMusicApi:
         await self.aclose()
 
     async def aclose(self) -> None:
+        """Close the underlying HTTP client only if this API instance owns it."""
         await self.http.aclose()
 
     @property
     def active_subscription(self) -> bool:
+        """Whether account metadata confirms an active Apple Music subscription.
+
+        Returns ``False`` if the API instance has no authenticated account
+        information, which is not proof that the account lacks a subscription.
+        """
         return bool(
             (self.account_info or {})
             .get("meta", {})
@@ -71,6 +82,7 @@ class AppleMusicApi:
 
     @property
     def account_restrictions(self) -> dict[str, Any] | None:
+        """Return account content restrictions, if present in account metadata."""
         data = (self.account_info or {}).get("data") or []
         return data[0].get("attributes", {}).get("restrictions") if data else None
 
@@ -95,6 +107,26 @@ class AppleMusicApi:
         client: httpx.AsyncClient | None = None,
         pacer: RequestPacer | None = None,
     ) -> AppleMusicApi:
+        """Create a client from tokens, optionally discovering missing credentials.
+
+        Args:
+            storefront: Two-letter country code. Defaults to the authenticated
+                account's storefront when available, otherwise ``"us"``.
+            language: Language tag used for web playback requests.
+            token: Apple Music developer token. If omitted, attempt to extract
+                one from Apple's web player.
+            media_user_token: Optional authenticated user's token. When given,
+                validate it with the account endpoint during creation.
+            client: Optional externally managed HTTPX client, useful for tests.
+                The caller is responsible for closing this client.
+            pacer: Optional shared limiter for serializing Apple API requests.
+
+        Returns:
+            An initialized API instance, suitable for ``async with``.
+
+        Raises:
+            GamdlApiError: If token discovery or account validation fails.
+        """
         http = ApiHttpClient("apple_music", client=client, pacer=pacer)
         try:
             token = token or await fetch_developer_token(http)
@@ -141,6 +173,12 @@ class AppleMusicApi:
         path: str,
         **kwargs: Any,
     ) -> AppleMusicApi:
+        """Create an authenticated client using a Netscape cookies file.
+
+        The file must contain ``media-user-token`` for ``music.apple.com``.
+        Additional keyword arguments are forwarded to :meth:`create`.
+        Cookies are read from disk but never migrated or persisted by this API.
+        """
         return await cls.create(
             media_user_token=media_user_token_from_cookies(path),
             **kwargs,
@@ -152,6 +190,11 @@ class AppleMusicApi:
         wrapper: WrapperApi,
         **kwargs: Any,
     ) -> AppleMusicApi:
+        """Create a client using authentication tokens from an active wrapper.
+
+        ``wrapper.me`` must contain both the developer and music-user tokens.
+        Additional keyword arguments are forwarded to :meth:`create`.
+        """
         credentials = credentials_from_wrapper(wrapper.me)
         return await cls.create(
             token=credentials.developer_token,
@@ -175,6 +218,7 @@ class AppleMusicApi:
         operation: str,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Fetch one AMP API response and reject top-level API errors."""
         result = await self.http.request_json(
             "GET",
             self._amp_url(path),
@@ -196,6 +240,7 @@ class AppleMusicApi:
         extend: str = "extendedAssetUrls",
         include: str = "lyrics,albums",
     ) -> dict[str, Any]:
+        """Fetch one catalog song, optionally including lyrics and album data."""
         return await self._get(
             f"/v1/catalog/{self.storefront}/songs/{song_id}",
             operation="get_song",
@@ -205,6 +250,7 @@ class AppleMusicApi:
     async def get_music_video(
         self, music_video_id: str, *, include: str = "albums"
     ) -> dict[str, Any]:
+        """Fetch a catalog music video and its requested relationships."""
         return await self._get(
             f"/v1/catalog/{self.storefront}/music-videos/{music_video_id}",
             operation="get_music_video",
@@ -212,6 +258,7 @@ class AppleMusicApi:
         )
 
     async def get_uploaded_video(self, uploaded_video_id: str) -> dict[str, Any]:
+        """Fetch metadata for an uploaded catalog video."""
         return await self._get(
             f"/v1/catalog/{self.storefront}/uploaded-videos/{uploaded_video_id}",
             operation="get_uploaded_video",
@@ -220,6 +267,7 @@ class AppleMusicApi:
     async def get_album(
         self, album_id: str, *, extend: str = "extendedAssetUrls"
     ) -> dict[str, Any]:
+        """Fetch a catalog album with the requested extended asset metadata."""
         return await self._get(
             f"/v1/catalog/{self.storefront}/albums/{album_id}",
             operation="get_album",
@@ -233,6 +281,11 @@ class AppleMusicApi:
         limit_tracks: int = 300,
         extend: str = "extendedAssetUrls",
     ) -> dict[str, Any]:
+        """Fetch a catalog playlist with up to ``limit_tracks`` embedded tracks.
+
+        For playlists spanning multiple pages, use :meth:`iter_playlist_tracks`
+        rather than assuming the embedded track relationship is complete.
+        """
         return await self._get(
             f"/v1/catalog/{self.storefront}/playlists/{playlist_id}",
             operation="get_playlist",
@@ -247,6 +300,12 @@ class AppleMusicApi:
         views: str = "full-albums,compilation-albums,live-albums,singles,top-songs",
         limit: int = 100,
     ) -> dict[str, Any]:
+        """Fetch an artist with selected relationships and views.
+
+        ``include`` and ``views`` are comma-separated Apple Music names.
+        ``limit`` applies to each requested relationship or view, not to the
+        overall response. For a complete view, use :meth:`iter_artist_view`.
+        """
         return await self._get(
             f"/v1/catalog/{self.storefront}/artists/{artist_id}",
             operation="get_artist",
@@ -267,6 +326,7 @@ class AppleMusicApi:
         include: str = "catalog",
         extend: str = "extendedAssetUrls",
     ) -> dict[str, Any]:
+        """Fetch one user's library song, optionally including its catalog item."""
         return await self._get(
             f"/v1/me/library/songs/{song_id}",
             operation="get_library_song",
@@ -276,6 +336,7 @@ class AppleMusicApi:
     async def get_library_music_video(
         self, music_video_id: str, *, include: str = "catalog"
     ) -> dict[str, Any]:
+        """Fetch one user's library music video and requested relationships."""
         return await self._get(
             f"/v1/me/library/music-videos/{music_video_id}",
             operation="get_library_music_video",
@@ -289,6 +350,7 @@ class AppleMusicApi:
         include: str = "catalog",
         extend: str = "extendedAssetUrls",
     ) -> dict[str, Any]:
+        """Fetch one user's library album and requested relationships."""
         return await self._get(
             f"/v1/me/library/albums/{album_id}",
             operation="get_library_album",
@@ -303,6 +365,12 @@ class AppleMusicApi:
         limit: int = 100,
         extend: str = "extendedAssetUrls",
     ) -> dict[str, Any]:
+        """Fetch one library playlist and its selected included resources.
+
+        ``limit`` applies to each resource type named in ``include``. For all
+        of the playlist's tracks, use :meth:`iter_playlist_tracks` with
+        ``is_library=True``.
+        """
         return await self._get(
             f"/v1/me/library/playlists/{playlist_id}",
             operation="get_library_playlist",
@@ -322,6 +390,7 @@ class AppleMusicApi:
         include: str,
         extend: str | None = None,
     ) -> dict[str, Any]:
+        """Fetch one page of a user-library collection."""
         params: dict[str, Any] = {"limit": limit, "offset": offset, "include": include}
         if extend is not None:
             params["extend"] = extend
@@ -339,6 +408,7 @@ class AppleMusicApi:
         include: str = "catalog",
         extend: str = "extendedAssetUrls",
     ) -> dict[str, Any]:
+        """Fetch one page of library songs; ``limit`` is the page size."""
         return await self._library_list(
             "songs", limit=limit, offset=offset, include=include, extend=extend
         )
@@ -346,6 +416,7 @@ class AppleMusicApi:
     async def get_library_music_videos(
         self, *, limit: int = 100, offset: int = 0, include: str = "catalog"
     ) -> dict[str, Any]:
+        """Fetch one page of library music videos; ``offset`` skips prior items."""
         return await self._library_list(
             "music-videos", limit=limit, offset=offset, include=include
         )
@@ -353,6 +424,7 @@ class AppleMusicApi:
     async def get_library_albums(
         self, *, limit: int = 100, offset: int = 0, include: str = "catalog"
     ) -> dict[str, Any]:
+        """Fetch one page of library albums without following ``next``."""
         return await self._library_list(
             "albums", limit=limit, offset=offset, include=include
         )
@@ -360,6 +432,7 @@ class AppleMusicApi:
     async def get_library_playlists(
         self, *, limit: int = 100, offset: int = 0, include: str = "catalog"
     ) -> dict[str, Any]:
+        """Fetch one page of library playlists without following ``next``."""
         return await self._library_list(
             "playlists", limit=limit, offset=offset, include=include
         )
@@ -371,7 +444,16 @@ class AppleMusicApi:
         offset: int = 0,
         include: str = "catalog",
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield all user playlists in server order, transparently following `next`."""
+        """Yield library playlists in server order, across all pages.
+
+        Args:
+            limit: Requested number of playlists per page, not a total cap.
+            offset: Number of items to skip before the first page.
+            include: Comma-separated relationships to request.
+
+        Yields:
+            Individual Apple Music library-playlist resource dictionaries.
+        """
         page = await self.get_library_playlists(
             limit=limit, offset=offset, include=include
         )
@@ -386,7 +468,14 @@ class AppleMusicApi:
         include: str = "catalog",
         extend: str = "extendedAssetUrls",
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield the user's songs across all pages, in library order."""
+        """Yield library songs lazily, following subsequent pages in order.
+
+        ``limit`` determines page size and ``offset`` the starting position.
+        ``include`` and ``extend`` are forwarded to the initial song query.
+
+        Yields:
+            Individual library-song resource dictionaries.
+        """
         page = await self.get_library_songs(
             limit=limit, offset=offset, include=include, extend=extend
         )
@@ -400,7 +489,11 @@ class AppleMusicApi:
         offset: int = 0,
         include: str = "catalog",
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield all music videos in the user's library."""
+        """Yield all library music videos, starting at ``offset``.
+
+        ``limit`` is the requested page size; pagination is automatic.
+        Each yielded value is a library music-video resource dictionary.
+        """
         page = await self.get_library_music_videos(
             limit=limit, offset=offset, include=include
         )
@@ -414,7 +507,11 @@ class AppleMusicApi:
         offset: int = 0,
         include: str = "catalog",
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield all albums in the user's library."""
+        """Yield all library albums in server order, starting at ``offset``.
+
+        ``limit`` specifies the requested page size, not a result limit.
+        Each yielded value is a library-album resource dictionary.
+        """
         page = await self.get_library_albums(
             limit=limit, offset=offset, include=include
         )
@@ -427,7 +524,13 @@ class AppleMusicApi:
         *,
         result_type: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Iterate plain collections or type-grouped search result pages."""
+        """Iterate ``data``/``next`` pages, or one nested search result group.
+
+        For grouped searches, every fetched page must contain
+        ``results[result_type]``. Repeated pagination cursors and invalid
+        collection shapes raise :class:`GamdlApiResponseError` rather than
+        silently skipping results or looping indefinitely.
+        """
         seen: set[str] = set()
         while True:
             collection = page
@@ -459,6 +562,12 @@ class AppleMusicApi:
             page = await self.get_extended_api_data(next_url)
 
     async def get_extended_api_data(self, next_uri: str) -> dict[str, Any]:
+        """Fetch a server-provided pagination link from the AMP API.
+
+        Only HTTPS links targeting ``amp-api.music.apple.com`` are allowed;
+        this prevents forwarding authentication headers to another host.
+        ``next_uri`` may be a relative URI or an absolute AMP URL.
+        """
         return await self._get(next_uri, operation="get_extended_api_data")
 
     async def get_search_results(
@@ -469,6 +578,21 @@ class AppleMusicApi:
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
+        """Fetch one page of catalog search results grouped by resource type.
+
+        Args:
+            term: Search query.
+            types: Comma-separated Apple Music resource types to search.
+            limit: Requested number of results per type on this page.
+            offset: Starting offset for the initial search query.
+
+        Returns:
+            Raw search response with ``results`` grouped by type. Each group
+            may contain its own ``next`` link for additional results.
+
+        See Also:
+            :meth:`iter_search_results` to consume every page automatically.
+        """
         return await self._get(
             f"/v1/catalog/{self.storefront}/search",
             operation="get_search_results",
@@ -483,12 +607,26 @@ class AppleMusicApi:
         limit: int = 50,
         offset: int = 0,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield catalog search resources across pages for each requested type.
+        """Yield catalog search results, following pagination for each type.
 
-        Apple returns independent result groups per type, each with its own
-        pagination cursor. Groups are emitted in the order given in ``types``;
-        results within a group preserve Apple's ordering. An absent group
-        simply means no results for that type.
+        Apple's search response contains separate groups such as ``songs`` and
+        ``albums``, each with an independent ``next`` cursor. This method
+        exhausts one type before moving to the next, in the order specified
+        by ``types``. It does **not** provide a global relevance ranking across
+        types. Missing/empty groups yield nothing.
+
+        Args:
+            term: Search query.
+            types: Comma-separated resource types, in preferred output order.
+            limit: Requested page size per resource type, not a total cap.
+            offset: Starting offset for the initial search request.
+
+        Yields:
+            Raw resource dictionaries with their original ``type`` field.
+
+        Notes:
+            Pages are fetched only as needed. Breaking out of ``async for``
+            avoids requesting additional pages.
         """
         page = await self.get_search_results(
             term, types=types, limit=limit, offset=offset
@@ -511,7 +649,18 @@ class AppleMusicApi:
         is_library: bool = False,
         limit: int = 100,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield every track of a catalog or user-library playlist in order."""
+        """Yield playlist tracks in order by following the ``tracks`` endpoint.
+
+        Args:
+            playlist_id: ID of the catalog or library playlist.
+            is_library: Use the authenticated user's library endpoint instead
+                of the storefront's catalog endpoint.
+            limit: Requested page size, not a total track limit.
+
+        Yields:
+            Individual song or music-video resource dictionaries in playlist
+            order, including items beyond the first page.
+        """
         base = (
             f"/v1/me/library/playlists/{playlist_id}"
             if is_library
@@ -532,7 +681,17 @@ class AppleMusicApi:
         is_library: bool = False,
         limit: int = 100,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield every track in a catalog or user-library album in order."""
+        """Yield an album's tracks in order, following the ``tracks`` cursor.
+
+        Args:
+            album_id: Catalog or library album ID.
+            is_library: Select the authenticated library album endpoint.
+            limit: Requested page size, not a maximum number of tracks.
+
+        Yields:
+            Song and music-video resource dictionaries in the order returned
+            by Apple Music.
+        """
         base = (
             f"/v1/me/library/albums/{album_id}"
             if is_library
@@ -553,7 +712,20 @@ class AppleMusicApi:
         *,
         limit: int = 100,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield a catalog artist's view, e.g. ``full-albums`` or ``top-songs``."""
+        """Yield all resources in one catalog artist view.
+
+        Args:
+            artist_id: Catalog artist ID.
+            view: Apple Music view name, such as ``full-albums``,
+                ``singles``, or ``top-songs``.
+            limit: Requested page size, not a total cap.
+
+        Yields:
+            Individual view resource dictionaries in server order.
+
+        Raises:
+            ValueError: If ``view`` contains path or query separators.
+        """
         if not view or any(c in view for c in "/?#"):
             raise ValueError("Invalid artist view")
         page = await self._get(
@@ -573,6 +745,12 @@ class AppleMusicApi:
         hls_encryption: str = "CBC",
         hls_profile: str = "enhancedHls",
     ) -> dict[str, Any]:
+        """Retrieve streaming asset metadata for a song or other media item.
+
+        ``hls_encryption`` and ``hls_profile`` select the requested HLS
+        configuration. The response is raw Apple metadata; downloading and
+        decrypting media are responsibilities of higher-level components.
+        """
         params: dict[str, Any] = {
             "id": media_id,
             "kind": kind,
@@ -586,6 +764,12 @@ class AppleMusicApi:
     async def get_webplayback(
         self, track_id: str, *, is_library: bool = False
     ) -> dict[str, Any]:
+        """Request playback metadata for a catalog or library track.
+
+        ``is_library`` sends ``universalLibraryId`` instead of the catalog
+        ``salableAdamId``. The endpoint may reject unavailable media with a
+        ``dialog`` response, which is converted to an API error.
+        """
         body = {
             ("universalLibraryId" if is_library else "salableAdamId"): track_id,
             "language": self.language,
@@ -610,6 +794,22 @@ class AppleMusicApi:
         key_system: str = "com.widevine.alpha",
         is_library: bool = False,
     ) -> dict[str, Any]:
+        """Exchange a DRM challenge for the track's playback license.
+
+        Args:
+            track_id: Apple Music media identifier.
+            track_uri: Stream URI associated with the license challenge.
+            challenge: Encoded challenge supplied by the DRM component.
+            key_system: DRM key-system identifier (defaults to Widevine).
+            is_library: Whether the identifier belongs to the user's library.
+
+        Returns:
+            Raw license response from Apple Music when ``status`` is zero.
+
+        Notes:
+            License requests use POST and are **not** automatically retried.
+            Neither the challenge nor license contents should appear in logs.
+        """
         response = await self.http.request_json(
             "POST",
             APPLE_MUSIC_LICENSE_URL,

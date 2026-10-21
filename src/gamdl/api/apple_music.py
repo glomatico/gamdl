@@ -828,6 +828,8 @@ class AppleMusicApi:
     ) -> dict[str, Any]:
         """Retrieve streaming asset metadata for a song or other media item.
 
+        ``kind`` uses Apple's asset API identifiers: ``"song"`` for songs
+        and ``"musicVideo"`` for music videos (not ``"music-video"``).
         ``hls_encryption`` and ``hls_profile`` select the requested HLS
         configuration. The response is raw Apple metadata; downloading and
         decrypting media are responsibilities of higher-level components.

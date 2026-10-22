@@ -11,8 +11,9 @@ from .tags import Tags
 class Song(Media):
     """An Apple Music song; every network-dependent operation is explicit.
 
-    Loading tags or cover metadata reuses the song's metadata. Requesting
-    lyrics, assets or playback metadata never happens implicitly.
+    Cover metadata comes from the catalog resource; tags instead come from
+    the first playback asset's metadata, as in Gamdl 3.x. Neither lyrics nor
+    streaming assets are requested just because the song object was created.
     """
 
     resource_type = "songs"
@@ -30,10 +31,34 @@ class Song(Media):
         return items[0]
 
     async def get_tags(self) -> Tags:
-        """Derive common tags from cached catalog metadata, without disk IO."""
+        """Derive tags from the first web-playback asset's metadata.
+
+        Reuses a cached web-playback response if one has been requested. This
+        intentionally does not fetch catalog metadata or lyrics, nor does it
+        enrich missing fields from iTunes yet.
+
+        Raises:
+            GamdlMediaError: No playback asset contains usable metadata.
+        """
 
         async def load() -> Tags:
-            return Tags.from_metadata(await self.get_metadata())
+            playback = await self._get_webplayback()
+            song_list = playback.get("songList")
+            if not isinstance(song_list, list) or not song_list:
+                raise GamdlMediaError("Web playback returned no songs")
+            first_song = song_list[0]
+            if not isinstance(first_song, dict):
+                raise GamdlMediaError("Web playback song has invalid metadata")
+            assets = first_song.get("assets")
+            if not isinstance(assets, list) or not assets:
+                raise GamdlMediaError("Web playback returned no song assets")
+            first_asset = assets[0]
+            metadata = (
+                first_asset.get("metadata") if isinstance(first_asset, dict) else None
+            )
+            if not isinstance(metadata, dict):
+                raise GamdlMediaError("Web playback asset has no tag metadata")
+            return Tags.from_asset_metadata(metadata)
 
         return await self._load("tags", load)
 
@@ -83,14 +108,14 @@ class Song(Media):
 
         return await self._load(key, load)
 
-    async def get_assets(
+    async def _get_assets(
         self,
         *,
         include_license_urls: bool = True,
         hls_encryption: str = "CBC",
         hls_profile: str = "enhancedHls",
     ) -> dict[str, Any]:
-        """Fetch song asset metadata without downloading streams or licenses.
+        """Internal: fetch song asset metadata without downloading media.
 
         Asset preferences are part of the cache key. The stream/decryption
         abstraction is a later milestone; this returns raw asset metadata.
@@ -108,8 +133,8 @@ class Song(Media):
 
         return await self._load(key, load)
 
-    async def get_webplayback(self) -> dict[str, Any]:
-        """Fetch playback metadata only when requested; no DRM exchange."""
+    async def _get_webplayback(self) -> dict[str, Any]:
+        """Internal: lazily cache web playback for tagging and future streams."""
         return await self._load(
             "webplayback",
             lambda: self.api.get_webplayback(self.id, is_library=self.is_library),

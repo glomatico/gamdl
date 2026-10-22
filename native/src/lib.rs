@@ -2,10 +2,12 @@
 
 use pyo3::prelude::*;
 
+mod stream;
 mod tags;
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tags::write_mp4_tags, m)?)?;
+    m.add_class::<stream::NativeStream>()?;
     Ok(())
 }

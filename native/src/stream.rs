@@ -1,0 +1,250 @@
+//! Bounded, ordered, retryable HTTP fragment fetching for Python's Stream API.
+//! Partial/failed responses are never sent downstream: retries always restart
+//! an entire fragment, preventing duplicated bytes after an interrupted request.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use futures_util::{StreamExt, stream};
+use pyo3::exceptions::{PyOSError, PyValueError};
+use pyo3::prelude::*;
+use pyo3::types::PyBytes;
+use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
+use reqwest::{Client, StatusCode, Url, redirect};
+use tokio::sync::{Mutex, mpsc};
+use tokio::task::AbortHandle;
+
+const MAX_PART_SIZE: usize = 64 * 1024 * 1024;
+
+type Part = (String, Option<u64>, Option<u64>);
+type DownloadResult = Result<Vec<u8>, &'static str>;
+
+fn valid_url(url: &Url) -> bool {
+    if url.username() != "" || url.password().is_some() || url.fragment().is_some() {
+        return false;
+    }
+    match url.scheme() {
+        "https" => true,
+        "http" => matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1")),
+        _ => false,
+    }
+}
+
+async fn fetch_part(client: Client, part: Part, retries: u32) -> DownloadResult {
+    let (url, start, end) = part;
+    let range = match (start, end) {
+        (Some(a), Some(b)) => Some((a, b)),
+        _ => None,
+    };
+    let mut attempt = 0;
+    loop {
+        let mut req = client.get(&url);
+        if let Some((a, b)) = range {
+            req = req.header(RANGE, format!("bytes={a}-{b}"));
+        }
+        let response = match req.send().await {
+            Ok(reply) => reply,
+            Err(_) if attempt < retries => {
+                tokio::time::sleep(Duration::from_millis(150 * (1 << attempt))).await;
+                attempt += 1;
+                continue;
+            }
+            Err(_) => return Err("Streaming request failed after retries"),
+        };
+        let expected_status = if range.is_some() {
+            StatusCode::PARTIAL_CONTENT
+        } else {
+            StatusCode::OK
+        };
+        if response.status() != expected_status {
+            if (response.status() == StatusCode::TOO_MANY_REQUESTS
+                || response.status().is_server_error()
+                || response.status() == StatusCode::REQUEST_TIMEOUT)
+                && attempt < retries
+            {
+                tokio::time::sleep(Duration::from_millis(150 * (1 << attempt))).await;
+                attempt += 1;
+                continue;
+            }
+            return Err("Streaming server returned an unexpected HTTP status");
+        }
+        if let Some((a, b)) = range {
+            let valid = response
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("bytes "))
+                .and_then(|v| v.split_once('/'))
+                .and_then(|(actual, _)| actual.split_once('-'))
+                .is_some_and(|(lo, hi)| {
+                    lo.parse::<u64>().ok() == Some(a) && hi.parse::<u64>().ok() == Some(b)
+                });
+            if !valid {
+                return Err("Streaming server returned an invalid Content-Range");
+            }
+        }
+        if response
+            .headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .is_some_and(|n| n > MAX_PART_SIZE as u64)
+        {
+            return Err("Streaming fragment exceeds size limit");
+        }
+        let mut body = Vec::new();
+        let mut reply = response;
+        let mut failed = false;
+        loop {
+            match reply.chunk().await {
+                Ok(Some(bytes)) => {
+                    if bytes.len() > MAX_PART_SIZE.saturating_sub(body.len()) {
+                        return Err("Streaming fragment exceeds size limit");
+                    }
+                    body.extend_from_slice(&bytes);
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    failed = true;
+                    break;
+                }
+            }
+        }
+        if failed {
+            if attempt < retries {
+                tokio::time::sleep(Duration::from_millis(150 * (1 << attempt))).await;
+                attempt += 1;
+                continue;
+            }
+            return Err("Streaming response interrupted after retries");
+        }
+        if let Some((a, b)) = range {
+            if body.len() as u64 != b - a + 1 {
+                if attempt < retries {
+                    tokio::time::sleep(Duration::from_millis(150 * (1 << attempt))).await;
+                    attempt += 1;
+                    continue;
+                }
+                return Err("Streaming byte range was incomplete");
+            }
+        }
+        if body.is_empty() {
+            return Err("Streaming fragment was empty");
+        }
+        return Ok(body);
+    }
+}
+
+#[pyclass]
+pub(crate) struct NativeStream {
+    receiver: Arc<Mutex<mpsc::Receiver<DownloadResult>>>,
+    abort_handle: AbortHandle,
+}
+
+#[pymethods]
+impl NativeStream {
+    #[new]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3))]
+    fn new(
+        parts: Vec<Part>,
+        concurrency: usize,
+        chunk_size: usize,
+        retries: u32,
+    ) -> PyResult<Self> {
+        if parts.is_empty() || parts.len() > 100_000 {
+            return Err(PyValueError::new_err(
+                "Expected between 1 and 100000 streaming parts",
+            ));
+        }
+        if !(1..=32).contains(&concurrency) {
+            return Err(PyValueError::new_err(
+                "concurrency must be between 1 and 32",
+            ));
+        }
+        if !(1024..=4 * 1024 * 1024).contains(&chunk_size) {
+            return Err(PyValueError::new_err(
+                "chunk_size must be between 1024 and 4194304",
+            ));
+        }
+        if retries > 8 {
+            return Err(PyValueError::new_err("retries must not exceed 8"));
+        }
+        for (url, start, end) in &parts {
+            let parsed = Url::parse(url)
+                .map_err(|_| PyValueError::new_err("Invalid streaming resource URL"))?;
+            if !valid_url(&parsed) {
+                return Err(PyValueError::new_err("Streaming resources must use HTTPS"));
+            }
+            if start.is_some() != end.is_some() || start > end {
+                return Err(PyValueError::new_err("Invalid streaming byte range"));
+            }
+            if start.is_some_and(|a| end.is_some_and(|b| b - a >= MAX_PART_SIZE as u64)) {
+                return Err(PyValueError::new_err(
+                    "Streaming byte range exceeds size limit",
+                ));
+            }
+        }
+        let client = Client::builder()
+            .timeout(Duration::from_secs(40))
+            .redirect(redirect::Policy::custom(|attempt| {
+                if attempt.previous().len() < 8 && valid_url(attempt.url()) {
+                    attempt.follow()
+                } else {
+                    attempt.stop()
+                }
+            }))
+            .build()
+            .map_err(|_| PyOSError::new_err("Unable to initialize streaming HTTP client"))?;
+        let (sender, receiver) = mpsc::channel(2);
+        let job = pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
+            let tasks = stream::iter(parts).map(|part| {
+                let client = client.clone();
+                async move { fetch_part(client, part, retries).await }
+            });
+            let mut ready = tasks.buffered(concurrency);
+            while let Some(result) = ready.next().await {
+                match result {
+                    Ok(bytes) => {
+                        for chunk in bytes.chunks(chunk_size) {
+                            if sender.send(Ok(chunk.to_vec())).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        let _ = sender.send(Err(error)).await;
+                        return;
+                    }
+                }
+            }
+        });
+        Ok(Self {
+            receiver: Arc::new(Mutex::new(receiver)),
+            abort_handle: job.abort_handle(),
+        })
+    }
+
+    fn next_chunk<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let receiver = self.receiver.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let result = receiver.lock().await.recv().await;
+            match result {
+                Some(Ok(bytes)) => {
+                    Python::attach(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+                }
+                Some(Err(msg)) => Err(PyOSError::new_err(msg)),
+                None => Python::attach(|py| Ok(py.None())),
+            }
+        })
+    }
+
+    fn close(&self) {
+        self.abort_handle.abort();
+    }
+}
+
+impl Drop for NativeStream {
+    fn drop(&mut self) {
+        self.abort_handle.abort();
+    }
+}

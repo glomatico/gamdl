@@ -12,6 +12,7 @@ from .cache import InstanceCache
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
+    from gamdl.api.wrapper import WrapperApi
 
     from .cover import Cover
     from .cover_cache import CoverCache
@@ -152,6 +153,13 @@ class Media:
     async def get_metadata(self) -> dict[str, Any]:
         """Fetch resource metadata once, or use data supplied by from_metadata."""
         return await self._load("metadata", self._fetch_metadata)
+
+    async def _get_wrapper_playback(self, wrapper_api: WrapperApi) -> dict[str, Any]:
+        """Cache raw wrapper playback for both stream and tag consumers."""
+        return await self._load(
+            ("wrapper_playback", id(wrapper_api)),
+            lambda: wrapper_api.get_playback(self.id),
+        )
 
     async def _catalog_id(self) -> str:
         """Find a catalog equivalent for library media when one exists."""

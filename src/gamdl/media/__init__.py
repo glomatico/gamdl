@@ -34,7 +34,6 @@ from .stream import (
     StreamSegment,
     WebPlaybackStream,
 )
-from .tags import Tags
 from .music_video import MusicVideo
 from .uploaded_video import UploadedVideo
 
@@ -69,7 +68,6 @@ __all__ = [
     "StreamSourceSelectionRequest",
     "StreamSelectionOption",
     "StreamSelectionRequest",
-    "Tags",
     "UnsupportedMediaError",
     "UploadedVideo",
     "WebPlaybackStream",

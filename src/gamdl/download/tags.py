@@ -1,11 +1,11 @@
-"""Shared tags parsed from Apple Music playback asset metadata."""
+"""Output-oriented tags parsed from playback and iTunes metadata."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from .exceptions import GamdlMediaError
+from .exceptions import TagResolutionError
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,9 @@ class Tags:
     gapless: bool | None = None
     explicit: bool | None = None
     storefront: int | None = None
+    media_type: int | None = None
+    rating: int | None = None
+    lyrics: str | None = None
 
     @classmethod
     def from_asset_metadata(cls, metadata: dict[str, Any]) -> Tags:
@@ -55,11 +58,18 @@ class Tags:
         """
 
         if not isinstance(metadata.get("itemName"), str) or not metadata["itemName"]:
-            raise GamdlMediaError("Playback asset has no media title")
+            raise TagResolutionError("Playback asset has no media title")
 
         def number(key: str) -> int | None:
             value = metadata.get(key)
-            return int(value) if value not in (None, "") else None
+            if value in (None, ""):
+                return None
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                raise TagResolutionError(
+                    "Playback asset contains an invalid numeric tag"
+                ) from None
 
         def flag(key: str) -> bool | None:
             value = metadata.get(key)
@@ -68,6 +78,13 @@ class Tags:
             return bool(value) if value is not None else None
 
         genre = metadata.get("genre")
+        kind = metadata.get("kind")
+        explicit = metadata.get("explicit")
+        explicitness = (
+            int(explicit)
+            if isinstance(explicit, (int, str)) and str(explicit).isdigit()
+            else None
+        )
         return cls(
             title=metadata.get("itemName"),
             artist=metadata.get("artistName"),
@@ -97,4 +114,6 @@ class Tags:
             gapless=flag("gapless"),
             explicit=flag("explicit"),
             storefront=number("s"),
+            media_type=6 if kind == "music-video" else 1 if kind == "song" else None,
+            rating=explicitness,
         )

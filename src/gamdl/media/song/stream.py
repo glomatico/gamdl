@@ -146,13 +146,8 @@ class SongStreamResolver:
         if self.wrapper_api is None:
             return None
 
-        async def playback() -> dict:
-            return await self.wrapper_api.get_playback(self.song.id)
-
         try:
-            wrapped = await self.song._load(
-                ("streams_wrapper", self._wrapper_key), playback
-            )
+            wrapped = await self.song._get_wrapper_playback(self.wrapper_api)
         except GamdlApiError:
             # A missing/unavailable wrapper HLS should not prevent assets.
             return None

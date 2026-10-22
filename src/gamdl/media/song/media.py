@@ -14,7 +14,6 @@ from .stream import SongStreamResolver
 from .models import StreamSelector
 from ..stream import AudioStream
 from .enums import SongCodec
-from ..tags import Tags
 
 if TYPE_CHECKING:
     from ...api.wrapper import WrapperApi
@@ -23,8 +22,8 @@ if TYPE_CHECKING:
 class Song(Media):
     """An Apple Music song; every network-dependent operation is explicit.
 
-    Cover metadata comes from the catalog resource; tags instead come from
-    the first playback asset's metadata, as in Gamdl 3.x. Neither lyrics nor
+    Cover metadata comes from the catalog resource; playback metadata is
+    available independently for downstream tag resolution. Neither lyrics nor
     streaming assets are requested just because the song object was created.
     """
 
@@ -70,38 +69,6 @@ class Song(Media):
         if not isinstance(items, list) or not items:
             raise GamdlMediaError("Apple Music returned no song metadata")
         return items[0]
-
-    async def get_tags(self) -> Tags:
-        """Derive tags from the first web-playback asset's metadata.
-
-        Reuses a cached web-playback response if one has been requested. This
-        intentionally does not fetch catalog metadata or lyrics, nor does it
-        enrich missing fields from iTunes yet.
-
-        Raises:
-            GamdlMediaError: No playback asset contains usable metadata.
-        """
-
-        async def load() -> Tags:
-            playback = await self._get_webplayback()
-            song_list = playback.get("songList")
-            if not isinstance(song_list, list) or not song_list:
-                raise GamdlMediaError("Web playback returned no songs")
-            first_song = song_list[0]
-            if not isinstance(first_song, dict):
-                raise GamdlMediaError("Web playback song has invalid metadata")
-            assets = first_song.get("assets")
-            if not isinstance(assets, list) or not assets:
-                raise GamdlMediaError("Web playback returned no song assets")
-            first_asset = assets[0]
-            metadata = (
-                first_asset.get("metadata") if isinstance(first_asset, dict) else None
-            )
-            if not isinstance(metadata, dict):
-                raise GamdlMediaError("Web playback asset has no tag metadata")
-            return Tags.from_asset_metadata(metadata)
-
-        return await self._load("tags", load)
 
     async def get_lyrics(
         self,

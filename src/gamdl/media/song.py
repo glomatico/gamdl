@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+import httpx
+
 from .base import Media
 from .exceptions import GamdlMediaError
 from .lyrics import Lyrics
+from .song_stream import SongStreamResolver, StreamSelector
+from .stream import AudioStream, SongCodec
 from .tags import Tags
+
+if TYPE_CHECKING:
+    from ..api.wrapper import WrapperApi
 
 
 class Song(Media):
@@ -18,6 +28,31 @@ class Song(Media):
 
     resource_type = "songs"
     library_type = "library-songs"
+
+    async def get_streams(
+        self,
+        *,
+        wrapper_api: WrapperApi | None = None,
+        client: httpx.AsyncClient | None = None,
+    ) -> tuple[AudioStream, ...]:
+        """Discover Webplayback and HLS variants; no segments or DRM keys."""
+        return await SongStreamResolver(
+            self, wrapper_api=wrapper_api, client=client
+        ).get_streams()
+
+    async def get_stream(
+        self,
+        *,
+        codec: SongCodec | None = None,
+        codec_priority: Sequence[SongCodec] | None = None,
+        selector: StreamSelector | None = None,
+        wrapper_api: WrapperApi | None = None,
+        client: httpx.AsyncClient | None = None,
+    ) -> AudioStream:
+        """Select the highest-bitrate codec match or invoke ASK callback."""
+        return await SongStreamResolver(
+            self, wrapper_api=wrapper_api, client=client
+        ).get_stream(codec=codec, codec_priority=codec_priority, selector=selector)
 
     async def _fetch_metadata(self) -> dict[str, Any]:
         payload = (

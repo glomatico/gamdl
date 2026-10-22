@@ -19,3 +19,11 @@ class SelectionRequiredError(GamdlMediaError):
         super().__init__(
             f"Selection required for {kind}; provide a selector or auto_select"
         )
+
+
+class StreamNotAvailableError(GamdlMediaError):
+    """No available stream matches the requested codec or preferences."""
+
+
+class StreamManifestError(GamdlMediaError):
+    """A media CDN returned an invalid or unsupported streaming playlist."""

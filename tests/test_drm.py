@@ -133,10 +133,10 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
         # Actual package parsers are independently exercised below when their
         # optional extras are present. License orchestration is always tested.
         self.widevine_patch = patch(
-            "gamdl.media.drm._widevine_pssh", return_value=PSSH()
+            "gamdl.media.drm.service._widevine_pssh", return_value=PSSH()
         )
         self.playready_patch = patch(
-            "gamdl.media.drm._playready_header", return_value=WRMHeader()
+            "gamdl.media.drm.service._playready_header", return_value=WRMHeader()
         )
         self.widevine_patch.start()
         self.playready_patch.start()
@@ -299,7 +299,9 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
         song, stream, client = make_song()
         cdm = FakeCdm()
         with patch(
-            "gamdl.media.drm._make_cdm", new_callable=AsyncMock, return_value=cdm
+            "gamdl.media.drm.service._make_cdm",
+            new_callable=AsyncMock,
+            return_value=cdm,
         ) as factory:
             async with client:
                 await song.get_keys(stream, device_path="example.wvd")

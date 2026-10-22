@@ -15,7 +15,6 @@ from gamdl.media import (
     SelectionKind,
     SelectionRequiredError,
     Song,
-    Tags,
     UnsupportedMediaError,
     UploadedVideo,
 )
@@ -177,89 +176,18 @@ class MediaFactoryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SongOperationTests(unittest.IsolatedAsyncioTestCase):
-    async def test_cover_and_tags_only_require_one_metadata_request(self):
+    async def test_cover_only_uses_catalog_metadata(self):
         api = fake_api()
         song = Song.from_id(SONG_DATA["id"], api=api)
-        cover, tags = await asyncio.gather(song.get_cover(), song.get_tags())
+        cover = await song.get_cover()
         self.assertIsInstance(cover, Cover)
-        self.assertIsInstance(tags, Tags)
-        self.assertEqual(tags.title, "Never Gonna Give You Up")
-        self.assertEqual(tags.album, "Whenever You Need Somebody")
-        self.assertEqual(tags.album_id, 1559885420)
-        self.assertEqual(tags.artist_id, 669771)
-        self.assertEqual(tags.track_total, 10)
-        self.assertEqual(tags.genre, ("Pop",))
-        self.assertEqual(tags.explicit, False)
-        self.assertEqual(tags.xid, PLAYBACK_TAG_DATA["xid"])
         self.assertEqual(cover.get_raw_url(), "https://example.test/{w}x{h}.{f}")
         self.assertEqual(
             cover.get_formatted_url(width=1000, height=1000, format="png"),
             "https://example.test/1000x1000.png",
         )
         api.get_song.assert_awaited_once()
-        api.get_webplayback.assert_awaited_once_with(SONG_DATA["id"], is_library=False)
-
-    async def test_tags_are_from_webplayback_not_catalog(self):
-        api = fake_api()
-        song = Song.from_metadata(
-            {
-                "id": SONG_DATA["id"],
-                "type": "songs",
-                "attributes": {"name": "A conflicting catalog title"},
-            },
-            api=api,
-        )
-        tags = await song.get_tags()
-        self.assertEqual(tags.title, PLAYBACK_TAG_DATA["itemName"])
-        self.assertEqual(tags.album, PLAYBACK_TAG_DATA["playlistName"])
-        self.assertIs(tags, await song.get_tags())
-        api.get_song.assert_not_awaited()
-        api.get_webplayback.assert_awaited_once()
-        self.assertIs(await song._get_webplayback(), await song._get_webplayback())
-        api.get_webplayback.assert_awaited_once()
-
-    async def test_tags_share_a_simultaneous_webplayback_load(self):
-        api = fake_api()
-        song = Song.from_id(SONG_DATA["id"], api=api)
-        playback, tags = await asyncio.gather(song._get_webplayback(), song.get_tags())
-        self.assertEqual(
-            playback["songList"][0]["assets"][0]["metadata"]["itemName"],
-            tags.title,
-        )
-        api.get_webplayback.assert_awaited_once()
-        api.get_song.assert_not_awaited()
-
-    async def test_tags_reject_missing_playback_metadata_and_retry(self):
-        api = fake_api()
-        song = Song.from_id(SONG_DATA["id"], api=api)
-        api.get_webplayback.return_value = {"songList": []}
-        with self.assertRaises(GamdlMediaError):
-            await song.get_tags()
-        song.invalidate()
-        api.get_webplayback.return_value = {"songList": [{"assets": [{}]}]}
-        with self.assertRaises(GamdlMediaError):
-            await song.get_tags()
-        song.invalidate()
-        api.get_webplayback.return_value = {
-            "songList": [{"assets": [{"metadata": PLAYBACK_TAG_DATA}]}]
-        }
-        self.assertEqual((await song.get_tags()).title, "Never Gonna Give You Up")
-        self.assertEqual(api.get_webplayback.await_count, 3)
-
-    async def test_tags_reject_incomplete_first_asset(self):
-        api = fake_api()
-        api.get_webplayback.return_value = {
-            "songList": [{"assets": [{"metadata": {"artistName": "Rick Astley"}}]}]
-        }
-        song = Song.from_id(SONG_DATA["id"], api=api)
-        with self.assertRaises(GamdlMediaError):
-            await song.get_tags()
-
-    def test_playback_boolean_string_flags(self):
-        values = {**PLAYBACK_TAG_DATA, "compilation": "0", "gapless": "1"}
-        tags = Tags.from_asset_metadata(values)
-        self.assertIs(tags.compilation, False)
-        self.assertIs(tags.gapless, True)
+        api.get_webplayback.assert_not_awaited()
 
     async def test_cover_format_validation_and_missing_artwork(self):
         cover = Cover.from_metadata(SONG_DATA["attributes"]["artwork"])

@@ -6,7 +6,9 @@ import unittest
 
 from gamdl import media
 from gamdl import drm
-from gamdl.media import base, enums, models, stream, tags
+from gamdl import download
+from gamdl.download import tags
+from gamdl.media import base, enums, models, stream
 from gamdl.media import music_video, song, uploaded_video
 from gamdl.drm import models as drm_models
 from gamdl.drm import service as drm_service
@@ -38,7 +40,7 @@ class MediaPackageTests(unittest.TestCase):
             (drm.ContentKey, drm_models.ContentKey),
             (media.Lyrics, song_lyrics.Lyrics),
             (media.SongStreamResolver, song_stream.SongStreamResolver),
-            (media.Tags, tags.Tags),
+            (download.Tags, tags.Tags),
             (drm.Drm, drm_service.Drm),
             (media.StreamSelectionRequest, song_models.StreamSelectionRequest),
             (
@@ -56,7 +58,8 @@ class MediaPackageTests(unittest.TestCase):
             media.SongCodec: "gamdl.media.song.enums",
             media.SongStreamResolver: "gamdl.media.song.stream",
             media.Lyrics: "gamdl.media.song.lyrics",
-            media.Tags: "gamdl.media.tags",
+            download.Tags: "gamdl.download.tags",
+            download.TagResolver: "gamdl.download.tag_resolver",
             media.MusicVideo: "gamdl.media.music_video.media",
             media.UploadedVideo: "gamdl.media.uploaded_video.media",
             drm.ContentKey: "gamdl.drm.models",
@@ -76,6 +79,7 @@ class MediaPackageTests(unittest.TestCase):
             "gamdl.media.video",
             "gamdl.media.song.tags",
             "gamdl.media.drm",
+            "gamdl.media.tags",
         ):
             with self.subTest(module=module):
                 self.assertIsNone(importlib.util.find_spec(module))
@@ -91,6 +95,8 @@ class MediaPackageTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(media, name))
         self.assertFalse(hasattr(media.Media, "get_keys"))
+        self.assertFalse(hasattr(media.Song, "get_tags"))
+        self.assertFalse(hasattr(media, "Tags"))
 
     def test_generic_stream_and_song_codec_matching_are_separate(self):
         self.assertIs(media.AudioStream, stream.AudioStream)
@@ -116,7 +122,7 @@ class MediaPackageTests(unittest.TestCase):
             "genre": "Pop",
             "trackNumber": "2",
         }
-        shared = media.Tags.from_asset_metadata(wrapper_asset_metadata)
+        shared = download.Tags.from_asset_metadata(wrapper_asset_metadata)
         self.assertIsInstance(shared, tags.Tags)
         self.assertEqual(shared.title, "Music Video Title")
         self.assertEqual(shared.artist, "Music Video Artist")

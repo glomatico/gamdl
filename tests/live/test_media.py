@@ -9,6 +9,7 @@ import os
 import unittest
 
 from gamdl.media import GamdlMediaError, Lyrics, MediaResolver, Song
+from gamdl.download import TagResolver
 from tests.live_auth import LiveSettings, open_live_session
 
 ALBUM_ID = "1559885420"
@@ -31,7 +32,7 @@ class MediaLiveTests(unittest.IsolatedAsyncioTestCase):
         song = Song.from_id(SONG_ID, api=self.session.api)
         metadata = await song.get_metadata()
         self.assertEqual(metadata["id"], SONG_ID)
-        tags = await song.get_tags()
+        tags = await TagResolver().get_tags(song)
         self.assertIn("Never Gonna Give You Up", tags.title)
         self.assertIn("Whenever You Need Somebody", tags.album)
         self.assertEqual(tags.track_number, 1)

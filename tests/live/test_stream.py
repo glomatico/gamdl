@@ -8,7 +8,16 @@ import os
 import unittest
 
 from gamdl.api import WrapperApi
-from gamdl.media import HlsSongStream, Song, SongCodec, StreamOrigin, WebPlaybackStream
+from gamdl.media import (
+    HlsSongStream,
+    HlsType,
+    Song,
+    SongCodec,
+    StreamOrigin,
+    StreamSelectionRequest,
+    StreamSourceSelectionRequest,
+    WebPlaybackStream,
+)
 from tests.live_auth import LiveSettings, open_live_session
 
 SONG_ID = "1559885421"
@@ -39,8 +48,27 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
     async def test_asset_hls_without_wrapper(self):
         stream = await self.song.get_stream(codec=SongCodec.ALAC)
         self.assertIsInstance(stream, HlsSongStream)
-        self.assertEqual(stream.origin, StreamOrigin.ASSET_HLS)
+        self.assertEqual(stream.origin, StreamOrigin.ASSET_ENHANCED_HLS)
         self.assertGreater(stream.bitrate, 0)
+
+    async def test_explicit_standard_assets_hls(self):
+        calls = []
+
+        async def choose(request):
+            calls.append(type(request))
+            if isinstance(request, StreamSourceSelectionRequest):
+                return next(
+                    o.index
+                    for o in request.options
+                    if o.origin == StreamOrigin.ASSET_STANDARD_HLS
+                )
+            self.assertIsInstance(request, StreamSelectionRequest)
+            return next(o.index for o in request.options if o.codec == SongCodec.AAC)
+
+        stream = await self.song.get_stream(codec=SongCodec.ASK, selector=choose)
+        self.assertEqual(stream.origin, StreamOrigin.ASSET_STANDARD_HLS)
+        self.assertEqual(stream.hls_type, HlsType.STANDARD)
+        self.assertEqual(calls, [StreamSourceSelectionRequest, StreamSelectionRequest])
 
     async def test_wrapper_hls_and_ask_selection(self):
         if self.session.source != "wrapper":
@@ -56,6 +84,12 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((await selected.get_drm_info()).fairplay_streaming)
 
             async def choose(request):
+                if isinstance(request, StreamSourceSelectionRequest):
+                    return next(
+                        option.index
+                        for option in request.options
+                        if option.origin == StreamOrigin.WRAPPER_HLS
+                    )
                 return next(
                     option.index
                     for option in request.options

@@ -10,12 +10,16 @@ import httpx
 from gamdl.media import (
     DRMInfo,
     HlsSongStream,
+    HlsType,
     SelectionRequiredError,
     Song,
     SongCodec,
     StreamManifestError,
     StreamNotAvailableError,
     StreamOrigin,
+    StreamSource,
+    StreamSourceSelectionRequest,
+    StreamSelectionRequest,
     WebPlaybackStream,
 )
 from gamdl.media.song_stream import SongStreamResolver, _default_master_url
@@ -26,6 +30,7 @@ WEB_MASTER = BASE + "web-asset.m3u8"
 WEB_HE = BASE + "he-asset.m3u8"
 WRAPPER_MASTER = BASE + "P42_default.m3u8"
 ASSET_MASTER = BASE + "P93_default.m3u8"
+STANDARD_ASSET_MASTER = BASE + "P94_default.m3u8"
 ENHANCED = (
     "#EXTM3U\n#EXT-X-VERSION:6\n"
     '#EXT-X-STREAM-INF:BANDWIDTH=2600000,AVERAGE-BANDWIDTH=2100000,CODECS="alac",AUDIO="audio-alac-96-24"\n'
@@ -78,13 +83,20 @@ def fake_api(*, web_master: str | None = None):
             ]
         }
     )
-    api.get_assets = AsyncMock(
-        return_value={"results": {"assets": [{"url": BASE + "P93_custom.m3u8"}]}}
-    )
+
+    async def get_assets(_id, **kwargs):
+        filename = (
+            "P93_custom.m3u8"
+            if kwargs.get("hls_profile", "enhancedHls") == "enhancedHls"
+            else "P94_custom.m3u8"
+        )
+        return {"results": {"assets": [{"url": BASE + filename}]}}
+
+    api.get_assets = AsyncMock(side_effect=get_assets)
     return api
 
 
-def stream_client(*, master=ENHANCED, asset_master=None):
+def stream_client(*, master=ENHANCED, asset_master=None, standard_master=STANDARD):
     calls = []
 
     def handle(request):
@@ -94,6 +106,8 @@ def stream_client(*, master=ENHANCED, asset_master=None):
             return httpx.Response(200, text=master)
         if name == "P93_default.m3u8":
             return httpx.Response(200, text=asset_master or master)
+        if name == "P94_default.m3u8":
+            return httpx.Response(200, text=standard_master)
         if name in {
             "alac-hi.m3u8",
             "alac-lo.m3u8",
@@ -138,11 +152,13 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(alac.url, BASE + "alac-hi.m3u8")
             self.assertEqual(aac.bitrate, 256000)
             self.assertEqual(atmos.codec_string, "ec-3")
-            self.assertEqual(alac.origin, StreamOrigin.ASSET_HLS)
+            self.assertEqual(alac.origin, StreamOrigin.ASSET_ENHANCED_HLS)
+            self.assertEqual(alac.hls_type, HlsType.ENHANCED)
+            self.assertEqual(alac.source_api, StreamSource.ASSETS)
             self.assertEqual(
                 [path for _, path, _ in calls], ["/media/P93_default.m3u8"]
             )
-            api.get_webplayback.assert_awaited_once()
+            api.get_webplayback.assert_not_awaited()
             api.get_assets.assert_awaited_once()
 
     async def test_wrapper_hls_preferred_without_assets_request(self):
@@ -175,10 +191,63 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             selected = await song.get_stream(
                 codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
             )
-            self.assertEqual(selected.origin, StreamOrigin.ASSET_HLS)
+            self.assertEqual(selected.origin, StreamOrigin.ASSET_ENHANCED_HLS)
             self.assertEqual(selected.codec, SongCodec.ALAC)
             self.assertIn("/media/P42_default.m3u8", [p for _, p, _ in calls])
             self.assertIn("/media/P93_default.m3u8", [p for _, p, _ in calls])
+
+    async def test_missing_wrapper_hls_falls_back_to_assets_enhanced_only(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(return_value={"songList": [{"assets": []}]})
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client()
+        async with client:
+            selected = await song.get_stream(
+                codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
+            )
+            self.assertEqual(selected.origin, StreamOrigin.ASSET_ENHANCED_HLS)
+            self.assertEqual(selected.codec, SongCodec.ALAC)
+            api.get_webplayback.assert_not_awaited()
+            api.get_assets.assert_awaited_once()
+            self.assertEqual([p for _, p, _ in calls], ["/media/P93_default.m3u8"])
+
+    async def test_no_standard_profile_request_for_missing_nonweb_codec(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client(master=STANDARD, asset_master=STANDARD)
+        async with client:
+            with self.assertRaises(StreamNotAvailableError):
+                await song.get_stream(
+                    codec=SongCodec.ATMOS, client=client, wrapper_api=wrapper
+                )
+            self.assertEqual(
+                [p for _, p, _ in calls],
+                ["/media/P42_default.m3u8", "/media/P93_default.m3u8"],
+            )
+            api.get_assets.assert_awaited_once()
+
+    async def test_wrapper_precedes_assets_even_if_assets_higher_bitrate(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client(master=STANDARD, asset_master=ENHANCED)
+        async with client:
+            stream = await song.get_stream(
+                codec=SongCodec.AAC, client=client, wrapper_api=wrapper
+            )
+            self.assertEqual(stream.origin, StreamOrigin.WRAPPER_HLS)
+            self.assertEqual(stream.bitrate, 272000)
+            self.assertEqual(stream.hls_type, HlsType.STANDARD)
+            self.assertEqual([p for _, p, _ in calls], ["/media/P42_default.m3u8"])
+            api.get_assets.assert_not_awaited()
 
     async def test_standard_hls_matches_codecs_without_audio_group(self):
         api = fake_api()
@@ -187,8 +256,17 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         async with client:
             he = await song.get_stream(codec=SongCodec.AAC_HE, client=client)
             self.assertEqual(he.url, BASE + "he.m3u8")
+            self.assertEqual(he.hls_type, HlsType.STANDARD)
+            self.assertEqual(he.origin, StreamOrigin.ASSET_ENHANCED_HLS)
             with self.assertRaises(StreamNotAvailableError):
                 await song.get_stream(codec=SongCodec.ALAC, client=client)
+            api.get_assets.assert_awaited_once_with(
+                "111",
+                kind="song",
+                include_license_urls=True,
+                hls_encryption="CBC",
+                hls_profile="enhancedHls",
+            )
 
     async def test_codec_priority_uses_first_available_codec(self):
         api = fake_api()
@@ -205,29 +283,207 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(web.codec, SongCodec.AAC_WEB)
 
-    async def test_ask_unifies_web_and_hls_and_can_choose_either(self):
+    async def test_ask_selects_source_before_discovering_its_variants(self):
         api = fake_api()
         song = Song.from_id("111", api=api)
         seen = []
 
-        async def choose_hls(request):
+        async def choose_assets_enhanced(request):
             seen.append(request)
+            if isinstance(request, StreamSourceSelectionRequest):
+                api.get_assets.assert_not_awaited()
+                api.get_webplayback.assert_not_awaited()
+                return next(
+                    o.index
+                    for o in request.options
+                    if o.origin == StreamOrigin.ASSET_ENHANCED_HLS
+                )
+            self.assertIsInstance(request, StreamSelectionRequest)
             return next(o.index for o in request.options if o.codec == SongCodec.ALAC)
 
         client, calls = stream_client()
         async with client:
             chosen = await song.get_stream(
-                codec=SongCodec.ASK, selector=choose_hls, client=client
+                codec=SongCodec.ASK, selector=choose_assets_enhanced, client=client
             )
             self.assertEqual(chosen.codec, SongCodec.ALAC)
             self.assertEqual(seen[0].media_id, "111")
-            self.assertEqual(seen[0].options[0].origin, StreamOrigin.WEBPLAYBACK)
-            self.assertEqual(seen[0].options[2].origin, StreamOrigin.ASSET_HLS)
-            direct = await song.get_stream(
-                codec=SongCodec.ASK, selector=lambda request: 1, client=client
+            self.assertEqual(len(seen), 2)
+            self.assertEqual(
+                [o.origin for o in seen[0].options],
+                [
+                    StreamOrigin.WEBPLAYBACK,
+                    StreamOrigin.ASSET_ENHANCED_HLS,
+                    StreamOrigin.ASSET_STANDARD_HLS,
+                ],
             )
-            self.assertEqual(direct.codec, SongCodec.AAC_HE_WEB)
+            self.assertEqual(seen[1].origin, StreamOrigin.ASSET_ENHANCED_HLS)
+            self.assertTrue(
+                all(
+                    o.origin == StreamOrigin.ASSET_ENHANCED_HLS for o in seen[1].options
+                )
+            )
+            api.get_webplayback.assert_not_awaited()
             self.assertEqual([x for x in calls if x[1].endswith("alac-hi.m3u8")], [])
+            self.assertEqual([p for _, p, _ in calls], ["/media/P93_default.m3u8"])
+            api.get_assets.assert_awaited_once()
+
+    async def test_ask_webplayback_avoids_assets_and_wrapper(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock()
+        song = Song.from_id("111", api=api)
+        prompts = []
+
+        def choose(request):
+            prompts.append(request)
+            if isinstance(request, StreamSourceSelectionRequest):
+                self.assertEqual(
+                    [o.origin for o in request.options],
+                    [
+                        StreamOrigin.WEBPLAYBACK,
+                        StreamOrigin.WRAPPER_HLS,
+                        StreamOrigin.ASSET_ENHANCED_HLS,
+                        StreamOrigin.ASSET_STANDARD_HLS,
+                    ],
+                )
+                return 0
+            return 1
+
+        client, calls = stream_client()
+        async with client:
+            result = await song.get_stream(
+                codec=SongCodec.ASK, selector=choose, wrapper_api=wrapper, client=client
+            )
+            self.assertEqual(result.codec, SongCodec.AAC_HE_WEB)
+            self.assertEqual(result.origin, StreamOrigin.WEBPLAYBACK)
+            self.assertEqual(len(prompts), 2)
+            wrapper.get_playback.assert_not_awaited()
+            api.get_assets.assert_not_awaited()
+            api.get_webplayback.assert_awaited_once()
+            self.assertEqual(calls, [])
+
+    async def test_ask_explicit_standard_profile_and_exact_origin(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        seen = []
+
+        def choose(request):
+            seen.append(request)
+            if isinstance(request, StreamSourceSelectionRequest):
+                return next(
+                    o.index
+                    for o in request.options
+                    if o.origin == StreamOrigin.ASSET_STANDARD_HLS
+                )
+            return next(o.index for o in request.options if o.codec == SongCodec.AAC_HE)
+
+        client, calls = stream_client()
+        async with client:
+            stream = await song.get_stream(
+                codec=SongCodec.ASK, selector=choose, client=client
+            )
+            self.assertEqual(stream.origin, StreamOrigin.ASSET_STANDARD_HLS)
+            self.assertEqual(stream.source_api, StreamSource.ASSETS)
+            self.assertEqual(stream.hls_type, HlsType.STANDARD)
+            self.assertEqual(stream.codec, SongCodec.AAC_HE)
+            self.assertEqual([p for _, p, _ in calls], ["/media/P94_default.m3u8"])
+            api.get_assets.assert_awaited_once_with(
+                "111",
+                kind="song",
+                include_license_urls=True,
+                hls_encryption="CBC",
+                hls_profile="",
+            )
+            api.get_webplayback.assert_not_awaited()
+
+    async def test_ask_wrapper_source_does_not_contact_other_apis(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+
+        def select(request):
+            if isinstance(request, StreamSourceSelectionRequest):
+                return next(
+                    o.index
+                    for o in request.options
+                    if o.origin == StreamOrigin.WRAPPER_HLS
+                )
+            return next(o.index for o in request.options if o.codec == SongCodec.ALAC)
+
+        client, calls = stream_client()
+        async with client:
+            result = await song.get_stream(
+                codec=SongCodec.ASK, selector=select, wrapper_api=wrapper, client=client
+            )
+            self.assertEqual(result.origin, StreamOrigin.WRAPPER_HLS)
+            self.assertEqual(result.hls_type, HlsType.ENHANCED)
+            self.assertEqual(result.source_api, StreamSource.WRAPPER)
+            self.assertEqual([p for _, p, _ in calls], ["/media/P42_default.m3u8"])
+            api.get_assets.assert_not_awaited()
+            api.get_webplayback.assert_not_awaited()
+
+    async def test_ask_library_only_offers_webplayback(self):
+        api = fake_api()
+        api.get_webplayback.return_value = {
+            "songList": [{"songId": "i.123", "assets": [{"URL": WEB_MASTER}]}]
+        }
+        song = Song.from_id("i.123", api=api, is_library=True)
+        prompts = []
+
+        def select(request):
+            prompts.append(request)
+            return 0
+
+        client, calls = stream_client()
+        async with client:
+            stream = await song.get_stream(
+                codec=SongCodec.ASK, selector=select, client=client
+            )
+            self.assertEqual(stream.origin, StreamOrigin.LIBRARY_WEBPLAYBACK)
+            self.assertEqual(
+                [o.origin for o in prompts[0].options],
+                [StreamOrigin.LIBRARY_WEBPLAYBACK],
+            )
+            self.assertEqual(len(prompts), 2)
+            self.assertEqual(calls, [])
+            api.get_assets.assert_not_awaited()
+
+    async def test_full_discovery_preserves_all_distinct_origins(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client()
+        async with client:
+            streams = await song.get_streams(client=client, wrapper_api=wrapper)
+            self.assertEqual(
+                {s.origin for s in streams},
+                {
+                    StreamOrigin.WEBPLAYBACK,
+                    StreamOrigin.WRAPPER_HLS,
+                    StreamOrigin.ASSET_ENHANCED_HLS,
+                    StreamOrigin.ASSET_STANDARD_HLS,
+                },
+            )
+            self.assertIn(
+                StreamOrigin.ASSET_STANDARD_HLS,
+                {s.origin for s in streams if s.codec == SongCodec.AAC},
+            )
+            self.assertEqual(
+                [p for _, p, _ in calls],
+                [
+                    "/media/P42_default.m3u8",
+                    "/media/P93_default.m3u8",
+                    "/media/P94_default.m3u8",
+                ],
+            )
+            self.assertEqual(api.get_assets.await_count, 2)
 
     async def test_ask_without_selector_raises_before_network(self):
         api = fake_api()
@@ -254,6 +510,14 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 await song.get_stream(
                     codec=SongCodec.ASK, selector=lambda _: 777, client=client
                 )
+            with self.assertRaises(ValueError):
+                await song.get_stream(
+                    codec=SongCodec.ASK,
+                    selector=lambda request: (
+                        0 if isinstance(request, StreamSourceSelectionRequest) else 99
+                    ),
+                    client=client,
+                )
 
     async def test_priority_ask_callback_only_if_fallback_reached(self):
         api = fake_api()
@@ -274,7 +538,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 client=client,
             )
             self.assertEqual(selected.codec, SongCodec.AAC_WEB)
-            callback.assert_called_once()
+        self.assertEqual(callback.call_count, 2)
 
     async def test_library_stream_is_direct_and_drm_free(self):
         api = fake_api()
@@ -331,7 +595,7 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
         async with client:
             stream = HlsSongStream(
                 codec=SongCodec.AAC,
-                origin=StreamOrigin.ASSET_HLS,
+                origin=StreamOrigin.ASSET_ENHANCED_HLS,
                 url=BASE + "clear.m3u8",
                 transport=StreamTransport(client),
             )
@@ -413,7 +677,7 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
         ) as client:
             stream = HlsSongStream(
                 codec=SongCodec.ALAC,
-                origin=StreamOrigin.ASSET_HLS,
+                origin=StreamOrigin.ASSET_ENHANCED_HLS,
                 url=BASE + "file.m3u8",
                 transport=StreamTransport(client),
             )
@@ -439,7 +703,7 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             stream = HlsSongStream(
                 codec=SongCodec.ALAC,
-                origin=StreamOrigin.ASSET_HLS,
+                origin=StreamOrigin.ASSET_ENHANCED_HLS,
                 url=ASSET_MASTER,
                 transport=StreamTransport(client),
             )

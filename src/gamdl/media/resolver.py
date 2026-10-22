@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
 from .base import Media, MediaSource
+from .cover_cache import CoverCache
 from .constants import DEFAULT_AUTO_SELECT
 from .enums import SelectionKind
 from .exceptions import SelectionRequiredError, UnsupportedMediaError
@@ -40,26 +41,34 @@ class MediaResolver:
         *,
         selector: Selector | None = None,
         auto_select: Iterable[SelectionKind | str] = DEFAULT_AUTO_SELECT,
+        cover_cache: CoverCache | None = None,
     ) -> None:
         self.api = api
         self.selector = selector
         self.auto_select = frozenset(SelectionKind(item) for item in auto_select)
+        self.cover_cache = cover_cache if cover_cache is not None else CoverCache()
 
     async def from_song(
         self, song_id: str, *, is_library: bool = False
     ) -> AsyncIterator[Media]:
         """Yield one unloaded song; no remote calls are required."""
-        yield Song.from_id(song_id, api=self.api, is_library=is_library)
+        yield Song.from_id(
+            song_id, api=self.api, is_library=is_library, cover_cache=self.cover_cache
+        )
 
     async def from_music_video(
         self, media_id: str, *, is_library: bool = False
     ) -> AsyncIterator[Media]:
         """Yield one unloaded music video."""
-        yield MusicVideo.from_id(media_id, api=self.api, is_library=is_library)
+        yield MusicVideo.from_id(
+            media_id, api=self.api, is_library=is_library, cover_cache=self.cover_cache
+        )
 
     async def from_uploaded_video(self, media_id: str) -> AsyncIterator[Media]:
         """Yield one unloaded uploaded video."""
-        yield UploadedVideo.from_id(media_id, api=self.api)
+        yield UploadedVideo.from_id(
+            media_id, api=self.api, cover_cache=self.cover_cache
+        )
 
     async def _from_collection(
         self,
@@ -72,7 +81,9 @@ class MediaResolver:
             raise SelectionRequiredError(kind.value)
 
         def as_media(metadata: dict, index: int) -> Media:
-            media = Media.from_metadata(metadata, api=self.api)
+            media = Media.from_metadata(
+                metadata, api=self.api, cover_cache=self.cover_cache
+            )
             media.source = MediaSource(kind=kind.value, id=source_id, index=index)
             return media
 

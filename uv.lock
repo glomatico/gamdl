@@ -222,6 +222,18 @@ wheels = [
 ]
 
 [[package]]
+name = "async-lru"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/43/9d22679e8dd0ed965182cca990d32c68b150730cce8046ad61b3179b5b7a/async_lru-2.4.0.tar.gz", hash = "sha256:b0b0077d9b7596615b3c12d0aad4f6aeccaaa0ac75ceae472608ede89e764c08", size = 22927, upload-time = "2026-10-12T18:12:54.276Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/0b/6a817103fb78faca4970c686a61065047da7226aba0d7cae6d4299b20c59/async_lru-2.4.0-py3-none-any.whl", hash = "sha256:1b46a96419ef91fe11431d58db98d792c9b4250001427191a40faf1031934212", size = 10045, upload-time = "2026-10-12T18:12:53.091Z" },
+]
+
+[[package]]
 name = "async-timeout"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -765,6 +777,7 @@ name = "gamdl"
 version = "4.0.0a0"
 source = { editable = "." }
 dependencies = [
+    { name = "async-lru" },
     { name = "httpx" },
     { name = "httpx-retries" },
     { name = "m3u8" },
@@ -786,6 +799,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "async-lru", specifier = ">=2.0,<3" },
     { name = "httpx", specifier = ">=0.28.1,<1" },
     { name = "httpx-retries", specifier = ">=0.6,<1" },
     { name = "m3u8", specifier = ">=6,<7" },

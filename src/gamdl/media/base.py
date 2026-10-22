@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from .enums import DrmBackend
 from .exceptions import GamdlMediaError, UnsupportedMediaError
 from .models import MediaSource
+from .cache import InstanceCache
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
 
     from .cover import Cover
+    from .cover_cache import CoverCache
     from .stream import AudioStream
     from .drm import ContentKey
 
@@ -46,6 +48,7 @@ class Media:
         api: AppleMusicApi,
         is_library: bool = False,
         metadata: dict[str, Any] | None = None,
+        cover_cache: CoverCache | None = None,
     ) -> None:
         if not media_id:
             raise ValueError("A media ID must not be empty")
@@ -53,10 +56,10 @@ class Media:
         self.api = api
         self.is_library = is_library
         self.source: MediaSource | None = None
-        self._cache: dict[object, Any] = {}
-        self._inflight: dict[object, asyncio.Task[Any]] = {}
+        self.cover_cache = cover_cache
+        self._memo = InstanceCache()
         if metadata is not None:
-            self._cache["metadata"] = metadata
+            self._memo.seed("metadata", metadata)
 
     @property
     def type(self) -> str:
@@ -70,22 +73,37 @@ class Media:
         api: AppleMusicApi,
         media_type: str | None = None,
         is_library: bool = False,
+        cover_cache: CoverCache | None = None,
     ) -> Media:
         """Create an unloaded object; generic Media requires ``media_type``."""
         if cls is Media:
             target, inferred_library = cls._target_for_type(media_type)
-            return target(media_id, api=api, is_library=is_library or inferred_library)
+            return target(
+                media_id,
+                api=api,
+                is_library=is_library or inferred_library,
+                cover_cache=cover_cache,
+            )
         if media_type is not None and media_type not in {
             cls.resource_type,
             cls.library_type,
         }:
             raise UnsupportedMediaError("Media type does not match the requested class")
         return cls(
-            media_id, api=api, is_library=is_library or media_type == cls.library_type
+            media_id,
+            api=api,
+            is_library=is_library or media_type == cls.library_type,
+            cover_cache=cover_cache,
         )
 
     @classmethod
-    def from_metadata(cls, metadata: dict[str, Any], *, api: AppleMusicApi) -> Media:
+    def from_metadata(
+        cls,
+        metadata: dict[str, Any],
+        *,
+        api: AppleMusicApi,
+        cover_cache: CoverCache | None = None,
+    ) -> Media:
         """Instantiate and preseed metadata so the first read makes no request."""
         if not isinstance(metadata, dict) or not isinstance(metadata.get("id"), str):
             raise GamdlMediaError("Expected a media resource containing an ID")
@@ -95,7 +113,13 @@ class Media:
             raise UnsupportedMediaError(
                 "Media metadata does not match the requested class"
             )
-        return target(metadata["id"], api=api, is_library=is_library, metadata=metadata)
+        return target(
+            metadata["id"],
+            api=api,
+            is_library=is_library,
+            metadata=metadata,
+            cover_cache=cover_cache,
+        )
 
     @staticmethod
     def _target_for_type(media_type: str | None) -> tuple[type[Media], bool]:
@@ -119,38 +143,12 @@ class Media:
         return result
 
     async def _load(self, key: object, factory: Callable[[], Awaitable[T]]) -> T:
-        """Cache successes, share simultaneous loads, and permit retries.
-
-        Shielding prevents one canceled waiter from canceling a shared load.
-        Completion callbacks clear failures and avoid unobserved task errors.
-        """
-        if key in self._cache:
-            return self._cache[key]
-        task = self._inflight.get(key)
-        if task is None:
-            task = asyncio.create_task(factory())
-            self._inflight[key] = task
-
-            def finish(done: asyncio.Task[Any]) -> None:
-                try:
-                    value = done.result()
-                except BaseException:
-                    value = None
-                    success = False
-                else:
-                    success = True
-                if self._inflight.get(key) is done:
-                    self._inflight.pop(key, None)
-                    if success:
-                        self._cache[key] = value
-
-            task.add_done_callback(finish)
-        return await asyncio.shield(task)
+        """Cache per-resource values via the shared instance cache helper."""
+        return await self._memo.get(key, factory)
 
     def invalidate(self) -> None:
         """Clear cached values; any already-running calls may still complete."""
-        self._cache.clear()
-        self._inflight.clear()
+        self._memo.clear()
 
     async def _fetch_metadata(self) -> dict[str, Any]:
         raise NotImplementedError
@@ -192,15 +190,22 @@ class Media:
 
         return await self._load("catalog_id", load)
 
-    async def get_cover(self) -> Cover | None:
-        """Return artwork URL metadata, without fetching image bytes."""
+    async def get_cover(self, *, cache: CoverCache | None = None) -> Cover | None:
+        """Return lazy artwork with the media's cache or a caller override.
+
+        The memoized metadata stays independent of the attached byte cache.
+        """
         from .cover import Cover
 
         async def load() -> Cover | None:
             artwork = (await self.get_metadata()).get("attributes", {}).get("artwork")
             return Cover.from_metadata(artwork) if isinstance(artwork, dict) else None
 
-        return await self._load("cover", load)
+        cover = await self._load("cover", load)
+        selected_cache = cache if cache is not None else self.cover_cache
+        if cover is None or selected_cache is None:
+            return cover
+        return replace(cover, cache=selected_cache)
 
     async def get_keys(
         self,

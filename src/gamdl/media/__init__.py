@@ -2,6 +2,7 @@
 
 from .base import Media, MediaSource
 from .cover import Cover
+from .cover_cache import CoverCache
 from .drm import ContentKey, DrmBackend
 from .enums import HlsType, StreamOrigin, StreamSource
 from .exceptions import (
@@ -46,6 +47,7 @@ from .uploaded_video import UploadedVideo
 __all__ = [
     "AudioStream",
     "Cover",
+    "CoverCache",
     "ContentKey",
     "DEFAULT_AUTO_SELECT",
     "DRMInfo",

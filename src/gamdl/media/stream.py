@@ -17,6 +17,7 @@ import m3u8
 from .exceptions import StreamManifestError
 from .enums import HlsType, StreamOrigin, StreamSource
 from .models import DRMInfo, StreamSegment
+from .cache import InstanceCache
 
 if TYPE_CHECKING:
     from m3u8.model import M3U8
@@ -88,8 +89,7 @@ class AudioStream:
         self.drm_free = drm_free
         self.media_id = media_id
         self._transport = transport
-        self._cache: dict[str, Any] = {}
-        self._inflight: dict[str, Any] = {}
+        self._memo = InstanceCache()
 
     @property
     def source_api(self) -> StreamSource:
@@ -104,29 +104,7 @@ class AudioStream:
         return StreamSource.WEBPLAYBACK
 
     async def _load(self, name: str, factory: Callable[[], Awaitable[Any]]) -> Any:
-        import asyncio
-
-        if name in self._cache:
-            return self._cache[name]
-        task = self._inflight.get(name)
-        if task is None:
-            task = asyncio.create_task(factory())
-            self._inflight[name] = task
-
-            def finished(done: asyncio.Task[Any]) -> None:
-                try:
-                    value = done.result()
-                except BaseException:
-                    success = False
-                else:
-                    success = True
-                if self._inflight.get(name) is done:
-                    self._inflight.pop(name, None)
-                    if success:
-                        self._cache[name] = value
-
-            task.add_done_callback(finished)
-        return await asyncio.shield(task)
+        return await self._memo.get(name, factory)
 
     async def get_manifest(self) -> M3U8:
         """Fetch the *selected media playlist*, never a full media segment."""

@@ -22,7 +22,7 @@ from gamdl.media import (
     StreamSelectionRequest,
     WebPlaybackStream,
 )
-from gamdl.media.song_stream import SongStreamResolver, _default_master_url
+from gamdl.media.song.stream import SongStreamResolver, _default_master_url
 from gamdl.media.stream import StreamTransport
 
 BASE = "https://cdn.example.test/media/"

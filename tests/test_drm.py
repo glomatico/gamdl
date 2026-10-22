@@ -21,7 +21,8 @@ from gamdl.media import (
     StreamOrigin,
     WebPlaybackStream,
 )
-from gamdl.media.drm import _playready_header, _widevine_pssh
+from gamdl.media.drm.playready import _playready_header
+from gamdl.media.drm.widevine import _widevine_pssh
 from gamdl.media.stream import StreamTransport
 
 KID = bytes.fromhex("00112233445566778899aabbccddeeff")

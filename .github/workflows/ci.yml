@@ -25,6 +25,11 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
       - name: Install Python
         run: uv python install ${{ matrix.python-version }}
 
@@ -36,13 +41,15 @@ jobs:
 
       - name: Verify import and version
         run: |
-          uv run --no-sync --python ${{ matrix.python-version }} python -c "import gamdl; from importlib.metadata import version; assert version('gamdl') == '4.0.0a0'"
+          uv run --no-sync --python ${{ matrix.python-version }} python -c "import gamdl; from gamdl.muxer import Muxer; from importlib.metadata import version; assert version('gamdl') == '4.0.0a0'; assert Muxer is not None"
 
       - name: Run offline API tests
         run: uv run --no-sync --python ${{ matrix.python-version }} python -m unittest discover -s tests -v
 
       - name: Check formatting
-        run: uv format --check
+        run: |
+          uv format --check
+          cargo fmt --manifest-path native/Cargo.toml --check
 
       - name: Build source and wheel distributions
         run: uv build

@@ -10,6 +10,11 @@ dist/
 .mypy_cache/
 .coverage
 .coverage.*
+target/
+/native/target/
+*.so
+*.pyd
+*.dylib
 
 # Local configuration and private development diary
 .env

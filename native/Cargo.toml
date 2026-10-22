@@ -1,0 +1,16 @@
+[package]
+name = "gamdl-native"
+version = "4.0.0-alpha.0"
+edition = "2024"
+license = "MIT"
+description = "Native MP4 processing for Gamdl"
+repository = "https://github.com/glomatico/gamdl"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["abi3-py310"] }
+mp4ameta = "0.13"

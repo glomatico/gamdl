@@ -39,7 +39,7 @@ from .stream import (
     StreamSegment,
     WebPlaybackStream,
 )
-from .song.tags import Tags
+from .tags import Tags
 from .music_video import MusicVideo
 from .uploaded_video import UploadedVideo
 

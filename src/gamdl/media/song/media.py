@@ -14,7 +14,7 @@ from .stream import SongStreamResolver
 from .models import StreamSelector
 from ..stream import AudioStream
 from .enums import SongCodec
-from .tags import Tags
+from ..tags import Tags
 
 if TYPE_CHECKING:
     from ...api.wrapper import WrapperApi

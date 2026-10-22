@@ -1,9 +1,7 @@
-"""Widevine and PlayReady DRM helpers, with a stable public import surface."""
+"""Shared Widevine and PlayReady DRM models and license handling."""
 
 from ..enums import DrmBackend
 from .models import ContentKey
-from .playready import _playready_header
-from .service import _make_cdm, get_stream_keys
-from .widevine import _widevine_pssh
+from .service import get_stream_keys
 
 __all__ = ["DrmBackend", "ContentKey", "get_stream_keys"]

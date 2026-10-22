@@ -242,20 +242,3 @@ def _decode_data_uri(uri: str) -> bytes | None:
         return base64.b64decode(uri.split(",", 1)[1], validate=True)
     except (ValueError, base64.binascii.Error):
         return None
-
-
-def __getattr__(name: str) -> Any:
-    """Compatibility aliases for song-only symbols formerly defined here."""
-    if name == "SongCodec":
-        from .song.enums import SongCodec
-
-        return SongCodec
-    if name in {"WEB_FLAVORS", "SONG_CODEC_REGEX_MAP"}:
-        from .song import constants
-
-        return getattr(constants, name)
-    if name == "match_hls_codec":
-        from .song.stream import match_hls_codec
-
-        return match_hls_codec
-    raise AttributeError(name)

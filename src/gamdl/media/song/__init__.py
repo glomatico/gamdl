@@ -1,4 +1,4 @@
-"""Song media model, codecs, streams, lyrics and tags."""
+"""Song media model, codecs, streams and lyrics."""
 
 from .enums import SongCodec
 from .lyrics import Lyrics, LyricsLine, LyricsSegment
@@ -10,7 +10,6 @@ from .models import (
     StreamSourceSelectionRequest,
 )
 from .stream import SongStreamResolver
-from .tags import Tags
 
 __all__ = [
     "Song",
@@ -18,7 +17,6 @@ __all__ = [
     "Lyrics",
     "LyricsLine",
     "LyricsSegment",
-    "Tags",
     "SongStreamResolver",
     "StreamSelectionOption",
     "StreamSelectionRequest",

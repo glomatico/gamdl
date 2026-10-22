@@ -1,6 +1,8 @@
 """Local HTTP fixtures exercise native Tokio/reqwest, not HTTPX mocking."""
 
 import asyncio
+import shutil
+import subprocess
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,6 +15,7 @@ from unittest.mock import AsyncMock, Mock
 import m3u8
 
 from gamdl.media import AudioStream, SongCodec, StreamManifestError, StreamOrigin
+from gamdl.drm import ContentKey
 from gamdl.stream import Stream
 
 
@@ -40,16 +43,23 @@ class HttpHandler(BaseHTTPRequestHandler):
             return
         if name == "slow":
             time.sleep(0.35)
+        if name in self.server.fixtures:
+            bodies = self.server.fixtures
+        else:
+            bodies = {}
         bodies = {
-            "init": b"INIT",
-            "a": b"A" * 3000,
-            "b": b"B" * 4000,
-            "c": b"C" * 3000,
-            "retry": b"RETRIED",
-            "interrupt": b"COMPLETE",
-            "range": b"0123456789",
-            "ignore-range": b"0123456789",
-            "slow": b"S" * 5000,
+            **{
+                "init": b"INIT",
+                "a": b"A" * 3000,
+                "b": b"B" * 4000,
+                "c": b"C" * 3000,
+                "retry": b"RETRIED",
+                "interrupt": b"COMPLETE",
+                "range": b"0123456789",
+                "ignore-range": b"0123456789",
+                "slow": b"S" * 5000,
+            },
+            **bodies,
         }
         body = bodies.get(name)
         if body is None:
@@ -98,6 +108,7 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
         cls.http = ThreadingHTTPServer(("127.0.0.1", 0), HttpHandler)
         cls.http.lock = threading.Lock()
         cls.http.hits = Counter()
+        cls.http.fixtures = {}
         cls.thread = threading.Thread(target=cls.http.serve_forever, daemon=True)
         cls.thread.start()
         cls.url = f"http://127.0.0.1:{cls.http.server_port}"
@@ -110,6 +121,7 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         self.http.hits.clear()
+        self.http.fixtures.clear()
 
     def audio(self, content: str):
         transport = Mock()
@@ -254,3 +266,224 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
                 returned = await stream.save(path)
             self.assertEqual(returned, path)
             self.assertEqual(path.read_bytes(), b"A" * 3000)
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg"), "FFmpeg required for encrypted MP4 fixtures"
+    )
+    async def test_decrypted_stream_is_decodable_aac(self):
+        key = bytes.fromhex("00112233445566778899aabbccddeeff")
+        kid = bytes.fromhex("101112131415161718191a1b1c1d1e1f")
+        with TemporaryDirectory() as tmp:
+            clear = Path(tmp) / "clear.m4a"
+            encrypted = Path(tmp) / "encrypted.m4a"
+            output = Path(tmp) / "decrypted.m4a"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=800:duration=0.8",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    "-y",
+                    str(clear),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-i",
+                    str(clear),
+                    "-c:a",
+                    "copy",
+                    "-movflags",
+                    "+frag_keyframe+empty_moov",
+                    "-encryption_scheme",
+                    "cenc-aes-ctr",
+                    "-encryption_key",
+                    key.hex(),
+                    "-encryption_kid",
+                    kid.hex(),
+                    "-y",
+                    str(encrypted),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            self.http.fixtures["encrypted"] = encrypted.read_bytes()
+            playlist = fixture_playlist("#EXTINF:1,\nencrypted\n")
+            async with Stream(
+                self.audio(playlist),
+                decryption_key=ContentKey(kid, key),
+            ) as stream:
+                await stream.save(output)
+
+            def md5(path: Path):
+                return subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-hide_banner",
+                        "-v",
+                        "error",
+                        "-i",
+                        str(path),
+                        "-map",
+                        "0:a:0",
+                        "-f",
+                        "md5",
+                        "-",
+                    ],
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                ).stdout.strip()
+
+            ffmpeg_decrypted = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-decryption_key",
+                    key.hex(),
+                    "-i",
+                    str(encrypted),
+                    "-map",
+                    "0:a:0",
+                    "-f",
+                    "md5",
+                    "-",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.strip()
+            self.assertEqual(ffmpeg_decrypted, md5(output))
+            self.assertNotEqual(encrypted.read_bytes(), output.read_bytes())
+            self.assertNotIn(b"enca", output.read_bytes())
+            self.assertNotIn(b"sinf", output.read_bytes())
+            self.assertIn(b"mp4a", output.read_bytes())
+            # Reuse the same encrypted fixture but separate EXT-X-MAP from
+            # the media fragments, exercising native cross-part state.
+            original = encrypted.read_bytes()
+            split = original.index(b"moof") - 4
+            self.http.fixtures["init-encrypted"] = original[:split]
+            self.http.fixtures["fragment-encrypted"] = original[split:]
+            playlist = fixture_playlist(
+                "#EXTINF:1,\nfragment-encrypted\n",
+                prefix='#EXT-X-MAP:URI="init-encrypted"\n',
+            )
+            async with Stream(
+                self.audio(playlist),
+                decryption_key=key,
+            ) as stream:
+                chunks = [chunk async for chunk in stream]
+            separated = Path(tmp) / "split-decrypted.m4a"
+            separated.write_bytes(b"".join(chunks))
+            self.assertEqual(md5(separated), ffmpeg_decrypted)
+            self.assertEqual(separated.read_bytes(), output.read_bytes())
+            self.http.fixtures.clear()
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg"), "FFmpeg required for encrypted MP4 fixtures"
+    )
+    async def test_wrong_key_id_rejected(self):
+        key = bytes.fromhex("00112233445566778899aabbccddeeff")
+        kid = bytes.fromhex("101112131415161718191a1b1c1d1e1f")
+        with TemporaryDirectory() as tmp:
+            encrypted = Path(tmp) / "encrypted.m4a"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=800:duration=0.2",
+                    "-c:a",
+                    "aac",
+                    "-movflags",
+                    "+frag_keyframe+empty_moov",
+                    "-encryption_scheme",
+                    "cenc-aes-ctr",
+                    "-encryption_key",
+                    key.hex(),
+                    "-encryption_kid",
+                    kid.hex(),
+                    "-y",
+                    str(encrypted),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            self.http.fixtures["encrypted"] = encrypted.read_bytes()
+            playlist = fixture_playlist("#EXTINF:1,\nencrypted\n")
+            with self.assertRaisesRegex(ValueError, "16 bytes"):
+                async with Stream(self.audio(playlist), decryption_key=b"too short"):
+                    pass
+            async with Stream(
+                self.audio(playlist),
+                decryption_key=ContentKey(b"0" * 16, key),
+            ) as stream:
+                with self.assertRaisesRegex(OSError, "key ID"):
+                    await stream.read()
+            self.http.fixtures.clear()
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg"), "FFmpeg required for encrypted MP4 fixtures"
+    )
+    async def test_unsupported_cbcs_and_missing_init_fail_closed(self):
+        key = bytes.fromhex("00112233445566778899aabbccddeeff")
+        kid = bytes.fromhex("101112131415161718191a1b1c1d1e1f")
+        with TemporaryDirectory() as tmp:
+            encrypted = Path(tmp) / "encrypted.m4a"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=800:duration=0.2",
+                    "-c:a",
+                    "aac",
+                    "-movflags",
+                    "+frag_keyframe+empty_moov",
+                    "-encryption_scheme",
+                    "cenc-aes-ctr",
+                    "-encryption_key",
+                    key.hex(),
+                    "-encryption_kid",
+                    kid.hex(),
+                    "-y",
+                    str(encrypted),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            original = encrypted.read_bytes()
+            self.http.fixtures["encrypted"] = original.replace(b"cenc", b"cbcs", 1)
+            playlist = fixture_playlist("#EXTINF:1,\nencrypted\n")
+            async with Stream(self.audio(playlist), decryption_key=key) as stream:
+                with self.assertRaisesRegex(OSError, "Only AES-CTR"):
+                    await stream.read()
+            split = original.index(b"moof") - 4
+            self.http.fixtures["encrypted"] = original[split:]
+            async with Stream(self.audio(playlist), decryption_key=key) as stream:
+                with self.assertRaisesRegex(OSError, "initialization section"):
+                    await stream.read()

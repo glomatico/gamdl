@@ -2,8 +2,13 @@
 
 from .base import Media, MediaSource
 from .cover import Cover
+from .drm import ContentKey, DrmBackend
 from .exceptions import (
     GamdlMediaError,
+    DrmConfigurationError,
+    DrmError,
+    DrmLicenseError,
+    DrmMetadataError,
     SelectionRequiredError,
     StreamManifestError,
     StreamNotAvailableError,
@@ -42,9 +47,15 @@ from .video import MusicVideo, UploadedVideo
 __all__ = [
     "AudioStream",
     "Cover",
+    "ContentKey",
     "DEFAULT_AUTO_SELECT",
     "DRMInfo",
     "GamdlMediaError",
+    "DrmBackend",
+    "DrmError",
+    "DrmConfigurationError",
+    "DrmLicenseError",
+    "DrmMetadataError",
     "HlsSongStream",
     "HlsType",
     "Lyrics",

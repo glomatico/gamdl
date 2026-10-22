@@ -5,14 +5,18 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from .drm import DrmBackend
 from .exceptions import GamdlMediaError, UnsupportedMediaError
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
 
     from .cover import Cover
+    from .stream import AudioStream
+    from .drm import ContentKey
 
 T = TypeVar("T")
 
@@ -197,3 +201,34 @@ class Media:
             return Cover.from_metadata(artwork) if isinstance(artwork, dict) else None
 
         return await self._load("cover", load)
+
+    async def get_keys(
+        self,
+        stream: AudioStream,
+        *,
+        backend: DrmBackend | str = DrmBackend.WIDEVINE,
+        device_path: str | Path | None = None,
+        cdm: Any | None = None,
+    ) -> tuple[ContentKey, ...]:
+        """Get authorized content keys for this media's selected stream.
+
+        Requires a caller-supplied, legitimately provisioned CDM or device
+        path for protected content. This never caches licenses or keys.
+        Unprotected streams return an empty tuple without making requests.
+        """
+        from .drm import get_stream_keys
+        from .stream import AudioStream
+
+        if not isinstance(stream, AudioStream) or stream.media_id != self.id:
+            raise GamdlMediaError("Stream does not belong to this media resource")
+        if not isinstance(backend, DrmBackend):
+            backend = DrmBackend(backend)
+        return await get_stream_keys(
+            self.api,
+            stream=stream,
+            media_id=self.id,
+            is_library=self.is_library,
+            backend=backend,
+            device_path=device_path,
+            cdm=cdm,
+        )

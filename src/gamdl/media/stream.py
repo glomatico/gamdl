@@ -90,8 +90,9 @@ class HlsType(str, Enum):
 class DRMInfo:
     """DRM signaling only; no secret keys or license responses.
 
-    The PSSH fields hold decoded data-URI bytes when available, not a
-    key/authorization URL. Non-data key references are preserved separately.
+    PSSH fields hold decoded data-URI bytes when available, not keys.
+    URI fields preserve the original HLS reference for license exchanges,
+    regardless of whether its data bytes could also be decoded.
     """
 
     widevine_pssh: bytes | None = None
@@ -181,6 +182,7 @@ class AudioStream:
         bitrate: int | None = None,
         codec_string: str | None = None,
         drm_free: bool = False,
+        media_id: str | None = None,
     ) -> None:
         self.codec = codec
         self.origin = origin
@@ -188,6 +190,7 @@ class AudioStream:
         self.bitrate = bitrate
         self.codec_string = codec_string
         self.drm_free = drm_free
+        self.media_id = media_id
         self._transport = transport
         self._cache: dict[str, Any] = {}
         self._inflight: dict[str, Any] = {}
@@ -296,12 +299,10 @@ class AudioStream:
                 kind = (key.keyformat or "").lower()
                 if kind == "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed":
                     widevine_pssh = _decode_data_uri(uri)
-                    if widevine_pssh is None:
-                        widevine_uri = uri
+                    widevine_uri = uri
                 elif kind == "com.microsoft.playready":
                     playready_pssh = _decode_data_uri(uri)
-                    if playready_pssh is None:
-                        playready_uri = uri
+                    playready_uri = uri
                 elif kind == "com.apple.streamingkeydelivery":
                     # Apple's universal placeholder is not a usable key URI.
                     if uri != "skd://itunes.apple.com/P000000000/s1/e1":
@@ -311,8 +312,7 @@ class AudioStream:
                     # This isn't necessarily Widevine/PlayReady PSSH: keep
                     # the untyped data separately instead of mislabeling it.
                     untyped_data = _decode_data_uri(uri)
-                    if untyped_data is None:
-                        untyped_uri = uri
+                    untyped_uri = uri
             return DRMInfo(
                 widevine_pssh=widevine_pssh,
                 playready_pssh=playready_pssh,

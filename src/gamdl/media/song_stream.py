@@ -151,6 +151,7 @@ class SongStreamResolver:
                             url=url,
                             transport=self.transport,
                             drm_free=True,
+                            media_id=self.song.id,
                         )
                     )
                     continue
@@ -172,6 +173,7 @@ class SongStreamResolver:
                         url=url,
                         bitrate=bitrate,
                         transport=self.transport,
+                        media_id=self.song.id,
                     )
                 )
             return tuple(result)
@@ -253,6 +255,7 @@ class SongStreamResolver:
                     transport=self.transport,
                     codec_string=codecs,
                     bitrate=bitrate,
+                    media_id=self.song.id,
                 )
             )
         return tuple(result)

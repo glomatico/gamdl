@@ -21,3 +21,4 @@ target/
 .env.*
 !.env.example
 /.local/
+/scripts/dump_stream.py

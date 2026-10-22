@@ -4,50 +4,20 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
-from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
 from .base import Media, MediaSource
+from .constants import DEFAULT_AUTO_SELECT
+from .enums import SelectionKind
 from .exceptions import SelectionRequiredError, UnsupportedMediaError
+from .models import SelectionOption, SelectionRequest
 from .song import Song
-from .video import MusicVideo, UploadedVideo
+from .music_video import MusicVideo
+from .uploaded_video import UploadedVideo
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
-
-
-class SelectionKind(str, Enum):
-    """Independent selection decisions made by the source resolver."""
-
-    ALBUM_TRACKS = "album_tracks"
-    PLAYLIST_TRACKS = "playlist_tracks"
-    ARTIST = "artist"
-    LIBRARY = "library"
-
-
-DEFAULT_AUTO_SELECT = frozenset(
-    {SelectionKind.ALBUM_TRACKS, SelectionKind.PLAYLIST_TRACKS}
-)
-
-
-@dataclass(frozen=True)
-class SelectionOption:
-    """A selectable item, identified by its occurrence index (not media ID)."""
-
-    index: int
-    title: str
-    media: Media
-
-
-@dataclass(frozen=True)
-class SelectionRequest:
-    """A UI-independent request for a choice among discovered media."""
-
-    kind: SelectionKind
-    source_id: str
-    options: tuple[SelectionOption, ...]
 
 
 Selector = Callable[[SelectionRequest], Sequence[int] | Awaitable[Sequence[int]]]

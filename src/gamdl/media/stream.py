@@ -7,10 +7,7 @@ extract decryption keys, download full media, or write output files.
 from __future__ import annotations
 
 import base64
-import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
@@ -18,113 +15,12 @@ import httpx
 import m3u8
 
 from .exceptions import StreamManifestError
+from .enums import HlsType, StreamOrigin, StreamSource
+from .models import DRMInfo, StreamSegment
 
 if TYPE_CHECKING:
     from m3u8.model import M3U8
-
-
-class SongCodec(str, Enum):
-    """Compatible with Gamdl 3.x's song codec and preference identifiers."""
-
-    AAC_WEB = "aac-web"
-    AAC_HE_WEB = "aac-he-web"
-    AAC = "aac"
-    AAC_HE = "aac-he"
-    AAC_BINAURAL = "aac-binaural"
-    AAC_DOWNMIX = "aac-downmix"
-    AAC_HE_BINAURAL = "aac-he-binaural"
-    AAC_HE_DOWNMIX = "aac-he-downmix"
-    ATMOS = "atmos"
-    AC3 = "ac3"
-    ALAC = "alac"
-    ASK = "ask"
-
-    @property
-    def is_web(self) -> bool:
-        return self in {SongCodec.AAC_WEB, SongCodec.AAC_HE_WEB}
-
-
-# Keep these aligned with the original Gamdl codec mapping. The AUDIO group
-# in Apple's enhanced master playlist is not the RFC CODECS identifier.
-SONG_CODEC_REGEX_MAP: dict[SongCodec, str] = {
-    SongCodec.AAC: r"audio-stereo-\d+",
-    SongCodec.AAC_HE: r"audio-HE-stereo-\d+",
-    SongCodec.AAC_BINAURAL: r"audio-stereo-\d+-binaural",
-    SongCodec.AAC_DOWNMIX: r"audio-stereo-\d+-downmix",
-    SongCodec.AAC_HE_BINAURAL: r"audio-HE-stereo-\d+-binaural",
-    SongCodec.AAC_HE_DOWNMIX: r"audio-HE-stereo-\d+-downmix",
-    SongCodec.ATMOS: r"audio-atmos-.*",
-    SongCodec.AC3: r"audio-ac3-.*",
-    SongCodec.ALAC: r"audio-alac-.*",
-}
-WEB_FLAVORS: dict[SongCodec, str] = {
-    SongCodec.AAC_WEB: "28:ctrp256",
-    SongCodec.AAC_HE_WEB: "32:ctrp64",
-}
-
-
-class StreamOrigin(str, Enum):
-    WEBPLAYBACK = "webplayback"
-    LIBRARY_WEBPLAYBACK = "library-webplayback"
-    WRAPPER_HLS = "wrapper-hls"
-    ASSET_ENHANCED_HLS = "asset-enhanced-hls"
-    ASSET_STANDARD_HLS = "asset-standard-hls"
-
-
-class StreamSource(str, Enum):
-    """Which service supplied the stream's playback URL."""
-
-    WEBPLAYBACK = "webplayback"
-    WRAPPER = "wrapper"
-    ASSETS = "assets"
-
-
-class HlsType(str, Enum):
-    """Actual master-playlist structure, not the requested HLS profile."""
-
-    ENHANCED = "enhanced"
-    STANDARD = "standard"
-
-
-@dataclass(frozen=True)
-class DRMInfo:
-    """DRM signaling only; no secret keys or license responses.
-
-    PSSH fields hold decoded data-URI bytes when available, not keys.
-    URI fields preserve the original HLS reference for license exchanges,
-    regardless of whether its data bytes could also be decoded.
-    """
-
-    widevine_pssh: bytes | None = None
-    playready_pssh: bytes | None = None
-    fairplay_streaming: str | None = None
-    widevine_uri: str | None = None
-    playready_uri: str | None = None
-    untyped_key_data: bytes | None = None
-    untyped_key_uri: str | None = None
-    encryption_method: str | None = None
-
-    @property
-    def is_protected(self) -> bool:
-        return self.encryption_method not in {None, "NONE"} or any(
-            value is not None
-            for value in (
-                self.widevine_pssh,
-                self.playready_pssh,
-                self.fairplay_streaming,
-                self.widevine_uri,
-                self.playready_uri,
-                self.untyped_key_data,
-                self.untyped_key_uri,
-            )
-        )
-
-
-@dataclass(frozen=True)
-class StreamSegment:
-    url: str
-    duration: float | None = None
-    byte_range: str | None = None
+    from .song.enums import SongCodec
 
 
 class StreamTransport:
@@ -348,19 +244,18 @@ def _decode_data_uri(uri: str) -> bytes | None:
         return None
 
 
-def match_hls_codec(
-    audio_group: str | None, codec_string: str | None
-) -> SongCodec | None:
-    """Map one HLS master variant back to Gamdl's codec enum."""
-    if audio_group:
-        for codec, pattern in SONG_CODEC_REGEX_MAP.items():
-            if re.fullmatch(pattern, audio_group):
-                return codec
-        # Enhanced HLS must respect the AUDIO-group regex: generic CODECS
-        # matching would otherwise misclassify an unknown special variant.
-        return None
-    if codec_string == "mp4a.40.2":
-        return SongCodec.AAC
-    if codec_string == "mp4a.40.5":
-        return SongCodec.AAC_HE
-    return None
+def __getattr__(name: str) -> Any:
+    """Compatibility aliases for song-only symbols formerly defined here."""
+    if name == "SongCodec":
+        from .song.enums import SongCodec
+
+        return SongCodec
+    if name in {"WEB_FLAVORS", "SONG_CODEC_REGEX_MAP"}:
+        from .song import constants
+
+        return getattr(constants, name)
+    if name == "match_hls_codec":
+        from .song.stream import match_hls_codec
+
+        return match_hls_codec
+    raise AttributeError(name)

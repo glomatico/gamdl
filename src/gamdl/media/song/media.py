@@ -7,15 +7,17 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from .base import Media
-from .exceptions import GamdlMediaError
+from ..base import Media
+from ..exceptions import GamdlMediaError
 from .lyrics import Lyrics
-from .song_stream import SongStreamResolver, StreamSelector
-from .stream import AudioStream, SongCodec
+from .stream import SongStreamResolver
+from .models import StreamSelector
+from ..stream import AudioStream
+from .enums import SongCodec
 from .tags import Tags
 
 if TYPE_CHECKING:
-    from ..api.wrapper import WrapperApi
+    from ...api.wrapper import WrapperApi
 
 
 class Song(Media):

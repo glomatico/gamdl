@@ -3,6 +3,7 @@
 from .base import Media, MediaSource
 from .cover import Cover
 from .drm import ContentKey, DrmBackend
+from .enums import HlsType, StreamOrigin, StreamSource
 from .exceptions import (
     GamdlMediaError,
     DrmConfigurationError,
@@ -14,7 +15,7 @@ from .exceptions import (
     StreamNotAvailableError,
     UnsupportedMediaError,
 )
-from .lyrics import Lyrics, LyricsLine, LyricsSegment
+from .song.lyrics import Lyrics, LyricsLine, LyricsSegment
 from .resolver import (
     DEFAULT_AUTO_SELECT,
     MediaResolver,
@@ -23,8 +24,9 @@ from .resolver import (
     SelectionRequest,
 )
 from .song import Song
-from .song_stream import (
-    SongStreamResolver,
+from .song.enums import SongCodec
+from .song.stream import SongStreamResolver
+from .song.models import (
     StreamSourceOption,
     StreamSourceSelectionRequest,
     StreamSelectionOption,
@@ -34,15 +36,12 @@ from .stream import (
     DRMInfo,
     AudioStream,
     HlsSongStream,
-    HlsType,
-    SongCodec,
-    StreamOrigin,
     StreamSegment,
-    StreamSource,
     WebPlaybackStream,
 )
-from .tags import Tags
-from .video import MusicVideo, UploadedVideo
+from .song.tags import Tags
+from .music_video import MusicVideo
+from .uploaded_video import UploadedVideo
 
 __all__ = [
     "AudioStream",

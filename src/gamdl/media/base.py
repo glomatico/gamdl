@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from .drm import DrmBackend
+from .enums import DrmBackend
 from .exceptions import GamdlMediaError, UnsupportedMediaError
+from .models import MediaSource
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
@@ -21,13 +21,12 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-@dataclass(frozen=True)
-class MediaSource:
-    """Context for one occurrence within an album, playlist or other source."""
-
-    kind: str
-    id: str
-    index: int
+def _first_resource(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract one resource consistently for supported video media models."""
+    values = payload.get("data")
+    if not isinstance(values, list) or not values:
+        raise GamdlMediaError("Apple Music returned no media metadata")
+    return values[0]
 
 
 class Media:
@@ -101,7 +100,8 @@ class Media:
     @staticmethod
     def _target_for_type(media_type: str | None) -> tuple[type[Media], bool]:
         from .song import Song
-        from .video import MusicVideo, UploadedVideo
+        from .music_video import MusicVideo
+        from .uploaded_video import UploadedVideo
 
         targets: dict[str, tuple[type[Media], bool]] = {
             "song": (Song, False),

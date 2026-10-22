@@ -1,59 +1,23 @@
-"""Explicit DRM license operations for provisioned Widevine/PlayReady CDMs.
-
-No device material or keys are embedded, logged or cached by Gamdl. Optional
-CDM dependencies are imported only for the requested backend. The Apple Music
-license endpoint is the only license service used by this module.
-"""
+"""Backend-independent authorized DRM license orchestration."""
 
 from __future__ import annotations
 
 import asyncio
 import base64
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from .exceptions import (
-    DrmConfigurationError,
-    DrmLicenseError,
-    DrmMetadataError,
-)
+from ..enums import DrmBackend
+from ..exceptions import DrmConfigurationError, DrmLicenseError, DrmMetadataError
+from .models import ContentKey
+from .playready import _playready_header
+from .widevine import _widevine_pssh
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
-
-    from .stream import AudioStream, DRMInfo
-
-
-class DrmBackend(str, Enum):
-    """Supported content-decryption modules for Apple Music license requests."""
-
-    WIDEVINE = "widevine"
-    PLAYREADY = "playready"
-
-    @property
-    def key_system(self) -> str:
-        return {
-            DrmBackend.WIDEVINE: "com.widevine.alpha",
-            DrmBackend.PLAYREADY: "com.microsoft.playready",
-        }[self]
-
-
-@dataclass(frozen=True, repr=False)
-class ContentKey:
-    """A license's content key and 16-byte identifier (both kept in memory).
-
-    The default repr deliberately never prints sensitive key material. Key
-    bytes are returned for callers that need them in their media pipeline.
-    """
-
-    kid: bytes
-    key: bytes
-
-    def __repr__(self) -> str:
-        return "ContentKey(<redacted>)"
+    from ..models import DRMInfo
+    from ..stream import AudioStream
 
 
 def _get_signaling(drm: DRMInfo, backend: DrmBackend) -> tuple[bytes, str]:
@@ -72,49 +36,6 @@ def _get_signaling(drm: DRMInfo, backend: DrmBackend) -> tuple[bytes, str]:
     if not isinstance(data, bytes) or not data or not uri:
         raise DrmMetadataError("No usable DRM initialization data for selected backend")
     return data, uri
-
-
-def _widevine_pssh(data: bytes) -> Any:
-    """Accept a full PSSH/Widevine payload or a single 16-byte CENC KID."""
-    try:
-        from pywidevine import PSSH
-        from pywidevine.license_protocol_pb2 import WidevinePsshData
-    except ImportError:
-        raise DrmConfigurationError(
-            "Widevine backend not installed; install gamdl[widevine]"
-        ) from None
-
-    try:
-        if len(data) == 16:
-            payload = WidevinePsshData(algorithm=1, key_ids=[data]).SerializeToString()
-            return PSSH(payload, strict=True)
-        return PSSH(data, strict=True)
-    except Exception:
-        raise DrmMetadataError("Invalid Widevine DRM initialization data") from None
-
-
-def _playready_header(data: bytes) -> Any:
-    """Accept a PlayReady object/header or a 16-byte CENC key identifier."""
-    try:
-        from pyplayready.system.pssh import PSSH
-        from pyplayready.system.wrmheader import WRMHeader
-    except ImportError:
-        raise DrmConfigurationError(
-            "PlayReady backend not installed; install gamdl[playready]"
-        ) from None
-
-    try:
-        if len(data) == 16:
-            key_id = base64.b64encode(UUID(bytes=data).bytes_le).decode("ascii")
-            return WRMHeader(
-                '<WRMHEADER xmlns="http://schemas.microsoft.com/DRM/2007/03/PlayReadyHeader" '
-                'version="4.3.0.0"><DATA><PROTECTINFO><KIDS>'
-                f'<KID ALGID="AESCTR" VALUE="{key_id}" />'
-                "</KIDS></PROTECTINFO></DATA></WRMHEADER>"
-            )
-        return PSSH(data).wrm_headers[0]
-    except Exception:
-        raise DrmMetadataError("Invalid PlayReady DRM initialization data") from None
 
 
 async def _make_cdm(backend: DrmBackend, device_path: str | Path) -> Any:

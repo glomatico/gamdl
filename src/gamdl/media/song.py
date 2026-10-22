@@ -35,7 +35,7 @@ class Song(Media):
         wrapper_api: WrapperApi | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> tuple[AudioStream, ...]:
-        """Discover Webplayback and HLS variants; no segments or DRM keys."""
+        """Discover every source, including both assets profiles, without media bytes."""
         return await SongStreamResolver(
             self, wrapper_api=wrapper_api, client=client
         ).get_streams()
@@ -49,7 +49,11 @@ class Song(Media):
         wrapper_api: WrapperApi | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> AudioStream:
-        """Select the highest-bitrate codec match or invoke ASK callback."""
+        """Select a codec or ASK for a source first, then its advertised variant.
+
+        With ASK the selector receives StreamSourceSelectionRequest followed by
+        StreamSelectionRequest. Only the selected source is fetched.
+        """
         return await SongStreamResolver(
             self, wrapper_api=wrapper_api, client=client
         ).get_stream(codec=codec, codec_priority=codec_priority, selector=selector)

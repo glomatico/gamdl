@@ -67,8 +67,23 @@ class StreamOrigin(str, Enum):
     WEBPLAYBACK = "webplayback"
     LIBRARY_WEBPLAYBACK = "library-webplayback"
     WRAPPER_HLS = "wrapper-hls"
-    WEBPLAYBACK_HLS = "webplayback-hls"
-    ASSET_HLS = "asset-hls"
+    ASSET_ENHANCED_HLS = "asset-enhanced-hls"
+    ASSET_STANDARD_HLS = "asset-standard-hls"
+
+
+class StreamSource(str, Enum):
+    """Which service supplied the stream's playback URL."""
+
+    WEBPLAYBACK = "webplayback"
+    WRAPPER = "wrapper"
+    ASSETS = "assets"
+
+
+class HlsType(str, Enum):
+    """Actual master-playlist structure, not the requested HLS profile."""
+
+    ENHANCED = "enhanced"
+    STANDARD = "standard"
 
 
 @dataclass(frozen=True)
@@ -176,6 +191,18 @@ class AudioStream:
         self._transport = transport
         self._cache: dict[str, Any] = {}
         self._inflight: dict[str, Any] = {}
+
+    @property
+    def source_api(self) -> StreamSource:
+        """Identify the URL provider separately from HLS playlist structure."""
+        if self.origin == StreamOrigin.WRAPPER_HLS:
+            return StreamSource.WRAPPER
+        if self.origin in {
+            StreamOrigin.ASSET_ENHANCED_HLS,
+            StreamOrigin.ASSET_STANDARD_HLS,
+        }:
+            return StreamSource.ASSETS
+        return StreamSource.WEBPLAYBACK
 
     async def _load(self, name: str, factory: Callable[[], Awaitable[Any]]) -> Any:
         import asyncio
@@ -306,6 +333,10 @@ class WebPlaybackStream(AudioStream):
 
 class HlsSongStream(AudioStream):
     """Enhanced or standard HLS media playlist selected from a master."""
+
+    def __init__(self, *, hls_type: HlsType = HlsType.STANDARD, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.hls_type = hls_type
 
 
 def _decode_data_uri(uri: str) -> bytes | None:

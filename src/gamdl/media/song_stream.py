@@ -15,10 +15,15 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ..api.exceptions import GamdlApiError
-from .exceptions import SelectionRequiredError, StreamNotAvailableError
+from .exceptions import (
+    SelectionRequiredError,
+    StreamManifestError,
+    StreamNotAvailableError,
+)
 from .stream import (
     WEB_FLAVORS,
     AudioStream,
+    HlsType,
     HlsSongStream,
     SongCodec,
     StreamOrigin,
@@ -33,8 +38,24 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class StreamSourceOption:
+    """One provider/profile, available before making a discovery request."""
+
+    index: int
+    origin: StreamOrigin
+
+
+@dataclass(frozen=True)
+class StreamSourceSelectionRequest:
+    """First ASK prompt: choose a source before fetching any streams."""
+
+    media_id: str
+    options: tuple[StreamSourceOption, ...]
+
+
+@dataclass(frozen=True)
 class StreamSelectionOption:
-    """A stream candidate exposed to a caller-owned UI callback."""
+    """Second ASK prompt: choose a variant from the chosen source only."""
 
     index: int
     stream: AudioStream
@@ -51,16 +72,23 @@ class StreamSelectionOption:
     def bitrate(self) -> int | None:
         return self.stream.bitrate
 
+    @property
+    def hls_type(self) -> HlsType | None:
+        return getattr(self.stream, "hls_type", None)
+
 
 @dataclass(frozen=True)
 class StreamSelectionRequest:
-    """Unified Webplayback and HLS selection request, independent of CLI."""
+    """Candidates for a single selected provider/profile."""
 
     media_id: str
+    origin: StreamOrigin
     options: tuple[StreamSelectionOption, ...]
 
 
-StreamSelector = Callable[[StreamSelectionRequest], int | Awaitable[int]]
+StreamSelector = Callable[
+    [StreamSourceSelectionRequest | StreamSelectionRequest], int | Awaitable[int]
+]
 
 
 def _default_master_url(value: str) -> str:
@@ -150,40 +178,44 @@ class SongStreamResolver:
 
         return await self.song._load(("streams_web", self._client_key), discover)
 
-    async def _primary_hls_source(self) -> tuple[str, StreamOrigin] | None:
-        if self.wrapper_api is not None:
+    async def _wrapper_hls_source(self) -> tuple[str, StreamOrigin] | None:
+        if self.wrapper_api is None:
+            return None
 
-            async def playback() -> dict:
-                return await self.wrapper_api.get_playback(self.song.id)
+        async def playback() -> dict:
+            return await self.wrapper_api.get_playback(self.song.id)
 
-            try:
-                wrapped = await self.song._load(
-                    ("streams_wrapper", self._wrapper_key), playback
-                )
-            except GamdlApiError:
-                # An unavailable optional wrapper must not prevent Asset HLS.
-                wrapped = {}
-            url = _first_song(wrapped).get("hls-playlist-url")
-            if isinstance(url, str) and url:
-                return _default_master_url(url), StreamOrigin.WRAPPER_HLS
-
-        playback = await self.song._get_webplayback()
-        url = _first_song(playback).get("hls-playlist-url")
+        try:
+            wrapped = await self.song._load(
+                ("streams_wrapper", self._wrapper_key), playback
+            )
+        except GamdlApiError:
+            # A missing/unavailable wrapper HLS should not prevent assets.
+            return None
+        url = _first_song(wrapped).get("hls-playlist-url")
         if isinstance(url, str) and url:
-            return _default_master_url(url), StreamOrigin.WEBPLAYBACK_HLS
+            return _default_master_url(url), StreamOrigin.WRAPPER_HLS
         return None
 
-    async def _asset_hls_source(self) -> tuple[str, StreamOrigin] | None:
+    async def _asset_hls_source(
+        self, origin: StreamOrigin
+    ) -> tuple[str, StreamOrigin] | None:
         if self.song.is_library:
             return None
-        assets = await self.song._get_assets()
+        if origin not in {
+            StreamOrigin.ASSET_ENHANCED_HLS,
+            StreamOrigin.ASSET_STANDARD_HLS,
+        }:
+            raise ValueError("Expected an Assets API HLS source")
+        profile = "enhancedHls" if origin == StreamOrigin.ASSET_ENHANCED_HLS else ""
+        assets = await self.song._get_assets(hls_profile=profile)
         entries = assets.get("results", {}).get("assets", [])
         if not isinstance(entries, list):
             return None
         for asset in entries:
             url = asset.get("url") if isinstance(asset, dict) else None
             if isinstance(url, str) and url:
-                return _default_master_url(url), StreamOrigin.ASSET_HLS
+                return _default_master_url(url), origin
         return None
 
     async def _from_hls_master(
@@ -191,6 +223,11 @@ class SongStreamResolver:
     ) -> tuple[HlsSongStream, ...]:
         url, origin = source
         manifest = await self.transport.get_manifest(url)
+        hls_type = (
+            HlsType.ENHANCED
+            if any(getattr(p.stream_info, "audio", None) for p in manifest.playlists)
+            else HlsType.STANDARD
+        )
         result: list[HlsSongStream] = []
         for playlist in manifest.playlists:
             info = playlist.stream_info
@@ -199,6 +236,11 @@ class SongStreamResolver:
             codec = match_hls_codec(group, codecs)
             if codec is None:
                 continue
+            if hls_type == HlsType.STANDARD and codec not in {
+                SongCodec.AAC,
+                SongCodec.AAC_HE,
+            }:
+                continue
             bitrate = getattr(info, "average_bandwidth", None) or getattr(
                 info, "bandwidth", None
             )
@@ -206,6 +248,7 @@ class SongStreamResolver:
                 HlsSongStream(
                     codec=codec,
                     origin=origin,
+                    hls_type=hls_type,
                     url=playlist.absolute_uri,
                     transport=self.transport,
                     codec_string=codecs,
@@ -215,43 +258,107 @@ class SongStreamResolver:
         return tuple(result)
 
     async def get_hls_streams(
-        self, *, asset_fallback: bool = False
+        self, *, origin: StreamOrigin
     ) -> tuple[HlsSongStream, ...]:
-        """Discover HLS variants; optionally force the assets endpoint fallback."""
+        """Discover one explicit HLS source, without implicit API fallbacks.
+
+        The ``enhancedHls`` *request* can return standard HLS on Apple's side;
+        the actual type is detected from the master, not inferred from origin.
+        """
+        if origin not in {
+            StreamOrigin.WRAPPER_HLS,
+            StreamOrigin.ASSET_ENHANCED_HLS,
+            StreamOrigin.ASSET_STANDARD_HLS,
+        }:
+            raise ValueError("Unsupported HLS source")
         key = (
-            "streams_hls_asset" if asset_fallback else "streams_hls_primary",
-            self._wrapper_key,
+            "streams_hls",
+            origin,
+            self._wrapper_key if origin == StreamOrigin.WRAPPER_HLS else None,
             self._client_key,
         )
 
         async def discover() -> tuple[HlsSongStream, ...]:
             if self.song.is_library:
                 return ()
-            primary = None if asset_fallback else await self._primary_hls_source()
-            if primary is not None:
-                try:
-                    options = await self._from_hls_master(primary)
-                except StreamManifestError:
-                    options = ()
-                if options:
-                    return options
-            asset = await self._asset_hls_source()
-            if asset is None or (primary is not None and asset[0] == primary[0]):
+            source = (
+                await self._wrapper_hls_source()
+                if origin == StreamOrigin.WRAPPER_HLS
+                else await self._asset_hls_source(origin)
+            )
+            if source is None:
                 return ()
             try:
-                return await self._from_hls_master(asset)
+                return await self._from_hls_master(source)
             except StreamManifestError:
                 return ()
-
-        from .exceptions import StreamManifestError
 
         return await self.song._load(key, discover)
 
     async def get_streams(self) -> tuple[AudioStream, ...]:
-        """Return Webplayback plus available HLS candidates, unselected."""
-        web = await self.get_web_streams()
-        hls = await self.get_hls_streams()
-        return (*web, *hls)
+        """Explicit, full discovery of all eligible sources, including both profiles."""
+        candidates: list[AudioStream] = list(await self.get_web_streams())
+        if not self.song.is_library:
+            for origin in self._hls_origins():
+                candidates.extend(await self.get_hls_streams(origin=origin))
+        return tuple(candidates)
+
+    def _hls_origins(self) -> tuple[StreamOrigin, ...]:
+        return (
+            *((StreamOrigin.WRAPPER_HLS,) if self.wrapper_api is not None else ()),
+            StreamOrigin.ASSET_ENHANCED_HLS,
+            StreamOrigin.ASSET_STANDARD_HLS,
+        )
+
+    def _source_options(self) -> tuple[StreamSourceOption, ...]:
+        origins = [
+            StreamOrigin.LIBRARY_WEBPLAYBACK
+            if self.song.is_library
+            else StreamOrigin.WEBPLAYBACK
+        ]
+        if not self.song.is_library:
+            origins.extend(self._hls_origins())
+        return tuple(StreamSourceOption(i, origin) for i, origin in enumerate(origins))
+
+    async def _streams_for_source(
+        self, origin: StreamOrigin
+    ) -> tuple[AudioStream, ...]:
+        if origin in {StreamOrigin.WEBPLAYBACK, StreamOrigin.LIBRARY_WEBPLAYBACK}:
+            return await self.get_web_streams()
+        return await self.get_hls_streams(origin=origin)
+
+    @staticmethod
+    async def _select_index(
+        selector: StreamSelector,
+        request: StreamSourceSelectionRequest | StreamSelectionRequest,
+        count: int,
+    ) -> int:
+        choice = selector(request)
+        if inspect.isawaitable(choice):
+            choice = await choice
+        if type(choice) is not int or not 0 <= choice < count:
+            raise ValueError("Stream selector returned an invalid index")
+        return choice
+
+    async def _ask(self, selector: StreamSelector) -> AudioStream:
+        sources = self._source_options()
+        source_request = StreamSourceSelectionRequest(self.song.id, sources)
+        source_index = await self._select_index(selector, source_request, len(sources))
+        origin = sources[source_index].origin
+        candidates = await self._streams_for_source(origin)
+        if not candidates:
+            raise StreamNotAvailableError(
+                "No song streams available from selected source"
+            )
+        request = StreamSelectionRequest(
+            media_id=self.song.id,
+            origin=origin,
+            options=tuple(
+                StreamSelectionOption(i, stream) for i, stream in enumerate(candidates)
+            ),
+        )
+        chosen = await self._select_index(selector, request, len(candidates))
+        return candidates[chosen]
 
     async def get_stream(
         self,
@@ -280,22 +387,7 @@ class SongStreamResolver:
             if preferred == SongCodec.ASK:
                 if selector is None:
                     raise SelectionRequiredError("song_stream")
-                candidates = await self.get_streams()
-                if not candidates:
-                    raise StreamNotAvailableError("No selectable song streams")
-                request = StreamSelectionRequest(
-                    media_id=self.song.id,
-                    options=tuple(
-                        StreamSelectionOption(index=i, stream=item)
-                        for i, item in enumerate(candidates)
-                    ),
-                )
-                selection = selector(request)
-                if inspect.isawaitable(selection):
-                    selection = await selection
-                if type(selection) is not int or not 0 <= selection < len(candidates):
-                    raise ValueError("Stream selector returned an invalid index")
-                return candidates[selection]
+                return await self._ask(selector)
             if preferred.is_web:
                 matches = [
                     item
@@ -303,17 +395,22 @@ class SongStreamResolver:
                     if item.codec == preferred
                 ]
             else:
-                matches = [
-                    item
-                    for item in await self.get_hls_streams()
-                    if item.codec == preferred
-                ]
-                if not matches:
+                # Match codecs independently within each source. Wrapper
+                # always wins over assets, even when its bitrate is lower.
+                origins = (
+                    (StreamOrigin.WRAPPER_HLS, StreamOrigin.ASSET_ENHANCED_HLS)
+                    if self.wrapper_api is not None
+                    else (StreamOrigin.ASSET_ENHANCED_HLS,)
+                )
+                for origin in origins:
                     matches = [
                         item
-                        for item in await self.get_hls_streams(asset_fallback=True)
+                        for item in await self.get_hls_streams(origin=origin)
                         if item.codec == preferred
                     ]
+                    if matches:
+                        return max(matches, key=lambda item: item.bitrate or 0)
+                continue
             if matches:
                 return max(matches, key=lambda item: item.bitrate or 0)
         raise StreamNotAvailableError(

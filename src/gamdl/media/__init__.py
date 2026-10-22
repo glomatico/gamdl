@@ -20,6 +20,8 @@ from .resolver import (
 from .song import Song
 from .song_stream import (
     SongStreamResolver,
+    StreamSourceOption,
+    StreamSourceSelectionRequest,
     StreamSelectionOption,
     StreamSelectionRequest,
 )
@@ -27,9 +29,11 @@ from .stream import (
     DRMInfo,
     AudioStream,
     HlsSongStream,
+    HlsType,
     SongCodec,
     StreamOrigin,
     StreamSegment,
+    StreamSource,
     WebPlaybackStream,
 )
 from .tags import Tags
@@ -42,6 +46,7 @@ __all__ = [
     "DRMInfo",
     "GamdlMediaError",
     "HlsSongStream",
+    "HlsType",
     "Lyrics",
     "LyricsLine",
     "LyricsSegment",
@@ -60,6 +65,9 @@ __all__ = [
     "StreamNotAvailableError",
     "StreamOrigin",
     "StreamSegment",
+    "StreamSource",
+    "StreamSourceOption",
+    "StreamSourceSelectionRequest",
     "StreamSelectionOption",
     "StreamSelectionRequest",
     "Tags",

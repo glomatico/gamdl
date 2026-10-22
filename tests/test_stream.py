@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 
 from gamdl.media import (
-    DRMInfo,
     HlsSongStream,
     HlsType,
     SelectionRequiredError,
@@ -22,6 +21,7 @@ from gamdl.media import (
     StreamSelectionRequest,
     WebPlaybackStream,
 )
+from gamdl.drm import DRMInfo
 from gamdl.media.song.stream import SongStreamResolver, _default_master_url
 from gamdl.media.stream import StreamTransport
 

@@ -1,29 +1,29 @@
-"""Offline DRM license contracts; provisioned devices and real keys not used."""
+"""DRM backend factory and license exchange contracts; no real licenses."""
 
 import base64
 import importlib.util
+import asyncio
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
 import httpx
 
-from gamdl.media import (
+from gamdl.drm import (
     ContentKey,
+    DRMInfo,
+    Drm,
     DrmBackend,
     DrmConfigurationError,
     DrmLicenseError,
     DrmMetadataError,
-    GamdlMediaError,
-    Song,
-    SongCodec,
-    StreamOrigin,
-    WebPlaybackStream,
 )
-from gamdl.media.drm.playready import _playready_header
-from gamdl.media.drm.widevine import _widevine_pssh
+from gamdl.drm.playready import _playready_header
+from gamdl.drm.widevine import _widevine_pssh
+from gamdl.media import SongCodec, StreamOrigin, WebPlaybackStream
 from gamdl.media.stream import StreamTransport
+
 
 KID = bytes.fromhex("00112233445566778899aabbccddeeff")
 SECRET = bytes.fromhex("11223344556677889900aabbccddeeff")
@@ -104,11 +104,22 @@ class FakeCdm:
             raise RuntimeError("secret key do not display")
 
 
-def make_song(*, payload=None, is_library=False):
-    response = payload or playlist()
+def make_stream(*, payload=None):
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda _: httpx.Response(200, text=response))
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, text=payload or playlist())
+        )
     )
+    stream = WebPlaybackStream(
+        codec=SongCodec.AAC_WEB,
+        origin=StreamOrigin.WEBPLAYBACK,
+        url=URL,
+        transport=StreamTransport(client),
+    )
+    return stream, client
+
+
+def fake_api():
     api = Mock()
     api.get_license_exchange = AsyncMock(
         return_value={
@@ -116,48 +127,44 @@ def make_song(*, payload=None, is_library=False):
             "license": base64.b64encode(b"example license").decode(),
         }
     )
-    song = Song.from_id(
-        "i.111" if is_library else "111", api=api, is_library=is_library
-    )
-    stream = WebPlaybackStream(
-        codec=SongCodec.AAC_WEB,
-        origin=StreamOrigin.WEBPLAYBACK,
-        url=URL,
-        media_id=song.id,
-        transport=StreamTransport(client),
-    )
-    return song, stream, client
+    return api
 
 
-class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
+def new_handler(api, backend=DrmBackend.WIDEVINE, *, cdm=None, device_path=None):
+    factory = (
+        Drm.from_widevine if backend == DrmBackend.WIDEVINE else Drm.from_playready
+    )
+    return factory(api, cdm=cdm, device_path=device_path)
+
+
+class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        # Actual package parsers are independently exercised below when their
-        # optional extras are present. License orchestration is always tested.
         self.widevine_patch = patch(
-            "gamdl.media.drm.service._widevine_pssh", return_value=PSSH()
+            "gamdl.drm.service._widevine_pssh", return_value=PSSH()
         )
         self.playready_patch = patch(
-            "gamdl.media.drm.service._playready_header", return_value=WRMHeader()
+            "gamdl.drm.service._playready_header", return_value=WRMHeader()
         )
         self.widevine_patch.start()
         self.playready_patch.start()
         self.addAsyncCleanup(self.playready_patch.stop)
         self.addAsyncCleanup(self.widevine_patch.stop)
 
-    async def test_widevine_acquires_content_only_closes_and_does_not_cache(self):
-        song, stream, client = make_song()
-        cdm = FakeCdm()
+    async def test_widevine_content_only_sessions_and_no_key_caching(self):
+        stream, client = make_stream()
+        api, cdm = fake_api(), FakeCdm()
+        drm = Drm.from_widevine(api, cdm=cdm)
         async with client:
+            info = await stream.get_drm_info()
             for _ in range(2):
-                keys = await song.get_keys(stream, cdm=cdm)
+                keys = await drm.get_keys(media_id="111", drm_info=info)
                 self.assertEqual(keys, (ContentKey(KID, SECRET),))
-            self.assertEqual(song.api.get_license_exchange.await_count, 2)
+            self.assertEqual(api.get_license_exchange.await_count, 2)
             self.assertEqual(cdm.events.count("close"), 2)
             self.assertEqual(cdm.events.count("open"), 2)
             self.assertEqual(repr(keys[0]), "ContentKey(<redacted>)")
             self.assertNotIn(SECRET.hex(), repr(keys))
-            self.assertEqual(song._memo.values, {})
-            song.api.get_license_exchange.assert_awaited_with(
+            api.get_license_exchange.assert_awaited_with(
                 "111",
                 KEY_URI,
                 base64.b64encode(b"challenge").decode(),
@@ -169,9 +176,9 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(type(cdm.challenge_input).__name__, "PSSH")
 
-    async def test_playready_uses_xml_challenge_and_decoded_license(self):
-        song, stream, client = make_song()
-        cdm = FakeCdm(backend=DrmBackend.PLAYREADY)
+    async def test_playready_xml_and_library_metadata(self):
+        stream, client = make_stream()
+        api, cdm = fake_api(), FakeCdm(backend=DrmBackend.PLAYREADY)
         cdm.keys.insert(
             0,
             Mock(
@@ -180,137 +187,244 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
                 key_type=SimpleNamespace(name="KEYEXCHANGE"),
             ),
         )
+        drm = Drm.from_playready(api, cdm=cdm)
         async with client:
-            keys = await song.get_keys(stream, backend=DrmBackend.PLAYREADY, cdm=cdm)
-            self.assertEqual(keys[0].kid, KID)
-            self.assertEqual(keys[0].key, SECRET)
-            self.assertEqual(type(cdm.challenge_input).__name__, "WRMHeader")
-            self.assertEqual(cdm.license_data, "example license")
-            self.assertEqual(cdm.events[-1], "close")
-            song.api.get_license_exchange.assert_awaited_once_with(
-                "111",
-                KEY_URI,
-                base64.b64encode(b"<soap>challenge</soap>").decode(),
-                key_system="com.microsoft.playready",
-                is_library=False,
+            keys = await drm.get_keys(
+                media_id="i.111",
+                drm_info=await stream.get_drm_info(),
+                is_library=True,
             )
+        self.assertEqual(keys[0].kid, KID)
+        self.assertEqual(keys[0].key, SECRET)
+        self.assertEqual(type(cdm.challenge_input).__name__, "WRMHeader")
+        self.assertEqual(cdm.license_data, "example license")
+        self.assertEqual(cdm.events[-1], "close")
+        api.get_license_exchange.assert_awaited_once_with(
+            "i.111",
+            KEY_URI,
+            base64.b64encode(b"<soap>challenge</soap>").decode(),
+            key_system="com.microsoft.playready",
+            is_library=True,
+        )
 
-    async def test_explicit_keyformat_preserves_license_uri(self):
+    async def test_explicit_signaling_uri_and_backend_selection(self):
         for backend, keyformat in (
             (DrmBackend.WIDEVINE, "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"),
             (DrmBackend.PLAYREADY, "com.microsoft.playready"),
         ):
             with self.subTest(backend=backend):
-                song, stream, client = make_song(
+                stream, client = make_stream(
                     payload=playlist(keyformat=keyformat, method="SAMPLE-AES")
                 )
-                cdm = FakeCdm(backend=backend)
+                api = fake_api()
+                drm = new_handler(api, backend, cdm=FakeCdm(backend=backend))
                 async with client:
-                    drm = await stream.get_drm_info()
-                    self.assertTrue(drm.widevine_pssh or drm.playready_pssh)
+                    info = await stream.get_drm_info()
                     self.assertEqual(
-                        drm.widevine_uri
+                        info.widevine_uri
                         if backend == DrmBackend.WIDEVINE
-                        else drm.playready_uri,
+                        else info.playready_uri,
                         KEY_URI,
                     )
-                    await song.get_keys(stream, backend=backend, cdm=cdm)
+                    await drm.get_keys(media_id="111", drm_info=info)
 
-    async def test_fairplay_only_raises_without_contacting_license_endpoint(self):
-        song, stream, client = make_song(
-            payload=playlist(
-                "com.apple.streamingkeydelivery",
-                "SAMPLE-AES",
-                "skd://itunes.apple.com/track",
-            )
+    async def test_backend_chooses_only_its_own_signaling(self):
+        info = DRMInfo(
+            widevine_pssh=KID,
+            widevine_uri="data:wv",
+            playready_pssh=b"p" * 16,
+            playready_uri="data:pr",
+            encryption_method="SAMPLE-AES",
         )
-        cdm = FakeCdm()
-        async with client:
+        for backend, expected_uri in (
+            (DrmBackend.WIDEVINE, "data:wv"),
+            (DrmBackend.PLAYREADY, "data:pr"),
+        ):
+            api = fake_api()
+            drm = new_handler(api, backend, cdm=FakeCdm(backend=backend))
+            await drm.get_keys(media_id="111", drm_info=info)
+            self.assertEqual(api.get_license_exchange.await_args.args[1], expected_uri)
+
+    async def test_fairplay_only_raises_before_cdm_or_license_request(self):
+        info = DRMInfo(
+            fairplay_streaming="skd://itunes.apple.com/track",
+            encryption_method="SAMPLE-AES",
+        )
+        for backend in DrmBackend:
+            api, cdm = fake_api(), FakeCdm(backend=backend)
+            drm = new_handler(api, backend, cdm=cdm)
             with self.assertRaises(DrmMetadataError):
-                await song.get_keys(stream, cdm=cdm)
+                await drm.get_keys(media_id="111", drm_info=info)
             self.assertEqual(cdm.events, [])
-            song.api.get_license_exchange.assert_not_awaited()
+            api.get_license_exchange.assert_not_awaited()
 
-    async def test_unknown_signaling_does_not_get_treated_as_widevine(self):
-        song, stream, client = make_song(payload=playlist(method="SAMPLE-AES"))
-        async with client:
-            with self.assertRaises(DrmMetadataError):
-                await song.get_keys(stream, cdm=FakeCdm())
+    async def test_unknown_untyped_signaling_rejected(self):
+        info = DRMInfo(
+            untyped_key_data=KID,
+            untyped_key_uri=KEY_URI,
+            encryption_method="SAMPLE-AES",
+        )
+        drm = Drm.from_widevine(fake_api(), cdm=FakeCdm())
+        with self.assertRaises(DrmMetadataError):
+            await drm.get_keys(media_id="111", drm_info=info)
 
-    async def test_drm_free_returns_empty_without_credentials_or_network(self):
-        song, stream, client = make_song()
-        stream.drm_free = True
-        async with client:
-            self.assertEqual(await song.get_keys(stream), ())
-            song.api.get_license_exchange.assert_not_awaited()
-            self.assertEqual(stream._memo.values, {})
+    async def test_unprotected_info_returns_empty_without_initializing_cdm(self):
+        api = fake_api()
+        drm = Drm.from_widevine(api)
+        self.assertEqual(await drm.get_keys(media_id="111", drm_info=DRMInfo()), ())
+        self.assertIsNone(drm._cdm)
+        api.get_license_exchange.assert_not_awaited()
 
-    async def test_wrong_media_rejected(self):
-        song, stream, client = make_song()
-        another_song = Song.from_id("different-id", api=song.api)
-        async with client:
-            with self.assertRaises(GamdlMediaError):
-                await another_song.get_keys(stream)
-            self.assertEqual(stream._memo.values, {})
+    async def test_invalid_input_rejected(self):
+        drm = Drm.from_widevine(fake_api(), cdm=FakeCdm())
+        with self.assertRaises(ValueError):
+            await drm.get_keys(media_id="", drm_info=DRMInfo())
+        with self.assertRaises(TypeError):
+            await drm.get_keys(media_id="1", drm_info=None)
 
-    async def test_missing_or_duplicate_cdm_parameters(self):
-        song, stream, client = make_song()
-        async with client:
+    async def test_factory_validation_and_default_path(self):
+        api = fake_api()
+        self.assertEqual(Drm.from_widevine(api).backend, DrmBackend.WIDEVINE)
+        with self.assertRaises(DrmConfigurationError):
+            Drm.from_playready(api)
+        for factory in (Drm.from_playready, Drm.from_widevine):
             with self.assertRaises(DrmConfigurationError):
-                await song.get_keys(stream)
-            with self.assertRaises(DrmConfigurationError):
-                await song.get_keys(stream, device_path="private.wvd", cdm=FakeCdm())
+                factory(api, cdm=FakeCdm(), device_path="device")
+        self.assertEqual(
+            Drm.from_playready(api, device_path="device.prd").backend,
+            DrmBackend.PLAYREADY,
+        )
 
-    async def test_apple_license_rejected_closes_session_without_secret_leak(self):
-        song, stream, client = make_song()
-        song.api.get_license_exchange.side_effect = RuntimeError(
+    async def test_license_failure_closes_session_and_redacts_error(self):
+        api = fake_api()
+        api.get_license_exchange.side_effect = RuntimeError(
             "credential ABC; secret key material"
         )
         cdm = FakeCdm()
-        async with client:
-            with self.assertRaises(DrmLicenseError) as error:
-                await song.get_keys(stream, cdm=cdm)
-            self.assertEqual(cdm.events[-1], "close")
-            self.assertNotIn("credential", str(error.exception))
-            self.assertNotIn("secret", str(error.exception))
+        drm = Drm.from_widevine(api, cdm=cdm)
+        with self.assertRaises(DrmLicenseError) as error:
+            await drm.get_keys(
+                media_id="111",
+                drm_info=DRMInfo(
+                    untyped_key_data=KID,
+                    untyped_key_uri=KEY_URI,
+                    encryption_method="ISO-23001-7",
+                ),
+            )
+        self.assertEqual(cdm.events[-1], "close")
+        self.assertNotIn("credential", str(error.exception))
+        self.assertNotIn("secret", str(error.exception))
 
-    async def test_cdm_failure_and_no_keys_close_session(self):
-        song, stream, client = make_song()
-        async with client:
-            for cdm in (
-                FakeCdm(fail="challenge"),
-                FakeCdm(fail="parse"),
-                FakeCdm(keys=[]),
-            ):
-                with self.subTest(fail=cdm.fail):
-                    with self.assertRaises(DrmLicenseError):
-                        await song.get_keys(stream, cdm=cdm)
-                    self.assertEqual(cdm.events[-1], "close")
+    async def test_cdm_errors_and_no_keys_close_sessions(self):
+        for cdm in (
+            FakeCdm(fail="challenge"),
+            FakeCdm(fail="parse"),
+            FakeCdm(keys=[]),
+        ):
+            with self.subTest(fail=cdm.fail):
+                drm = Drm.from_widevine(fake_api(), cdm=cdm)
+                with self.assertRaises(DrmLicenseError):
+                    await drm.get_keys(
+                        media_id="111",
+                        drm_info=DRMInfo(
+                            untyped_key_data=KID,
+                            untyped_key_uri=KEY_URI,
+                            encryption_method="ISO-23001-7",
+                        ),
+                    )
+                self.assertEqual(cdm.events[-1], "close")
 
-    async def test_configuration_path_never_echoed_in_failure(self):
-        song, stream, client = make_song()
-        async with client:
-            with self.assertRaises(DrmConfigurationError) as error:
-                await song.get_keys(
-                    stream, device_path="/missing/sensitive-path/private-key-file.wvd"
-                )
-            self.assertNotIn("sensitive", str(error.exception))
-
-    async def test_can_supply_custom_device_path_without_storing_it(self):
-        song, stream, client = make_song()
+    async def test_custom_device_lazy_initialized_only_once(self):
+        api = fake_api()
         cdm = FakeCdm()
         with patch(
-            "gamdl.media.drm.service._make_cdm",
+            "gamdl.drm.service._make_cdm",
             new_callable=AsyncMock,
             return_value=cdm,
         ) as factory:
-            async with client:
-                await song.get_keys(stream, device_path="example.wvd")
-        factory.assert_awaited_once_with(DrmBackend.WIDEVINE, "example.wvd")
-        self.assertNotIn("device_path", song.__dict__)
+            drm = Drm.from_widevine(api, device_path="example.wvd")
+            self.assertIsNone(drm._cdm)
+            info = DRMInfo(
+                untyped_key_data=KID,
+                untyped_key_uri=KEY_URI,
+                encryption_method="ISO-23001-7",
+            )
+            await drm.get_keys(media_id="1", drm_info=info)
+            await drm.get_keys(media_id="1", drm_info=info)
+            factory.assert_awaited_once_with(DrmBackend.WIDEVINE, "example.wvd")
+
+    async def test_concurrent_requests_initialize_one_shared_cdm(self):
+        api = fake_api()
+        cdm = FakeCdm()
+        info = DRMInfo(
+            untyped_key_data=KID,
+            untyped_key_uri=KEY_URI,
+            encryption_method="ISO-23001-7",
+        )
+        with patch(
+            "gamdl.drm.service._make_cdm",
+            new_callable=AsyncMock,
+            return_value=cdm,
+        ) as constructor:
+            drm = Drm.from_widevine(api)
+            keys = await asyncio.gather(
+                drm.get_keys(media_id="111", drm_info=info),
+                drm.get_keys(media_id="222", drm_info=info),
+            )
+        self.assertEqual(keys, [(ContentKey(KID, SECRET),)] * 2)
+        constructor.assert_awaited_once_with(DrmBackend.WIDEVINE, None)
+        self.assertEqual(api.get_license_exchange.await_count, 2)
+        self.assertEqual(cdm.events.count("close"), 2)
+
+    async def test_multiple_content_keys_preserved(self):
+        second_kid = bytes.fromhex("ffeeddccbbaa99887766554433221100")
+        second_key = b"2" * 16
+        cdm = FakeCdm(
+            keys=[
+                Mock(type="CONTENT", kid=UUID(bytes=KID), key=SECRET),
+                Mock(type="CONTENT", kid=UUID(bytes=second_kid), key=second_key),
+            ]
+        )
+        drm = Drm.from_widevine(fake_api(), cdm=cdm)
+        keys = await drm.get_keys(
+            media_id="111",
+            drm_info=DRMInfo(
+                widevine_pssh=KID,
+                widevine_uri=KEY_URI,
+                encryption_method="SAMPLE-AES",
+            ),
+        )
+        self.assertEqual(
+            keys, (ContentKey(KID, SECRET), ContentKey(second_kid, second_key))
+        )
+
+    async def test_invalid_device_file_does_not_leak_path(self):
+        drm = Drm.from_widevine(
+            fake_api(), device_path="/missing/sensitive-path/private-key-file.wvd"
+        )
+        with self.assertRaises(DrmConfigurationError) as error:
+            await drm.get_keys(
+                media_id="111",
+                drm_info=DRMInfo(
+                    untyped_key_data=KID,
+                    untyped_key_uri=KEY_URI,
+                    encryption_method="ISO-23001-7",
+                ),
+            )
+        self.assertNotIn("sensitive", str(error.exception))
 
 
 class DrmInitializationTests(unittest.TestCase):
+    @unittest.skipUnless(
+        importlib.util.find_spec("pywidevine"), "pywidevine is optional"
+    )
+    def test_bundled_default_widevine_device_initializes_without_path(self):
+        # Only creates a CDM. Does not open a license session or perform I/O.
+        from gamdl.drm.service import _make_cdm
+
+        cdm = asyncio.run(_make_cdm(DrmBackend.WIDEVINE, None))
+        self.assertEqual(type(cdm).__name__, "Cdm")
+
     @unittest.skipUnless(
         importlib.util.find_spec("pywidevine"), "pywidevine is optional"
     )
@@ -325,7 +439,7 @@ class DrmInitializationTests(unittest.TestCase):
         header = _playready_header(KID)
         self.assertIn("WRMHEADER", header._root.tag)
 
-    def test_unsupported_malformed_pssh_is_sanitized(self):
+    def test_malformed_pssh_is_sanitized(self):
         if importlib.util.find_spec("pywidevine"):
             with self.assertRaises(DrmMetadataError):
                 _widevine_pssh(b"broken invalid data")

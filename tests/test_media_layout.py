@@ -5,10 +5,11 @@ import inspect
 import unittest
 
 from gamdl import media
-from gamdl.media import base, drm, enums, models, stream, tags
+from gamdl import drm
+from gamdl.media import base, enums, models, stream, tags
 from gamdl.media import music_video, song, uploaded_video
-from gamdl.media.drm import models as drm_models
-from gamdl.media.drm import service as drm_service
+from gamdl.drm import models as drm_models
+from gamdl.drm import service as drm_service
 from gamdl.media.song import constants as song_constants
 from gamdl.media.song import enums as song_enums
 from gamdl.media.song import lyrics as song_lyrics
@@ -25,20 +26,20 @@ class MediaPackageTests(unittest.TestCase):
             (media.MusicVideo, music_video.MusicVideo),
             (media.UploadedVideo, uploaded_video.UploadedVideo),
             (media.SongCodec, song_enums.SongCodec),
-            (media.DrmBackend, enums.DrmBackend),
+            (drm.DrmBackend, drm_service.DrmBackend),
             (media.HlsType, enums.HlsType),
             (media.StreamOrigin, enums.StreamOrigin),
             (media.StreamSource, enums.StreamSource),
             (media.SelectionKind, enums.SelectionKind),
-            (media.DRMInfo, models.DRMInfo),
+            (drm.DRMInfo, drm_models.DRMInfo),
             (media.StreamSegment, models.StreamSegment),
             (media.SelectionOption, models.SelectionOption),
             (media.SelectionRequest, models.SelectionRequest),
-            (media.ContentKey, drm_models.ContentKey),
+            (drm.ContentKey, drm_models.ContentKey),
             (media.Lyrics, song_lyrics.Lyrics),
             (media.SongStreamResolver, song_stream.SongStreamResolver),
             (media.Tags, tags.Tags),
-            (drm.get_stream_keys, drm_service.get_stream_keys),
+            (drm.Drm, drm_service.Drm),
             (media.StreamSelectionRequest, song_models.StreamSelectionRequest),
             (
                 media.StreamSourceSelectionRequest,
@@ -58,8 +59,10 @@ class MediaPackageTests(unittest.TestCase):
             media.Tags: "gamdl.media.tags",
             media.MusicVideo: "gamdl.media.music_video.media",
             media.UploadedVideo: "gamdl.media.uploaded_video.media",
-            media.ContentKey: "gamdl.media.drm.models",
-            media.DrmBackend: "gamdl.media.enums",
+            drm.ContentKey: "gamdl.drm.models",
+            drm.DRMInfo: "gamdl.drm.models",
+            drm.Drm: "gamdl.drm.service",
+            drm.DrmBackend: "gamdl.drm.enums",
             media.AudioStream: "gamdl.media.stream",
         }
         for symbol, module in expected_modules.items():
@@ -72,6 +75,7 @@ class MediaPackageTests(unittest.TestCase):
             "gamdl.media.lyrics",
             "gamdl.media.video",
             "gamdl.media.song.tags",
+            "gamdl.media.drm",
         ):
             with self.subTest(module=module):
                 self.assertIsNone(importlib.util.find_spec(module))
@@ -83,6 +87,10 @@ class MediaPackageTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(stream, name))
+        for name in ("DrmBackend", "DRMInfo", "ContentKey", "DrmLicenseError"):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(media, name))
+        self.assertFalse(hasattr(media.Media, "get_keys"))
 
     def test_generic_stream_and_song_codec_matching_are_separate(self):
         self.assertIs(media.AudioStream, stream.AudioStream)

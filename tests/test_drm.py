@@ -156,7 +156,7 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(cdm.events.count("open"), 2)
             self.assertEqual(repr(keys[0]), "ContentKey(<redacted>)")
             self.assertNotIn(SECRET.hex(), repr(keys))
-            self.assertEqual(song._cache, {})
+            self.assertEqual(song._memo.values, {})
             song.api.get_license_exchange.assert_awaited_with(
                 "111",
                 KEY_URI,
@@ -243,7 +243,7 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
         async with client:
             self.assertEqual(await song.get_keys(stream), ())
             song.api.get_license_exchange.assert_not_awaited()
-            self.assertEqual(stream._cache, {})
+            self.assertEqual(stream._memo.values, {})
 
     async def test_wrong_media_rejected(self):
         song, stream, client = make_song()
@@ -251,7 +251,7 @@ class MediaDrmTests(unittest.IsolatedAsyncioTestCase):
         async with client:
             with self.assertRaises(GamdlMediaError):
                 await another_song.get_keys(stream)
-            self.assertEqual(stream._cache, {})
+            self.assertEqual(stream._memo.values, {})
 
     async def test_missing_or_duplicate_cdm_parameters(self):
         song, stream, client = make_song()

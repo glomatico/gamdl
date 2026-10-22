@@ -6,6 +6,8 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+from async_lru import alru_cache
+
 from gamdl.api.exceptions import GamdlApiError
 from gamdl.media import Media, MusicVideo, Song
 
@@ -81,8 +83,9 @@ class TagResolver:
 
     Wrapper playback is preferred when configured for catalog songs/videos.
     A failed or incomplete wrapper response falls back to webplayback (songs)
-    or iTunes page + lookup metadata (music videos). Album-date enrichment
-    is opt-in. Neither file tags nor media bytes are written here.
+    or iTunes page + lookup metadata (music videos). For songs, iTunes is
+    consulted only when use_album_date=True, and only for an album's release
+    date. Neither file tags nor media bytes are written here.
     """
 
     def __init__(
@@ -92,10 +95,17 @@ class TagResolver:
         itunes_api: ItunesApi | None = None,
         use_album_date: bool = False,
     ) -> None:
+        if use_album_date and itunes_api is None:
+            raise ValueError("use_album_date requires an iTunes API")
         self.wrapper_api = wrapper_api
         self.itunes_api = itunes_api
         self.use_album_date = use_album_date
         self._cache_key = object()
+        # Album-wide reuse: a playlist/album may contain many songs sharing
+        # an album ID. Bound to this resolver, not a global cache of `self`.
+        self._album_release_date = alru_cache(maxsize=128, ttl=3600)(
+            self._fetch_album_release_date
+        )
 
     async def get_tags(self, media: Media) -> Tags:
         """Resolve tags once per media instance and resolver configuration."""
@@ -126,51 +136,24 @@ class TagResolver:
             tags = Tags.from_asset_metadata(
                 _playback_asset(await song._get_webplayback())
             )
-        # Asset metadata is authoritative. Ask iTunes only when album
-        # information is missing, or the caller requested album release dates.
-        if self.itunes_api is None or (tags.album and not self.use_album_date):
+        # Song tags come only from playback metadata. The optional album-date
+        # override is the *sole* reason to query iTunes for a song.
+        if not self.use_album_date or tags.album_id is None:
             return tags
-        identifier = str(tags.album_id or song.id)
-        lookup = await self.itunes_api.get_lookup_result(identifier)
-        track, collection = _lookup_parts(lookup)
-        if collection is None and tags.album_id is not None:
-            lookup = await self.itunes_api.get_lookup_result(str(song.id))
-            track, collection = _lookup_parts(lookup)
-        if collection is None and track is None:
+        try:
+            date = await self._album_release_date(tags.album_id)
+        except GamdlApiError:
+            # A temporary iTunes failure should not discard otherwise complete
+            # playback tags, and must not become a cached lookup result.
             return tags
-        return replace(
-            tags,
-            album=tags.album
-            or (_text(collection.get("collectionName")) if collection else None),
-            album_artist=tags.album_artist
-            or (_text(collection.get("artistName")) if collection else None),
-            album_id=tags.album_id
-            or (_number(collection.get("collectionId")) if collection else None),
-            release_date=(
-                (_text(collection.get("releaseDate")) if collection else None)
-                if self.use_album_date
-                else tags.release_date
-                or (_text(collection.get("releaseDate")) if collection else None)
-            )
-            or tags.release_date,
-            copyright=tags.copyright
-            or (_text(collection.get("copyright")) if collection else None),
-            track_number=tags.track_number
-            or (_number(track.get("trackNumber")) if track else None),
-            track_total=tags.track_total
-            or (_number(track.get("trackCount")) if track else None)
-            or (_number(collection.get("trackCount")) if collection else None),
-            disc_number=tags.disc_number
-            or (_number(track.get("discNumber")) if track else None),
-            disc_total=tags.disc_total
-            or (_number(track.get("discCount")) if track else None),
-            genre=tags.genre
-            or (
-                (_text(collection.get("primaryGenreName")),)
-                if collection and _text(collection.get("primaryGenreName"))
-                else ()
-            ),
-        )
+        return replace(tags, release_date=date) if date else tags
+
+    async def _fetch_album_release_date(self, album_id: int) -> str | None:
+        """Fetch only the album release date; never enrich other song fields."""
+        assert self.itunes_api is not None
+        lookup = await self.itunes_api.get_lookup_result(str(album_id))
+        _, collection = _lookup_parts(lookup)
+        return _text(collection.get("releaseDate")) if collection else None
 
     async def _video_tags(self, video: MusicVideo) -> Tags:
         tags = await self._wrapper_tags(video)

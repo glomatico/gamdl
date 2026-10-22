@@ -210,7 +210,7 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tags.album, "Whenever You Need Somebody")
         itunes.get_lookup_result.assert_not_awaited()
 
-    async def test_song_enrichment_for_missing_album_and_album_date(self):
+    async def test_song_never_enriches_missing_tags_from_itunes_by_default(self):
         api = fake_api()
         api.get_webplayback.return_value = {
             "songList": [
@@ -229,13 +229,101 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
             ]
         }
         itunes = fake_itunes(track=VIDEO_TRACK, collection=VIDEO_COLLECTION)
+        tags = await TagResolver(itunes_api=itunes).get_tags(
+            Song.from_id("1559885421", api=api)
+        )
+        self.assertIsNone(tags.album)
+        self.assertIsNone(tags.track_total)
+        self.assertEqual(tags.release_date, "1990-01-01")
+        itunes.get_lookup_result.assert_not_awaited()
+
+    async def test_use_album_date_overrides_only_date_not_other_tags(self):
+        api = fake_api()
+        api.get_webplayback.return_value = {
+            "songList": [
+                {
+                    "assets": [
+                        {
+                            "metadata": {
+                                **PLAYBACK_TAG_DATA,
+                                "playlistName": None,
+                                "trackCount": None,
+                                "releaseDate": "1990-01-01",
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        itunes = fake_itunes(track=VIDEO_TRACK, collection=VIDEO_COLLECTION)
         tags = await TagResolver(itunes_api=itunes, use_album_date=True).get_tags(
             Song.from_id("1559885421", api=api)
         )
-        self.assertEqual(tags.album, VIDEO_COLLECTION["collectionName"])
-        self.assertEqual(tags.track_total, 10)
+        self.assertIsNone(tags.album)
+        self.assertIsNone(tags.track_total)
         self.assertEqual(tags.release_date, VIDEO_COLLECTION["releaseDate"])
         itunes.get_lookup_result.assert_awaited_once_with("1559885420")
+
+    async def test_use_album_date_requires_itunes_api(self):
+        with self.assertRaisesRegex(ValueError, "requires an iTunes API"):
+            TagResolver(use_album_date=True)
+
+    async def test_use_album_date_without_album_id_uses_playback_date(self):
+        api = fake_api()
+        api.get_webplayback.return_value = {
+            "songList": [
+                {
+                    "assets": [
+                        {
+                            "metadata": {
+                                **PLAYBACK_TAG_DATA,
+                                "playlistId": None,
+                                "releaseDate": "1990-01-01",
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        itunes = fake_itunes(collection=VIDEO_COLLECTION)
+        tags = await TagResolver(itunes_api=itunes, use_album_date=True).get_tags(
+            Song.from_id("1559885421", api=api)
+        )
+        self.assertEqual(tags.release_date, "1990-01-01")
+        itunes.get_lookup_result.assert_not_awaited()
+
+    async def test_use_album_date_without_itunes_result_preserves_playback_date(self):
+        itunes = fake_itunes()
+        tags = await TagResolver(itunes_api=itunes, use_album_date=True).get_tags(
+            Song.from_id("1559885421", api=fake_api())
+        )
+        self.assertEqual(tags.release_date, PLAYBACK_TAG_DATA["releaseDate"])
+        itunes.get_lookup_result.assert_awaited_once_with("1559885420")
+
+    async def test_use_album_date_caches_lookup_across_song_instances(self):
+        api = fake_api()
+        itunes = fake_itunes(collection=VIDEO_COLLECTION)
+        resolver = TagResolver(itunes_api=itunes, use_album_date=True)
+        first, second = await asyncio.gather(
+            resolver.get_tags(Song.from_id("1559885421", api=api)),
+            resolver.get_tags(Song.from_id("1559885422", api=api)),
+        )
+        self.assertEqual(first.release_date, VIDEO_COLLECTION["releaseDate"])
+        self.assertEqual(second.release_date, VIDEO_COLLECTION["releaseDate"])
+        itunes.get_lookup_result.assert_awaited_once_with("1559885420")
+
+    async def test_album_date_lookup_failure_keeps_song_tags_and_is_retryable(self):
+        itunes = fake_itunes(collection=VIDEO_COLLECTION)
+        itunes.get_lookup_result.side_effect = [
+            GamdlApiResponseError("iTunes unavailable"),
+            {"results": [VIDEO_COLLECTION]},
+        ]
+        resolver = TagResolver(itunes_api=itunes, use_album_date=True)
+        first = await resolver.get_tags(Song.from_id("1559885421", api=fake_api()))
+        second = await resolver.get_tags(Song.from_id("1559885422", api=fake_api()))
+        self.assertEqual(first.release_date, PLAYBACK_TAG_DATA["releaseDate"])
+        self.assertEqual(second.release_date, VIDEO_COLLECTION["releaseDate"])
+        self.assertEqual(itunes.get_lookup_result.await_count, 2)
 
     async def test_resolvers_with_different_sources_do_not_share_tag_result(self):
         api = fake_api()

@@ -27,19 +27,3 @@ class StreamNotAvailableError(GamdlMediaError):
 
 class StreamManifestError(GamdlMediaError):
     """A media CDN returned an invalid or unsupported streaming playlist."""
-
-
-class DrmError(GamdlMediaError):
-    """An authorized DRM operation could not be completed."""
-
-
-class DrmConfigurationError(DrmError):
-    """No provisioned device/CDM was supplied or the backend is unavailable."""
-
-
-class DrmMetadataError(DrmError):
-    """The selected stream has no usable DRM signaling for this backend."""
-
-
-class DrmLicenseError(DrmError):
-    """The DRM license exchange or CDM processing failed."""

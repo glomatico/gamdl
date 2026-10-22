@@ -1,4 +1,4 @@
-"""Apple Music license-exchange endpoint; CDM handling lives in media."""
+"""Apple Music license-exchange endpoint; CDM handling lives in gamdl.drm."""
 
 from __future__ import annotations
 

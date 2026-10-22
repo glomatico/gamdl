@@ -6,7 +6,7 @@ import base64
 from typing import Any
 from uuid import UUID
 
-from ..exceptions import DrmConfigurationError, DrmMetadataError
+from .exceptions import DrmConfigurationError, DrmMetadataError
 
 
 def _playready_header(data: bytes) -> Any:

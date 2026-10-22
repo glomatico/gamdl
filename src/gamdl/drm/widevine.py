@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..exceptions import DrmConfigurationError, DrmMetadataError
+from .exceptions import DrmConfigurationError, DrmMetadataError
 
 
 def _widevine_pssh(data: bytes) -> Any:

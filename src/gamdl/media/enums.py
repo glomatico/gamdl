@@ -28,20 +28,6 @@ class HlsType(str, Enum):
     STANDARD = "standard"
 
 
-class DrmBackend(str, Enum):
-    """Supported content-decryption modules for Apple Music license requests."""
-
-    WIDEVINE = "widevine"
-    PLAYREADY = "playready"
-
-    @property
-    def key_system(self) -> str:
-        return {
-            DrmBackend.WIDEVINE: "com.widevine.alpha",
-            DrmBackend.PLAYREADY: "com.microsoft.playready",
-        }[self]
-
-
 class SelectionKind(str, Enum):
     """Independent selection decisions made by the source resolver."""
 

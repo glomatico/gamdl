@@ -3,14 +3,9 @@
 from .base import Media, MediaSource
 from .cover import Cover
 from .cover_cache import CoverCache
-from .drm import ContentKey, DrmBackend
 from .enums import HlsType, StreamOrigin, StreamSource
 from .exceptions import (
     GamdlMediaError,
-    DrmConfigurationError,
-    DrmError,
-    DrmLicenseError,
-    DrmMetadataError,
     SelectionRequiredError,
     StreamManifestError,
     StreamNotAvailableError,
@@ -34,7 +29,6 @@ from .song.models import (
     StreamSelectionRequest,
 )
 from .stream import (
-    DRMInfo,
     AudioStream,
     HlsSongStream,
     StreamSegment,
@@ -48,15 +42,8 @@ __all__ = [
     "AudioStream",
     "Cover",
     "CoverCache",
-    "ContentKey",
     "DEFAULT_AUTO_SELECT",
-    "DRMInfo",
     "GamdlMediaError",
-    "DrmBackend",
-    "DrmError",
-    "DrmConfigurationError",
-    "DrmLicenseError",
-    "DrmMetadataError",
     "HlsSongStream",
     "HlsType",
     "Lyrics",

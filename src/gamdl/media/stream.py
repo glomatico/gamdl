@@ -14,9 +14,11 @@ from urllib.parse import urlsplit
 import httpx
 import m3u8
 
+from gamdl.drm.models import DRMInfo
+
 from .exceptions import StreamManifestError
 from .enums import HlsType, StreamOrigin, StreamSource
-from .models import DRMInfo, StreamSegment
+from .models import StreamSegment
 from .cache import InstanceCache
 
 if TYPE_CHECKING:

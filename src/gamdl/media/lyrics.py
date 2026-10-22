@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from xml.etree import ElementTree
 
@@ -73,13 +73,15 @@ class LyricsLine:
 class Lyrics:
     """Lyrics grouped into stanzas, retaining the source TTML losslessly.
 
-    Conversion methods never contact the Apple Music API. Timing is in
-    integer milliseconds; enhanced LRC uses timed word/syllable segments.
+    Conversion methods never contact the Apple Music API. Timing is in integer
+    milliseconds. When ``syllable=True``, export is restricted to enhanced
+    A2 LRC or original TTML; normal lyrics can also export text and SRT.
     """
 
     stanzas: list[list[LyricsLine]] = field(default_factory=list)
     source_ttml: str | None = None
     language: str | None = None
+    syllable: bool = False
 
     @property
     def lines(self) -> list[LyricsLine]:
@@ -99,8 +101,14 @@ class Lyrics:
         )
 
     @classmethod
-    def from_ttml(cls, xml: str) -> Lyrics:
-        """Parse TTML paragraphs as lines and TTML divs as stanzas."""
+    def from_ttml(cls, xml: str, *, syllable: bool = False) -> Lyrics:
+        """Parse TTML paragraphs as lines and TTML divs as stanzas.
+
+        Args:
+            xml: Raw TTML document, preserved for lossless export.
+            syllable: Enable enhanced LRC and restrict other output formats.
+                Set when the source is Apple's syllable-lyrics endpoint.
+        """
         try:
             root = ElementTree.fromstring(xml)
         except ElementTree.ParseError as exc:
@@ -110,14 +118,33 @@ class Lyrics:
 
         def parse_line(p: ElementTree.Element) -> LyricsLine:
             text = "".join(p.itertext()).strip()
-            segments = tuple(
-                LyricsSegment(
-                    text="".join(span.itertext()) + (span.tail or ""),
-                    start=_milliseconds(span.get("begin")),
-                    end=_milliseconds(span.get("end")),
-                )
-                for span in p.iter()
-                if _local(span.tag) == "span"
+            parts: list[LyricsSegment] = []
+
+            def collect_parts(element: ElementTree.Element) -> None:
+                # Traverse text nodes once, not span.itertext() for each span.
+                # Apple can nest timed syllables in an untimed role="x-bg"
+                # wrapper; recursing on every span would duplicate its text.
+                timed = _local(element.tag) == "span"
+                begin = _milliseconds(element.get("begin")) if timed else None
+                end = _milliseconds(element.get("end")) if timed else None
+                if element.text:
+                    parts.append(LyricsSegment(element.text, begin, end))
+                for child in element:
+                    collect_parts(child)
+                    if child.tail:
+                        # Tail whitespace/punctuation follows the preceding
+                        # segment; keep it attached instead of inventing a
+                        # second timestamp for the same syllable.
+                        if parts:
+                            parts[-1] = replace(
+                                parts[-1], text=parts[-1].text + child.tail
+                            )
+                        else:
+                            parts.append(LyricsSegment(child.tail))
+
+            collect_parts(p)
+            segments = (
+                tuple(parts) if any(part.start is not None for part in parts) else ()
             )
             start = _milliseconds(p.get("begin"))
             end = _milliseconds(p.get("end"))
@@ -140,45 +167,43 @@ class Lyrics:
             if lines:
                 stanzas = [lines]
         lang = root.get("{http://www.w3.org/XML/1998/namespace}lang")
-        return cls(stanzas=stanzas, source_ttml=xml, language=lang)
+        return cls(stanzas=stanzas, source_ttml=xml, language=lang, syllable=syllable)
 
     def to_plain_text(self) -> str:
         """Preserve stanza breaks while discarding all timing."""
+        if self.syllable:
+            raise GamdlMediaError(
+                "Syllable-synced lyrics can only export to LRC or raw TTML"
+            )
         return "\n\n".join(
             "\n".join(line.text for line in stanza) for stanza in self.stanzas
         )
 
     def to_lrc(self) -> str:
-        """Return traditional line-timed LRC (or untimed text where necessary)."""
-        return "\n".join(
-            (f"[{_lrc_stamp(line.start)}]" if line.start is not None else "")
-            + line.text
-            for line in self.lines
-        )
+        """Export standard LRC or A2 enhanced LRC when ``syllable=True``.
 
-    def to_enhanced_lrc(self) -> str:
-        """Preserve segment timing when available, else use line timing."""
+        A2 uses ``[mm:ss.xx]`` for each line and ``<mm:ss.xx>`` before each
+        timed word/syllable. Text outside timed spans is retained verbatim.
+        """
         values: list[str] = []
         for line in self.lines:
             prefix = f"[{_lrc_stamp(line.start)}]" if line.start is not None else ""
-            if (
-                self.is_syllable_synced
-                and line.segments
-                and "".join(s.text for s in line.segments).strip() == line.text
-            ):
-                # Some TTML mixes spans and additional text outside spans.
-                # Never drop that text just to retain partial segment timing.
+            if self.syllable and line.segments:
                 content = "".join(
                     (f"<{_lrc_stamp(s.start)}>" if s.start is not None else "") + s.text
                     for s in line.segments
                 )
-                values.append(prefix + content)
+                values.append(prefix + content.strip())
             else:
                 values.append(prefix + line.text)
         return "\n".join(values)
 
     def to_srt(self) -> str:
         """Convert fully timed lines to SRT without inventing missing end times."""
+        if self.syllable:
+            raise GamdlMediaError(
+                "Syllable-synced lyrics can only export to LRC or raw TTML"
+            )
         timed = [
             line
             for line in self.lines

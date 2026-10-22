@@ -104,7 +104,7 @@ class Song(Media):
                     )
             if not isinstance(raw, str) or not raw:
                 return None
-            return Lyrics.from_ttml(raw)
+            return Lyrics.from_ttml(raw, syllable=syllable)
 
         return await self._load(key, load)
 

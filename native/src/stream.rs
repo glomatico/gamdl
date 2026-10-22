@@ -5,6 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::decrypt::CencDecryptor;
 use futures_util::{StreamExt, stream};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -144,13 +145,17 @@ pub(crate) struct NativeStream {
 #[pymethods]
 impl NativeStream {
     #[new]
-    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3))]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None))]
     fn new(
         parts: Vec<Part>,
         concurrency: usize,
         chunk_size: usize,
         retries: u32,
+        decryption_key: Option<Vec<u8>>,
+        key_id: Option<Vec<u8>>,
     ) -> PyResult<Self> {
+        let decryptor =
+            CencDecryptor::new(decryption_key, key_id).map_err(PyValueError::new_err)?;
         if parts.is_empty() || parts.len() > 100_000 {
             return Err(PyValueError::new_err(
                 "Expected between 1 and 100000 streaming parts",
@@ -197,6 +202,7 @@ impl NativeStream {
             .map_err(|_| PyOSError::new_err("Unable to initialize streaming HTTP client"))?;
         let (sender, receiver) = mpsc::channel(2);
         let job = pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
+            let mut decryptor = decryptor;
             let tasks = stream::iter(parts).map(|part| {
                 let client = client.clone();
                 async move { fetch_part(client, part, retries).await }
@@ -204,7 +210,13 @@ impl NativeStream {
             let mut ready = tasks.buffered(concurrency);
             while let Some(result) = ready.next().await {
                 match result {
-                    Ok(bytes) => {
+                    Ok(mut bytes) => {
+                        if let Some(ref mut handler) = decryptor {
+                            if let Err(error) = handler.decrypt_part(&mut bytes) {
+                                let _ = sender.send(Err(error)).await;
+                                return;
+                            }
+                        }
                         for chunk in bytes.chunks(chunk_size) {
                             if sender.send(Ok(chunk.to_vec())).await.is_err() {
                                 return;

@@ -2,6 +2,7 @@
 
 use pyo3::prelude::*;
 
+mod decrypt;
 mod stream;
 mod tags;
 

@@ -2,7 +2,9 @@
 
 Playlist discovery remains in gamdl.media. Network segment fetching, bounded
 concurrency and retries are implemented by the native Tokio/reqwest backend.
-This layer yields raw HLS bytes, which may still be DRM-encrypted.
+Without a decryption key, this layer yields the raw potentially encrypted
+HLS bytes. With a 16-byte CENC key, Rust decrypts fragmented MP4 samples
+before yielding or saving, preserving the fragment layout.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from gamdl import _native
+from gamdl.drm.models import ContentKey
 from gamdl.media import AudioStream
 from gamdl.media.exceptions import StreamManifestError
 
@@ -76,7 +79,9 @@ class Stream(AsyncIterator[bytes]):
     """Async context manager yielding raw HLS bytes in playlist order.
 
     Stream owns the native HTTP client and cancels pending fragment requests
-    when the context exits. It does not decrypt or mux media.
+    when the context exits. Pass decryption_key as a ContentKey (preferred,
+    verifies the key ID) or 16-byte AES key to decrypt CENC/AES-CTR audio.
+    CBCS, key rotation and muxing are not supported yet.
     Do not share one Stream iterator between independent consumers.
     """
 
@@ -87,6 +92,7 @@ class Stream(AsyncIterator[bytes]):
         concurrency: int = 8,
         chunk_size: int = 262144,
         retries: int = 3,
+        decryption_key: bytes | ContentKey | None = None,
     ) -> None:
         if not isinstance(source, AudioStream):
             raise TypeError("source must be an AudioStream")
@@ -94,6 +100,17 @@ class Stream(AsyncIterator[bytes]):
         self.concurrency = concurrency
         self.chunk_size = chunk_size
         self.retries = retries
+        if isinstance(decryption_key, ContentKey):
+            self._key = decryption_key.key
+            self._kid = decryption_key.kid
+        elif isinstance(decryption_key, bytes):
+            self._key = decryption_key
+            self._kid = None
+        elif decryption_key is None:
+            self._key = None
+            self._kid = None
+        else:
+            raise TypeError("decryption_key must be bytes or a ContentKey")
         self._engine: _native.NativeStream | None = None
         self._used = False
 
@@ -101,10 +118,20 @@ class Stream(AsyncIterator[bytes]):
         if self._used:
             raise RuntimeError("A Stream instance cannot be reopened")
         self._used = True
-        parts = await _plan(self.source)
-        self._engine = _native.NativeStream(
-            parts, self.concurrency, self.chunk_size, self.retries
-        )
+        try:
+            parts = await _plan(self.source)
+            self._engine = _native.NativeStream(
+                parts,
+                self.concurrency,
+                self.chunk_size,
+                self.retries,
+                self._key,
+                self._kid,
+            )
+        finally:
+            # The worker now owns the native copy (or validation has failed).
+            self._key = None
+            self._kid = None
         return self
 
     async def __aexit__(self, *_exc: object) -> None:

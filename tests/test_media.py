@@ -36,6 +36,29 @@ VIDEO_DATA = {
     "type": "music-videos",
     "attributes": {"name": "Never Gonna Give You Up"},
 }
+PLAYBACK_TAG_DATA = {
+    "kind": "song",
+    "itemId": "1559885421",
+    "itemName": "Never Gonna Give You Up",
+    "artistName": "Rick Astley",
+    "artistId": "669771",
+    "playlistName": "Whenever You Need Somebody",
+    "playlistId": "1559885420",
+    "playlistArtistName": "Rick Astley",
+    "sort-name": "Never Gonna Give You Up",
+    "sort-artist": "Rick Astley",
+    "trackNumber": 1,
+    "trackCount": 10,
+    "discNumber": 1,
+    "discCount": 1,
+    "genre": "Pop",
+    "genreId": 14,
+    "composerName": "Mike Stock, Matt Aitken & Pete Waterman",
+    "releaseDate": "1987-07-27T07:00:00Z",
+    "explicit": 0,
+    "s": 143503,
+    "xid": "BMGRightsManagementUKLtd:isrc:GBARL9300135",
+}
 TTML = (
     '<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en">'
     '<body><div><p begin="00:00:01.200" end="00:00:02.500">'
@@ -55,7 +78,13 @@ def fake_api():
         return_value={"data": [{"attributes": {"ttml": TTML}}]}
     )
     api.get_assets = AsyncMock(return_value={"results": {"assets": [{"url": "test"}]}})
-    api.get_webplayback = AsyncMock(return_value={"songList": [{"songId": "123"}]})
+    api.get_webplayback = AsyncMock(
+        return_value={
+            "songList": [
+                {"songId": "1559885421", "assets": [{"metadata": PLAYBACK_TAG_DATA}]}
+            ]
+        }
+    )
     api.get_music_video = AsyncMock(return_value={"data": [VIDEO_DATA]})
     api.get_uploaded_video = AsyncMock(
         return_value={"data": [{"id": "2", "type": "uploaded-videos"}]}
@@ -156,12 +185,81 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(tags, Tags)
         self.assertEqual(tags.title, "Never Gonna Give You Up")
         self.assertEqual(tags.album, "Whenever You Need Somebody")
+        self.assertEqual(tags.album_id, 1559885420)
+        self.assertEqual(tags.artist_id, 669771)
+        self.assertEqual(tags.track_total, 10)
+        self.assertEqual(tags.genre, ("Pop",))
+        self.assertEqual(tags.explicit, False)
+        self.assertEqual(tags.xid, PLAYBACK_TAG_DATA["xid"])
         self.assertEqual(cover.get_raw_url(), "https://example.test/{w}x{h}.{f}")
         self.assertEqual(
             cover.get_formatted_url(width=1000, height=1000, format="png"),
             "https://example.test/1000x1000.png",
         )
         api.get_song.assert_awaited_once()
+        api.get_webplayback.assert_awaited_once_with(SONG_DATA["id"], is_library=False)
+
+    async def test_tags_are_from_webplayback_not_catalog(self):
+        api = fake_api()
+        song = Song.from_metadata(
+            {
+                "id": SONG_DATA["id"],
+                "type": "songs",
+                "attributes": {"name": "A conflicting catalog title"},
+            },
+            api=api,
+        )
+        tags = await song.get_tags()
+        self.assertEqual(tags.title, PLAYBACK_TAG_DATA["itemName"])
+        self.assertEqual(tags.album, PLAYBACK_TAG_DATA["playlistName"])
+        self.assertIs(tags, await song.get_tags())
+        api.get_song.assert_not_awaited()
+        api.get_webplayback.assert_awaited_once()
+        self.assertIs(await song._get_webplayback(), await song._get_webplayback())
+        api.get_webplayback.assert_awaited_once()
+
+    async def test_tags_share_a_simultaneous_webplayback_load(self):
+        api = fake_api()
+        song = Song.from_id(SONG_DATA["id"], api=api)
+        playback, tags = await asyncio.gather(song._get_webplayback(), song.get_tags())
+        self.assertEqual(
+            playback["songList"][0]["assets"][0]["metadata"]["itemName"],
+            tags.title,
+        )
+        api.get_webplayback.assert_awaited_once()
+        api.get_song.assert_not_awaited()
+
+    async def test_tags_reject_missing_playback_metadata_and_retry(self):
+        api = fake_api()
+        song = Song.from_id(SONG_DATA["id"], api=api)
+        api.get_webplayback.return_value = {"songList": []}
+        with self.assertRaises(GamdlMediaError):
+            await song.get_tags()
+        song.invalidate()
+        api.get_webplayback.return_value = {"songList": [{"assets": [{}]}]}
+        with self.assertRaises(GamdlMediaError):
+            await song.get_tags()
+        song.invalidate()
+        api.get_webplayback.return_value = {
+            "songList": [{"assets": [{"metadata": PLAYBACK_TAG_DATA}]}]
+        }
+        self.assertEqual((await song.get_tags()).title, "Never Gonna Give You Up")
+        self.assertEqual(api.get_webplayback.await_count, 3)
+
+    async def test_tags_reject_incomplete_first_asset(self):
+        api = fake_api()
+        api.get_webplayback.return_value = {
+            "songList": [{"assets": [{"metadata": {"artistName": "Rick Astley"}}]}]
+        }
+        song = Song.from_id(SONG_DATA["id"], api=api)
+        with self.assertRaises(GamdlMediaError):
+            await song.get_tags()
+
+    def test_playback_boolean_string_flags(self):
+        values = {**PLAYBACK_TAG_DATA, "compilation": "0", "gapless": "1"}
+        tags = Tags.from_asset_metadata(values)
+        self.assertIs(tags.compilation, False)
+        self.assertIs(tags.gapless, True)
 
     async def test_cover_format_validation_and_missing_artwork(self):
         cover = Cover.from_metadata(SONG_DATA["attributes"]["artwork"])
@@ -207,7 +305,7 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(await library_song.get_lyrics(), Lyrics)
         api.get_lyrics.assert_awaited_once_with("1559885421", language=None)
         self.assertEqual(
-            (await library_song.get_assets())["results"]["assets"][0]["url"], "test"
+            (await library_song._get_assets())["results"]["assets"][0]["url"], "test"
         )
         api.get_assets.assert_awaited_once_with(
             "1559885421",
@@ -216,7 +314,7 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
             hls_encryption="CBC",
             hls_profile="enhancedHls",
         )
-        await library_song.get_webplayback()
+        await library_song._get_webplayback()
         api.get_webplayback.assert_awaited_once_with("i.private", is_library=True)
 
         missing = Song.from_metadata(
@@ -232,12 +330,12 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
         song = Song.from_id("1559885421", api=api)
         api.get_assets.assert_not_awaited()
         api.get_webplayback.assert_not_awaited()
-        await song.get_assets(hls_profile="")
-        await song.get_assets(hls_profile="")
-        await song.get_assets(hls_profile="enhancedHls")
+        await song._get_assets(hls_profile="")
+        await song._get_assets(hls_profile="")
+        await song._get_assets(hls_profile="enhancedHls")
         self.assertEqual(api.get_assets.await_count, 2)
-        await song.get_webplayback()
-        await song.get_webplayback()
+        await song._get_webplayback()
+        await song._get_webplayback()
         api.get_webplayback.assert_awaited_once_with("1559885421", is_library=False)
 
     async def test_absent_lyrics_returns_none(self):

@@ -74,8 +74,8 @@ class Lyrics:
     """Lyrics grouped into stanzas, retaining the source TTML losslessly.
 
     Conversion methods never contact the Apple Music API. Timing is in integer
-    milliseconds. When ``syllable=True``, export is restricted to enhanced
-    A2 LRC or original TTML; normal lyrics can also export text and SRT.
+    milliseconds. When ``syllable=True``, supported exports are plain text,
+    enhanced A2 LRC and original TTML; only SRT remains unavailable.
     """
 
     stanzas: list[list[LyricsLine]] = field(default_factory=list)
@@ -170,11 +170,11 @@ class Lyrics:
         return cls(stanzas=stanzas, source_ttml=xml, language=lang, syllable=syllable)
 
     def to_plain_text(self) -> str:
-        """Preserve stanza breaks while discarding all timing."""
-        if self.syllable:
-            raise GamdlMediaError(
-                "Syllable-synced lyrics can only export to LRC or raw TTML"
-            )
+        """Assemble text from parsed lines with stanza breaks, without timing.
+
+        Also supports syllable-timed TTML: each parsed ``LyricsLine.text``
+        already contains the complete joined text, including nested spans.
+        """
         return "\n\n".join(
             "\n".join(line.text for line in stanza) for stanza in self.stanzas
         )
@@ -202,7 +202,7 @@ class Lyrics:
         """Convert fully timed lines to SRT without inventing missing end times."""
         if self.syllable:
             raise GamdlMediaError(
-                "Syllable-synced lyrics can only export to LRC or raw TTML"
+                "Syllable-synced lyrics cannot export to SRT; use plain text, LRC or raw TTML"
             )
         timed = [
             line

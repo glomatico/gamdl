@@ -289,8 +289,9 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
             "[00:01.20]<00:01.20>Hello <00:01.70>world",
         )
         self.assertEqual(timed.to_ttml(), TTML)
-        with self.assertRaises(GamdlMediaError):
-            timed.to_plain_text()
+        self.assertEqual(
+            timed.to_plain_text(), "Hello world\nAnother line\n\nUntimed line"
+        )
         with self.assertRaises(GamdlMediaError):
             timed.to_srt()
         self.assertIs(
@@ -393,9 +394,10 @@ class LyricsTests(unittest.TestCase):
             "[00:03.00]Another line\nUntimed line",
         )
         self.assertEqual(lyrics.to_ttml(), TTML)
-        with self.assertRaisesRegex(GamdlMediaError, "only export"):
-            lyrics.to_plain_text()
-        with self.assertRaisesRegex(GamdlMediaError, "only export"):
+        self.assertEqual(
+            lyrics.to_plain_text(), "Hello world\nAnother line\n\nUntimed line"
+        )
+        with self.assertRaisesRegex(GamdlMediaError, "cannot export to SRT"):
             lyrics.to_srt()
         self.assertFalse(hasattr(lyrics, "to_enhanced_lrc"))
 
@@ -422,6 +424,7 @@ class LyricsTests(unittest.TestCase):
             lyrics.to_lrc(),
             "[00:01.00]<00:01.00>Say <00:01.30>hello <00:01.70>again<00:02.20> now",
         )
+        self.assertEqual(lyrics.to_plain_text(), "Say hello again now")
         self.assertEqual(lyrics.to_ttml(), ttml)
 
     def test_mixed_timed_and_untimed_text_is_preserved(self):
@@ -432,6 +435,7 @@ class LyricsTests(unittest.TestCase):
         )
         lyrics = Lyrics.from_ttml(ttml, syllable=True)
         self.assertEqual(lyrics.lines[0].text, "Unmarked word here")
+        self.assertEqual(lyrics.to_plain_text(), "Unmarked word here")
         self.assertEqual(lyrics.to_lrc(), "[00:00.50]Unmarked <00:01.00>word here")
         self.assertEqual(lyrics.to_ttml(), ttml)
 

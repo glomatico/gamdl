@@ -62,9 +62,9 @@ class MediaLiveTests(unittest.IsolatedAsyncioTestCase):
                 if line.segments
             )
         )
-        with self.assertRaisesRegex(GamdlMediaError, "only export"):
-            syllable.to_plain_text()
-        with self.assertRaisesRegex(GamdlMediaError, "only export"):
+        self.assertEqual(syllable.to_plain_text(), lyrics.to_plain_text())
+        self.assertTrue(syllable.to_plain_text())
+        with self.assertRaisesRegex(GamdlMediaError, "cannot export to SRT"):
             syllable.to_srt()
         self.assertEqual(syllable.to_ttml(), syllable.source_ttml)
 

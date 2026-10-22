@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import unittest
 
-from gamdl.media import Lyrics, MediaResolver, Song
+from gamdl.media import GamdlMediaError, Lyrics, MediaResolver, Song
 from tests.live_auth import LiveSettings, open_live_session
 
 ALBUM_ID = "1559885420"
@@ -50,9 +50,22 @@ class MediaLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(lyrics.lines), 0)
         self.assertTrue(lyrics.is_synced)
         self.assertTrue(syllable.is_syllable_synced)
+        self.assertFalse(lyrics.syllable)
+        self.assertTrue(syllable.syllable)
         self.assertTrue(syllable.to_lrc())
-        self.assertTrue(syllable.to_enhanced_lrc())
-        self.assertTrue(syllable.to_srt())
+        self.assertIn("<", syllable.to_lrc())
+        self.assertNotIn("<", lyrics.to_lrc())
+        self.assertTrue(
+            all(
+                "".join(segment.text for segment in line.segments).strip() == line.text
+                for line in syllable.lines
+                if line.segments
+            )
+        )
+        with self.assertRaisesRegex(GamdlMediaError, "only export"):
+            syllable.to_plain_text()
+        with self.assertRaisesRegex(GamdlMediaError, "only export"):
+            syllable.to_srt()
         self.assertEqual(syllable.to_ttml(), syllable.source_ttml)
 
     async def test_album_resolver_and_seeded_metadata(self) -> None:

@@ -277,10 +277,22 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
         song = Song.from_id("1559885421", api=api)
         lyrics = await song.get_lyrics()
         self.assertIsInstance(lyrics, Lyrics)
+        self.assertFalse(lyrics.syllable)
         self.assertIs(lyrics, await song.get_lyrics())
         self.assertEqual(api.get_lyrics.await_count, 1)
         timed = await song.get_lyrics(syllable=True, lyrics_language="pt-BR")
         self.assertIsInstance(timed, Lyrics)
+        self.assertTrue(timed.syllable)
+        self.assertTrue(timed.is_syllable_synced)
+        self.assertEqual(
+            timed.to_lrc().splitlines()[0],
+            "[00:01.20]<00:01.20>Hello <00:01.70>world",
+        )
+        self.assertEqual(timed.to_ttml(), TTML)
+        with self.assertRaises(GamdlMediaError):
+            timed.to_plain_text()
+        with self.assertRaises(GamdlMediaError):
+            timed.to_srt()
         self.assertIs(
             timed, await song.get_lyrics(syllable=True, lyrics_language="pt-BR")
         )
@@ -364,15 +376,72 @@ class LyricsTests(unittest.TestCase):
             lyrics.to_lrc(),
             "[00:01.20]Hello world\n[00:03.00]Another line\nUntimed line",
         )
-        self.assertEqual(
-            lyrics.to_enhanced_lrc().splitlines()[0],
-            "[00:01.20]<00:01.20>Hello <00:01.70>world",
-        )
+        self.assertNotIn("<00:01.20>", lyrics.to_lrc())
         self.assertEqual(
             lyrics.to_srt().split("\n\n")[0],
             "1\n00:00:01,200 --> 00:00:02,500\nHello world",
         )
         self.assertEqual(lyrics.to_ttml(), TTML)
+
+    def test_a2_enhanced_lrc_and_syllable_only_exports(self):
+        lyrics = Lyrics.from_ttml(TTML, syllable=True)
+        self.assertTrue(lyrics.is_syllable_synced)
+        self.assertEqual(len(lyrics.stanzas), 2)
+        self.assertEqual(
+            lyrics.to_lrc(),
+            "[00:01.20]<00:01.20>Hello <00:01.70>world\n"
+            "[00:03.00]Another line\nUntimed line",
+        )
+        self.assertEqual(lyrics.to_ttml(), TTML)
+        with self.assertRaisesRegex(GamdlMediaError, "only export"):
+            lyrics.to_plain_text()
+        with self.assertRaisesRegex(GamdlMediaError, "only export"):
+            lyrics.to_srt()
+        self.assertFalse(hasattr(lyrics, "to_enhanced_lrc"))
+
+    def test_nested_timed_spans_never_duplicate_lyrics(self):
+        # Apple's TTML can contain an untimed wrapper span around background
+        # vocals; its timed children must be emitted exactly once, in order.
+        ttml = (
+            '<tt xmlns="http://www.w3.org/ns/ttml"><body><div>'
+            '<p begin="1.00s" end="3.00s">'
+            '<span begin="1.00s" end="1.30s">Say </span>'
+            '<span role="background">'
+            '<span begin="1.30s" end="1.70s">hello </span>'
+            '<span begin="1.70s" end="2.20s">again</span>'
+            "</span>"
+            '<span begin="2.20s" end="3.00s"> now</span>'
+            "</p></div></body></tt>"
+        )
+        lyrics = Lyrics.from_ttml(ttml, syllable=True)
+        line = lyrics.lines[0]
+        self.assertEqual(line.text, "Say hello again now")
+        self.assertEqual(len(line.segments), 4)
+        self.assertEqual([s.start for s in line.segments], [1000, 1300, 1700, 2200])
+        self.assertEqual(
+            lyrics.to_lrc(),
+            "[00:01.00]<00:01.00>Say <00:01.30>hello <00:01.70>again<00:02.20> now",
+        )
+        self.assertEqual(lyrics.to_ttml(), ttml)
+
+    def test_mixed_timed_and_untimed_text_is_preserved(self):
+        ttml = (
+            '<tt><body><div><p begin="0.5s" end="2s">'
+            'Unmarked <span begin="1s" end="1.5s">word</span> here'
+            "</p></div></body></tt>"
+        )
+        lyrics = Lyrics.from_ttml(ttml, syllable=True)
+        self.assertEqual(lyrics.lines[0].text, "Unmarked word here")
+        self.assertEqual(lyrics.to_lrc(), "[00:00.50]Unmarked <00:01.00>word here")
+        self.assertEqual(lyrics.to_ttml(), ttml)
+
+    def test_line_only_mode_does_not_emit_syllable_timestamps(self):
+        lyrics = Lyrics.from_ttml(TTML)
+        self.assertTrue(lyrics.is_syllable_synced)  # timing is still parsed
+        self.assertFalse(lyrics.syllable)
+        self.assertEqual(lyrics.to_lrc().splitlines()[0], "[00:01.20]Hello world")
+        self.assertTrue(lyrics.to_plain_text())
+        self.assertTrue(lyrics.to_srt())
 
     def test_invalid_ttml_and_missing_ttml(self):
         with self.assertRaises(GamdlMediaError):

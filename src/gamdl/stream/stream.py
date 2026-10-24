@@ -181,6 +181,12 @@ class Stream(AsyncIterator[bytes]):
                 self._kid,
                 enhanced_song,
                 self._wrapper,
+                isinstance(self.source, HlsSongStream)
+                and self.source.origin
+                in {
+                    StreamOrigin.ASSET_STANDARD_HLS,
+                    StreamOrigin.ASSET_ENHANCED_HLS,
+                },
             )
         finally:
             # The worker now owns the native copy (or validation has failed).

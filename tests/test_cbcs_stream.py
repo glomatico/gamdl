@@ -13,7 +13,14 @@ from http.server import ThreadingHTTPServer
 from unittest.mock import AsyncMock, Mock
 
 from gamdl.drm import ContentKey
-from gamdl.media import AudioStream, SongCodec, StreamOrigin, VideoStream
+from gamdl.media import (
+    AudioStream,
+    HlsSongStream,
+    HlsType,
+    SongCodec,
+    StreamOrigin,
+    VideoStream,
+)
 from gamdl.stream import Stream
 from tests.test_native_stream import HttpHandler, fixture_playlist, manifest_url
 
@@ -314,6 +321,27 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         async with Stream(
             self.source(), decryption_key=ContentKey(b"0" * 16, KEY)
         ) as stream:
+            with self.assertRaisesRegex(OSError, "key ID"):
+                await stream.read()
+
+    async def test_asset_standard_song_accepts_licensed_cbcs_key_with_other_kid(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        source = self.source()
+        apple_source = HlsSongStream(
+            codec=SongCodec.AAC,
+            origin=StreamOrigin.ASSET_STANDARD_HLS,
+            url=source.url,
+            transport=source._transport,
+            hls_type=HlsType.STANDARD,
+        )
+        async with Stream(
+            apple_source, decryption_key=ContentKey(b"X" * 16, KEY)
+        ) as stream:
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        # Ordinary stream types must still verify their declared KID.
+        async with Stream(source, decryption_key=ContentKey(b"X" * 16, KEY)) as stream:
             with self.assertRaisesRegex(OSError, "key ID"):
                 await stream.read()
 

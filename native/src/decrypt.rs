@@ -223,6 +223,7 @@ pub(crate) struct Mp4Decryptor {
     key: [u8; 16],
     expected_kid: Option<[u8; 16]>,
     enhanced_hls_song: bool,
+    asset_song_cbcs: bool,
     wrapper_mode: bool,
     config: Option<EncryptionConfig>,
     input_offset: u64,
@@ -233,12 +234,14 @@ impl Mp4Decryptor {
         kid: Option<Vec<u8>>,
         enhanced_hls_song: bool,
         wrapper_mode: bool,
+        asset_song_cbcs: bool,
     ) -> std::result::Result<Option<Self>, &'static str> {
         if wrapper_mode && key.is_none() && kid.is_none() {
             return Ok(Some(Self {
                 key: [0u8; 16],
                 expected_kid: None,
                 enhanced_hls_song,
+                asset_song_cbcs,
                 wrapper_mode,
                 config: None,
                 input_offset: 0,
@@ -260,6 +263,7 @@ impl Mp4Decryptor {
                     key,
                     expected_kid,
                     enhanced_hls_song,
+                    asset_song_cbcs,
                     wrapper_mode,
                     config: None,
                     input_offset: 0,
@@ -412,6 +416,15 @@ impl Mp4Decryptor {
                 && descriptions
                     .iter()
                     .all(|desc| desc.scheme == EncryptionScheme::Cbcs);
+            // Apple's CBCS Asset HLS license KID is not always the tenc
+            // KID, even for a standard (single-description) AAC stream.
+            // Only allow this mismatch for explicitly identified Asset
+            // HLS song audio, never for web AAC or video.
+            let asset_song_cbcs = self.asset_song_cbcs
+                && !video
+                && descriptions
+                    .iter()
+                    .all(|desc| desc.scheme == EncryptionScheme::Cbcs);
             if self.wrapper_mode
                 && (video
                     || descriptions.iter().any(|desc| {
@@ -422,6 +435,7 @@ impl Mp4Decryptor {
                 return Err("Wrapper sample delivery supports only non-pattern CBCS song audio");
             }
             if !enhanced_song_prefetch
+                && !asset_song_cbcs
                 && self
                     .expected_kid
                     .is_some_and(|expected| Some(expected) != first_kid)

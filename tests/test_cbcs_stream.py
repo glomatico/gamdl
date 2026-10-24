@@ -25,6 +25,11 @@ CT2 = bytes.fromhex("5086cb9b507219ee95db113a917678b2")
 PT1 = bytes.fromhex("6bc1bee22e409f96e93d7e117393172a")
 PT2 = bytes.fromhex("ae2d8a571e03ac9c9eb76fac45af8e51")
 SKIP = b"clear skip block"
+# Ciphertext of PT1+PT2 encrypted using Gamdl 3.x's fixed enhanced-HLS
+# prefetch key and IV. Fixed test-vector bytes, not a second copy of the key.
+PREFETCH_CT = bytes.fromhex(
+    "6ab97d9019bac24e943afbf9fca8d6414032cf5f6c84c64667e84246a36b2800"
+)
 
 
 def be32(i: int) -> bytes:
@@ -182,7 +187,13 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         self.http.hits.clear()
         self.http.fixtures.clear()
 
-    def source(self, *, video=False, segments="cbcs-fragment"):
+    def source(
+        self,
+        *,
+        video=False,
+        segments="cbcs-fragment",
+        origin=StreamOrigin.ASSET_STANDARD_HLS,
+    ):
         transport = Mock()
         transport.get_manifest = AsyncMock(
             return_value=manifest_url(
@@ -195,7 +206,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         args = {
             "codec": "h264" if video else SongCodec.AAC,
-            "origin": StreamOrigin.ASSET_ENHANCED_HLS,
+            "origin": origin,
             "url": f"{self.base}/hls.m3u8",
             "transport": transport,
         }
@@ -246,6 +257,49 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         ) as stream:
             output = await stream.read()
         self.assertEqual(mdats(output[len(init) :]), expected_first + expected_second)
+
+    async def test_enhanced_song_cbcs_uses_prefetch_then_license_key(self):
+        init, initial_fragment, expected_initial = fixture(second_description=True)
+        _, later_fragment, expected_later = fixture(
+            second_description=True, selected_description=2
+        )
+        # Description 1 uses the fixed prefetch key, not the license key.
+        initial_fragment = initial_fragment.replace(CT1 + CT2, PREFETCH_CT)
+        self.http.fixtures.update(
+            {
+                "cbcs-init": init,
+                "cbcs-fragment": initial_fragment,
+                "cbcs-next": later_fragment,
+            }
+        )
+        # Apple's enhanced-HLS license KID can differ from its tenc KID.
+        license_key = ContentKey(b"L" * 16, KEY)
+        audio = self.source(
+            segments="cbcs-fragment,cbcs-next",
+            origin=StreamOrigin.ASSET_ENHANCED_HLS,
+        )
+        async with Stream(audio, decryption_key=license_key) as stream:
+            output = await stream.read()
+        self.assertEqual(mdats(output[len(init) :]), expected_initial + expected_later)
+
+        # Do NOT accept that mismatched KID for ordinary CBCS streams.
+        standard_audio = self.source(segments="cbcs-fragment,cbcs-next")
+        async with Stream(standard_audio, decryption_key=license_key) as stream:
+            with self.assertRaisesRegex(OSError, "key ID"):
+                await stream.read()
+
+        # Enhanced-HLS VIDEO must not use the song-specific prefetch key.
+        video_init, video_fragment, _ = fixture(video=True, second_description=True)
+        self.http.fixtures.update(
+            {
+                "cbcs-init": video_init,
+                "cbcs-fragment": video_fragment,
+            }
+        )
+        video = self.source(video=True, origin=StreamOrigin.ASSET_ENHANCED_HLS)
+        async with Stream(video, decryption_key=license_key) as stream:
+            with self.assertRaisesRegex(OSError, "key ID"):
+                await stream.read()
 
     async def test_invalid_constant_iv_fails_and_prevents_output(self):
         init, fragment, _ = fixture(corrupt_iv=True)

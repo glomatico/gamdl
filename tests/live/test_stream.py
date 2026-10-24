@@ -71,11 +71,10 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, [StreamSourceSelectionRequest, StreamSelectionRequest])
 
     async def test_wrapper_hls_and_ask_selection(self):
-        if self.session.source != "wrapper":
+        if self.session.wrapper is None:
             self.skipTest("Authenticated wrapper source required for wrapper HLS")
-        async with await WrapperApi.create(
-            base_url=LiveSettings.from_env().wrapper_url
-        ) as wrapper:
+        wrapper = self.session.wrapper
+        if wrapper is not None:
             selected = await self.song.get_stream(
                 codec=SongCodec.ALAC, wrapper_api=wrapper
             )

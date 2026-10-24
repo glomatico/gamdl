@@ -7,7 +7,6 @@ GAMDL_RUN_LIVE=1 uv run python -m unittest discover -s tests/live -p test_stream
 import os
 import unittest
 
-from gamdl.api import WrapperApi
 from gamdl.media import (
     HlsSongStream,
     HlsType,
@@ -19,8 +18,12 @@ from gamdl.media import (
     WebPlaybackStream,
 )
 from tests.live_auth import LiveSettings, open_live_session
-
-SONG_ID = "1559885421"
+from tests.live.song_fixture import (
+    ENHANCED_CODECS,
+    SONG_ID,
+    STANDARD_CODECS,
+    WEB_CODECS,
+)
 
 
 @unittest.skipUnless(
@@ -28,7 +31,7 @@ SONG_ID = "1559885421"
     "Opt-in only: set GAMDL_RUN_LIVE=1 to contact Apple Music",
 )
 class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
-    """Read-only streaming metadata of a BR Rick Astley song."""
+    """Read-only codec and DRM metadata for the Brazilian New Rules fixture."""
 
     async def asyncSetUp(self):
         self.context = open_live_session(LiveSettings.from_env(), interval=0.75)
@@ -101,6 +104,36 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIsInstance(asked, HlsSongStream)
             self.assertEqual(asked.codec, SongCodec.ALAC)
+
+    async def test_codec_inventory_for_future_muxer_coverage(self):
+        from gamdl.media import SongStreamResolver
+
+        resolver = SongStreamResolver(self.song, wrapper_api=self.session.wrapper)
+        web = await resolver.get_web_streams()
+        self.assertTrue(set(WEB_CODECS) <= {s.codec for s in web})
+        self.assertFalse(any(s.codec == SongCodec.AC3 for s in web))
+
+        for origin, expected in (
+            (StreamOrigin.ASSET_ENHANCED_HLS, ENHANCED_CODECS),
+            (StreamOrigin.ASSET_STANDARD_HLS, STANDARD_CODECS),
+        ):
+            with self.subTest(origin=origin.value):
+                renditions = await resolver.get_hls_streams(origin=origin)
+                found = {stream.codec for stream in renditions}
+                self.assertTrue(
+                    set(expected) <= found,
+                    f"Live codec fixture changed for {origin.value}: "
+                    f"missing {set(expected) - found}",
+                )
+                self.assertNotIn(SongCodec.AC3, found)
+
+        if self.session.wrapper is not None:
+            wrapper_renditions = await resolver.get_hls_streams(
+                origin=StreamOrigin.WRAPPER_HLS
+            )
+            found = {stream.codec for stream in wrapper_renditions}
+            self.assertTrue(set(ENHANCED_CODECS) <= found)
+            self.assertNotIn(SongCodec.AC3, found)
 
 
 if __name__ == "__main__":

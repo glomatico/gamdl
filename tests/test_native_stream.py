@@ -608,7 +608,7 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
             self.http.fixtures["encrypted"] = original.replace(b"cenc", b"cbcs", 1)
             playlist = fixture_playlist("#EXTINF:1,\nencrypted\n")
             async with Stream(self.audio(playlist), decryption_key=key) as stream:
-                with self.assertRaisesRegex(OSError, "Only AES-CTR"):
+                with self.assertRaisesRegex(OSError, "Unsupported fragmented MP4"):
                     await stream.read()
             split = original.index(b"moof") - 4
             self.http.fixtures["encrypted"] = original[split:]

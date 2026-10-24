@@ -1,0 +1,302 @@
+"""Synthetic CBCS fragmented-MP4 fixtures with known NIST AES-CBC vectors.
+
+The fixtures use valid MP4 box framing and the same tenc/senc layout as Apple's
+SAMPLE-AES/CBCS streams. No DRM license, credentials, or remote Apple data.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+from unittest.mock import AsyncMock, Mock
+
+from gamdl.drm import ContentKey
+from gamdl.media import AudioStream, SongCodec, StreamOrigin, VideoStream
+from gamdl.stream import Stream
+from tests.test_native_stream import HttpHandler, fixture_playlist, manifest_url
+
+KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
+KID = bytes.fromhex("101112131415161718191a1b1c1d1e1f")
+IV = bytes(range(16))
+CT1 = bytes.fromhex("7649abac8119b246cee98e9b12e9197d")
+CT2 = bytes.fromhex("5086cb9b507219ee95db113a917678b2")
+PT1 = bytes.fromhex("6bc1bee22e409f96e93d7e117393172a")
+PT2 = bytes.fromhex("ae2d8a571e03ac9c9eb76fac45af8e51")
+SKIP = b"clear skip block"
+
+
+def be32(i: int) -> bytes:
+    return i.to_bytes(4, "big")
+
+
+def atom(kind: bytes, body: bytes) -> bytes:
+    return be32(len(body) + 8) + kind + body
+
+
+def fullbox(kind: bytes, version: int, flags: int, body: bytes) -> bytes:
+    return atom(kind, bytes([version]) + flags.to_bytes(3, "big") + body)
+
+
+def fixture(
+    *,
+    video=False,
+    pattern=0,
+    per_sample_iv=False,
+    corrupt_iv=False,
+    second_description=False,
+    selected_description=1,
+):
+    """Construct init + fragment and known plaintext for two CBCS samples."""
+    sample_encrypted = CT1 + (SKIP if pattern else b"") + CT2 + b"tail"
+    sample_plain = PT1 + (SKIP if pattern else b"") + PT2 + b"tail"
+    other_encrypted = b"ABCD" + CT1 + (SKIP if pattern else b"") + CT2 + b"end"
+    other_plain = b"ABCD" + PT1 + (SKIP if pattern else b"") + PT2 + b"end"
+
+    iv_size = 16 if per_sample_iv else 0
+    tenc_body = bytes([pattern, 0, 1, iv_size]) + KID
+    if not per_sample_iv:
+        tenc_body += bytes([8 if corrupt_iv else 16]) + IV
+
+    def sample_description(tenc_payload):
+        sinf = atom(
+            b"sinf",
+            atom(b"frma", b"avc1" if video else b"mp4a")
+            + fullbox(b"schm", 0, 0, b"cbcs" + be32(0x10000))
+            + atom(b"schi", fullbox(b"tenc", 1, 0, tenc_payload)),
+        )
+        return atom(
+            b"encv" if video else b"enca",
+            bytes(78 if video else 28) + sinf,
+        )
+
+    descriptions = [sample_description(tenc_body)]
+    if second_description:
+        assert not per_sample_iv
+        different_iv = bytes(value ^ 0xFF for value in IV)
+        descriptions.append(
+            sample_description(bytes([pattern, 0, 1, 0]) + KID + b"\x10" + different_iv)
+        )
+    if selected_description == 2:
+        assert second_description
+        # The ciphertext was generated with IV, so using the alternate IV
+        # changes only the first plaintext block in each sample.
+        changed_pt1 = bytes(value ^ 0xFF for value in PT1)
+        sample_plain = sample_plain.replace(PT1, changed_pt1)
+        other_plain = other_plain.replace(PT1, changed_pt1)
+    stsd = fullbox(
+        b"stsd",
+        0,
+        0,
+        be32(len(descriptions)) + b"".join(descriptions),
+    )
+    stbl = atom(b"stbl", stsd)
+    minf = atom(b"minf", stbl)
+    hdlr = fullbox(b"hdlr", 0, 0, be32(0) + (b"vide" if video else b"soun") + be32(0))
+    mdia = atom(b"mdia", hdlr + minf)
+    tkhd = fullbox(b"tkhd", 0, 0, be32(0) + be32(0) + be32(1) + be32(0))
+    trak = atom(b"trak", tkhd + mdia)
+    trex = fullbox(b"trex", 0, 0, be32(1) + be32(1) + be32(1024) + be32(0) + be32(0))
+    init = atom(b"ftyp", b"isom" + be32(0) + b"isom") + atom(
+        b"moov", trak + atom(b"mvex", trex)
+    )
+
+    samples = (sample_encrypted, other_encrypted)
+    iv = IV if per_sample_iv else b""
+    senc = fullbox(
+        b"senc",
+        0,
+        2,
+        be32(2)
+        + iv
+        + (1).to_bytes(2, "big")
+        + (0).to_bytes(2, "big")
+        + be32(len(samples[0]))
+        + iv
+        + (2).to_bytes(2, "big")
+        + (4).to_bytes(2, "big")
+        + be32(len(samples[1]) - 7)
+        + (3).to_bytes(2, "big")
+        + be32(0),
+    )
+    tfhd = fullbox(
+        b"tfhd",
+        0,
+        0x020002 if selected_description == 2 else 0x020000,
+        be32(1) + (be32(2) if selected_description == 2 else b""),
+    )
+    trun_zero = fullbox(
+        b"trun", 0, 0x201, be32(2) + be32(0) + b"".join(be32(len(s)) for s in samples)
+    )
+    traf_zero = atom(b"traf", tfhd + senc + trun_zero)
+    moof_len = len(atom(b"moof", traf_zero))
+    trun = fullbox(
+        b"trun",
+        0,
+        0x201,
+        be32(2) + be32(moof_len + 8) + b"".join(be32(len(s)) for s in samples),
+    )
+    traf = atom(b"traf", tfhd + senc + trun)
+    fragment = atom(b"moof", traf) + atom(b"mdat", b"".join(samples))
+    assert len(fragment) - len(b"".join(samples)) == moof_len + 8
+    return init, fragment, sample_plain + other_plain
+
+
+def mdats(data: bytes) -> bytes:
+    """Return plaintext data from all mdat boxes in one fMP4 fragment."""
+    result = bytearray()
+    at = 0
+    while at + 8 <= len(data):
+        length = int.from_bytes(data[at : at + 4], "big")
+        typ = data[at + 4 : at + 8]
+        if length < 8 or at + length > len(data):
+            raise AssertionError("bad atom framing")
+        if typ == b"mdat":
+            result.extend(data[at + 8 : at + length])
+        at += length
+    assert at == len(data)
+    return bytes(result)
+
+
+class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.http = ThreadingHTTPServer(("127.0.0.1", 0), HttpHandler)
+        cls.http.lock = threading.Lock()
+        from collections import Counter
+
+        cls.http.hits = Counter()
+        cls.http.fixtures = {}
+        cls.thread = threading.Thread(target=cls.http.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base = f"http://127.0.0.1:{cls.http.server_port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.http.shutdown()
+        cls.http.server_close()
+        cls.thread.join()
+
+    def setUp(self):
+        self.http.hits.clear()
+        self.http.fixtures.clear()
+
+    def source(self, *, video=False, segments="cbcs-fragment"):
+        transport = Mock()
+        transport.get_manifest = AsyncMock(
+            return_value=manifest_url(
+                self.base,
+                fixture_playlist(
+                    "".join(f"#EXTINF:1,\n{name}\n" for name in segments.split(",")),
+                    prefix='#EXT-X-MAP:URI="cbcs-init"\n',
+                ),
+            )
+        )
+        args = {
+            "codec": "h264" if video else SongCodec.AAC,
+            "origin": StreamOrigin.ASSET_ENHANCED_HLS,
+            "url": f"{self.base}/hls.m3u8",
+            "transport": transport,
+        }
+        return VideoStream(**args) if video else AudioStream(**args)
+
+    async def check_fixture(self, *, video=False, pattern=0, per_sample_iv=False):
+        init, fragment, expected = fixture(
+            video=video, pattern=pattern, per_sample_iv=per_sample_iv
+        )
+        self.http.fixtures["cbcs-init"] = init
+        self.http.fixtures["cbcs-fragment"] = fragment
+        async with Stream(
+            self.source(video=video), decryption_key=ContentKey(KID, KEY)
+        ) as stream:
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        self.assertIn(b"free", decoded)
+        self.assertNotIn(b"enca" if not video else b"encv", decoded)
+        self.assertEqual(self.http.hits["cbcs-init"], 1)
+        self.assertEqual(self.http.hits["cbcs-fragment"], 1)
+
+    async def test_unpatterned_constant_iv_cbcs_audio(self):
+        await self.check_fixture()
+
+    async def test_patterned_cbcs_video(self):
+        await self.check_fixture(video=True, pattern=0x11)
+
+    async def test_cbcs_with_per_sample_iv(self):
+        await self.check_fixture(per_sample_iv=True)
+
+    async def test_multiple_sample_descriptions_select_distinct_constant_ivs(self):
+        init, first, expected_first = fixture(second_description=True)
+        other_init, second, expected_second = fixture(
+            second_description=True,
+            selected_description=2,
+        )
+        self.assertEqual(init, other_init)
+        self.http.fixtures.update(
+            {
+                "cbcs-init": init,
+                "cbcs-fragment": first,
+                "cbcs-next": second,
+            }
+        )
+        async with Stream(
+            self.source(segments="cbcs-fragment,cbcs-next"),
+            decryption_key=ContentKey(KID, KEY),
+        ) as stream:
+            output = await stream.read()
+        self.assertEqual(mdats(output[len(init) :]), expected_first + expected_second)
+
+    async def test_invalid_constant_iv_fails_and_prevents_output(self):
+        init, fragment, _ = fixture(corrupt_iv=True)
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        async with Stream(self.source(), decryption_key=ContentKey(KID, KEY)) as stream:
+            with self.assertRaisesRegex(OSError, "Unsupported fragmented MP4"):
+                await stream.read()
+
+    async def test_wrong_content_key_id_rejected(self):
+        init, fragment, _ = fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        async with Stream(
+            self.source(), decryption_key=ContentKey(b"0" * 16, KEY)
+        ) as stream:
+            with self.assertRaisesRegex(OSError, "key ID"):
+                await stream.read()
+
+    async def test_different_key_ids_across_descriptions_are_rejected(self):
+        init, fragment, _ = fixture(second_description=True)
+        init = bytearray(init)
+        first = init.index(b"tenc")
+        second = init.index(b"tenc", first + 4)
+        init[second + 12 : second + 28] = b"0" * 16
+        self.http.fixtures.update(
+            {
+                "cbcs-init": bytes(init),
+                "cbcs-fragment": fragment,
+            }
+        )
+        async with Stream(self.source(), decryption_key=KEY) as stream:
+            with self.assertRaisesRegex(OSError, "Multiple content key IDs"):
+                await stream.read()
+
+    async def test_sample_group_key_rotation_is_rejected(self):
+        init, fragment, _ = fixture()
+        fragment = bytearray(fragment)
+        pos = fragment.index(b"senc")
+        fragment[pos : pos + 4] = b"sbgp"
+        fragment[pos + 8 : pos + 12] = b"seig"
+        self.http.fixtures.update(
+            {
+                "cbcs-init": init,
+                "cbcs-fragment": bytes(fragment),
+            }
+        )
+        async with Stream(self.source(), decryption_key=KEY) as stream:
+            with self.assertRaisesRegex(OSError, "Sample-group encryption overrides"):
+                await stream.read()
+
+    async def test_raw_copies_cbcs_without_decryption(self):
+        init, fragment, _ = fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        async with Stream(self.source()) as stream:
+            self.assertEqual(await stream.read(), init + fragment)

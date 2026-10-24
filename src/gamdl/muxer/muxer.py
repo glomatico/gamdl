@@ -12,10 +12,21 @@ from gamdl.download.tags import Tags
 class Muxer:
     """Native operations on MP4 containers.
 
-    The initial milestone implements in-place metadata tagging. Later native
-    decryption/muxing operations will join this interface. Tag files in the
-    download pipeline's temporary output, before publishing the final path.
+    Native audio remuxing operates on bytes and preserves encoded packets.
+    Tagging operates on an MP4 file. Tag temporary outputs before publishing
+    the final path.
     """
+
+    def remux(self, data: bytes) -> bytes:
+        """Flatten decrypted, single-track fragmented MP4 audio without transcoding.
+
+        Preserves compressed samples and codec configuration. Returns an
+        ordinary seekable MP4 in memory; unsupported input fails closed.
+        Call after native Stream decryption, before optional file tagging.
+        """
+        if not isinstance(data, bytes):
+            raise TypeError("data must be MP4 bytes")
+        return _native.remux_mp4(data)
 
     def tag(
         self,

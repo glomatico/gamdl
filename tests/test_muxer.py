@@ -62,6 +62,186 @@ def decoded_pcm_md5(path: Path):
     return result.stdout.strip()
 
 
+def packet_hashes(path: Path):
+    """Compare encoded samples, independent of container edit-list padding."""
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_packets",
+            "-show_data_hash",
+            "md5",
+            "-show_entries",
+            "packet=size,data_hash",
+            "-of",
+            "csv=p=0",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [tuple(row.split(",")[:2]) for row in result.stdout.splitlines()]
+
+
+@unittest.skipUnless(
+    shutil.which("ffmpeg") and shutil.which("ffprobe"),
+    "FFmpeg and FFprobe required for MP4 remux fixtures",
+)
+class NativeMp4RemuxTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.directory = Path(self.tmp.name)
+        self.muxer = Muxer()
+
+    def fixture(self, codec):
+        fragmented = self.directory / f"fragmented-{codec}.m4a"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=48000:duration=0.4",
+                "-c:a",
+                codec,
+                "-movflags",
+                "+frag_keyframe+empty_moov+default_base_moof",
+                "-frag_duration",
+                "100000",
+                "-y",
+                str(fragmented),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return fragmented
+
+    def test_lossless_flatten_for_aac_and_alac(self):
+        # FFmpeg's empty_moov muxer cannot emit the required E-AC-3 codec
+        # initialization. Real E-AC-3/Atmos is exercised by the live suite.
+        for codec, probe_codec in (("aac", "aac"), ("alac", "alac")):
+            with self.subTest(codec=codec):
+                original = self.fixture(codec)
+                input_bytes = original.read_bytes()
+                self.assertIn(b"moof", input_bytes)
+                finished = self.directory / f"finished-{codec}.m4a"
+                finished.write_bytes(self.muxer.remux(input_bytes))
+                top = [kind for kind, _ in atoms(finished.read_bytes())]
+                self.assertEqual(top, [b"ftyp", b"moov", b"mdat"])
+                self.assertEqual(packet_hashes(original), packet_hashes(finished))
+                result = subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "a:0",
+                        "-show_entries",
+                        "stream=codec_name",
+                        "-of",
+                        "default=nk=1:nw=1",
+                        str(finished),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                self.assertEqual(result.stdout.strip(), probe_codec)
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-nostdin",
+                        "-v",
+                        "error",
+                        "-xerror",
+                        "-i",
+                        str(finished),
+                        "-map",
+                        "0:a:0",
+                        "-f",
+                        "null",
+                        "-",
+                    ],
+                    capture_output=True,
+                    check=True,
+                )
+
+    def test_remux_then_tag(self):
+        original = self.fixture("aac")
+        dest = self.directory / "taggable.m4a"
+        dest.write_bytes(self.muxer.remux(original.read_bytes()))
+        self.muxer.tag(dest, tags=Tags(title="Remuxed AAC", artist="Gamdl"))
+        self.assertEqual(mp4_tag_atoms(dest)[b"\xa9nam"], [(1, b"Remuxed AAC")])
+        self.assertEqual(packet_hashes(original), packet_hashes(dest))
+
+    def test_nonzero_fragment_decode_timestamps_and_discontinuity_rejection(self):
+        original = self.fixture("aac")
+        data = bytearray(original.read_bytes())
+        positions = []
+        at = 0
+        while (at := data.find(b"tfdt", at)) >= 0:
+            # Locate the timestamp in FFmpeg's version-1 tfdt full box.
+            timestamp_at = at + 8
+            if data[at + 4] != 1:
+                self.skipTest("Expected a version-1 tfdt fixture")
+            positions.append(timestamp_at)
+            value = int.from_bytes(data[timestamp_at : timestamp_at + 8], "big")
+            data[timestamp_at : timestamp_at + 8] = (value + 48000).to_bytes(8, "big")
+            at = timestamp_at + 8
+        self.assertGreater(len(positions), 1, "Fixture must have several fragments")
+        output = self.directory / "nonzero.m4a"
+        output.write_bytes(self.muxer.remux(bytes(data)))
+        self.assertEqual(packet_hashes(original), packet_hashes(output))
+
+        value = int.from_bytes(data[positions[1] : positions[1] + 8], "big")
+        data[positions[1] : positions[1] + 8] = (value + 1).to_bytes(8, "big")
+        with self.assertRaisesRegex(ValueError, "Unsupported fragmented MP4"):
+            self.muxer.remux(bytes(data))
+
+    def test_bad_and_unfragmented_inputs_fail_without_output(self):
+        for data in (
+            b"",
+            b"not an mp4",
+            b"\0" * 16,
+            self.fixture("aac").read_bytes()[:80],
+        ):
+            with self.subTest(length=len(data)), self.assertRaises(ValueError):
+                self.muxer.remux(data)
+        with self.assertRaises(TypeError):
+            self.muxer.remux("not bytes")
+        regular = self.directory / "regular.m4a"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=48000:cl=stereo",
+                "-t",
+                "0.2",
+                "-c:a",
+                "aac",
+                "-y",
+                str(regular),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        with self.assertRaises(ValueError):
+            self.muxer.remux(regular.read_bytes())
+
+
 @unittest.skipUnless(
     shutil.which("ffmpeg"), "FFmpeg is required for MP4 fixture generation"
 )

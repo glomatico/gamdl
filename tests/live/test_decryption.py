@@ -3,6 +3,9 @@
 Run explicitly:
     GAMDL_RUN_LIVE_DECRYPT=1 uv run python -m unittest tests.live.test_decryption -v
 
+To additionally remux each decrypted rendition and compare encoded packets:
+    GAMDL_RUN_LIVE_DECRYPT=1 GAMDL_CHECK_REMUX=1 uv run python -m unittest tests.live.test_decryption -v
+
 The wrapper tests skip when no authenticated local wrapper is available.
 Media is written only to temporary files; neither content keys nor signed
 CDN URLs are printed or retained. Tests may require an Apple Music subscription.
@@ -27,6 +30,7 @@ from gamdl.media import (
     StreamOrigin,
 )
 from gamdl.stream import Stream
+from gamdl.muxer import Muxer
 from tests.live_auth import LiveSettings, open_live_session
 from tests.live.song_fixture import (
     ENHANCED_CODECS,
@@ -150,6 +154,75 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
             f"Incorrect output codec for {source.codec.value}",
         )
         self.assertGreater(streams[0].get("channels", 0), 0)
+        if os.environ.get("GAMDL_CHECK_REMUX") == "1":
+            flat = path.with_name(path.stem + "-flat.m4a")
+            flat.write_bytes(Muxer().remux(path.read_bytes()))
+
+            def encoded_packets(file):
+                result = subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "a:0",
+                        "-show_packets",
+                        "-show_data_hash",
+                        "md5",
+                        "-show_entries",
+                        "packet=size,data_hash",
+                        "-of",
+                        "csv=p=0",
+                        str(file),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    check=True,
+                )
+                return [tuple(row.split(",")[:2]) for row in result.stdout.splitlines()]
+
+            self.assertEqual(encoded_packets(path), encoded_packets(flat))
+            flat_probe = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "a:0",
+                    "-show_entries",
+                    "stream=codec_name",
+                    "-of",
+                    "default=nw=1:nk=1",
+                    str(flat),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
+            )
+            self.assertEqual(flat_probe.stdout.strip(), expected_codec)
+            flat_decoded = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-nostdin",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-xerror",
+                    "-i",
+                    str(flat),
+                    "-map",
+                    "0:a:0",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(flat_decoded.returncode, 0, flat_decoded.stderr[:350])
         if shutil.which("mediainfo"):
             info = subprocess.run(
                 ["mediainfo", str(path)],

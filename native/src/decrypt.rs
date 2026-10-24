@@ -1,6 +1,6 @@
 //! Strict AES-CTR CENC decryption of complete fragmented-MP4 HLS parts.
 //! Never outputs partially decrypted media; unknown schemes fail closed.
-//! Only a single protected audio sample description is supported initially.
+//! Only a single protected audio or video track is supported initially.
 
 use aes::Aes128;
 use ctr::Ctr128BE;
@@ -137,7 +137,8 @@ impl CencDecryptor {
         {
             let mdia = child(buf, trak, b"mdia", 0)?;
             let hdlr = child(buf, mdia, b"hdlr", 0)?;
-            if buf.get(hdlr.data + 8..hdlr.data + 12) != Some(b"soun") {
+            let handler = buf.get(hdlr.data + 8..hdlr.data + 12);
+            if handler != Some(b"soun") && handler != Some(b"vide") {
                 continue;
             }
             let tkhd = child(buf, trak, b"tkhd", 0)?;
@@ -156,11 +157,13 @@ impl CencDecryptor {
                 .into_iter()
                 .next()
                 .ok_or(MALFORMED)?;
-            if &entry.kind != b"enca" {
+            let video = handler == Some(b"vide");
+            if (video && &entry.kind != b"encv") || (!video && &entry.kind != b"enca") {
                 return Err(UNSUPPORTED);
             }
-            // Audio sample-entry v0/v1 uses 36 bytes preceding its child atoms.
-            let sinf = child(buf, entry, b"sinf", 28)?;
+            // Audio entry header: 36 bytes; visual entry header: 86 bytes.
+            // The box data starts after the first 8 bytes of either header.
+            let sinf = child(buf, entry, b"sinf", if video { 78 } else { 28 })?;
             let schm = child(buf, sinf, b"schm", 0)?;
             if buf.get(schm.data + 4..schm.data + 8) != Some(b"cenc") {
                 return Err("Only AES-CTR/CENC decryption is supported");
@@ -171,7 +174,15 @@ impl CencDecryptor {
                 .ok_or(MALFORMED)?
                 .try_into()
                 .map_err(|_| MALFORMED)?;
-            if &format != b"mp4a" && &format != b"alac" {
+            let supported = if video {
+                matches!(
+                    &format,
+                    b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"av01" | b"mp4v"
+                )
+            } else {
+                matches!(&format, b"mp4a" | b"alac" | b"ac-3" | b"ec-3")
+            };
+            if !supported {
                 return Err(UNSUPPORTED);
             }
             let schi = child(buf, sinf, b"schi", 0)?;
@@ -217,7 +228,7 @@ impl CencDecryptor {
                 default_size,
             });
         }
-        self.config = Some(selected.ok_or("Expected an encrypted audio MP4 track")?);
+        self.config = Some(selected.ok_or("Expected an encrypted audio or video MP4 track")?);
         Ok(())
     }
     fn decrypt_fragment(&self, buf: &mut [u8], moof: BoxPos, mdat: BoxPos) -> Result<()> {

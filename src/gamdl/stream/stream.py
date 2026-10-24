@@ -9,15 +9,16 @@ before yielding or saving, preserving the fragment layout.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from os import PathLike
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from gamdl import _native
 from gamdl.drm.models import ContentKey
-from gamdl.media import AudioStream
+from gamdl.media import HlsStream
 from gamdl.media.exceptions import StreamManifestError
+from .progress import StreamProgress
 
 
 def _range(raw: str | None, previous_end: int | None, *, init: bool = False):
@@ -39,7 +40,7 @@ def _range(raw: str | None, previous_end: int | None, *, init: bool = False):
     return offset, end, end + 1
 
 
-async def _plan(source: AudioStream) -> list[tuple[str, int | None, int | None]]:
+async def _plan(source: HlsStream) -> list[tuple[str, int | None, int | None]]:
     manifest = await source.get_manifest()
     if not manifest.is_endlist:
         raise StreamManifestError("Only completed HLS media playlists are supported")
@@ -87,15 +88,15 @@ class Stream(AsyncIterator[bytes]):
 
     def __init__(
         self,
-        source: AudioStream,
+        source: HlsStream,
         *,
         concurrency: int = 8,
         chunk_size: int = 262144,
         retries: int = 3,
         decryption_key: bytes | ContentKey | None = None,
     ) -> None:
-        if not isinstance(source, AudioStream):
-            raise TypeError("source must be an AudioStream")
+        if not isinstance(source, HlsStream):
+            raise TypeError("source must be an HlsStream")
         self.source = source
         self.concurrency = concurrency
         self.chunk_size = chunk_size
@@ -112,6 +113,7 @@ class Stream(AsyncIterator[bytes]):
         else:
             raise TypeError("decryption_key must be bytes or a ContentKey")
         self._engine: _native.NativeStream | None = None
+        self._final_progress: StreamProgress | None = None
         self._used = False
 
     async def __aenter__(self) -> Stream:
@@ -136,8 +138,18 @@ class Stream(AsyncIterator[bytes]):
 
     async def __aexit__(self, *_exc: object) -> None:
         if self._engine is not None:
+            self._final_progress = self.progress
             self._engine.close()
             self._engine = None
+
+    @property
+    def progress(self) -> StreamProgress:
+        """Read a native progress snapshot without contacting the network."""
+        if self._engine is not None:
+            return StreamProgress(*self._engine.progress())
+        if self._final_progress is not None:
+            return self._final_progress
+        raise RuntimeError("Stream progress is available after entering the context")
 
     def __aiter__(self) -> Stream:
         return self
@@ -154,7 +166,12 @@ class Stream(AsyncIterator[bytes]):
         """Collect all remaining chunks in memory; best for small media only."""
         return b"".join([chunk async for chunk in self])
 
-    async def save(self, path: str | PathLike[str]) -> Path:
+    async def save(
+        self,
+        path: str | PathLike[str],
+        *,
+        progress_callback: Callable[[StreamProgress], None] | None = None,
+    ) -> Path:
         """Save raw stream bytes, atomically publishing only on success."""
         destination = Path(path)
         tmp_path: Path | None = None
@@ -169,6 +186,8 @@ class Stream(AsyncIterator[bytes]):
                 tmp_path = Path(output.name)
                 async for chunk in self:
                     output.write(chunk)
+                    if progress_callback is not None:
+                        progress_callback(self.progress)
             tmp_path.replace(destination)
             return destination
         finally:

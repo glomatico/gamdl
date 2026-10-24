@@ -11,6 +11,7 @@ class StreamOrigin(str, Enum):
     WRAPPER_HLS = "wrapper-hls"
     ASSET_ENHANCED_HLS = "asset-enhanced-hls"
     ASSET_STANDARD_HLS = "asset-standard-hls"
+    ITUNES_HLS = "itunes-hls"
 
 
 class StreamSource(str, Enum):
@@ -19,6 +20,7 @@ class StreamSource(str, Enum):
     WEBPLAYBACK = "webplayback"
     WRAPPER = "wrapper"
     ASSETS = "assets"
+    ITUNES = "itunes"
 
 
 class HlsType(str, Enum):

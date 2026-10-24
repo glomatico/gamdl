@@ -30,15 +30,19 @@ from .song.models import (
 )
 from .stream import (
     AudioStream,
+    HlsStream,
     HlsSongStream,
     StreamSegment,
+    VideoStream,
     WebPlaybackStream,
 )
 from .music_video import MusicVideo
+from .music_video.stream import MusicVideoStreams
 from .uploaded_video import UploadedVideo
 
 __all__ = [
     "AudioStream",
+    "HlsStream",
     "Cover",
     "CoverCache",
     "DEFAULT_AUTO_SELECT",
@@ -52,6 +56,7 @@ __all__ = [
     "MediaResolver",
     "MediaSource",
     "MusicVideo",
+    "MusicVideoStreams",
     "SelectionKind",
     "SelectionOption",
     "SelectionRequest",
@@ -63,6 +68,7 @@ __all__ = [
     "StreamNotAvailableError",
     "StreamOrigin",
     "StreamSegment",
+    "VideoStream",
     "StreamSource",
     "StreamSourceOption",
     "StreamSourceSelectionRequest",

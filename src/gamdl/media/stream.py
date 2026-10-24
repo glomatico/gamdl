@@ -68,13 +68,13 @@ class StreamTransport:
             raise StreamManifestError("Invalid HLS playlist data") from exc
 
 
-class AudioStream:
-    """A selected audio resource; manifest and protection load on demand."""
+class HlsStream:
+    """One selected HLS media track; manifest and DRM load on demand."""
 
     def __init__(
         self,
         *,
-        codec: SongCodec,
+        codec: SongCodec | str,
         origin: StreamOrigin,
         url: str,
         transport: StreamTransport,
@@ -98,6 +98,8 @@ class AudioStream:
         """Identify the URL provider separately from HLS playlist structure."""
         if self.origin == StreamOrigin.WRAPPER_HLS:
             return StreamSource.WRAPPER
+        if self.origin == StreamOrigin.ITUNES_HLS:
+            return StreamSource.ITUNES
         if self.origin in {
             StreamOrigin.ASSET_ENHANCED_HLS,
             StreamOrigin.ASSET_STANDARD_HLS,
@@ -201,6 +203,27 @@ class AudioStream:
             )
 
         return await self._load("drm", load)
+
+
+class AudioStream(HlsStream):
+    """Selected audio track, with the existing SongCodec-based interface."""
+
+
+class VideoStream(HlsStream):
+    """Selected video track with resolution and frame-rate metadata."""
+
+    def __init__(
+        self,
+        *,
+        width: int | None = None,
+        height: int | None = None,
+        frame_rate: float | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.width = width
+        self.height = height
+        self.frame_rate = frame_rate
 
 
 class WebPlaybackStream(AudioStream):

@@ -3,7 +3,9 @@
 //! an entire fragment, preventing duplicated bytes after an interrupted request.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
+use std::time::Instant;
 
 use crate::decrypt::CencDecryptor;
 use futures_util::{StreamExt, stream};
@@ -20,6 +22,15 @@ const MAX_PART_SIZE: usize = 64 * 1024 * 1024;
 type Part = (String, Option<u64>, Option<u64>);
 type DownloadResult = Result<Vec<u8>, &'static str>;
 
+struct ProgressCounters {
+    transferred: AtomicU64,
+    emitted: AtomicU64,
+    completed: AtomicUsize,
+    total_parts: usize,
+    total_bytes: Option<u64>,
+    started: Instant,
+}
+
 fn valid_url(url: &Url) -> bool {
     if url.username() != "" || url.password().is_some() || url.fragment().is_some() {
         return false;
@@ -31,7 +42,12 @@ fn valid_url(url: &Url) -> bool {
     }
 }
 
-async fn fetch_part(client: Client, part: Part, retries: u32) -> DownloadResult {
+async fn fetch_part(
+    client: Client,
+    part: Part,
+    retries: u32,
+    progress: Arc<ProgressCounters>,
+) -> DownloadResult {
     let (url, start, end) = part;
     let range = match (start, end) {
         (Some(a), Some(b)) => Some((a, b)),
@@ -99,6 +115,9 @@ async fn fetch_part(client: Client, part: Part, retries: u32) -> DownloadResult 
         loop {
             match reply.chunk().await {
                 Ok(Some(bytes)) => {
+                    progress
+                        .transferred
+                        .fetch_add(bytes.len() as u64, Ordering::Relaxed);
                     if bytes.len() > MAX_PART_SIZE.saturating_sub(body.len()) {
                         return Err("Streaming fragment exceeds size limit");
                     }
@@ -140,6 +159,7 @@ async fn fetch_part(client: Client, part: Part, retries: u32) -> DownloadResult 
 pub(crate) struct NativeStream {
     receiver: Arc<Mutex<mpsc::Receiver<DownloadResult>>>,
     abort_handle: AbortHandle,
+    progress: Arc<ProgressCounters>,
 }
 
 #[pymethods]
@@ -200,12 +220,28 @@ impl NativeStream {
             }))
             .build()
             .map_err(|_| PyOSError::new_err("Unable to initialize streaming HTTP client"))?;
+        let total_bytes = parts.iter().try_fold(0u64, |sum, (_, start, end)| {
+            let (Some(start), Some(end)) = (start, end) else {
+                return None;
+            };
+            sum.checked_add(end - start + 1)
+        });
+        let progress = Arc::new(ProgressCounters {
+            transferred: AtomicU64::new(0),
+            emitted: AtomicU64::new(0),
+            completed: AtomicUsize::new(0),
+            total_parts: parts.len(),
+            total_bytes,
+            started: Instant::now(),
+        });
         let (sender, receiver) = mpsc::channel(2);
+        let worker_progress = Arc::clone(&progress);
         let job = pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
             let mut decryptor = decryptor;
             let tasks = stream::iter(parts).map(|part| {
                 let client = client.clone();
-                async move { fetch_part(client, part, retries).await }
+                let progress = Arc::clone(&worker_progress);
+                async move { fetch_part(client, part, retries, progress).await }
             });
             let mut ready = tasks.buffered(concurrency);
             while let Some(result) = ready.next().await {
@@ -222,6 +258,7 @@ impl NativeStream {
                                 return;
                             }
                         }
+                        worker_progress.completed.fetch_add(1, Ordering::Relaxed);
                     }
                     Err(error) => {
                         let _ = sender.send(Err(error)).await;
@@ -233,15 +270,20 @@ impl NativeStream {
         Ok(Self {
             receiver: Arc::new(Mutex::new(receiver)),
             abort_handle: job.abort_handle(),
+            progress,
         })
     }
 
     fn next_chunk<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let receiver = self.receiver.clone();
+        let progress = Arc::clone(&self.progress);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let result = receiver.lock().await.recv().await;
             match result {
                 Some(Ok(bytes)) => {
+                    progress
+                        .emitted
+                        .fetch_add(bytes.len() as u64, Ordering::Relaxed);
                     Python::attach(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
                 }
                 Some(Err(msg)) => Err(PyOSError::new_err(msg)),
@@ -252,6 +294,17 @@ impl NativeStream {
 
     fn close(&self) {
         self.abort_handle.abort();
+    }
+
+    fn progress(&self) -> (u64, u64, usize, usize, Option<u64>, f64) {
+        (
+            self.progress.transferred.load(Ordering::Relaxed),
+            self.progress.emitted.load(Ordering::Relaxed),
+            self.progress.completed.load(Ordering::Relaxed),
+            self.progress.total_parts,
+            self.progress.total_bytes,
+            self.progress.started.elapsed().as_secs_f64(),
+        )
     }
 }
 

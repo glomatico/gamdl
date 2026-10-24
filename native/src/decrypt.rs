@@ -1,8 +1,9 @@
-//! Strict AES-CTR CENC decryption of complete fragmented-MP4 HLS parts.
+//! Strict CENC (AES-CTR) and CBCS (AES-CBC) decryption of fragmented MP4.
 //! Never outputs partially decrypted media; unknown schemes fail closed.
 //! Only a single protected audio or video track is supported initially.
 
 use aes::Aes128;
+use aes::cipher::{BlockDecrypt, KeyInit, generic_array::GenericArray};
 use ctr::Ctr128BE;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 
@@ -16,6 +17,75 @@ struct BoxPos {
     data: usize,
     end: usize,
     kind: [u8; 4],
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEY: [u8; 16] = [
+        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f,
+        0x3c,
+    ];
+    const IV: [u8; 16] = [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f,
+    ];
+    const CT1: [u8; 16] = [
+        0x76, 0x49, 0xab, 0xac, 0x81, 0x19, 0xb2, 0x46, 0xce, 0xe9, 0x8e, 0x9b, 0x12, 0xe9, 0x19,
+        0x7d,
+    ];
+    const CT2: [u8; 16] = [
+        0x50, 0x86, 0xcb, 0x9b, 0x50, 0x72, 0x19, 0xee, 0x95, 0xdb, 0x11, 0x3a, 0x91, 0x76, 0x78,
+        0xb2,
+    ];
+    const PT1: [u8; 16] = [
+        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17,
+        0x2a,
+    ];
+    const PT2: [u8; 16] = [
+        0xae, 0x2d, 0x8a, 0x57, 0x1e, 0x03, 0xac, 0x9c, 0x9e, 0xb7, 0x6f, 0xac, 0x45, 0xaf, 0x8e,
+        0x51,
+    ];
+
+    #[test]
+    fn cbcs_unpatterned_matches_nist_sp800_38a_cbc_vector() {
+        let cipher = Aes128::new((&KEY).into());
+        let mut chain = IV;
+        let mut data = [CT1.as_slice(), CT2.as_slice(), b"tail".as_slice()].concat();
+        decrypt_cbcs_range(&mut data, &cipher, &mut chain, 0, 0);
+        assert_eq!(
+            data,
+            [PT1.as_slice(), PT2.as_slice(), b"tail".as_slice()].concat()
+        );
+        assert_eq!(chain, CT2);
+    }
+
+    #[test]
+    fn cbcs_pattern_skips_clear_blocks_without_advancing_chain() {
+        let cipher = Aes128::new((&KEY).into());
+        let mut chain = IV;
+        let skipped = b"clear skip block";
+        let mut data = [CT1.as_slice(), skipped, CT2.as_slice(), b"last".as_slice()].concat();
+        decrypt_cbcs_range(&mut data, &cipher, &mut chain, 1, 1);
+        assert_eq!(
+            data,
+            [PT1.as_slice(), skipped, PT2.as_slice(), b"last".as_slice()].concat()
+        );
+        assert_eq!(chain, CT2);
+    }
+
+    #[test]
+    fn cbcs_cipher_chain_continues_across_subsamples() {
+        let cipher = Aes128::new((&KEY).into());
+        let mut chain = IV;
+        let mut one = CT1;
+        let mut two = CT2;
+        decrypt_cbcs_range(&mut one, &cipher, &mut chain, 0, 0);
+        decrypt_cbcs_range(&mut two, &cipher, &mut chain, 0, 0);
+        assert_eq!(one, PT1);
+        assert_eq!(two, PT2);
+    }
 }
 
 fn u16_at(buf: &[u8], at: usize) -> Result<u16> {
@@ -89,17 +159,60 @@ fn child(buf: &[u8], parent: BoxPos, name: &[u8; 4], skip: usize) -> Result<BoxP
 
 struct EncryptionConfig {
     track_id: u32,
-    iv_size: usize,
+    default_description: usize,
     default_size: usize,
+    descriptions: Vec<SampleEncryption>,
 }
 
-pub(crate) struct CencDecryptor {
+struct SampleEncryption {
+    scheme: EncryptionScheme,
+    iv_size: usize,
+    constant_iv: Option<[u8; 16]>,
+    crypt_blocks: u8,
+    skip_blocks: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EncryptionScheme {
+    Cenc,
+    Cbcs,
+}
+
+/// CBCS crypt/skip patterns restart at the beginning of each encrypted
+/// subsample, but the CBC chaining IV advances only on encrypted blocks.
+/// Partial final blocks are always plaintext. No padding is added or removed.
+fn decrypt_cbcs_range(
+    data: &mut [u8],
+    cipher: &Aes128,
+    chain: &mut [u8; 16],
+    crypt_blocks: u8,
+    skip_blocks: u8,
+) {
+    let mut block_index = 0usize;
+    let period = crypt_blocks as usize + skip_blocks as usize;
+    for block in data.chunks_exact_mut(16) {
+        let is_encrypted = period == 0 || block_index % period < crypt_blocks as usize;
+        if is_encrypted {
+            let mut ciphertext = [0u8; 16];
+            ciphertext.copy_from_slice(block);
+            let mut work = GenericArray::clone_from_slice(block);
+            cipher.decrypt_block(&mut work);
+            for (index, plain) in block.iter_mut().enumerate() {
+                *plain = work[index] ^ chain[index];
+            }
+            *chain = ciphertext;
+        }
+        block_index += 1;
+    }
+}
+
+pub(crate) struct Mp4Decryptor {
     key: [u8; 16],
     expected_kid: Option<[u8; 16]>,
     config: Option<EncryptionConfig>,
     input_offset: u64,
 }
-impl CencDecryptor {
+impl Mp4Decryptor {
     pub(crate) fn new(
         key: Option<Vec<u8>>,
         kid: Option<Vec<u8>>,
@@ -109,11 +222,11 @@ impl CencDecryptor {
             (Some(key), kid) => {
                 let key: [u8; 16] = key
                     .try_into()
-                    .map_err(|_| "CENC key must contain exactly 16 bytes")?;
+                    .map_err(|_| "MP4 AES key must contain exactly 16 bytes")?;
                 let expected_kid = kid
                     .map(|kid| {
                         kid.try_into()
-                            .map_err(|_| "CENC key ID must contain exactly 16 bytes")
+                            .map_err(|_| "MP4 key ID must contain exactly 16 bytes")
                     })
                     .transpose()?;
                 Ok(Some(Self {
@@ -123,7 +236,7 @@ impl CencDecryptor {
                     input_offset: 0,
                 }))
             }
-            (None, Some(_)) => Err("A CENC key ID requires a decryption key"),
+            (None, Some(_)) => Err("An MP4 key ID requires a decryption key"),
         }
     }
     fn parse_init(&mut self, buf: &mut [u8], moov: BoxPos) -> Result<()> {
@@ -150,82 +263,143 @@ impl CencDecryptor {
             let minf = child(buf, mdia, b"minf", 0)?;
             let stbl = child(buf, minf, b"stbl", 0)?;
             let stsd = child(buf, stbl, b"stsd", 0)?;
-            if u32_at(buf, stsd.data + 4)? != 1 {
+            let count = u32_at(buf, stsd.data + 4)? as usize;
+            if count == 0 || count > 16 {
                 return Err(UNSUPPORTED);
             }
-            let entry = boxes(buf, stsd.data + 8, stsd.end)?
-                .into_iter()
-                .next()
-                .ok_or(MALFORMED)?;
+            let entries = boxes(buf, stsd.data + 8, stsd.end)?;
+            if entries.len() != count {
+                return Err(MALFORMED);
+            }
             let video = handler == Some(b"vide");
-            if (video && &entry.kind != b"encv") || (!video && &entry.kind != b"enca") {
-                return Err(UNSUPPORTED);
-            }
-            // Audio entry header: 36 bytes; visual entry header: 86 bytes.
-            // The box data starts after the first 8 bytes of either header.
-            let sinf = child(buf, entry, b"sinf", if video { 78 } else { 28 })?;
-            let schm = child(buf, sinf, b"schm", 0)?;
-            if buf.get(schm.data + 4..schm.data + 8) != Some(b"cenc") {
-                return Err("Only AES-CTR/CENC decryption is supported");
-            }
-            let frma = child(buf, sinf, b"frma", 0)?;
-            let format: [u8; 4] = buf
-                .get(frma.data..frma.data + 4)
-                .ok_or(MALFORMED)?
-                .try_into()
-                .map_err(|_| MALFORMED)?;
-            let supported = if video {
-                matches!(
-                    &format,
-                    b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"av01" | b"mp4v"
-                )
-            } else {
-                matches!(&format, b"mp4a" | b"alac" | b"ac-3" | b"ec-3")
-            };
-            if !supported {
-                return Err(UNSUPPORTED);
-            }
-            let schi = child(buf, sinf, b"schi", 0)?;
-            let tenc = child(buf, schi, b"tenc", 0)?;
-            if buf.get(tenc.data) != Some(&0) {
-                return Err(UNSUPPORTED);
-            }
-            if buf.get(tenc.data + 6) != Some(&1) {
-                return Err(UNSUPPORTED);
-            }
-            let iv_size = *buf.get(tenc.data + 7).ok_or(MALFORMED)? as usize;
-            if iv_size != 8 && iv_size != 16 {
-                return Err(UNSUPPORTED);
-            }
-            let kid: [u8; 16] = buf
-                .get(tenc.data + 8..tenc.data + 24)
-                .ok_or(MALFORMED)?
-                .try_into()
-                .map_err(|_| MALFORMED)?;
-            if self.expected_kid.is_some_and(|expected| expected != kid) {
-                return Err("Decryption key ID does not match the encrypted media");
+            let mut descriptions = Vec::with_capacity(count);
+            let mut first_kid = None;
+            for entry in entries {
+                if (video && &entry.kind != b"encv") || (!video && &entry.kind != b"enca") {
+                    return Err(UNSUPPORTED);
+                }
+                // Audio entry header: 36 bytes; visual entry header: 86 bytes.
+                // The box data starts after the first 8 bytes of either header.
+                let sinf = child(buf, entry, b"sinf", if video { 78 } else { 28 })?;
+                let schm = child(buf, sinf, b"schm", 0)?;
+                let scheme = match buf.get(schm.data + 4..schm.data + 8) {
+                    Some(b"cenc") => EncryptionScheme::Cenc,
+                    Some(b"cbcs") => EncryptionScheme::Cbcs,
+                    _ => return Err("Only CENC/AES-CTR and CBCS/AES-CBC are supported"),
+                };
+                let frma = child(buf, sinf, b"frma", 0)?;
+                let format: [u8; 4] = buf
+                    .get(frma.data..frma.data + 4)
+                    .ok_or(MALFORMED)?
+                    .try_into()
+                    .map_err(|_| MALFORMED)?;
+                let supported = if video {
+                    matches!(
+                        &format,
+                        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"av01" | b"mp4v"
+                    )
+                } else {
+                    matches!(&format, b"mp4a" | b"alac" | b"ac-3" | b"ec-3")
+                };
+                if !supported {
+                    return Err(UNSUPPORTED);
+                }
+                let schi = child(buf, sinf, b"schi", 0)?;
+                let tenc = child(buf, schi, b"tenc", 0)?;
+                let version = *buf.get(tenc.data).ok_or(MALFORMED)?;
+                if version > 1 {
+                    return Err(UNSUPPORTED);
+                }
+                let pattern = if version == 1 {
+                    *buf.get(tenc.data + 4).ok_or(MALFORMED)?
+                } else {
+                    0
+                };
+                let crypt_blocks = pattern >> 4;
+                let skip_blocks = pattern & 0x0f;
+                if scheme == EncryptionScheme::Cenc && pattern != 0 {
+                    return Err(UNSUPPORTED);
+                }
+                if scheme == EncryptionScheme::Cbcs && crypt_blocks == 0 && skip_blocks != 0 {
+                    return Err(UNSUPPORTED);
+                }
+                if buf.get(tenc.data + 6) != Some(&1) {
+                    return Err(UNSUPPORTED);
+                }
+                let iv_size = *buf.get(tenc.data + 7).ok_or(MALFORMED)? as usize;
+                if iv_size != 0 && iv_size != 8 && iv_size != 16 {
+                    return Err(UNSUPPORTED);
+                }
+                if scheme == EncryptionScheme::Cenc && iv_size == 0 {
+                    return Err(UNSUPPORTED);
+                }
+                if scheme == EncryptionScheme::Cbcs && iv_size != 0 && iv_size != 16 {
+                    return Err(UNSUPPORTED);
+                }
+                let constant_iv = if iv_size == 0 {
+                    let size = *buf.get(tenc.data + 24).ok_or(MALFORMED)? as usize;
+                    if size != 16 {
+                        return Err(UNSUPPORTED);
+                    }
+                    Some(
+                        buf.get(tenc.data + 25..tenc.data + 25 + size)
+                            .ok_or(MALFORMED)?
+                            .try_into()
+                            .map_err(|_| MALFORMED)?,
+                    )
+                } else {
+                    None
+                };
+                let kid: [u8; 16] = buf
+                    .get(tenc.data + 8..tenc.data + 24)
+                    .ok_or(MALFORMED)?
+                    .try_into()
+                    .map_err(|_| MALFORMED)?;
+                if self.expected_kid.is_some_and(|expected| expected != kid) {
+                    return Err("Decryption key ID does not match the encrypted media");
+                }
+                // A single Stream currently accepts one content key. Distinct
+                // KIDs across sample descriptions require future multi-key API.
+                if first_kid.is_some_and(|previous| previous != kid) {
+                    return Err("Multiple content key IDs require a multi-key decryptor");
+                }
+                first_kid = Some(kid);
+                descriptions.push(SampleEncryption {
+                    scheme,
+                    iv_size,
+                    constant_iv,
+                    crypt_blocks,
+                    skip_blocks,
+                });
+                // Metadata remains the exact same byte length as the original
+                // initialization segment so all fragment offsets stay valid.
+                buf[entry.start + 4..entry.start + 8].copy_from_slice(&format);
+                buf[sinf.start + 4..sinf.start + 8].copy_from_slice(b"free");
             }
             let mut default_size = 0;
+            let mut default_description = 1;
             if let Ok(mvex) = child(buf, moov, b"mvex", 0) {
                 for trex in boxes(buf, mvex.data, mvex.end)?
                     .into_iter()
                     .filter(|b| &b.kind == b"trex")
                 {
                     if u32_at(buf, trex.data + 4)? == track_id {
+                        default_description = u32_at(buf, trex.data + 8)? as usize;
                         default_size = u32_at(buf, trex.data + 16)? as usize;
                     }
                 }
             }
-            // No box sizes or fragment offsets change when hiding encryption metadata.
-            buf[entry.start + 4..entry.start + 8].copy_from_slice(&format);
-            buf[sinf.start + 4..sinf.start + 8].copy_from_slice(b"free");
+            if default_description == 0 || default_description > descriptions.len() {
+                return Err(UNSUPPORTED);
+            }
             if selected.is_some() {
                 return Err(UNSUPPORTED);
             }
             selected = Some(EncryptionConfig {
                 track_id,
-                iv_size,
+                default_description,
                 default_size,
+                descriptions,
             });
         }
         self.config = Some(selected.ok_or("Expected an encrypted audio or video MP4 track")?);
@@ -260,12 +434,17 @@ impl CencDecryptor {
             } else {
                 moof.start
             };
-            if flags & 0x02 != 0 {
-                if u32_at(buf, pos)? != 1 {
-                    return Err(UNSUPPORTED);
-                }
+            let description_index = if flags & 0x02 != 0 {
+                let index = u32_at(buf, pos)? as usize;
                 pos += 4;
-            }
+                index
+            } else {
+                cfg.default_description
+            };
+            let desc = cfg
+                .descriptions
+                .get(description_index.checked_sub(1).ok_or(UNSUPPORTED)?)
+                .ok_or(UNSUPPORTED)?;
             if flags & 0x08 != 0 {
                 pos += 4;
             }
@@ -280,6 +459,13 @@ impl CencDecryptor {
             let mut senc = None;
             for atom in boxes(buf, traf.data, traf.end)? {
                 match &atom.kind {
+                    b"sbgp" | b"sgpd" => {
+                        // seig groups can override the per-sample KID,
+                        // pattern or IV. Refuse them until implemented.
+                        if buf.get(atom.data + 4..atom.data + 8) == Some(b"seig") {
+                            return Err("Sample-group encryption overrides are not supported");
+                        }
+                    }
                     b"trun" => {
                         if seen_trun {
                             return Err(UNSUPPORTED);
@@ -336,7 +522,7 @@ impl CencDecryptor {
             if !seen_trun {
                 return Err(UNSUPPORTED);
             }
-            let senc = senc.ok_or("CENC fragment has no sample encryption metadata")?;
+            let senc = senc.ok_or("Encrypted fragment has no sample encryption metadata")?;
             let flags = u32_at(buf, senc.data)? & 0x00ff_ffff;
             if flags & !2 != 0 {
                 return Err(UNSUPPORTED);
@@ -348,10 +534,12 @@ impl CencDecryptor {
             let mut senpos = senc.data + 8;
             let mut samplepos = offset.unwrap_or(mdat.data);
             for size in samples {
-                let iv = buf.get(senpos..senpos + cfg.iv_size).ok_or(MALFORMED)?;
-                let mut full_iv = [0u8; 16];
-                full_iv[..cfg.iv_size].copy_from_slice(iv);
-                senpos += cfg.iv_size;
+                let mut full_iv = desc.constant_iv.unwrap_or([0u8; 16]);
+                let iv = buf.get(senpos..senpos + desc.iv_size).ok_or(MALFORMED)?;
+                if desc.iv_size > 0 {
+                    full_iv[..desc.iv_size].copy_from_slice(iv);
+                }
+                senpos += desc.iv_size;
                 let mut subsamples = Vec::new();
                 if flags & 2 != 0 {
                     let sub_count = u16_at(buf, senpos)? as usize;
@@ -371,23 +559,35 @@ impl CencDecryptor {
                     return Err(MALFORMED);
                 }
                 let sample = &mut buf[samplepos..end];
-                let mut cipher = Ctr128BE::<Aes128>::new((&self.key).into(), (&full_iv).into());
+                // Every sample starts with a fresh IV. Transparent regions
+                // in subsample encryption do not advance the cipher.
                 if subsamples.is_empty() {
-                    cipher.apply_keystream(sample);
-                } else {
-                    let mut cursor = 0usize;
-                    for (clear, encrypted) in subsamples {
-                        cursor = cursor.checked_add(clear).ok_or(MALFORMED)?;
-                        let next = cursor.checked_add(encrypted).ok_or(MALFORMED)?;
-                        if next > sample.len() {
-                            return Err(MALFORMED);
-                        }
-                        cipher.apply_keystream(&mut sample[cursor..next]);
-                        cursor = next;
-                    }
-                    if cursor > sample.len() {
+                    subsamples.push((0, sample.len()));
+                }
+                let mut cursor = 0usize;
+                let mut ctr = (desc.scheme == EncryptionScheme::Cenc)
+                    .then(|| Ctr128BE::<Aes128>::new((&self.key).into(), (&full_iv).into()));
+                let cbc = (desc.scheme == EncryptionScheme::Cbcs)
+                    .then(|| Aes128::new((&self.key).into()));
+                let mut chain = full_iv;
+                for (clear, encrypted) in subsamples {
+                    cursor = cursor.checked_add(clear).ok_or(MALFORMED)?;
+                    let next = cursor.checked_add(encrypted).ok_or(MALFORMED)?;
+                    if next > sample.len() {
                         return Err(MALFORMED);
                     }
+                    if let Some(cipher) = ctr.as_mut() {
+                        cipher.apply_keystream(&mut sample[cursor..next]);
+                    } else if let Some(cipher) = cbc.as_ref() {
+                        decrypt_cbcs_range(
+                            &mut sample[cursor..next],
+                            cipher,
+                            &mut chain,
+                            desc.crypt_blocks,
+                            desc.skip_blocks,
+                        );
+                    }
+                    cursor = next;
                 }
                 samplepos = end;
             }

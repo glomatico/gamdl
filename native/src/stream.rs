@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::decrypt::CencDecryptor;
+use crate::decrypt::Mp4Decryptor;
 use futures_util::{StreamExt, stream};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -174,8 +174,7 @@ impl NativeStream {
         decryption_key: Option<Vec<u8>>,
         key_id: Option<Vec<u8>>,
     ) -> PyResult<Self> {
-        let decryptor =
-            CencDecryptor::new(decryption_key, key_id).map_err(PyValueError::new_err)?;
+        let decryptor = Mp4Decryptor::new(decryption_key, key_id).map_err(PyValueError::new_err)?;
         if parts.is_empty() || parts.len() > 100_000 {
             return Err(PyValueError::new_err(
                 "Expected between 1 and 100000 streaming parts",

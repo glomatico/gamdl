@@ -2,9 +2,9 @@
 
 Playlist discovery remains in gamdl.media. Network segment fetching, bounded
 concurrency and retries are implemented by the native Tokio/reqwest backend.
-Without a decryption key, this layer yields the raw potentially encrypted
-HLS bytes. With a 16-byte CENC key, Rust decrypts fragmented MP4 samples
-before yielding or saving, preserving the fragment layout.
+Without a decryption key, this layer yields potentially encrypted HLS bytes.
+With a 16-byte AES key, Rust decrypts CENC/AES-CTR or CBCS/AES-CBC samples
+before yielding or saving, preserving the fragmented MP4 layout.
 """
 
 from __future__ import annotations
@@ -81,8 +81,9 @@ class Stream(AsyncIterator[bytes]):
 
     Stream owns the native HTTP client and cancels pending fragment requests
     when the context exits. Pass decryption_key as a ContentKey (preferred,
-    verifies the key ID) or 16-byte AES key to decrypt CENC/AES-CTR audio.
-    CBCS, key rotation and muxing are not supported yet.
+    verifies the key ID) or 16-byte AES key to decrypt CENC/AES-CTR and
+    CBCS/AES-CBC audio or video tracks. Multi-key tracks and muxing are
+    not supported yet.
     Do not share one Stream iterator between independent consumers.
     """
 

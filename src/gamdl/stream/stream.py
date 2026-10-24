@@ -16,7 +16,7 @@ from tempfile import NamedTemporaryFile
 
 from gamdl import _native
 from gamdl.drm.models import ContentKey
-from gamdl.media import HlsStream
+from gamdl.media import AudioStream, HlsStream, StreamOrigin
 from gamdl.media.exceptions import StreamManifestError
 from .progress import StreamProgress
 
@@ -82,8 +82,10 @@ class Stream(AsyncIterator[bytes]):
     Stream owns the native HTTP client and cancels pending fragment requests
     when the context exits. Pass decryption_key as a ContentKey (preferred,
     verifies the key ID) or 16-byte AES key to decrypt CENC/AES-CTR and
-    CBCS/AES-CBC audio or video tracks. Multi-key tracks and muxing are
-    not supported yet.
+    CBCS/AES-CBC audio or video tracks. Enhanced HLS song CBCS automatically
+    applies the legacy prefetch key to sample description 1 and the supplied
+    content key to description 2. Other streams use only the supplied key.
+    Arbitrary key rotation and muxing are not supported yet.
     Do not share one Stream iterator between independent consumers.
     """
 
@@ -130,6 +132,8 @@ class Stream(AsyncIterator[bytes]):
                 self.retries,
                 self._key,
                 self._kid,
+                isinstance(self.source, AudioStream)
+                and self.source.origin == StreamOrigin.ASSET_ENHANCED_HLS,
             )
         finally:
             # The worker now owns the native copy (or validation has failed).

@@ -10,6 +10,10 @@ use ctr::cipher::{KeyIvInit, StreamCipher};
 type Result<T> = std::result::Result<T, &'static str>;
 const MALFORMED: &str = "Malformed fragmented MP4 encryption metadata";
 const UNSUPPORTED: &str = "Unsupported fragmented MP4 encryption layout";
+// Legacy Gamdl 3.x fixed prefetch key used ONLY by enhanced-HLS CBCS songs.
+const ENHANCED_HLS_PREFETCH_KEY: [u8; 16] = [
+    0x32, 0xb8, 0xad, 0xe1, 0x76, 0x9e, 0x26, 0xb1, 0xff, 0xb8, 0x98, 0x63, 0x52, 0x79, 0x3f, 0xc6,
+];
 
 #[derive(Clone, Copy)]
 struct BoxPos {
@@ -162,6 +166,7 @@ struct EncryptionConfig {
     default_description: usize,
     default_size: usize,
     descriptions: Vec<SampleEncryption>,
+    enhanced_song_prefetch: bool,
 }
 
 struct SampleEncryption {
@@ -209,6 +214,7 @@ fn decrypt_cbcs_range(
 pub(crate) struct Mp4Decryptor {
     key: [u8; 16],
     expected_kid: Option<[u8; 16]>,
+    enhanced_hls_song: bool,
     config: Option<EncryptionConfig>,
     input_offset: u64,
 }
@@ -216,6 +222,7 @@ impl Mp4Decryptor {
     pub(crate) fn new(
         key: Option<Vec<u8>>,
         kid: Option<Vec<u8>>,
+        enhanced_hls_song: bool,
     ) -> std::result::Result<Option<Self>, &'static str> {
         match (key, kid) {
             (None, None) => Ok(None),
@@ -232,6 +239,7 @@ impl Mp4Decryptor {
                 Ok(Some(Self {
                     key,
                     expected_kid,
+                    enhanced_hls_song,
                     config: None,
                     input_offset: 0,
                 }))
@@ -355,9 +363,6 @@ impl Mp4Decryptor {
                     .ok_or(MALFORMED)?
                     .try_into()
                     .map_err(|_| MALFORMED)?;
-                if self.expected_kid.is_some_and(|expected| expected != kid) {
-                    return Err("Decryption key ID does not match the encrypted media");
-                }
                 // A single Stream currently accepts one content key. Distinct
                 // KIDs across sample descriptions require future multi-key API.
                 if first_kid.is_some_and(|previous| previous != kid) {
@@ -375,6 +380,23 @@ impl Mp4Decryptor {
                 // initialization segment so all fragment offsets stay valid.
                 buf[entry.start + 4..entry.start + 8].copy_from_slice(&format);
                 buf[sinf.start + 4..sinf.start + 8].copy_from_slice(b"free");
+            }
+            // Apple enhanced-HLS CBCS songs use the fixed prefetch key for
+            // description 1 and the licensed key for description 2. The
+            // license's KID may differ from both MP4 tenc KIDs. Other audio
+            // and all video streams must never use this legacy key mapping.
+            let enhanced_song_prefetch = self.enhanced_hls_song
+                && !video
+                && descriptions.len() == 2
+                && descriptions
+                    .iter()
+                    .all(|desc| desc.scheme == EncryptionScheme::Cbcs);
+            if !enhanced_song_prefetch
+                && self
+                    .expected_kid
+                    .is_some_and(|expected| Some(expected) != first_kid)
+            {
+                return Err("Decryption key ID does not match the encrypted media");
             }
             let mut default_size = 0;
             let mut default_description = 1;
@@ -400,6 +422,7 @@ impl Mp4Decryptor {
                 default_description,
                 default_size,
                 descriptions,
+                enhanced_song_prefetch,
             });
         }
         self.config = Some(selected.ok_or("Expected an encrypted audio or video MP4 track")?);
@@ -445,6 +468,11 @@ impl Mp4Decryptor {
                 .descriptions
                 .get(description_index.checked_sub(1).ok_or(UNSUPPORTED)?)
                 .ok_or(UNSUPPORTED)?;
+            let key = if cfg.enhanced_song_prefetch && description_index == 1 {
+                &ENHANCED_HLS_PREFETCH_KEY
+            } else {
+                &self.key
+            };
             if flags & 0x08 != 0 {
                 pos += 4;
             }
@@ -566,9 +594,8 @@ impl Mp4Decryptor {
                 }
                 let mut cursor = 0usize;
                 let mut ctr = (desc.scheme == EncryptionScheme::Cenc)
-                    .then(|| Ctr128BE::<Aes128>::new((&self.key).into(), (&full_iv).into()));
-                let cbc = (desc.scheme == EncryptionScheme::Cbcs)
-                    .then(|| Aes128::new((&self.key).into()));
+                    .then(|| Ctr128BE::<Aes128>::new(key.into(), (&full_iv).into()));
+                let cbc = (desc.scheme == EncryptionScheme::Cbcs).then(|| Aes128::new(key.into()));
                 let mut chain = full_iv;
                 for (clear, encrypted) in subsamples {
                     cursor = cursor.checked_add(clear).ok_or(MALFORMED)?;

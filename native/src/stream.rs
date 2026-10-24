@@ -165,7 +165,7 @@ pub(crate) struct NativeStream {
 #[pymethods]
 impl NativeStream {
     #[new]
-    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None))]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false))]
     fn new(
         parts: Vec<Part>,
         concurrency: usize,
@@ -173,8 +173,10 @@ impl NativeStream {
         retries: u32,
         decryption_key: Option<Vec<u8>>,
         key_id: Option<Vec<u8>>,
+        enhanced_hls_song: bool,
     ) -> PyResult<Self> {
-        let decryptor = Mp4Decryptor::new(decryption_key, key_id).map_err(PyValueError::new_err)?;
+        let decryptor = Mp4Decryptor::new(decryption_key, key_id, enhanced_hls_song)
+            .map_err(PyValueError::new_err)?;
         if parts.is_empty() || parts.len() > 100_000 {
             return Err(PyValueError::new_err(
                 "Expected between 1 and 100000 streaming parts",

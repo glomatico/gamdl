@@ -2,6 +2,7 @@
 //! Never outputs partially decrypted media; unknown schemes fail closed.
 //! Only a single protected audio or video track is supported initially.
 
+use crate::wrapper::{BATCH_SIZE, WrapperSession};
 use aes::Aes128;
 use aes::cipher::{BlockDecrypt, KeyInit, generic_array::GenericArray};
 use ctr::Ctr128BE;
@@ -177,6 +178,13 @@ struct SampleEncryption {
     skip_blocks: u8,
 }
 
+struct WrapperPending {
+    start: usize,
+    ranges: Vec<(usize, usize)>,
+    aligned: Vec<u8>,
+    tail: Vec<u8>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum EncryptionScheme {
     Cenc,
@@ -215,6 +223,7 @@ pub(crate) struct Mp4Decryptor {
     key: [u8; 16],
     expected_kid: Option<[u8; 16]>,
     enhanced_hls_song: bool,
+    wrapper_mode: bool,
     config: Option<EncryptionConfig>,
     input_offset: u64,
 }
@@ -223,7 +232,18 @@ impl Mp4Decryptor {
         key: Option<Vec<u8>>,
         kid: Option<Vec<u8>>,
         enhanced_hls_song: bool,
+        wrapper_mode: bool,
     ) -> std::result::Result<Option<Self>, &'static str> {
+        if wrapper_mode && key.is_none() && kid.is_none() {
+            return Ok(Some(Self {
+                key: [0u8; 16],
+                expected_kid: None,
+                enhanced_hls_song,
+                wrapper_mode,
+                config: None,
+                input_offset: 0,
+            }));
+        }
         match (key, kid) {
             (None, None) => Ok(None),
             (Some(key), kid) => {
@@ -240,6 +260,7 @@ impl Mp4Decryptor {
                     key,
                     expected_kid,
                     enhanced_hls_song,
+                    wrapper_mode,
                     config: None,
                     input_offset: 0,
                 }))
@@ -391,6 +412,15 @@ impl Mp4Decryptor {
                 && descriptions
                     .iter()
                     .all(|desc| desc.scheme == EncryptionScheme::Cbcs);
+            if self.wrapper_mode
+                && (video
+                    || descriptions.iter().any(|desc| {
+                        desc.scheme != EncryptionScheme::Cbcs
+                            || (desc.crypt_blocks != 0 && desc.skip_blocks != 0)
+                    }))
+            {
+                return Err("Wrapper sample delivery supports only non-pattern CBCS song audio");
+            }
             if !enhanced_song_prefetch
                 && self
                     .expected_kid
@@ -428,12 +458,21 @@ impl Mp4Decryptor {
         self.config = Some(selected.ok_or("Expected an encrypted audio or video MP4 track")?);
         Ok(())
     }
-    fn decrypt_fragment(&self, buf: &mut [u8], moof: BoxPos, mdat: BoxPos) -> Result<()> {
+    async fn decrypt_fragment(
+        &self,
+        buf: &mut [u8],
+        moof: BoxPos,
+        mdat: BoxPos,
+        mut wrapper: Option<&mut WrapperSession>,
+        media_id: &str,
+        fairplay_key: &str,
+    ) -> Result<()> {
         let cfg = self
             .config
             .as_ref()
             .ok_or("Encrypted MP4 requires an initialization section")?;
         let mut handled = false;
+        let mut pending_wrapper = Vec::new();
         for traf in boxes(buf, moof.data, moof.end)?
             .into_iter()
             .filter(|b| &b.kind == b"traf")
@@ -483,7 +522,7 @@ impl Mp4Decryptor {
             };
             let mut samples = Vec::new();
             let mut seen_trun = false;
-            let mut offset = None;
+            let mut run_end = None;
             let mut senc = None;
             for atom in boxes(buf, traf.data, traf.end)? {
                 match &atom.kind {
@@ -495,25 +534,24 @@ impl Mp4Decryptor {
                         }
                     }
                     b"trun" => {
-                        if seen_trun {
-                            return Err(UNSUPPORTED);
-                        }
                         seen_trun = true;
                         let flags = u32_at(buf, atom.data)? & 0x00ff_ffff;
                         let count = u32_at(buf, atom.data + 4)? as usize;
-                        if count > 100_000 {
+                        if count > 100_000 || samples.len() > 100_000 - count {
                             return Err(UNSUPPORTED);
                         }
                         let mut at = atom.data + 8;
-                        if flags & 1 != 0 {
+                        let mut run_position = if flags & 1 != 0 {
                             let relative = u32_at(buf, at)? as i32 as i64;
                             let abs = (base as i64).checked_add(relative).ok_or(MALFORMED)?;
                             if abs < 0 {
                                 return Err(MALFORMED);
                             }
-                            offset = Some(abs as usize);
                             at += 4;
-                        }
+                            usize::try_from(abs).map_err(|_| MALFORMED)?
+                        } else {
+                            run_end.unwrap_or(mdat.data)
+                        };
                         if flags & 0x04 != 0 {
                             at += 4;
                         }
@@ -537,8 +575,10 @@ impl Mp4Decryptor {
                             if size == 0 || at > atom.end {
                                 return Err(MALFORMED);
                             }
-                            samples.push(size);
+                            samples.push((run_position, size));
+                            run_position = run_position.checked_add(size).ok_or(MALFORMED)?;
                         }
+                        run_end = Some(run_position);
                         if at > atom.end {
                             return Err(MALFORMED);
                         }
@@ -560,8 +600,7 @@ impl Mp4Decryptor {
                 return Err(MALFORMED);
             }
             let mut senpos = senc.data + 8;
-            let mut samplepos = offset.unwrap_or(mdat.data);
-            for size in samples {
+            for (samplepos, size) in samples {
                 let mut full_iv = desc.constant_iv.unwrap_or([0u8; 16]);
                 let iv = buf.get(senpos..senpos + desc.iv_size).ok_or(MALFORMED)?;
                 if desc.iv_size > 0 {
@@ -592,6 +631,31 @@ impl Mp4Decryptor {
                 if subsamples.is_empty() {
                     subsamples.push((0, sample.len()));
                 }
+                if self.wrapper_mode && !(cfg.enhanced_song_prefetch && description_index == 1) {
+                    let mut cipher_bytes = Vec::new();
+                    let mut cursor = 0usize;
+                    let mut ranges = Vec::new();
+                    for &(clear, encrypted) in &subsamples {
+                        cursor = cursor.checked_add(clear).ok_or(MALFORMED)?;
+                        let next = cursor.checked_add(encrypted).ok_or(MALFORMED)?;
+                        if next > sample.len() {
+                            return Err(MALFORMED);
+                        }
+                        cipher_bytes.extend_from_slice(&sample[cursor..next]);
+                        ranges.push((cursor, encrypted));
+                        cursor = next;
+                    }
+                    let aligned_len = cipher_bytes.len() & !15;
+                    if aligned_len != 0 {
+                        pending_wrapper.push(WrapperPending {
+                            start: samplepos,
+                            ranges,
+                            aligned: cipher_bytes[..aligned_len].to_vec(),
+                            tail: cipher_bytes[aligned_len..].to_vec(),
+                        });
+                    }
+                    continue;
+                }
                 let mut cursor = 0usize;
                 let mut ctr = (desc.scheme == EncryptionScheme::Cenc)
                     .then(|| Ctr128BE::<Aes128>::new(key.into(), (&full_iv).into()));
@@ -616,10 +680,49 @@ impl Mp4Decryptor {
                     }
                     cursor = next;
                 }
-                samplepos = end;
             }
             if senpos != senc.end {
                 return Err(MALFORMED);
+            }
+            if !pending_wrapper.is_empty() {
+                let session = wrapper
+                    .as_deref_mut()
+                    .ok_or("Wrapper sample delivery requires a wrapper session")?;
+                for batch in pending_wrapper.chunks(BATCH_SIZE) {
+                    let payloads = batch
+                        .iter()
+                        .map(|item| item.aligned.clone())
+                        .collect::<Vec<_>>();
+                    let plaintexts = session
+                        .decrypt_batch(media_id, fairplay_key, &payloads)
+                        .await?;
+                    for (item, plain) in batch.iter().zip(plaintexts) {
+                        let sample_len = item
+                            .ranges
+                            .last()
+                            .map(|(offset, size)| offset + size)
+                            .ok_or(MALFORMED)?;
+                        let mut encrypted_plain = plain;
+                        encrypted_plain.extend_from_slice(&item.tail);
+                        let mut cursor = 0usize;
+                        for (offset, size) in &item.ranges {
+                            let end = item
+                                .start
+                                .checked_add(*offset)
+                                .and_then(|n| n.checked_add(*size))
+                                .ok_or(MALFORMED)?;
+                            if end > buf.len() || cursor + size > encrypted_plain.len() {
+                                return Err(MALFORMED);
+                            }
+                            buf[item.start + offset..end]
+                                .copy_from_slice(&encrypted_plain[cursor..cursor + size]);
+                            cursor += size;
+                        }
+                        if cursor != encrypted_plain.len() || sample_len == 0 {
+                            return Err(MALFORMED);
+                        }
+                    }
+                }
             }
             for atom in boxes(buf, traf.data, traf.end)? {
                 if matches!(&atom.kind, b"senc" | b"saiz" | b"saio") {
@@ -632,7 +735,13 @@ impl Mp4Decryptor {
         }
         Ok(())
     }
-    pub(crate) fn decrypt_part(&mut self, bytes: &mut [u8]) -> Result<()> {
+    pub(crate) async fn decrypt_part_with_wrapper(
+        &mut self,
+        bytes: &mut [u8],
+        mut wrapper: Option<&mut WrapperSession>,
+        media_id: &str,
+        fairplay_key: &str,
+    ) -> Result<()> {
         let top = boxes(bytes, 0, bytes.len())?;
         let mut pending = None;
         let mut fragments = 0;
@@ -650,7 +759,15 @@ impl Mp4Decryptor {
                 }
                 b"mdat" => {
                     let moof = pending.take().ok_or(UNSUPPORTED)?;
-                    self.decrypt_fragment(bytes, moof, atom)?;
+                    self.decrypt_fragment(
+                        bytes,
+                        moof,
+                        atom,
+                        wrapper.as_deref_mut(),
+                        media_id,
+                        fairplay_key,
+                    )
+                    .await?;
                     fragments += 1;
                 }
                 _ => {}

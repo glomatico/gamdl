@@ -8,6 +8,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::decrypt::Mp4Decryptor;
+use crate::wrapper::WrapperSession;
 use futures_util::{StreamExt, stream};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -165,7 +166,7 @@ pub(crate) struct NativeStream {
 #[pymethods]
 impl NativeStream {
     #[new]
-    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false))]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, wrapper=None))]
     fn new(
         parts: Vec<Part>,
         concurrency: usize,
@@ -174,9 +175,30 @@ impl NativeStream {
         decryption_key: Option<Vec<u8>>,
         key_id: Option<Vec<u8>>,
         enhanced_hls_song: bool,
+        wrapper: Option<(String, u16, String, String)>,
     ) -> PyResult<Self> {
-        let decryptor = Mp4Decryptor::new(decryption_key, key_id, enhanced_hls_song)
-            .map_err(PyValueError::new_err)?;
+        if wrapper.is_some() && (decryption_key.is_some() || key_id.is_some()) {
+            return Err(PyValueError::new_err(
+                "Wrapper and AES key modes are mutually exclusive",
+            ));
+        }
+        if let Some((ref host, port, ref media_id, ref skd)) = wrapper {
+            if host.trim().is_empty()
+                || port == 0
+                || media_id.is_empty()
+                || media_id.len() > u16::MAX as usize
+                || !skd.starts_with("skd://")
+                || skd.len() <= 6
+                || skd.len() > u16::MAX as usize
+            {
+                return Err(PyValueError::new_err(
+                    "Invalid wrapper sample delivery configuration",
+                ));
+            }
+        }
+        let decryptor =
+            Mp4Decryptor::new(decryption_key, key_id, enhanced_hls_song, wrapper.is_some())
+                .map_err(PyValueError::new_err)?;
         if parts.is_empty() || parts.len() > 100_000 {
             return Err(PyValueError::new_err(
                 "Expected between 1 and 100000 streaming parts",
@@ -239,6 +261,17 @@ impl NativeStream {
         let worker_progress = Arc::clone(&progress);
         let job = pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
             let mut decryptor = decryptor;
+            let mut wrapper_session = if let Some((ref host, port, _, _)) = wrapper {
+                match WrapperSession::connect(host, port).await {
+                    Ok(session) => Some(session),
+                    Err(error) => {
+                        let _ = sender.send(Err(error)).await;
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
             let tasks = stream::iter(parts).map(|part| {
                 let client = client.clone();
                 let progress = Arc::clone(&worker_progress);
@@ -249,7 +282,17 @@ impl NativeStream {
                 match result {
                     Ok(mut bytes) => {
                         if let Some(ref mut handler) = decryptor {
-                            if let Err(error) = handler.decrypt_part(&mut bytes) {
+                            let media_id = wrapper.as_ref().map(|w| w.2.as_str()).unwrap_or("");
+                            let fairplay_key = wrapper.as_ref().map(|w| w.3.as_str()).unwrap_or("");
+                            if let Err(error) = handler
+                                .decrypt_part_with_wrapper(
+                                    &mut bytes,
+                                    wrapper_session.as_mut(),
+                                    media_id,
+                                    fairplay_key,
+                                )
+                                .await
+                            {
                                 let _ = sender.send(Err(error)).await;
                                 return;
                             }
@@ -266,6 +309,9 @@ impl NativeStream {
                         return;
                     }
                 }
+            }
+            if let Some(ref mut session) = wrapper_session {
+                session.finish().await;
             }
         });
         Ok(Self {

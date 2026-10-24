@@ -15,8 +15,9 @@ from unittest.mock import AsyncMock, Mock
 import m3u8
 
 from gamdl.media import AudioStream, SongCodec, StreamManifestError, StreamOrigin
+from gamdl.media import VideoStream
 from gamdl.drm import ContentKey
-from gamdl.stream import Stream
+from gamdl.stream import Stream, StreamProgress
 
 
 class HttpHandler(BaseHTTPRequestHandler):
@@ -266,6 +267,133 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
                 returned = await stream.save(path)
             self.assertEqual(returned, path)
             self.assertEqual(path.read_bytes(), b"A" * 3000)
+
+    async def test_native_progress_snapshots_and_callback(self):
+        playlist = fixture_playlist(
+            "#EXTINF:1,\na\n#EXTINF:1,\nb\n",
+        )
+        observations = []
+        source = self.audio(playlist)
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.m4a"
+            stream = Stream(source, chunk_size=1024)
+            with self.assertRaises(RuntimeError):
+                _ = stream.progress
+            async with stream:
+                self.assertEqual(stream.progress.total_parts, 2)
+                await stream.save(path, progress_callback=observations.append)
+                self.assertEqual(stream.progress.completed_parts, 2)
+            final = stream.progress
+            self.assertIsInstance(final, StreamProgress)
+            self.assertEqual(final.downloaded_bytes, 7000)
+            self.assertEqual(final.emitted_bytes, 7000)
+            self.assertEqual(final.total_parts, 2)
+            self.assertIsNone(final.total_bytes)
+            self.assertEqual(final.percentage, 100.0)
+            self.assertGreater(final.speed, 0)
+            self.assertTrue(observations)
+            self.assertEqual(observations[-1].emitted_bytes, 7000)
+            self.assertEqual(path.stat().st_size, 7000)
+
+    async def test_known_progress_byte_ranges(self):
+        source = self.audio(
+            fixture_playlist(
+                "#EXT-X-BYTERANGE:4@0\n#EXTINF:1,\nrange\n"
+                "#EXT-X-BYTERANGE:3\n#EXTINF:1,\nrange\n",
+            )
+        )
+        async with Stream(source) as stream:
+            self.assertEqual(stream.progress.total_bytes, 7)
+            self.assertEqual(await stream.read(), b"0123456")
+        self.assertEqual(stream.progress.percentage, 100.0)
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg"), "FFmpeg required for CENC video fixture"
+    )
+    async def test_decrypted_cenc_video_matches_ffmpeg(self):
+        key = bytes.fromhex("00112233445566778899aabbccddeeff")
+        kid = bytes.fromhex("101112131415161718191a1b1c1d1e1f")
+        with TemporaryDirectory() as tmp:
+            encrypted = Path(tmp) / "encrypted-video.mp4"
+            output = Path(tmp) / "decrypted-video.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc2=size=128x72:rate=15:duration=0.8",
+                    "-an",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+frag_keyframe+empty_moov",
+                    "-encryption_scheme",
+                    "cenc-aes-ctr",
+                    "-encryption_key",
+                    key.hex(),
+                    "-encryption_kid",
+                    kid.hex(),
+                    "-y",
+                    str(encrypted),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            self.http.fixtures["video-encrypted"] = encrypted.read_bytes()
+            stream_source = VideoStream(
+                codec="h264",
+                width=128,
+                height=72,
+                origin=StreamOrigin.WRAPPER_HLS,
+                url=f"{self.url}/video.m3u8",
+                transport=self.audio(
+                    fixture_playlist("#EXTINF:1,\nvideo-encrypted\n")
+                )._transport,
+            )
+            async with Stream(
+                stream_source, decryption_key=ContentKey(kid, key)
+            ) as stream:
+                await stream.save(output)
+
+            def checksum(cmd):
+                return subprocess.run(
+                    cmd + ["-an", "-f", "md5", "-"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+
+            reference = checksum(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-decryption_key",
+                    key.hex(),
+                    "-i",
+                    str(encrypted),
+                ]
+            )
+            actual = checksum(
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-i",
+                    str(output),
+                ]
+            )
+            self.assertEqual(actual, reference)
+            self.assertIn(b"avc1", output.read_bytes())
+            self.assertNotIn(b"encv", output.read_bytes())
 
     @unittest.skipUnless(
         shutil.which("ffmpeg"), "FFmpeg required for encrypted MP4 fixtures"

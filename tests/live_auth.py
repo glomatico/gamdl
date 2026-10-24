@@ -53,9 +53,13 @@ class LiveSession:
 
     source: str
     api: AppleMusicApi
+    wrapper: WrapperApi | None = None
 
     def __repr__(self) -> str:
-        return f"LiveSession(source={self.source!r}, api=<redacted>)"
+        return (
+            f"LiveSession(source={self.source!r}, api=<redacted>, "
+            f"wrapper={'available' if self.wrapper is not None else 'unavailable'})"
+        )
 
 
 @asynccontextmanager
@@ -73,10 +77,13 @@ async def open_live_session(
     pacer = RequestPacer(interval=interval)
     async with AsyncExitStack() as stack:
         if settings.wrapper_url:
-            try:
-                # A short timeout prevents a missing local wrapper from blocking
-                # fallbacks for the default API client's 600-second timeout.
-                async with httpx.AsyncClient(timeout=3.0) as wrapper_http:
+            async with AsyncExitStack() as wrapper_stack:
+                try:
+                    # Keep HTTP available for the entire session, including
+                    # playback requests after the initial /me call.
+                    wrapper_http = await wrapper_stack.enter_async_context(
+                        httpx.AsyncClient(timeout=3.0)
+                    )
                     wrapper = await WrapperApi.create(
                         base_url=settings.wrapper_url,
                         client=wrapper_http,
@@ -92,14 +99,13 @@ async def open_live_session(
                         storefront=settings.storefront,
                         pacer=pacer,
                     )
-            except (GamdlError, httpx.HTTPError, ValueError, OSError):
-                # Higher-priority source is unusable. Allow configured fallbacks
-                # to take over, without exposing exception/credential contents.
-                pass
-            else:
-                await stack.enter_async_context(api)
-                yield LiveSession(source="wrapper", api=api)
-                return
+                except (GamdlError, httpx.HTTPError, ValueError, OSError):
+                    # Failed wrapper resources close before credential fallback.
+                    pass
+                else:
+                    await wrapper_stack.enter_async_context(api)
+                    yield LiveSession(source="wrapper", api=api, wrapper=wrapper)
+                    return
 
         if settings.media_user_token:
             try:

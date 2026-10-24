@@ -158,11 +158,11 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
             info = await stream.get_drm_info()
             for _ in range(2):
                 keys = await drm.get_keys(media_id="111", drm_info=info)
-                self.assertEqual(keys, (ContentKey(KID, SECRET),))
+                self.assertEqual(keys, ContentKey(KID, SECRET))
             self.assertEqual(api.get_license_exchange.await_count, 2)
             self.assertEqual(cdm.events.count("close"), 2)
             self.assertEqual(cdm.events.count("open"), 2)
-            self.assertEqual(repr(keys[0]), "ContentKey(<redacted>)")
+            self.assertEqual(repr(keys), "ContentKey(<redacted>)")
             self.assertNotIn(SECRET.hex(), repr(keys))
             api.get_license_exchange.assert_awaited_with(
                 "111",
@@ -194,8 +194,8 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
                 drm_info=await stream.get_drm_info(),
                 is_library=True,
             )
-        self.assertEqual(keys[0].kid, KID)
-        self.assertEqual(keys[0].key, SECRET)
+        self.assertEqual(keys.kid, KID)
+        self.assertEqual(keys.key, SECRET)
         self.assertEqual(type(cdm.challenge_input).__name__, "WRMHeader")
         self.assertEqual(cdm.license_data, "example license")
         self.assertEqual(cdm.events[-1], "close")
@@ -271,7 +271,7 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def test_unprotected_info_returns_empty_without_initializing_cdm(self):
         api = fake_api()
         drm = Drm.from_widevine(api)
-        self.assertEqual(await drm.get_keys(media_id="111", drm_info=DRMInfo()), ())
+        self.assertIsNone(await drm.get_keys(media_id="111", drm_info=DRMInfo()))
         self.assertIsNone(drm._cdm)
         api.get_license_exchange.assert_not_awaited()
 
@@ -371,12 +371,12 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
                 drm.get_keys(media_id="111", drm_info=info),
                 drm.get_keys(media_id="222", drm_info=info),
             )
-        self.assertEqual(keys, [(ContentKey(KID, SECRET),)] * 2)
+        self.assertEqual(keys, [ContentKey(KID, SECRET)] * 2)
         constructor.assert_awaited_once_with(DrmBackend.WIDEVINE, None)
         self.assertEqual(api.get_license_exchange.await_count, 2)
         self.assertEqual(cdm.events.count("close"), 2)
 
-    async def test_multiple_content_keys_preserved(self):
+    async def test_multiple_distinct_content_keys_rejected(self):
         second_kid = bytes.fromhex("ffeeddccbbaa99887766554433221100")
         second_key = b"2" * 16
         cdm = FakeCdm(
@@ -386,17 +386,16 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         drm = Drm.from_widevine(fake_api(), cdm=cdm)
-        keys = await drm.get_keys(
-            media_id="111",
-            drm_info=DRMInfo(
-                widevine_pssh=KID,
-                widevine_uri=KEY_URI,
-                encryption_method="SAMPLE-AES",
-            ),
-        )
-        self.assertEqual(
-            keys, (ContentKey(KID, SECRET), ContentKey(second_kid, second_key))
-        )
+        with self.assertRaisesRegex(DrmLicenseError, "multiple distinct content keys"):
+            await drm.get_keys(
+                media_id="111",
+                drm_info=DRMInfo(
+                    widevine_pssh=KID,
+                    widevine_uri=KEY_URI,
+                    encryption_method="SAMPLE-AES",
+                ),
+            )
+        self.assertEqual(cdm.events[-1], "close")
 
     async def test_invalid_device_file_does_not_leak_path(self):
         drm = Drm.from_widevine(

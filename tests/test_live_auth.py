@@ -47,6 +47,8 @@ class AuthPriorityTests(unittest.IsolatedAsyncioTestCase):
             async with open_live_session(settings) as session:
                 self.assertEqual(session.source, "wrapper")
                 self.assertIs(session.api, api)
+                self.assertIs(session.wrapper, wrapper)
+                self.assertNotIn("secret-token", repr(session))
             w.assert_awaited_once()
             from_wrapper.assert_awaited_once()
             from_token.assert_not_awaited()
@@ -73,6 +75,7 @@ class AuthPriorityTests(unittest.IsolatedAsyncioTestCase):
         ):
             async with open_live_session(settings) as session:
                 self.assertEqual(session.source, "media_user_token")
+                self.assertIsNone(session.wrapper)
             token.assert_awaited_once()
             cookies.assert_not_awaited()
 
@@ -98,6 +101,7 @@ class AuthPriorityTests(unittest.IsolatedAsyncioTestCase):
         ):
             async with open_live_session(settings) as session:
                 self.assertEqual(session.source, "cookies")
+                self.assertIsNone(session.wrapper)
             cookies.assert_awaited_once()
 
     async def test_missing_all_sources_fails_without_secrets(self):

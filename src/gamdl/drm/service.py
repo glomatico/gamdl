@@ -80,9 +80,9 @@ async def _make_cdm(backend: DrmBackend, device_path: str | Path | None) -> Any:
         ) from None
 
 
-def _normalize_keys(backend: DrmBackend, keys: Any) -> tuple[ContentKey, ...]:
-    result: list[ContentKey] = []
-    seen: set[bytes] = set()
+def _normalize_key(backend: DrmBackend, keys: Any) -> ContentKey:
+    """Return exactly one content key; never silently guess among distinct KIDs."""
+    result: ContentKey | None = None
     for entry in keys:
         if backend == DrmBackend.WIDEVINE and entry.type != "CONTENT":
             continue
@@ -101,12 +101,16 @@ def _normalize_keys(backend: DrmBackend, keys: Any) -> tuple[ContentKey, ...]:
         key_bytes = bytes(entry.key)
         if len(kid_bytes) != 16 or len(key_bytes) not in {16, 24, 32}:
             raise DrmLicenseError("DRM license contained an invalid content key")
-        if kid_bytes not in seen:
-            result.append(ContentKey(kid_bytes, key_bytes))
-            seen.add(kid_bytes)
-    if not result:
+        key = ContentKey(kid_bytes, key_bytes)
+        if result is None:
+            result = key
+        elif result != key:
+            raise DrmLicenseError(
+                "DRM license contained multiple distinct content keys"
+            )
+    if result is None:
         raise DrmLicenseError("DRM license contained no usable content keys")
-    return tuple(result)
+    return result
 
 
 class Drm:
@@ -176,18 +180,20 @@ class Drm:
 
     async def get_keys(
         self, *, media_id: str, drm_info: DRMInfo, is_library: bool = False
-    ) -> tuple[ContentKey, ...]:
+    ) -> ContentKey | None:
         """Exchange an authorized license using a matching DRM URI and ID.
 
         FairPlay-only signaling cannot be used by Widevine or PlayReady.
-        Unprotected resources return an empty result without opening the CDM.
+        Unprotected resources return None without opening the CDM.
+        Multiple distinct content keys are rejected rather than silently
+        selecting one that may be unsuitable for the selected stream.
         """
         if not media_id:
             raise ValueError("A media ID must not be empty")
         if not isinstance(drm_info, DRMInfo):
             raise TypeError("drm_info must be a DRMInfo object")
         if not drm_info.is_protected:
-            return ()
+            return None
 
         data, uri = _get_signaling(drm_info, self.backend)
         initialization = (
@@ -230,7 +236,7 @@ class Drm:
                     decoded_license = license_data
                 await asyncio.to_thread(module.parse_license, session, decoded_license)
                 keys = await asyncio.to_thread(module.get_keys, session)
-                return _normalize_keys(self.backend, keys)
+                return _normalize_key(self.backend, keys)
             except DrmLicenseError:
                 raise
             except Exception:

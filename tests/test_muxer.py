@@ -236,7 +236,7 @@ class NativeAvMuxTests(unittest.TestCase):
         self.assertEqual(brands(default)[0], b"M4V ")
         self.assertEqual(
             brands(standard),
-            (b"mp42", [b"mp42", b"isom", b"iso6", b"avc1", b"hvc1"]),
+            (b"mp42", [b"mp42", b"isom"]),
         )
         for kind in ("v", "a"):
             self.assertEqual(track_hashes(default, kind), track_hashes(standard, kind))

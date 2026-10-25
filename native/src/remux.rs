@@ -99,7 +99,7 @@ pub(crate) fn file_type(major_brand: &[u8; 4]) -> Result<Vec<u8>> {
     let compatible: &[u8] = match major_brand {
         b"M4A " => b"M4A mp42isom",
         b"M4V " => b"M4V mp42isom",
-        b"mp42" => b"mp42isomiso6avc1hvc1",
+        b"mp42" => b"mp42isom",
         _ => return Err(UNSUPPORTED),
     };
     let mut body = Vec::with_capacity(8 + compatible.len());

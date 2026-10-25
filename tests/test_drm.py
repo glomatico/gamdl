@@ -295,6 +295,40 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
             DrmBackend.PLAYREADY,
         )
 
+    async def test_matching_drm_signaling_does_not_open_cdm(self):
+        api = fake_api()
+        widevine = Drm.from_widevine(api)
+        playready = Drm.from_playready(api, cdm=FakeCdm(backend=DrmBackend.PLAYREADY))
+        both = DRMInfo(
+            widevine_pssh=b"wv",
+            widevine_uri="data:widevine",
+            playready_pssh=b"pr",
+            playready_uri="data:playready",
+            encryption_method="SAMPLE-AES",
+        )
+        self.assertTrue(widevine.has_signaling(both))
+        self.assertTrue(playready.has_signaling(both))
+        self.assertFalse(widevine.has_signaling(DRMInfo(fairplay_streaming="skd://x")))
+        self.assertFalse(
+            playready.has_signaling(
+                DRMInfo(widevine_pssh=b"wv", widevine_uri="data:widevine")
+            )
+        )
+        self.assertTrue(
+            widevine.has_signaling(
+                DRMInfo(
+                    untyped_key_data=b"cenc",
+                    untyped_key_uri="data:untyped",
+                    encryption_method="ISO-23001-7",
+                )
+            )
+        )
+        self.assertFalse(widevine.has_signaling(DRMInfo()))
+        with self.assertRaises(TypeError):
+            widevine.has_signaling(None)
+        self.assertIsNone(widevine._cdm)
+        api.get_license_exchange.assert_not_awaited()
+
     async def test_license_failure_closes_session_and_redacts_error(self):
         api = fake_api()
         api.get_license_exchange.side_effect = RuntimeError(

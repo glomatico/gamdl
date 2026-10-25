@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, Mock
 
 from gamdl.api.http import ApiHttpClient
 from gamdl.api.wrapper import WrapperApi
+from gamdl.drm import ContentKey, DRMInfo, Drm
 from gamdl.media import (
     HlsSongStream,
     HlsType,
@@ -370,33 +371,37 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                     downloaded = await stream.read()
                 self.assertEqual(mdats(downloaded[len(init) :]), expected)
 
-    async def test_invalid_stream_types_and_exclusive_keys(self):
+    async def test_wrapper_can_coexist_with_drm_and_ignores_ineligible_sources(self):
         source = self.source()
-        with self.assertRaisesRegex(ValueError, "either decryption_key or wrapper_api"):
-            Stream(
-                source,
-                wrapper_api=self.api,
-                decryption_key=KEY,
-            )
+        drm = Drm.from_widevine(Mock())
+        Stream(source, wrapper_api=self.api, drm=drm)
         with self.assertRaises(TypeError):
             Stream(source, fairplay_key="skd://test")
+        with self.assertRaisesRegex(TypeError, "wrapper_api must be"):
+            Stream(source, wrapper_api=Mock())
+        init, fragment, _ = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
         source.origin = StreamOrigin.WEBPLAYBACK
-        with self.assertRaisesRegex(ValueError, "HLS song audio"):
-            Stream(source, wrapper_api=self.api)
+        async with Stream(source, wrapper_api=self.api) as stream:
+            self.assertEqual(stream.decryption_method, "none")
+            self.assertEqual(await stream.read(), init + fragment)
         source = self.source()
         source.media_id = None
         with self.assertRaisesRegex(ValueError, "media ID"):
-            Stream(source, wrapper_api=self.api)
+            async with Stream(source, wrapper_api=self.api):
+                pass
         for cls in (VideoStream, WebPlaybackStream):
             bad = cls(
                 codec="h264" if cls is VideoStream else SongCodec.AAC_WEB,
                 origin=StreamOrigin.ASSET_STANDARD_HLS,
                 url=f"{self.url}/hls.m3u8",
-                transport=Mock(),
+                transport=self.source()._transport,
                 media_id="1559885421",
             )
-            with self.assertRaisesRegex(ValueError, "HLS song audio"):
-                Stream(bad, wrapper_api=self.api)
+            async with Stream(bad, wrapper_api=self.api) as stream:
+                self.assertEqual(stream.decryption_method, "none")
+                self.assertEqual(await stream.read(), init + fragment)
+        self.assertEqual(self.wrapper.batches, [])
 
     async def test_fairplay_uri_is_resolved_lazily_from_cached_manifest(self):
         init, fragment, expected = fixture()
@@ -414,7 +419,9 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             self.wrapper.batches, [(b"1559885421", b"skd://local/test", 2)]
         )
 
-    async def test_missing_invalid_and_placeholder_fairplay_uri_rejected(self):
+    async def test_missing_invalid_and_placeholder_fairplay_pass_through(self):
+        init, fragment, _ = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
         for uri in (
             None,
             "not-an-skd",
@@ -423,14 +430,62 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(uri=uri):
                 source = self.source(fairplay_uri=uri)
-                with self.assertRaisesRegex(
-                    StreamManifestError, "no usable FairPlay SKD URI"
-                ):
-                    async with Stream(source, wrapper_api=self.api):
-                        self.fail(
-                            "Must refuse streams without usable FairPlay metadata"
-                        )
+                async with Stream(source, wrapper_api=self.api) as stream:
+                    self.assertEqual(stream.decryption_method, "none")
+                    self.assertEqual(await stream.read(), init + fragment)
                 self.assertEqual(source._transport.get_manifest.await_count, 1)
-                self.assertEqual(self.http.hits["init"], 0)
-                self.assertEqual(self.http.hits["segment"], 0)
                 self.assertEqual(self.wrapper.batches, [])
+
+    async def test_wrapper_has_priority_over_matching_widevine(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        source = self.source(origin=StreamOrigin.ASSET_ENHANCED_HLS)
+        info = DRMInfo(
+            fairplay_streaming="skd://local/test",
+            widevine_pssh=b"pssh",
+            widevine_uri="data:widevine",
+            encryption_method="SAMPLE-AES",
+        )
+        source.get_drm_info = AsyncMock(return_value=info)
+        drm = Drm.from_widevine(Mock())
+        drm.get_keys = AsyncMock(side_effect=AssertionError("Should use wrapper"))
+        async with Stream(source, wrapper_api=self.api, drm=drm) as stream:
+            self.assertEqual(stream.decryption_method, "wrapper")
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        drm.get_keys.assert_not_awaited()
+        self.assertEqual(
+            self.wrapper.batches, [(b"1559885421", b"skd://local/test", 2)]
+        )
+
+    async def test_incompatible_fairplay_uses_widevine_when_present(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        source = self.source(fairplay_uri=None)
+        info = DRMInfo(
+            widevine_pssh=b"pssh",
+            widevine_uri="data:widevine",
+            encryption_method="SAMPLE-AES",
+        )
+        source.get_drm_info = AsyncMock(return_value=info)
+        drm = Drm.from_widevine(Mock())
+        drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
+        async with Stream(source, wrapper_api=self.api, drm=drm) as stream:
+            self.assertEqual(stream.decryption_method, "widevine")
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        self.assertEqual(self.wrapper.batches, [])
+        drm.get_keys.assert_awaited_once_with(
+            media_id="1559885421", drm_info=info, is_library=False
+        )
+
+    async def test_explicit_key_overrides_wrapper_when_supplied(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        async with Stream(
+            self.source(), wrapper_api=self.api, decryption_key=ContentKey(KID, KEY)
+        ) as stream:
+            self.assertEqual(stream.decryption_method, "explicit_key")
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        self.assertEqual(self.wrapper.batches, [])

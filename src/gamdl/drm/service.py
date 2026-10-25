@@ -178,6 +178,20 @@ class Drm:
                 self._cdm = await _make_cdm(self.backend, self._device_path)
             return self._cdm
 
+    def has_signaling(self, drm_info: DRMInfo) -> bool:
+        """Whether this backend has enough signaling to attempt a license.
+
+        This does not contact the license provider or guarantee authorization.
+        It distinguishes absent/incompatible metadata from a real license error.
+        """
+        if not isinstance(drm_info, DRMInfo):
+            raise TypeError("drm_info must be a DRMInfo object")
+        try:
+            _get_signaling(drm_info, self.backend)
+        except DrmMetadataError:
+            return False
+        return True
+
     async def get_keys(
         self, *, media_id: str, drm_info: DRMInfo, is_library: bool = False
     ) -> ContentKey | None:

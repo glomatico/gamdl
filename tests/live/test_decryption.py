@@ -68,22 +68,27 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         )
         return max(candidates, key=lambda track: track.bitrate or 0)
 
-    async def download_and_check(self, source, *, key=None, wrapper=False):
+    async def download_and_check(
+        self, source, *, key=None, wrapper=False, auto=False, expected_method=None
+    ):
         if wrapper and self.session.wrapper is None:
             self.skipTest("No authenticated wrapper instance available")
         # Stable per-rendition test output name, useful for later muxer tests.
         name = (
             self.id().rsplit(".", 1)[-1]
             + f"-{source.origin.value}-{source.codec.value}"
-            + ("-wrapper" if wrapper else "-key")
+            + ("-auto" if auto else "-wrapper" if wrapper else "-key")
             + ".m4a"
         )
         path = Path(self.directory.name) / name
         async with Stream(
             source,
-            wrapper_api=self.session.wrapper if wrapper else None,
+            wrapper_api=self.session.wrapper if wrapper or auto else None,
             decryption_key=key,
+            drm=self.drm if auto else None,
         ) as stream:
+            if expected_method is not None:
+                self.assertEqual(stream.decryption_method, expected_method)
             await stream.save(path)
             progress = stream.progress
             self.assertEqual(progress.completed_parts, progress.total_parts)
@@ -251,6 +256,16 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         source = await self.song.get_stream(codec=SongCodec.AAC_WEB)
         self.assertEqual(source.origin, StreamOrigin.WEBPLAYBACK)
         await self.download_and_check(source, key=await self.license_key(source))
+
+    async def test_auto_widevine_web_aac(self):
+        source = await self.song.get_stream(codec=SongCodec.AAC_WEB)
+        await self.download_and_check(source, auto=True, expected_method="widevine")
+
+    async def test_auto_wrapper_enhanced_asset_alac(self):
+        if self.session.wrapper is None:
+            self.skipTest("Authenticated wrapper instance required")
+        source = await self.asset(StreamOrigin.ASSET_ENHANCED_HLS, SongCodec.ALAC)
+        await self.download_and_check(source, auto=True, expected_method="wrapper")
 
     async def test_web_all_other_codecs_with_content_key(self):
         for codec in WEB_CODECS:

@@ -2,9 +2,10 @@
 
 Playlist discovery remains in gamdl.media. Network segment fetching, bounded
 concurrency and retries are implemented by the native Tokio/reqwest backend.
-Without a decryption key, this layer yields potentially encrypted HLS bytes.
-With a 16-byte AES key, Rust decrypts CENC/AES-CTR or CBCS/AES-CBC samples
-before yielding or saving, preserving the fragmented MP4 layout.
+This layer can automatically acquire a key through an injected DRM backend,
+use wrapper-v2 for eligible Apple song HLS, or pass through encrypted bytes if
+neither method is available. Rust decrypts CENC/AES-CTR and CBCS/AES-CBC
+samples before yielding or saving, preserving the fragmented MP4 layout.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from tempfile import NamedTemporaryFile
 
 from gamdl import _native
 from gamdl.api.wrapper import WrapperApi
+from gamdl.drm import Drm, DrmLicenseError
 from gamdl.drm.models import ContentKey
 from gamdl.media import AudioStream, HlsStream, HlsSongStream, HlsType, StreamOrigin
 from gamdl.media.exceptions import StreamManifestError
@@ -81,15 +83,15 @@ class Stream(AsyncIterator[bytes]):
     """Async context manager yielding raw HLS bytes in playlist order.
 
     Stream owns the native HTTP client and cancels pending fragment requests
-    when the context exits. Pass decryption_key as a ContentKey (preferred,
-    verifies the key ID) or 16-byte AES key to decrypt CENC/AES-CTR and
-    CBCS/AES-CBC audio or video tracks. Enhanced HLS song CBCS automatically
-    applies the legacy prefetch key to sample description 1 and the supplied
-    content key to description 2. Alternatively, pass wrapper_api for HLS song
-    audio; the FairPlay SKD URI is resolved from the selected stream's cached
-    DRM metadata when entering the context. No separate FairPlay URI or license
-    lookup is required from the caller. Web-playback AAC and music videos do
-    not currently support wrapper delivery.
+    when the context exits. Wrapper-v2 is preferred when supplied for eligible
+    song HLS with usable FairPlay metadata. Otherwise, an injected Drm backend
+    acquires the content key when compatible signaling exists. With neither
+    path available, stream bytes are passed through unchanged, even if encrypted.
+    A manually supplied decryption_key overrides automatic selection and is
+    mutually exclusive with drm. License/decryption failures are never silently
+    downgraded to encrypted output. Enhanced HLS song CBCS automatically
+    applies the legacy prefetch key to sample description 1 and the licensed
+    key to description 2. Wrapper delivery is not supported for music videos.
     Arbitrary key rotation and muxing are not supported yet.
     Do not share one Stream iterator between independent consumers.
     """
@@ -103,6 +105,7 @@ class Stream(AsyncIterator[bytes]):
         retries: int = 3,
         decryption_key: bytes | ContentKey | None = None,
         wrapper_api: WrapperApi | None = None,
+        drm: Drm | None = None,
     ) -> None:
         if not isinstance(source, HlsStream):
             raise TypeError("source must be an HlsStream")
@@ -110,21 +113,23 @@ class Stream(AsyncIterator[bytes]):
         self.concurrency = concurrency
         self.chunk_size = chunk_size
         self.retries = retries
-        if wrapper_api is not None:
-            if not isinstance(wrapper_api, WrapperApi):
-                raise TypeError("wrapper_api must be a WrapperApi")
-            if decryption_key is not None:
-                raise ValueError("Use either decryption_key or wrapper_api, not both")
-            if not isinstance(source, HlsSongStream) or source.origin not in {
+        if wrapper_api is not None and not isinstance(wrapper_api, WrapperApi):
+            raise TypeError("wrapper_api must be a WrapperApi")
+        if drm is not None and not isinstance(drm, Drm):
+            raise TypeError("drm must be a Drm")
+        if drm is not None and decryption_key is not None:
+            raise ValueError("Use either decryption_key or drm, not both")
+        self._drm = drm
+        if (
+            wrapper_api is not None
+            and isinstance(source, HlsSongStream)
+            and source.origin
+            in {
                 StreamOrigin.WRAPPER_HLS,
                 StreamOrigin.ASSET_ENHANCED_HLS,
                 StreamOrigin.ASSET_STANDARD_HLS,
-            }:
-                raise ValueError(
-                    "Wrapper sample delivery requires an HLS song audio stream"
-                )
-            if not source.media_id:
-                raise ValueError("Wrapper sample delivery requires a song media ID")
+            }
+        ):
             self._wrapper = (
                 wrapper_api.decrypt_host,
                 wrapper_api.decrypt_port,
@@ -145,6 +150,7 @@ class Stream(AsyncIterator[bytes]):
             raise TypeError("decryption_key must be bytes or a ContentKey")
         self._engine: _native.NativeStream | None = None
         self._final_progress: StreamProgress | None = None
+        self._decryption_method: str | None = None
         self._used = False
 
     async def __aenter__(self) -> Stream:
@@ -153,38 +159,52 @@ class Stream(AsyncIterator[bytes]):
         self._used = True
         try:
             parts = await _plan(self.source)
+            key, kid = self._key, self._kid
+            method = "explicit_key" if key is not None else "none"
             wrapper = None
-            if self._wrapper is not None:
-                fairplay_uri = (await self.source.get_drm_info()).fairplay_streaming
+            if key is None and (self._wrapper is not None or self._drm is not None):
+                info = await self.source.get_drm_info()
+                fairplay_uri = info.fairplay_streaming
                 if (
-                    not isinstance(fairplay_uri, str)
-                    or not fairplay_uri.startswith("skd://")
-                    or len(fairplay_uri) <= len("skd://")
+                    self._wrapper is not None
+                    and isinstance(fairplay_uri, str)
+                    and fairplay_uri.startswith("skd://")
+                    and len(fairplay_uri) > len("skd://")
                 ):
-                    raise StreamManifestError(
-                        "Selected HLS stream has no usable FairPlay SKD URI"
+                    if not self.source.media_id:
+                        raise ValueError(
+                            "Wrapper sample delivery requires a song media ID"
+                        )
+                    wrapper = (*self._wrapper, fairplay_uri)
+                    method = "wrapper"
+                elif self._drm is not None and self._drm.has_signaling(info):
+                    if not self.source.media_id:
+                        raise ValueError("DRM license request requires a media ID")
+                    content_key = await self._drm.get_keys(
+                        media_id=self.source.media_id,
+                        drm_info=info,
+                        is_library=self.source.origin
+                        == StreamOrigin.LIBRARY_WEBPLAYBACK,
                     )
-                wrapper = (*self._wrapper, fairplay_uri)
+                    if content_key is None:
+                        raise DrmLicenseError("DRM license returned no content key")
+                    key, kid = content_key.key, content_key.kid
+                    method = self._drm.backend.value
             enhanced_song = (
-                self.source.hls_type == HlsType.ENHANCED
-                if self._wrapper is not None and isinstance(self.source, HlsSongStream)
-                else isinstance(self.source, AudioStream)
-                and (
-                    self.source.origin == StreamOrigin.ASSET_ENHANCED_HLS
-                    or (
-                        isinstance(self.source, HlsSongStream)
-                        and self.source.origin == StreamOrigin.WRAPPER_HLS
-                        and self.source.hls_type == HlsType.ENHANCED
-                    )
-                )
+                isinstance(self.source, HlsSongStream)
+                and self.source.hls_type == HlsType.ENHANCED
+            ) or (
+                not isinstance(self.source, HlsSongStream)
+                and isinstance(self.source, AudioStream)
+                and self.source.origin == StreamOrigin.ASSET_ENHANCED_HLS
             )
             self._engine = _native.NativeStream(
                 parts,
                 self.concurrency,
                 self.chunk_size,
                 self.retries,
-                self._key,
-                self._kid,
+                key,
+                kid,
                 enhanced_song,
                 wrapper,
                 isinstance(self.source, HlsSongStream)
@@ -194,11 +214,13 @@ class Stream(AsyncIterator[bytes]):
                     StreamOrigin.ASSET_ENHANCED_HLS,
                 },
             )
+            self._decryption_method = method
         finally:
             # The worker now owns the native copy (or validation has failed).
             self._key = None
             self._kid = None
             self._wrapper = None
+            self._drm = None
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
@@ -206,6 +228,15 @@ class Stream(AsyncIterator[bytes]):
             self._final_progress = self.progress
             self._engine.close()
             self._engine = None
+
+    @property
+    def decryption_method(self) -> str:
+        """Selected decryption method (available after entering the context)."""
+        if self._decryption_method is None:
+            raise RuntimeError(
+                "Decryption method is available after entering the context"
+            )
+        return self._decryption_method
 
     @property
     def progress(self) -> StreamProgress:

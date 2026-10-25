@@ -12,7 +12,7 @@ import unittest
 from http.server import ThreadingHTTPServer
 from unittest.mock import AsyncMock, Mock
 
-from gamdl.drm import ContentKey
+from gamdl.drm import ContentKey, DRMInfo, Drm, DrmBackend, DrmLicenseError
 from gamdl.media import (
     AudioStream,
     HlsSongStream,
@@ -381,4 +381,129 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
         async with Stream(self.source()) as stream:
+            self.assertEqual(stream.decryption_method, "none")
             self.assertEqual(await stream.read(), init + fragment)
+
+    async def test_auto_drm_decrypts_audio_and_video_with_matching_backend(self):
+        for backend, video in (
+            (DrmBackend.WIDEVINE, False),
+            (DrmBackend.PLAYREADY, False),
+            (DrmBackend.WIDEVINE, True),
+        ):
+            with self.subTest(backend=backend, video=video):
+                init, fragment, expected = fixture(video=video)
+                self.http.fixtures.update(
+                    {"cbcs-init": init, "cbcs-fragment": fragment}
+                )
+                source = self.source(video=video)
+                source.media_id = "12345"
+                info = DRMInfo(
+                    widevine_pssh=b"widevine-pssh",
+                    widevine_uri="data:widevine",
+                    playready_pssh=b"playready-pro",
+                    playready_uri="data:playready",
+                    encryption_method="SAMPLE-AES",
+                )
+                source.get_drm_info = AsyncMock(return_value=info)
+                drm = (
+                    Drm.from_widevine(Mock())
+                    if backend == DrmBackend.WIDEVINE
+                    else Drm.from_playready(Mock(), cdm=Mock())
+                )
+                drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
+                stream = Stream(source, drm=drm)
+                drm.get_keys.assert_not_awaited()
+                with self.assertRaisesRegex(RuntimeError, "after entering"):
+                    _ = stream.decryption_method
+                async with stream:
+                    self.assertEqual(stream.decryption_method, backend.value)
+                    decoded = await stream.read()
+                self.assertEqual(stream.decryption_method, backend.value)
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
+                self.assertIn(b"free", decoded)
+                drm.get_keys.assert_awaited_once_with(
+                    media_id="12345", drm_info=info, is_library=False
+                )
+                source._transport.get_manifest.assert_awaited_once()
+
+    async def test_unavailable_drm_signaling_streams_original_encrypted_bytes(self):
+        init, fragment, _ = fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        for info in (
+            DRMInfo(),
+            DRMInfo(encryption_method="SAMPLE-AES"),
+            DRMInfo(
+                fairplay_streaming="skd://only-fairplay",
+                encryption_method="SAMPLE-AES",
+            ),
+            DRMInfo(
+                playready_pssh=b"playready-only",
+                playready_uri="data:playready",
+                encryption_method="SAMPLE-AES",
+            ),
+        ):
+            with self.subTest(info=info):
+                source = self.source()
+                source.get_drm_info = AsyncMock(return_value=info)
+                drm = Drm.from_widevine(Mock())
+                drm.get_keys = AsyncMock(side_effect=AssertionError("No license"))
+                async with Stream(source, drm=drm) as stream:
+                    self.assertEqual(stream.decryption_method, "none")
+                    self.assertEqual(await stream.read(), init + fragment)
+                drm.get_keys.assert_not_awaited()
+
+    async def test_failed_license_is_not_downgraded_to_encrypted_output(self):
+        source = self.source()
+        source.media_id = "12345"
+        source.get_drm_info = AsyncMock(
+            return_value=DRMInfo(widevine_pssh=b"data", widevine_uri="data:widevine")
+        )
+        drm = Drm.from_widevine(Mock())
+        drm.get_keys = AsyncMock(side_effect=DrmLicenseError("License failed"))
+        stream = Stream(source, drm=drm)
+        with self.assertRaisesRegex(DrmLicenseError, "License failed"):
+            async with stream:
+                self.fail("License error must abort before downloading")
+        self.assertEqual(self.http.hits["cbcs-fragment"], 0)
+        drm.get_keys.assert_awaited_once()
+
+        # Once a matching backend attempted licensing, a missing key is also
+        # an error, not permission to return encrypted media silently.
+        drm.get_keys = AsyncMock(return_value=None)
+        with self.assertRaisesRegex(DrmLicenseError, "no content key"):
+            async with Stream(source, drm=drm):
+                pass
+        self.assertEqual(self.http.hits["cbcs-fragment"], 0)
+
+    async def test_library_drm_flag_and_missing_media_id(self):
+        source = self.source(origin=StreamOrigin.LIBRARY_WEBPLAYBACK)
+        source.media_id = "i.12345"
+        info = DRMInfo(widevine_pssh=b"pssh", widevine_uri="data:widevine")
+        source.get_drm_info = AsyncMock(return_value=info)
+        drm = Drm.from_widevine(Mock())
+        drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        async with Stream(source, drm=drm) as stream:
+            self.assertEqual(mdats((await stream.read())[len(init) :]), expected)
+        drm.get_keys.assert_awaited_once_with(
+            media_id="i.12345", drm_info=info, is_library=True
+        )
+        source = self.source()
+        source.get_drm_info = AsyncMock(return_value=info)
+        with self.assertRaisesRegex(ValueError, "media ID"):
+            async with Stream(source, drm=drm):
+                pass
+
+    async def test_explicit_key_overrides_automatic_selection_and_validates_args(self):
+        source = self.source()
+        drm = Drm.from_widevine(Mock())
+        with self.assertRaisesRegex(ValueError, "either decryption_key or drm"):
+            Stream(source, drm=drm, decryption_key=KEY)
+        with self.assertRaisesRegex(TypeError, "drm must be"):
+            Stream(source, drm=Mock())
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        async with Stream(source, decryption_key=ContentKey(KID, KEY)) as stream:
+            self.assertEqual(stream.decryption_method, "explicit_key")
+            self.assertEqual(mdats((await stream.read())[len(init) :]), expected)

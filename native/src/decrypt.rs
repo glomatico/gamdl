@@ -164,6 +164,7 @@ fn child(buf: &[u8], parent: BoxPos, name: &[u8; 4], skip: usize) -> Result<BoxP
 
 struct EncryptionConfig {
     track_id: u32,
+    auxiliary_track_ids: Vec<u32>,
     default_description: usize,
     default_size: usize,
     descriptions: Vec<SampleEncryption>,
@@ -281,6 +282,7 @@ impl Mp4Decryptor {
             return Err(UNSUPPORTED);
         }
         let mut selected = None;
+        let mut auxiliary_track_ids = Vec::new();
         for trak in boxes(buf, moov.data, moov.end)?
             .into_iter()
             .filter(|b| &b.kind == b"trak")
@@ -288,7 +290,8 @@ impl Mp4Decryptor {
             let mdia = child(buf, trak, b"mdia", 0)?;
             let hdlr = child(buf, mdia, b"hdlr", 0)?;
             let handler = buf.get(hdlr.data + 8..hdlr.data + 12);
-            if handler != Some(b"soun") && handler != Some(b"vide") {
+            let caption = matches!(handler, Some(b"clcp" | b"text" | b"sbtl" | b"subt"));
+            if !caption && handler != Some(b"soun") && handler != Some(b"vide") {
                 continue;
             }
             let tkhd = child(buf, trak, b"tkhd", 0)?;
@@ -297,6 +300,13 @@ impl Mp4Decryptor {
                 1 => u32_at(buf, tkhd.data + 20)?,
                 _ => return Err(UNSUPPORTED),
             };
+            if caption {
+                if track_id == 0 || auxiliary_track_ids.contains(&track_id) {
+                    return Err(MALFORMED);
+                }
+                auxiliary_track_ids.push(track_id);
+                continue;
+            }
             let minf = child(buf, mdia, b"minf", 0)?;
             let stbl = child(buf, minf, b"stbl", 0)?;
             let stsd = child(buf, stbl, b"stsd", 0)?;
@@ -478,13 +488,19 @@ impl Mp4Decryptor {
             }
             selected = Some(EncryptionConfig {
                 track_id,
+                auxiliary_track_ids: Vec::new(),
                 default_description,
                 default_size,
                 descriptions,
                 enhanced_song_prefetch,
             });
         }
-        self.config = Some(selected.ok_or("Expected an encrypted audio or video MP4 track")?);
+        let mut config = selected.ok_or("Expected an encrypted audio or video MP4 track")?;
+        if auxiliary_track_ids.contains(&config.track_id) {
+            return Err(MALFORMED);
+        }
+        config.auxiliary_track_ids = auxiliary_track_ids;
+        self.config = Some(config);
         Ok(())
     }
     async fn decrypt_fragment(
@@ -501,6 +517,7 @@ impl Mp4Decryptor {
             .as_ref()
             .ok_or("Encrypted MP4 requires an initialization section")?;
         let mut handled = false;
+        let mut saw_auxiliary = false;
         let mut pending_wrapper = Vec::new();
         for traf in boxes(buf, moof.data, moof.end)?
             .into_iter()
@@ -510,7 +527,14 @@ impl Mp4Decryptor {
             let flags = u32_at(buf, tfhd.data)? & 0x00ff_ffff;
             let track = u32_at(buf, tfhd.data + 4)?;
             if track != cfg.track_id {
-                return Err(UNSUPPORTED);
+                if cfg.auxiliary_track_ids.contains(&track) {
+                    // Music-video HLS can interleave clear CEA-608/708 or
+                    // subtitle data alongside encrypted video. Preserve its
+                    // track and traf/mdat bytes without attempting decryption.
+                    saw_auxiliary = true;
+                    continue;
+                }
+                return Err("Unexpected non-caption track in encrypted media fragment");
             }
             if handled {
                 return Err(UNSUPPORTED);
@@ -803,7 +827,7 @@ impl Mp4Decryptor {
                 }
             }
         }
-        if !handled {
+        if !handled && !saw_auxiliary {
             return Err(UNSUPPORTED);
         }
         Ok(())

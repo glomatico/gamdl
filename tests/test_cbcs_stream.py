@@ -189,6 +189,67 @@ def mdats(data: bytes) -> bytes:
     return bytes(result)
 
 
+def captioned_video_fixture():
+    """Encrypted HLS video with a separate clear CEA-608 track in its moof.
+
+    Some Apple Music renditions also contain a caption-only moof. The other
+    traf must remain untouched while the primary video sample is decrypted.
+    """
+    init, fragment, plaintext = fixture(video=True)
+    ftyp_end = int.from_bytes(init[:4], "big")
+    assert init[ftyp_end + 4 : ftyp_end + 8] == b"moov"
+    caption = atom(
+        b"trak",
+        fullbox(b"tkhd", 0, 0, be32(0) + be32(0) + be32(2) + be32(0))
+        + atom(
+            b"mdia",
+            fullbox(b"hdlr", 0, 0, be32(0) + b"clcp" + be32(0))
+            + atom(
+                b"minf",
+                atom(b"stbl", fullbox(b"stsd", 0, 0, be32(1) + atom(b"c608", b""))),
+            ),
+        ),
+    )
+    init = init[:ftyp_end] + atom(b"moov", init[ftyp_end + 8 :] + caption)
+
+    original_moof_end = int.from_bytes(fragment[:4], "big")
+    original_data = fragment[original_moof_end + 8 :]
+    caption_data = b"captions in same moof"
+    auxiliary_traf = atom(
+        b"traf",
+        fullbox(b"tfhd", 0, 0x020000, be32(2))
+        + fullbox(b"trun", 0, 0x201, be32(1) + be32(0) + be32(len(caption_data))),
+    )
+    moof = bytearray(atom(b"moof", fragment[8:original_moof_end] + auxiliary_traf))
+    video_trun = moof.index(b"trun")
+    caption_trun = moof.rindex(b"trun")
+    moof[video_trun + 12 : video_trun + 16] = be32(len(moof) + 8)
+    moof[caption_trun + 12 : caption_trun + 16] = be32(
+        len(moof) + 8 + len(original_data)
+    )
+    fragment = bytes(moof) + atom(b"mdat", original_data + caption_data)
+
+    standalone_caption = b"captions only"
+    caption_only_moof = bytearray(
+        atom(
+            b"moof",
+            atom(
+                b"traf",
+                fullbox(b"tfhd", 0, 0x020000, be32(2))
+                + fullbox(
+                    b"trun", 0, 0x201, be32(1) + be32(0) + be32(len(standalone_caption))
+                ),
+            ),
+        )
+    )
+    caption_only_trun = caption_only_moof.index(b"trun")
+    caption_only_moof[caption_only_trun + 12 : caption_only_trun + 16] = be32(
+        len(caption_only_moof) + 8
+    )
+    fragment += bytes(caption_only_moof) + atom(b"mdat", standalone_caption)
+    return init, fragment, plaintext + caption_data + standalone_caption
+
+
 class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
@@ -273,6 +334,32 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_patterned_cbcs_video(self):
         await self.check_fixture(video=True, pattern=0x11)
+
+    async def test_music_video_with_clear_caption_track_in_same_fragment(self):
+        init, fragment, expected = captioned_video_fixture()
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
+        source = self.source(video=True, origin=StreamOrigin.ITUNES_HLS)
+        async with Streamer(source, decryption_key=ContentKey(KID, KEY)) as streamer:
+            decrypted = await streamer.read()
+        self.assertEqual(mdats(decrypted[len(init) :]), expected)
+        self.assertIn(b"clcp", decrypted)
+        self.assertIn(b"captions only", decrypted)
+
+    async def test_unrecognized_auxiliary_track_is_rejected(self):
+        init, fragment, _ = captioned_video_fixture()
+        fragment = bytearray(fragment)
+        tfhds = []
+        position = 0
+        while (pos := fragment.find(b"tfhd", position)) != -1:
+            tfhds.append(pos)
+            position = pos + 4
+        self.assertGreaterEqual(len(tfhds), 2)
+        fragment[tfhds[1] + 8 : tfhds[1] + 12] = be32(3)
+        self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": bytes(fragment)})
+        source = self.source(video=True)
+        async with Streamer(source, decryption_key=ContentKey(KID, KEY)) as streamer:
+            with self.assertRaisesRegex(OSError, "Unexpected non-caption track"):
+                await streamer.read()
 
     async def test_cbcs_with_per_sample_iv(self):
         await self.check_fixture(per_sample_iv=True)

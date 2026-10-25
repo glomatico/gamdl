@@ -13,26 +13,26 @@ const BAD: &str = "Malformed fragmented MP4";
 const UNSUPPORTED: &str = "Unsupported fragmented MP4 remux layout";
 
 #[derive(Clone, Copy)]
-struct Atom {
-    start: usize,
-    data: usize,
-    end: usize,
-    name: [u8; 4],
+pub(crate) struct Atom {
+    pub(crate) start: usize,
+    pub(crate) data: usize,
+    pub(crate) end: usize,
+    pub(crate) name: [u8; 4],
 }
 
-fn u32_at(data: &[u8], at: usize) -> Result<u32> {
+pub(crate) fn u32_at(data: &[u8], at: usize) -> Result<u32> {
     let end = at.checked_add(4).ok_or(BAD)?;
     Ok(u32::from_be_bytes(
         data.get(at..end).ok_or(BAD)?.try_into().map_err(|_| BAD)?,
     ))
 }
-fn u64_at(data: &[u8], at: usize) -> Result<u64> {
+pub(crate) fn u64_at(data: &[u8], at: usize) -> Result<u64> {
     let end = at.checked_add(8).ok_or(BAD)?;
     Ok(u64::from_be_bytes(
         data.get(at..end).ok_or(BAD)?.try_into().map_err(|_| BAD)?,
     ))
 }
-fn atoms(data: &[u8], mut at: usize, end: usize) -> Result<Vec<Atom>> {
+pub(crate) fn atoms(data: &[u8], mut at: usize, end: usize) -> Result<Vec<Atom>> {
     if at > end || end > data.len() {
         return Err(BAD);
     }
@@ -69,16 +69,16 @@ fn atoms(data: &[u8], mut at: usize, end: usize) -> Result<Vec<Atom>> {
     }
     Ok(out)
 }
-fn children<'a>(data: &'a [u8], parent: Atom) -> Result<Vec<Atom>> {
+pub(crate) fn children(data: &[u8], parent: Atom) -> Result<Vec<Atom>> {
     atoms(data, parent.data, parent.end)
 }
-fn find(data: &[u8], parent: Atom, name: &[u8; 4]) -> Result<Atom> {
+pub(crate) fn find(data: &[u8], parent: Atom, name: &[u8; 4]) -> Result<Atom> {
     children(data, parent)?
         .into_iter()
         .find(|a| &a.name == name)
         .ok_or(UNSUPPORTED)
 }
-fn boxed(name: &[u8; 4], body: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn boxed(name: &[u8; 4], body: &[u8]) -> Result<Vec<u8>> {
     let len = u32::try_from(body.len().checked_add(8).ok_or(BAD)?).map_err(|_| UNSUPPORTED)?;
     let mut out = Vec::with_capacity(len as usize);
     out.extend_from_slice(&len.to_be_bytes());
@@ -86,13 +86,13 @@ fn boxed(name: &[u8; 4], body: &[u8]) -> Result<Vec<u8>> {
     out.extend_from_slice(body);
     Ok(out)
 }
-fn fullbox(name: &[u8; 4], version_flags: u32, payload: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn fullbox(name: &[u8; 4], version_flags: u32, payload: &[u8]) -> Result<Vec<u8>> {
     let mut body = Vec::with_capacity(4 + payload.len());
     body.extend(version_flags.to_be_bytes());
     body.extend(payload);
     boxed(name, &body)
 }
-fn set_duration(data: &[u8], atom: Atom, field: usize, value: u64) -> Result<Vec<u8>> {
+pub(crate) fn set_duration(data: &[u8], atom: Atom, field: usize, value: u64) -> Result<Vec<u8>> {
     let mut body = data[atom.data..atom.end].to_vec();
     let version = *body.first().ok_or(BAD)?;
     let (pos, width) = match version {

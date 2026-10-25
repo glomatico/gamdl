@@ -28,6 +28,18 @@ class Muxer:
             raise TypeError("data must be MP4 bytes")
         return _native.remux_mp4(data)
 
+    def mux(self, *, video: bytes, audio: bytes) -> bytes:
+        """Combine decrypted fMP4 video and audio into a seekable MP4.
+
+        Lossless: encoded packets are copied, never transcoded. Preserves
+        supported clear caption tracks embedded in the selected video stream.
+        Returns bytes, suitable for writing or sending to another consumer.
+        DRM removal must have already happened in separate Streamer calls.
+        """
+        if not isinstance(video, bytes) or not isinstance(audio, bytes):
+            raise TypeError("video and audio must be MP4 bytes")
+        return _native.mux_av_mp4(video, audio)
+
     def tag(
         self,
         path: str | PathLike[str],

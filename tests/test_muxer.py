@@ -87,6 +87,181 @@ def packet_hashes(path: Path):
     return [tuple(row.split(",")[:2]) for row in result.stdout.splitlines()]
 
 
+def track_hashes(path: Path, kind: str) -> list[str]:
+    """Verify lossless muxing by hashing encoded packets, not decoded frames."""
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            f"{kind}:0",
+            "-show_packets",
+            "-show_data_hash",
+            "sha256",
+            "-show_entries",
+            "packet=data_hash",
+            "-of",
+            "default=nk=1:nw=1",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in result.stdout.splitlines() if line.startswith("SHA256:")]
+
+
+@unittest.skipUnless(
+    shutil.which("ffmpeg") and shutil.which("ffprobe"),
+    "FFmpeg and FFprobe required for MP4 mux fixtures",
+)
+class NativeAvMuxTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        self.video = self.directory / "video.mp4"
+        self.audio = self.directory / "audio.m4a"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=duration=0.9:size=160x96:rate=24",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-x264-params",
+                "bframes=2:keyint=12",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+frag_keyframe+empty_moov+default_base_moof",
+                "-frag_duration",
+                "180000",
+                str(self.video),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=900:sample_rate=48000:duration=0.9",
+                "-c:a",
+                "aac",
+                "-movflags",
+                "+frag_keyframe+empty_moov+default_base_moof",
+                "-frag_duration",
+                "150000",
+                str(self.audio),
+            ],
+            capture_output=True,
+            check=True,
+        )
+
+    def mux(self, video: bytes | None = None, audio: bytes | None = None) -> Path:
+        output = self.directory / "muxed.mp4"
+        output.write_bytes(
+            Muxer().mux(
+                video=self.video.read_bytes() if video is None else video,
+                audio=self.audio.read_bytes() if audio is None else audio,
+            )
+        )
+        return output
+
+    def test_video_audio_lossless_mux_with_b_frames(self):
+        output = self.mux()
+        self.assertEqual(
+            [kind for kind, _ in atoms(output.read_bytes())],
+            [b"ftyp", b"moov", b"mdat"],
+        )
+        self.assertEqual(track_hashes(self.video, "v"), track_hashes(output, "v"))
+        self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
+        self.assertGreater(len(track_hashes(output, "v")), 15)
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-xerror",
+                "-i",
+                str(output),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-f",
+                "null",
+                "-",
+            ],
+            capture_output=True,
+            check=True,
+        )
+
+    def test_mux_preserves_track_offset_with_edit_list(self):
+        audio = bytearray(self.audio.read_bytes())
+        position = 0
+        count = 0
+        while (position := audio.find(b"tfdt", position)) >= 0:
+            # Keep fragment timestamps contiguous, but shift the whole audio
+            # presentation by one second relative to the video.
+            self.assertEqual(audio[position + 4], 1)
+            at = position + 8
+            value = int.from_bytes(audio[at : at + 8], "big")
+            audio[at : at + 8] = (value + 48000).to_bytes(8, "big")
+            count += 1
+            position = at + 8
+        self.assertGreater(count, 1)
+        output = self.mux(audio=bytes(audio))
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=start_time",
+                "-of",
+                "default=nk=1:nw=1",
+                str(output),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertGreater(float(result.stdout.strip()), 0.9)
+        self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
+
+    def test_rejects_bad_or_encrypted_track_inputs(self):
+        with self.assertRaisesRegex(TypeError, "bytes"):
+            Muxer().mux(video="bad", audio=self.audio.read_bytes())
+        with self.assertRaisesRegex(ValueError, "Malformed|Unsupported"):
+            self.mux(video=b"not mp4")
+        with self.assertRaisesRegex(ValueError, "Unexpected media track"):
+            self.mux(video=self.audio.read_bytes())
+        encrypted = self.video.read_bytes().replace(b"avc1", b"encv", 1)
+        self.assertNotEqual(encrypted, self.video.read_bytes())
+        with self.assertRaisesRegex(ValueError, "Encrypted or unsupported"):
+            self.mux(video=encrypted)
+
+
 @unittest.skipUnless(
     shutil.which("ffmpeg") and shutil.which("ffprobe"),
     "FFmpeg and FFprobe required for MP4 remux fixtures",

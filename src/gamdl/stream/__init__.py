@@ -1,6 +1,6 @@
-"""Rust-backed streaming of selected Apple Music HLS resources."""
+"""Rust-backed HLS and progressive HTTP media transfers."""
 
-from .stream import Stream
+from .streamer import Streamer
 from .progress import StreamProgress
 
-__all__ = ["Stream", "StreamProgress"]
+__all__ = ["Streamer", "StreamProgress"]

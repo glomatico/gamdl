@@ -30,6 +30,7 @@ from .song.models import (
 )
 from .stream import (
     AudioStream,
+    HttpStream,
     HlsStream,
     HlsSongStream,
     StreamSegment,
@@ -48,6 +49,7 @@ __all__ = [
     "DEFAULT_AUTO_SELECT",
     "GamdlMediaError",
     "HlsSongStream",
+    "HttpStream",
     "HlsType",
     "Lyrics",
     "LyricsLine",

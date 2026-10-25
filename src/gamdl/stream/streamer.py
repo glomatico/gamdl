@@ -1,6 +1,6 @@
-"""Download selected HLS streams using Rust, exposed as an async iterator.
+"""Download individual HLS tracks or progressive HTTP files using Rust.
 
-Playlist discovery remains in gamdl.media. Network segment fetching, bounded
+Playlist discovery remains in gamdl.media. Network requests, bounded
 concurrency and retries are implemented by the native Tokio/reqwest backend.
 This layer can automatically acquire a key through an injected DRM backend,
 use wrapper-v2 for eligible Apple song HLS, or pass through encrypted bytes if
@@ -19,7 +19,14 @@ from gamdl import _native
 from gamdl.api.wrapper import WrapperApi
 from gamdl.drm import Drm, DrmLicenseError
 from gamdl.drm.models import ContentKey
-from gamdl.media import AudioStream, HlsStream, HlsSongStream, HlsType, StreamOrigin
+from gamdl.media import (
+    AudioStream,
+    HlsStream,
+    HlsSongStream,
+    HttpStream,
+    HlsType,
+    StreamOrigin,
+)
 from gamdl.media.exceptions import StreamManifestError
 from .progress import StreamProgress
 
@@ -79,10 +86,10 @@ async def _plan(source: HlsStream) -> list[tuple[str, int | None, int | None]]:
     return parts
 
 
-class Stream(AsyncIterator[bytes]):
-    """Async context manager yielding raw HLS bytes in playlist order.
+class Streamer(AsyncIterator[bytes]):
+    """Async context manager yielding bytes from one media track.
 
-    Stream owns the native HTTP client and cancels pending fragment requests
+    Streamer owns the native HTTP client and cancels pending requests
     when the context exits. Wrapper-v2 is preferred when supplied for eligible
     song HLS with usable FairPlay metadata. Otherwise, an injected Drm backend
     acquires the content key when compatible signaling exists. With neither
@@ -92,13 +99,14 @@ class Stream(AsyncIterator[bytes]):
     downgraded to encrypted output. Enhanced HLS song CBCS automatically
     applies the legacy prefetch key to sample description 1 and the licensed
     key to description 2. Wrapper delivery is not supported for music videos.
-    Arbitrary key rotation and muxing are not supported yet.
-    Do not share one Stream iterator between independent consumers.
+    Progressive HTTP downloads are returned unchanged; MP4 DRM for standalone
+    files, arbitrary HLS key rotation and track muxing are not supported yet.
+    Do not share one Streamer iterator between independent consumers.
     """
 
     def __init__(
         self,
-        source: HlsStream,
+        source: HlsStream | HttpStream,
         *,
         concurrency: int = 8,
         chunk_size: int = 262144,
@@ -107,8 +115,8 @@ class Stream(AsyncIterator[bytes]):
         wrapper_api: WrapperApi | None = None,
         drm: Drm | None = None,
     ) -> None:
-        if not isinstance(source, HlsStream):
-            raise TypeError("source must be an HlsStream")
+        if not isinstance(source, (HlsStream, HttpStream)):
+            raise TypeError("source must be an HlsStream or HttpStream")
         self.source = source
         self.concurrency = concurrency
         self.chunk_size = chunk_size
@@ -119,6 +127,8 @@ class Stream(AsyncIterator[bytes]):
             raise TypeError("drm must be a Drm")
         if drm is not None and decryption_key is not None:
             raise ValueError("Use either decryption_key or drm, not both")
+        if isinstance(source, HttpStream) and decryption_key is not None:
+            raise ValueError("Progressive HTTP MP4 decryption is not supported")
         self._drm = drm
         if (
             wrapper_api is not None
@@ -153,11 +163,17 @@ class Stream(AsyncIterator[bytes]):
         self._decryption_method: str | None = None
         self._used = False
 
-    async def __aenter__(self) -> Stream:
+    async def __aenter__(self) -> Streamer:
         if self._used:
-            raise RuntimeError("A Stream instance cannot be reopened")
+            raise RuntimeError("A Streamer instance cannot be reopened")
         self._used = True
         try:
+            if isinstance(self.source, HttpStream):
+                self._engine = _native.NativeStream.progressive(
+                    self.source.url, self.chunk_size, self.retries
+                )
+                self._decryption_method = "none"
+                return self
             parts = await _plan(self.source)
             key, kid = self._key, self._kid
             method = "explicit_key" if key is not None else "none"
@@ -245,14 +261,14 @@ class Stream(AsyncIterator[bytes]):
             return StreamProgress(*self._engine.progress())
         if self._final_progress is not None:
             return self._final_progress
-        raise RuntimeError("Stream progress is available after entering the context")
+        raise RuntimeError("Streamer progress is available after entering the context")
 
-    def __aiter__(self) -> Stream:
+    def __aiter__(self) -> Streamer:
         return self
 
     async def __anext__(self) -> bytes:
         if self._engine is None:
-            raise RuntimeError("Stream must be used inside an async with block")
+            raise RuntimeError("Streamer must be used inside an async with block")
         result = await self._engine.next_chunk()
         if result is None:
             raise StopAsyncIteration

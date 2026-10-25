@@ -3,6 +3,12 @@
 from collections.abc import Awaitable
 
 class NativeStream:
+    @staticmethod
+    def progressive(
+        url: str,
+        chunk_size: int = 262144,
+        retries: int = 3,
+    ) -> NativeStream: ...
     def __init__(
         self,
         parts: list[tuple[str, int | None, int | None]],

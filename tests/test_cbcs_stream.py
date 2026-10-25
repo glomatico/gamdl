@@ -21,7 +21,7 @@ from gamdl.media import (
     StreamOrigin,
     VideoStream,
 )
-from gamdl.stream import Stream
+from gamdl.stream import Streamer
 from tests.test_native_stream import HttpHandler, fixture_playlist, manifest_url
 
 KEY = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
@@ -225,7 +225,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         self.http.fixtures["cbcs-init"] = init
         self.http.fixtures["cbcs-fragment"] = fragment
-        async with Stream(
+        async with Streamer(
             self.source(video=video), decryption_key=ContentKey(KID, KEY)
         ) as stream:
             decoded = await stream.read()
@@ -258,7 +258,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
                 "cbcs-next": second,
             }
         )
-        async with Stream(
+        async with Streamer(
             self.source(segments="cbcs-fragment,cbcs-next"),
             decryption_key=ContentKey(KID, KEY),
         ) as stream:
@@ -285,13 +285,13 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
             segments="cbcs-fragment,cbcs-next",
             origin=StreamOrigin.ASSET_ENHANCED_HLS,
         )
-        async with Stream(audio, decryption_key=license_key) as stream:
+        async with Streamer(audio, decryption_key=license_key) as stream:
             output = await stream.read()
         self.assertEqual(mdats(output[len(init) :]), expected_initial + expected_later)
 
         # Do NOT accept that mismatched KID for ordinary CBCS streams.
         standard_audio = self.source(segments="cbcs-fragment,cbcs-next")
-        async with Stream(standard_audio, decryption_key=license_key) as stream:
+        async with Streamer(standard_audio, decryption_key=license_key) as stream:
             with self.assertRaisesRegex(OSError, "key ID"):
                 await stream.read()
 
@@ -304,21 +304,23 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
             }
         )
         video = self.source(video=True, origin=StreamOrigin.ASSET_ENHANCED_HLS)
-        async with Stream(video, decryption_key=license_key) as stream:
+        async with Streamer(video, decryption_key=license_key) as stream:
             with self.assertRaisesRegex(OSError, "key ID"):
                 await stream.read()
 
     async def test_invalid_constant_iv_fails_and_prevents_output(self):
         init, fragment, _ = fixture(corrupt_iv=True)
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
-        async with Stream(self.source(), decryption_key=ContentKey(KID, KEY)) as stream:
+        async with Streamer(
+            self.source(), decryption_key=ContentKey(KID, KEY)
+        ) as stream:
             with self.assertRaisesRegex(OSError, "Unsupported fragmented MP4"):
                 await stream.read()
 
     async def test_wrong_content_key_id_rejected(self):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
-        async with Stream(
+        async with Streamer(
             self.source(), decryption_key=ContentKey(b"0" * 16, KEY)
         ) as stream:
             with self.assertRaisesRegex(OSError, "key ID"):
@@ -335,13 +337,15 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
             transport=source._transport,
             hls_type=HlsType.STANDARD,
         )
-        async with Stream(
+        async with Streamer(
             apple_source, decryption_key=ContentKey(b"X" * 16, KEY)
         ) as stream:
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected)
         # Ordinary stream types must still verify their declared KID.
-        async with Stream(source, decryption_key=ContentKey(b"X" * 16, KEY)) as stream:
+        async with Streamer(
+            source, decryption_key=ContentKey(b"X" * 16, KEY)
+        ) as stream:
             with self.assertRaisesRegex(OSError, "key ID"):
                 await stream.read()
 
@@ -357,7 +361,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
                 "cbcs-fragment": fragment,
             }
         )
-        async with Stream(self.source(), decryption_key=KEY) as stream:
+        async with Streamer(self.source(), decryption_key=KEY) as stream:
             with self.assertRaisesRegex(OSError, "Multiple content key IDs"):
                 await stream.read()
 
@@ -373,14 +377,14 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
                 "cbcs-fragment": bytes(fragment),
             }
         )
-        async with Stream(self.source(), decryption_key=KEY) as stream:
+        async with Streamer(self.source(), decryption_key=KEY) as stream:
             with self.assertRaisesRegex(OSError, "Sample-group encryption overrides"):
                 await stream.read()
 
     async def test_raw_copies_cbcs_without_decryption(self):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
-        async with Stream(self.source()) as stream:
+        async with Streamer(self.source()) as stream:
             self.assertEqual(stream.decryption_method, "none")
             self.assertEqual(await stream.read(), init + fragment)
 
@@ -411,7 +415,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
                     else Drm.from_playready(Mock(), cdm=Mock())
                 )
                 drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
-                stream = Stream(source, drm=drm)
+                stream = Streamer(source, drm=drm)
                 drm.get_keys.assert_not_awaited()
                 with self.assertRaisesRegex(RuntimeError, "after entering"):
                     _ = stream.decryption_method
@@ -447,7 +451,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
                 source.get_drm_info = AsyncMock(return_value=info)
                 drm = Drm.from_widevine(Mock())
                 drm.get_keys = AsyncMock(side_effect=AssertionError("No license"))
-                async with Stream(source, drm=drm) as stream:
+                async with Streamer(source, drm=drm) as stream:
                     self.assertEqual(stream.decryption_method, "none")
                     self.assertEqual(await stream.read(), init + fragment)
                 drm.get_keys.assert_not_awaited()
@@ -460,7 +464,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         drm = Drm.from_widevine(Mock())
         drm.get_keys = AsyncMock(side_effect=DrmLicenseError("License failed"))
-        stream = Stream(source, drm=drm)
+        stream = Streamer(source, drm=drm)
         with self.assertRaisesRegex(DrmLicenseError, "License failed"):
             async with stream:
                 self.fail("License error must abort before downloading")
@@ -471,7 +475,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         # an error, not permission to return encrypted media silently.
         drm.get_keys = AsyncMock(return_value=None)
         with self.assertRaisesRegex(DrmLicenseError, "no content key"):
-            async with Stream(source, drm=drm):
+            async with Streamer(source, drm=drm):
                 pass
         self.assertEqual(self.http.hits["cbcs-fragment"], 0)
 
@@ -484,7 +488,7 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
         init, fragment, expected = fixture()
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
-        async with Stream(source, drm=drm) as stream:
+        async with Streamer(source, drm=drm) as stream:
             self.assertEqual(mdats((await stream.read())[len(init) :]), expected)
         drm.get_keys.assert_awaited_once_with(
             media_id="i.12345", drm_info=info, is_library=True
@@ -492,18 +496,18 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
         source = self.source()
         source.get_drm_info = AsyncMock(return_value=info)
         with self.assertRaisesRegex(ValueError, "media ID"):
-            async with Stream(source, drm=drm):
+            async with Streamer(source, drm=drm):
                 pass
 
     async def test_explicit_key_overrides_automatic_selection_and_validates_args(self):
         source = self.source()
         drm = Drm.from_widevine(Mock())
         with self.assertRaisesRegex(ValueError, "either decryption_key or drm"):
-            Stream(source, drm=drm, decryption_key=KEY)
+            Streamer(source, drm=drm, decryption_key=KEY)
         with self.assertRaisesRegex(TypeError, "drm must be"):
-            Stream(source, drm=Mock())
+            Streamer(source, drm=Mock())
         init, fragment, expected = fixture()
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})
-        async with Stream(source, decryption_key=ContentKey(KID, KEY)) as stream:
+        async with Streamer(source, decryption_key=ContentKey(KID, KEY)) as stream:
             self.assertEqual(stream.decryption_method, "explicit_key")
             self.assertEqual(mdats((await stream.read())[len(init) :]), expected)

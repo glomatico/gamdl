@@ -23,7 +23,7 @@ from gamdl.media import (
     WebPlaybackStream,
 )
 from gamdl.media.exceptions import StreamManifestError
-from gamdl.stream import Stream
+from gamdl.stream import Streamer
 
 from tests.test_cbcs_stream import (
     CT1,
@@ -202,7 +202,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_standard_asset_delivers_and_reassembles(self):
         init, frag, expected = fixture()
         self.http.fixtures.update({"init": init, "segment": frag})
-        async with Stream(
+        async with Streamer(
             self.source(),
             wrapper_api=self.api,
             chunk_size=1024,
@@ -224,7 +224,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         source = self.source(
             origin=StreamOrigin.ASSET_ENHANCED_HLS, hls_type=HlsType.STANDARD
         )
-        async with Stream(source, wrapper_api=self.api) as stream:
+        async with Streamer(source, wrapper_api=self.api) as stream:
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected)
         self.assertEqual(sum(batch[2] for batch in self.wrapper.batches), 2)
@@ -236,7 +236,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "out.m4a"
             path.write_bytes(b"ORIGINAL")
-            async with Stream(
+            async with Streamer(
                 self.source(),
                 wrapper_api=self.api,
             ) as stream:
@@ -273,7 +273,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.http.fixtures["second"] = second
-        async with Stream(transport, wrapper_api=self.api) as stream:
+        async with Streamer(transport, wrapper_api=self.api) as stream:
             decoded = await stream.read()
         self.assertEqual(
             mdats(decoded[len(init) :]),
@@ -317,7 +317,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 "segment": moof + atom(b"mdat", payload),
             }
         )
-        async with Stream(self.source(), wrapper_api=self.api) as stream:
+        async with Streamer(self.source(), wrapper_api=self.api) as stream:
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected_two * 65)
         self.assertEqual([batch[2] for batch in self.wrapper.batches], [128, 2])
@@ -367,28 +367,28 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                         "segment": moof + fragment[mdat_at:],
                     }
                 )
-                async with Stream(self.source(), wrapper_api=self.api) as stream:
+                async with Streamer(self.source(), wrapper_api=self.api) as stream:
                     downloaded = await stream.read()
                 self.assertEqual(mdats(downloaded[len(init) :]), expected)
 
     async def test_wrapper_can_coexist_with_drm_and_ignores_ineligible_sources(self):
         source = self.source()
         drm = Drm.from_widevine(Mock())
-        Stream(source, wrapper_api=self.api, drm=drm)
+        Streamer(source, wrapper_api=self.api, drm=drm)
         with self.assertRaises(TypeError):
-            Stream(source, fairplay_key="skd://test")
+            Streamer(source, fairplay_key="skd://test")
         with self.assertRaisesRegex(TypeError, "wrapper_api must be"):
-            Stream(source, wrapper_api=Mock())
+            Streamer(source, wrapper_api=Mock())
         init, fragment, _ = fixture()
         self.http.fixtures.update({"init": init, "segment": fragment})
         source.origin = StreamOrigin.WEBPLAYBACK
-        async with Stream(source, wrapper_api=self.api) as stream:
+        async with Streamer(source, wrapper_api=self.api) as stream:
             self.assertEqual(stream.decryption_method, "none")
             self.assertEqual(await stream.read(), init + fragment)
         source = self.source()
         source.media_id = None
         with self.assertRaisesRegex(ValueError, "media ID"):
-            async with Stream(source, wrapper_api=self.api):
+            async with Streamer(source, wrapper_api=self.api):
                 pass
         for cls in (VideoStream, WebPlaybackStream):
             bad = cls(
@@ -398,7 +398,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 transport=self.source()._transport,
                 media_id="1559885421",
             )
-            async with Stream(bad, wrapper_api=self.api) as stream:
+            async with Streamer(bad, wrapper_api=self.api) as stream:
                 self.assertEqual(stream.decryption_method, "none")
                 self.assertEqual(await stream.read(), init + fragment)
         self.assertEqual(self.wrapper.batches, [])
@@ -408,7 +408,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         self.http.fixtures.update({"init": init, "segment": fragment})
         source = self.source()
         self.assertEqual(source._transport.get_manifest.await_count, 0)
-        stream = Stream(source, wrapper_api=self.api)
+        stream = Streamer(source, wrapper_api=self.api)
         self.assertEqual(source._transport.get_manifest.await_count, 0)
         async with stream:
             self.assertEqual(source._transport.get_manifest.await_count, 1)
@@ -430,7 +430,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(uri=uri):
                 source = self.source(fairplay_uri=uri)
-                async with Stream(source, wrapper_api=self.api) as stream:
+                async with Streamer(source, wrapper_api=self.api) as stream:
                     self.assertEqual(stream.decryption_method, "none")
                     self.assertEqual(await stream.read(), init + fragment)
                 self.assertEqual(source._transport.get_manifest.await_count, 1)
@@ -449,7 +449,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         source.get_drm_info = AsyncMock(return_value=info)
         drm = Drm.from_widevine(Mock())
         drm.get_keys = AsyncMock(side_effect=AssertionError("Should use wrapper"))
-        async with Stream(source, wrapper_api=self.api, drm=drm) as stream:
+        async with Streamer(source, wrapper_api=self.api, drm=drm) as stream:
             self.assertEqual(stream.decryption_method, "wrapper")
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected)
@@ -470,7 +470,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         source.get_drm_info = AsyncMock(return_value=info)
         drm = Drm.from_widevine(Mock())
         drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
-        async with Stream(source, wrapper_api=self.api, drm=drm) as stream:
+        async with Streamer(source, wrapper_api=self.api, drm=drm) as stream:
             self.assertEqual(stream.decryption_method, "widevine")
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected)
@@ -482,7 +482,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_explicit_key_overrides_wrapper_when_supplied(self):
         init, fragment, expected = fixture()
         self.http.fixtures.update({"init": init, "segment": fragment})
-        async with Stream(
+        async with Streamer(
             self.source(), wrapper_api=self.api, decryption_key=ContentKey(KID, KEY)
         ) as stream:
             self.assertEqual(stream.decryption_method, "explicit_key")

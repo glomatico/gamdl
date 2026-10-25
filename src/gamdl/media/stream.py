@@ -1,4 +1,4 @@
-"""Lazy audio stream descriptors, HLS inspection and DRM metadata.
+"""Lazy audio/video descriptors for HLS playlists and progressive HTTPS files.
 
 This layer discovers and describes streams. It does not acquire licenses,
 extract decryption keys, download full media, or write output files.
@@ -66,6 +66,34 @@ class StreamTransport:
             return m3u8.loads(content, uri=url)
         except (UnicodeError, ValueError) as exc:
             raise StreamManifestError("Invalid HLS playlist data") from exc
+
+
+class HttpStream:
+    """One progressive HTTP media file, not an HLS playlist.
+
+    No license metadata is extracted from standalone MP4/MP3 resources. The
+    progressive downloader preserves file bytes as-is, including encryption.
+    The stream origin identifies the provider, not the transfer protocol.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        codec: SongCodec | str | None = None,
+        origin: StreamOrigin = StreamOrigin.WEBPLAYBACK,
+        bitrate: int | None = None,
+        media_id: str | None = None,
+    ) -> None:
+        self.url = url
+        self.codec = codec
+        self.origin = origin
+        self.bitrate = bitrate
+        self.media_id = media_id
+
+    async def get_drm_info(self) -> DRMInfo:
+        """No playlist-side DRM signaling is available for direct files."""
+        return DRMInfo()
 
 
 class HlsStream:

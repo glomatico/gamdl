@@ -29,7 +29,7 @@ from gamdl.media import (
     SongStreamResolver,
     StreamOrigin,
 )
-from gamdl.stream import Stream
+from gamdl.stream import Streamer
 from gamdl.muxer import Muxer
 from tests.live_auth import LiveSettings, open_live_session
 from tests.live.song_fixture import (
@@ -81,7 +81,7 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
             + ".m4a"
         )
         path = Path(self.directory.name) / name
-        async with Stream(
+        async with Streamer(
             source,
             wrapper_api=self.session.wrapper if wrapper or auto else None,
             decryption_key=key,
@@ -288,7 +288,7 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         # Compare MediaInfo against Apple's exact original encrypted bytes:
         # an upstream CMAF/USAC warning must not be blamed on decryption.
         raw = Path(self.directory.name) / "encrypted-original.m4a"
-        async with Stream(source) as stream:
+        async with Streamer(source) as stream:
             await stream.save(raw)
         if shutil.which("mediainfo"):
 

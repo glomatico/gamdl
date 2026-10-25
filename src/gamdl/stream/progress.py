@@ -10,9 +10,9 @@ class StreamProgress:
     """Snapshot of native transfer counters.
 
     downloaded_bytes includes retries; emitted_bytes counts bytes received by
-    the Python iterator after optional decryption. total_bytes is known only
-    when every HLS part has an explicit byte range. completed_parts counts
-    fragments (including initialization sections) fully sent by Rust.
+    the Python iterator after optional decryption. total_bytes is known when
+    all HLS parts have byte ranges or progressive HTTP exposes Content-Length.
+    completed_parts counts completed HLS fragments or a whole HTTP file.
     """
 
     downloaded_bytes: int
@@ -33,7 +33,9 @@ class StreamProgress:
 
     @property
     def percentage(self) -> float:
-        """Approximate completion based on ordered, fully emitted parts."""
+        """Completion by byte count when known, otherwise completed parts."""
+        if self.total_bytes is not None and self.total_bytes > 0:
+            return min(100.0, 100.0 * self.emitted_bytes / self.total_bytes)
         return (
             100.0 * self.completed_parts / self.total_parts if self.total_parts else 0.0
         )

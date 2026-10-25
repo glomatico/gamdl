@@ -22,7 +22,7 @@ class Muxer:
 
         Preserves compressed samples and codec configuration. Returns an
         ordinary seekable MP4 in memory; unsupported input fails closed.
-        Call after native Stream decryption, before optional file tagging.
+        Call after native Streamer decryption, before optional file tagging.
         """
         if not isinstance(data, bytes):
             raise TypeError("data must be MP4 bytes")

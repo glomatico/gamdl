@@ -430,6 +430,77 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
                 )
                 source._transport.get_manifest.assert_awaited_once()
 
+    async def test_apple_cbcs_video_accepts_zero_kid_placeholder_only(self):
+        init, fragment, expected = fixture(video=True)
+        init = bytearray(init)
+        at = init.index(b"tenc")
+        init[at + 12 : at + 28] = bytes(16)
+        self.http.fixtures.update({"cbcs-init": bytes(init), "cbcs-fragment": fragment})
+
+        for origin in (StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS):
+            with self.subTest(origin=origin):
+                video = self.source(video=True, origin=origin)
+                async with Streamer(
+                    video, decryption_key=ContentKey(KID, KEY)
+                ) as streamer:
+                    decoded = await streamer.read()
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
+
+        # Apple audio, unrelated sources and nonzero KIDs retain validation.
+        for origin in (StreamOrigin.ASSET_STANDARD_HLS, StreamOrigin.WEBPLAYBACK):
+            with self.subTest(origin=origin):
+                video = self.source(video=True, origin=origin)
+                async with Streamer(
+                    video, decryption_key=ContentKey(KID, KEY)
+                ) as streamer:
+                    with self.assertRaisesRegex(OSError, "key ID"):
+                        await streamer.read()
+
+        nonzero_init = bytearray(init)
+        nonzero_init[at + 12 : at + 28] = b"P" * 16
+        self.http.fixtures["cbcs-init"] = bytes(nonzero_init)
+        video = self.source(video=True, origin=StreamOrigin.ITUNES_HLS)
+        async with Streamer(video, decryption_key=ContentKey(KID, KEY)) as streamer:
+            with self.assertRaisesRegex(OSError, "key ID"):
+                await streamer.read()
+
+    async def test_music_video_audio_cbcs_accepts_only_zero_kid_placeholder(self):
+        init, fragment, expected = fixture()
+        init = bytearray(init)
+        at = init.index(b"tenc")
+        init[at + 12 : at + 28] = bytes(16)
+        self.http.fixtures.update({"cbcs-init": bytes(init), "cbcs-fragment": fragment})
+        for origin in (StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS):
+            with self.subTest(origin=origin):
+                source = self.source(origin=origin)
+                async with Streamer(
+                    source, decryption_key=ContentKey(KID, KEY)
+                ) as streamer:
+                    decoded = await streamer.read()
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
+        for origin in (StreamOrigin.WEBPLAYBACK, StreamOrigin.ASSET_STANDARD_HLS):
+            with self.subTest(origin=origin):
+                source = self.source(origin=origin)
+                async with Streamer(
+                    source, decryption_key=ContentKey(KID, KEY)
+                ) as streamer:
+                    with self.assertRaisesRegex(OSError, "key ID"):
+                        await streamer.read()
+
+        ordinary_song = self.source(origin=StreamOrigin.WRAPPER_HLS)
+        ordinary_song = HlsSongStream(
+            codec=SongCodec.AAC,
+            origin=StreamOrigin.WRAPPER_HLS,
+            url=ordinary_song.url,
+            transport=ordinary_song._transport,
+            hls_type=HlsType.STANDARD,
+        )
+        async with Streamer(
+            ordinary_song, decryption_key=ContentKey(KID, KEY)
+        ) as streamer:
+            with self.assertRaisesRegex(OSError, "key ID"):
+                await streamer.read()
+
     async def test_unavailable_drm_signaling_streams_original_encrypted_bytes(self):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"cbcs-init": init, "cbcs-fragment": fragment})

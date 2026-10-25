@@ -253,11 +253,11 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_unchanged_ciphertext_from_wrapper_fails_closed(self):
-        init, fragment, _ = fixture(video=True)
+        init, fragment, _ = fixture()
         self.http.fixtures.update({"init": init, "segment": fragment})
         source = self.source()
-        source = VideoStream(
-            codec="h264",
+        source = AudioStream(
+            codec=SongCodec.AAC,
             origin=StreamOrigin.ITUNES_HLS,
             url=source.url,
             transport=source._transport,
@@ -265,7 +265,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         self.wrapper.echo = True
         with TemporaryDirectory() as directory:
-            path = Path(directory) / "video.m4v"
+            path = Path(directory) / "audio.m4a"
             path.write_bytes(b"PREEXISTING")
             async with Streamer(source, wrapper_api=self.api) as streamer:
                 with self.assertRaisesRegex(OSError, "unchanged"):
@@ -515,30 +515,59 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mdats(decoded[len(init) :]), expected)
         self.assertEqual(self.wrapper.batches, [])
 
-    async def test_music_video_audio_and_video_wrapper_delivery(self):
-        for cls, is_video, origin in (
-            (VideoStream, True, StreamOrigin.ITUNES_HLS),
-            (AudioStream, False, StreamOrigin.ITUNES_HLS),
-            (VideoStream, True, StreamOrigin.WRAPPER_HLS),
-        ):
-            with self.subTest(cls=cls, origin=origin):
-                self.wrapper.batches.clear()
-                init, segment, expected = fixture(video=is_video)
-                self.http.fixtures.update({"init": init, "segment": segment})
+    async def test_music_video_audio_wrapper_delivery(self):
+        init, segment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": segment})
+        source = self.source()
+        audio = AudioStream(
+            codec=SongCodec.AAC,
+            origin=StreamOrigin.ITUNES_HLS,
+            url=source.url,
+            transport=source._transport,
+            media_id="299199411",
+        )
+        async with Streamer(audio, wrapper_api=self.api) as streamer:
+            self.assertEqual(streamer.decryption_method, "wrapper")
+            downloaded = await streamer.read()
+        self.assertNotIn(b"enca", downloaded)
+        self.assertEqual(mdats(downloaded[len(init) :]), expected)
+        self.assertEqual(
+            self.wrapper.batches,
+            [(b"299199411", b"skd://local/test", 2)],
+        )
+
+    async def test_music_video_never_uses_wrapper_for_video_samples(self):
+        init, segment, expected = fixture(video=True)
+        self.http.fixtures.update({"init": init, "segment": segment})
+        for origin in (StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS):
+            with self.subTest(origin=origin):
                 source = self.source()
-                source = cls(
-                    codec="h264" if is_video else SongCodec.AAC,
+                video = VideoStream(
+                    codec="h264",
                     origin=origin,
                     url=source.url,
                     transport=source._transport,
                     media_id="299199411",
                 )
-                async with Streamer(source, wrapper_api=self.api) as streamer:
-                    self.assertEqual(streamer.decryption_method, "wrapper")
-                    downloaded = await streamer.read()
-                self.assertNotIn(b"encv" if is_video else b"enca", downloaded)
-                self.assertEqual(mdats(downloaded[len(init) :]), expected)
-                self.assertEqual(
-                    self.wrapper.batches,
-                    [(b"299199411", b"skd://local/test", 2)],
+                drm = Drm.from_widevine(Mock())
+                info = DRMInfo(
+                    fairplay_streaming="skd://local/test",
+                    widevine_pssh=b"pssh",
+                    widevine_uri="data:widevine",
+                    encryption_method="SAMPLE-AES",
                 )
+                video.get_drm_info = AsyncMock(return_value=info)
+                drm.get_keys = AsyncMock(return_value=ContentKey(KID, KEY))
+                async with Streamer(video, wrapper_api=self.api, drm=drm) as streamer:
+                    self.assertEqual(streamer.decryption_method, "widevine")
+                    downloaded = await streamer.read()
+                self.assertEqual(mdats(downloaded[len(init) :]), expected)
+                drm.get_keys.assert_awaited_once()
+                self.assertEqual(self.wrapper.batches, [])
+
+                # Without a usable DRM backend, video is downloaded encrypted
+                # instead of attempting an unsupported FairPlay wrapper call.
+                async with Streamer(video, wrapper_api=self.api) as streamer:
+                    self.assertEqual(streamer.decryption_method, "none")
+                    self.assertEqual(await streamer.read(), init + segment)
+                self.assertEqual(self.wrapper.batches, [])

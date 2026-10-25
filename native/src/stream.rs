@@ -291,7 +291,7 @@ pub(crate) struct NativeStream {
 #[pymethods]
 impl NativeStream {
     #[new]
-    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, wrapper=None, asset_song_cbcs=false))]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, wrapper=None, asset_song_cbcs=false, music_video_cbcs=false))]
     fn new(
         parts: Vec<Part>,
         concurrency: usize,
@@ -302,6 +302,7 @@ impl NativeStream {
         enhanced_hls_song: bool,
         wrapper: Option<(String, u16, String, String)>,
         asset_song_cbcs: bool,
+        music_video_cbcs: bool,
     ) -> PyResult<Self> {
         if wrapper.is_some() && (decryption_key.is_some() || key_id.is_some()) {
             return Err(PyValueError::new_err(
@@ -328,6 +329,7 @@ impl NativeStream {
             enhanced_hls_song,
             wrapper.is_some(),
             asset_song_cbcs,
+            music_video_cbcs,
         )
         .map_err(PyValueError::new_err)?;
         if parts.is_empty() || parts.len() > 100_000 {

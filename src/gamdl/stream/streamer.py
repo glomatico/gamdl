@@ -99,8 +99,9 @@ class Streamer(AsyncIterator[bytes]):
     mutually exclusive with drm. License/decryption failures are never silently
     downgraded to encrypted output. Enhanced HLS song CBCS automatically
     applies the legacy prefetch key to sample description 1 and the licensed
-    key to description 2. Wrapper delivery supports non-pattern CBCS
-    music-video audio/video tracks with a valid FairPlay SKD URI.
+    key to description 2. Wrapper does NOT support decrypting video samples:
+    video always uses an available direct DRM backend, never wrapper-v2.
+    A separate music-video audio track may still use wrapper-v2.
     Progressive HTTP downloads are returned unchanged; MP4 DRM for standalone
     files, arbitrary HLS key rotation and track muxing are not supported yet.
     Do not share one Streamer iterator between independent consumers.
@@ -141,7 +142,7 @@ class Streamer(AsyncIterator[bytes]):
                 StreamOrigin.ASSET_STANDARD_HLS,
             }
         ) or (
-            isinstance(source, (AudioStream, VideoStream))
+            isinstance(source, AudioStream)
             and source.origin in {StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS}
         )
         if wrapper_api is not None and wrapper_eligible:
@@ -234,6 +235,10 @@ class Streamer(AsyncIterator[bytes]):
                     StreamOrigin.ASSET_STANDARD_HLS,
                     StreamOrigin.ASSET_ENHANCED_HLS,
                 },
+                isinstance(self.source, (VideoStream, AudioStream))
+                and not isinstance(self.source, HlsSongStream)
+                and self.source.origin
+                in {StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS},
             )
             self._decryption_method = method
         finally:

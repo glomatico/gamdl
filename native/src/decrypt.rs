@@ -426,13 +426,12 @@ impl Mp4Decryptor {
                     .iter()
                     .all(|desc| desc.scheme == EncryptionScheme::Cbcs);
             if self.wrapper_mode
-                && (video
-                    || descriptions.iter().any(|desc| {
-                        desc.scheme != EncryptionScheme::Cbcs
-                            || (desc.crypt_blocks != 0 && desc.skip_blocks != 0)
-                    }))
+                && descriptions.iter().any(|desc| {
+                    desc.scheme != EncryptionScheme::Cbcs
+                        || (desc.crypt_blocks != 0 && desc.skip_blocks != 0)
+                })
             {
-                return Err("Wrapper sample delivery supports only non-pattern CBCS song audio");
+                return Err("Wrapper sample delivery supports only non-pattern CBCS tracks");
             }
             if !enhanced_song_prefetch
                 && !asset_song_cbcs
@@ -710,7 +709,15 @@ impl Mp4Decryptor {
                     let plaintexts = session
                         .decrypt_batch(media_id, fairplay_key, &payloads)
                         .await?;
-                    for (item, plain) in batch.iter().zip(plaintexts) {
+                    for ((item, ciphertext), plain) in batch.iter().zip(&payloads).zip(plaintexts) {
+                        // A wrapper may acknowledge the request while returning
+                        // untouched protected samples (observed for certain
+                        // iTunes music-video renditions). Treat that as a
+                        // decryption failure, never publish an encrypted file
+                        // with its protection boxes stripped.
+                        if plain == *ciphertext {
+                            return Err("Wrapper returned encrypted samples unchanged");
+                        }
                         let sample_len = item
                             .ranges
                             .last()

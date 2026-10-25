@@ -15,6 +15,7 @@ from gamdl.api.http import ApiHttpClient
 from gamdl.api.wrapper import WrapperApi
 from gamdl.drm import ContentKey, DRMInfo, Drm
 from gamdl.media import (
+    AudioStream,
     HlsSongStream,
     HlsType,
     SongCodec,
@@ -108,6 +109,8 @@ class WrapperHandler(socketserver.BaseRequestHandler):
                 )
                 payload = b"mock failure"
             else:
+                if self.server.echo:
+                    out = [CT1 + CT2 for _ in out]
                 payload = count.to_bytes(4, "big")
                 payload += b"".join(len(data).to_bytes(4, "big") for data in out)
                 payload += b"".join(out)
@@ -137,6 +140,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         cls.wrapper.close_frames = 0
         cls.wrapper.iv = IV
         cls.wrapper.invalid = False
+        cls.wrapper.echo = False
         cls.wrapper_thread = threading.Thread(
             target=cls.wrapper.serve_forever, daemon=True
         )
@@ -157,6 +161,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         self.wrapper.batches.clear()
         self.wrapper.iv = IV
         self.wrapper.invalid = False
+        self.wrapper.echo = False
         self.wrapper.close_frames = 0
         self.api = WrapperApi(
             ApiHttpClient("wrapper"),
@@ -246,6 +251,26 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 sorted(p.name for p in Path(directory).iterdir()), ["out.m4a"]
             )
+
+    async def test_unchanged_ciphertext_from_wrapper_fails_closed(self):
+        init, fragment, _ = fixture(video=True)
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        source = self.source()
+        source = VideoStream(
+            codec="h264",
+            origin=StreamOrigin.ITUNES_HLS,
+            url=source.url,
+            transport=source._transport,
+            media_id="299199411",
+        )
+        self.wrapper.echo = True
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "video.m4v"
+            path.write_bytes(b"PREEXISTING")
+            async with Streamer(source, wrapper_api=self.api) as streamer:
+                with self.assertRaisesRegex(OSError, "unchanged"):
+                    await streamer.save(path)
+            self.assertEqual(path.read_bytes(), b"PREEXISTING")
 
     async def test_enhanced_prefetch_then_wrapper(self):
         init, first, expected_first = fixture(second_description=True)
@@ -489,3 +514,31 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected)
         self.assertEqual(self.wrapper.batches, [])
+
+    async def test_music_video_audio_and_video_wrapper_delivery(self):
+        for cls, is_video, origin in (
+            (VideoStream, True, StreamOrigin.ITUNES_HLS),
+            (AudioStream, False, StreamOrigin.ITUNES_HLS),
+            (VideoStream, True, StreamOrigin.WRAPPER_HLS),
+        ):
+            with self.subTest(cls=cls, origin=origin):
+                self.wrapper.batches.clear()
+                init, segment, expected = fixture(video=is_video)
+                self.http.fixtures.update({"init": init, "segment": segment})
+                source = self.source()
+                source = cls(
+                    codec="h264" if is_video else SongCodec.AAC,
+                    origin=origin,
+                    url=source.url,
+                    transport=source._transport,
+                    media_id="299199411",
+                )
+                async with Streamer(source, wrapper_api=self.api) as streamer:
+                    self.assertEqual(streamer.decryption_method, "wrapper")
+                    downloaded = await streamer.read()
+                self.assertNotIn(b"encv" if is_video else b"enca", downloaded)
+                self.assertEqual(mdats(downloaded[len(init) :]), expected)
+                self.assertEqual(
+                    self.wrapper.batches,
+                    [(b"299199411", b"skd://local/test", 2)],
+                )

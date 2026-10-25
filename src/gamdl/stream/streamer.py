@@ -26,6 +26,7 @@ from gamdl.media import (
     HttpStream,
     HlsType,
     StreamOrigin,
+    VideoStream,
 )
 from gamdl.media.exceptions import StreamManifestError
 from .progress import StreamProgress
@@ -98,7 +99,8 @@ class Streamer(AsyncIterator[bytes]):
     mutually exclusive with drm. License/decryption failures are never silently
     downgraded to encrypted output. Enhanced HLS song CBCS automatically
     applies the legacy prefetch key to sample description 1 and the licensed
-    key to description 2. Wrapper delivery is not supported for music videos.
+    key to description 2. Wrapper delivery supports non-pattern CBCS
+    music-video audio/video tracks with a valid FairPlay SKD URI.
     Progressive HTTP downloads are returned unchanged; MP4 DRM for standalone
     files, arbitrary HLS key rotation and track muxing are not supported yet.
     Do not share one Streamer iterator between independent consumers.
@@ -130,16 +132,19 @@ class Streamer(AsyncIterator[bytes]):
         if isinstance(source, HttpStream) and decryption_key is not None:
             raise ValueError("Progressive HTTP MP4 decryption is not supported")
         self._drm = drm
-        if (
-            wrapper_api is not None
-            and isinstance(source, HlsSongStream)
+        wrapper_eligible = (
+            isinstance(source, HlsSongStream)
             and source.origin
             in {
                 StreamOrigin.WRAPPER_HLS,
                 StreamOrigin.ASSET_ENHANCED_HLS,
                 StreamOrigin.ASSET_STANDARD_HLS,
             }
-        ):
+        ) or (
+            isinstance(source, (AudioStream, VideoStream))
+            and source.origin in {StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS}
+        )
+        if wrapper_api is not None and wrapper_eligible:
             self._wrapper = (
                 wrapper_api.decrypt_host,
                 wrapper_api.decrypt_port,

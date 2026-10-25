@@ -59,12 +59,21 @@ def fixture(
     corrupt_iv=False,
     second_description=False,
     selected_description=1,
+    split_unpatterned_cbcs=False,
 ):
     """Construct init + fragment and known plaintext for two CBCS samples."""
     sample_encrypted = CT1 + (SKIP if pattern else b"") + CT2 + b"tail"
     sample_plain = PT1 + (SKIP if pattern else b"") + PT2 + b"tail"
     other_encrypted = b"ABCD" + CT1 + (SKIP if pattern else b"") + CT2 + b"end"
     other_plain = b"ABCD" + PT1 + (SKIP if pattern else b"") + PT2 + b"end"
+
+    if split_unpatterned_cbcs:
+        assert not pattern
+        gap = b"GAP"
+        sample_encrypted = CT1 + CT2[:5] + gap + CT2[5:] + b"tail"
+        sample_plain = PT1 + PT2[:5] + gap + PT2[5:] + b"tail"
+        other_encrypted = b"ABCD" + CT1 + CT2[:5] + gap + CT2[5:] + b"end"
+        other_plain = b"ABCD" + PT1 + PT2[:5] + gap + PT2[5:] + b"end"
 
     iv_size = 16 if per_sample_iv else 0
     tenc_body = bytes([pattern, 0, 1, iv_size]) + KID
@@ -116,22 +125,31 @@ def fixture(
 
     samples = (sample_encrypted, other_encrypted)
     iv = IV if per_sample_iv else b""
-    senc = fullbox(
-        b"senc",
-        0,
-        2,
-        be32(2)
-        + iv
-        + (1).to_bytes(2, "big")
-        + (0).to_bytes(2, "big")
-        + be32(len(samples[0]))
-        + iv
-        + (2).to_bytes(2, "big")
-        + (4).to_bytes(2, "big")
-        + be32(len(samples[1]) - 7)
-        + (3).to_bytes(2, "big")
-        + be32(0),
-    )
+    if split_unpatterned_cbcs:
+        entries = (
+            ((0, 21), (3, 11)),
+            ((4, 21), (3, 11)),
+        )
+        senc_body = be32(2)
+        for ranges in entries:
+            senc_body += iv + len(ranges).to_bytes(2, "big")
+            for clear, encrypted in ranges:
+                senc_body += clear.to_bytes(2, "big") + be32(encrypted)
+    else:
+        senc_body = (
+            be32(2)
+            + iv
+            + (1).to_bytes(2, "big")
+            + (0).to_bytes(2, "big")
+            + be32(len(samples[0]))
+            + iv
+            + (2).to_bytes(2, "big")
+            + (4).to_bytes(2, "big")
+            + be32(len(samples[1]) - 7)
+            + (3).to_bytes(2, "big")
+            + be32(0)
+        )
+    senc = fullbox(b"senc", 0, 2, senc_body)
     tfhd = fullbox(
         b"tfhd",
         0,
@@ -237,6 +255,21 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unpatterned_constant_iv_cbcs_audio(self):
         await self.check_fixture()
+
+    async def test_cbcs_decrypts_blocks_split_across_subsamples_like_gamdl3(self):
+        for video in (False, True):
+            with self.subTest(video=video):
+                init, fragment, expected = fixture(
+                    video=video, split_unpatterned_cbcs=True
+                )
+                self.http.fixtures.update(
+                    {"cbcs-init": init, "cbcs-fragment": fragment}
+                )
+                async with Streamer(
+                    self.source(video=video), decryption_key=ContentKey(KID, KEY)
+                ) as streamer:
+                    decoded = await streamer.read()
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
 
     async def test_patterned_cbcs_video(self):
         await self.check_fixture(video=True, pattern=0x11)

@@ -660,6 +660,42 @@ impl Mp4Decryptor {
                 if subsamples.is_empty() {
                     subsamples.push((0, sample.len()));
                 }
+                // The old GAMDL CBCS path assembled the encrypted regions of
+                // an entire sample before AES-CBC processing. Individual senc
+                // subsample ranges may split a 16-byte CBC block: decrypting
+                // them separately would leave such a block as ciphertext.
+                // For unpatterned CBCS, compact, decrypt, then scatter the
+                // same-length bytes while preserving all clear regions.
+                if !self.wrapper_mode
+                    && desc.scheme == EncryptionScheme::Cbcs
+                    && desc.crypt_blocks == 0
+                    && desc.skip_blocks == 0
+                    && subsamples.len() > 1
+                {
+                    let mut encrypted = Vec::new();
+                    let mut positions = Vec::new();
+                    let mut cursor = 0usize;
+                    for &(clear, size) in &subsamples {
+                        cursor = cursor.checked_add(clear).ok_or(MALFORMED)?;
+                        let end = cursor.checked_add(size).ok_or(MALFORMED)?;
+                        if end > sample.len() {
+                            return Err(MALFORMED);
+                        }
+                        encrypted.extend_from_slice(&sample[cursor..end]);
+                        positions.push((cursor, size));
+                        cursor = end;
+                    }
+                    let cipher = Aes128::new(key.into());
+                    let mut chain = full_iv;
+                    decrypt_cbcs_range(&mut encrypted, &cipher, &mut chain, 0, 0);
+                    let mut offset = 0;
+                    for (start, size) in positions {
+                        sample[start..start + size]
+                            .copy_from_slice(&encrypted[offset..offset + size]);
+                        offset += size;
+                    }
+                    continue;
+                }
                 if self.wrapper_mode && !(cfg.enhanced_song_prefetch && description_index == 1) {
                     let mut cipher_bytes = Vec::new();
                     let mut cursor = 0usize;

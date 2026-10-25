@@ -11,7 +11,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
-use crate::remux::{Atom, atoms, boxed, children, find, fullbox, set_duration, u32_at, u64_at};
+use crate::remux::{
+    Atom, atoms, boxed, children, file_type, find, fullbox, set_duration, u32_at, u64_at,
+};
 
 type Result<T> = std::result::Result<T, &'static str>;
 const BAD: &str = "Malformed fragmented MP4 for audio/video mux";
@@ -606,9 +608,11 @@ fn rebuild_trak(input: &[u8], track: &Track, offsets: &[u64], start_ms: u64) -> 
     }
     boxed(b"trak", &body)
 }
-fn mux(video: &[u8], audio: &[u8]) -> Result<Vec<u8>> {
-    let (ftyp, video_moov) = locate(video)?;
+fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
+    let (_, video_moov) = locate(video)?;
     let (_, audio_moov) = locate(audio)?;
+    // M4V is the GAMDL default even for HEVC; mp42 is an explicit opt-in.
+    let ftyp = file_type(if mp4_brand { b"mp42" } else { b"M4V " })?;
     let inputs = [video, audio];
     let mut tracks = Vec::new();
     discover(video, 0, video_moov, &mut tracks)?;
@@ -640,8 +644,7 @@ fn mux(video: &[u8], audio: &[u8]) -> Result<Vec<u8>> {
     // Build with fixed-width co64 tables: dummy offsets give the exact moov size.
     // Track data is laid out contiguously: video, optional captions, audio.
     let initial = movie_with_inputs(inputs, video_moov, &tracks, &offsets, start_ms)?;
-    let mut at =
-        u64::try_from(ftyp.end - ftyp.start + initial.len() + 16).map_err(|_| UNSUPPORTED)?;
+    let mut at = u64::try_from(ftyp.len() + initial.len() + 16).map_err(|_| UNSUPPORTED)?;
     for (track, positions) in tracks.iter().zip(&mut offsets) {
         for (packet, offset) in track.packets.iter().zip(positions) {
             *offset = at;
@@ -655,10 +658,10 @@ fn mux(video: &[u8], audio: &[u8]) -> Result<Vec<u8>> {
         return Err(UNSUPPORTED);
     }
     let mdat_length = at
-        .checked_sub((ftyp.end - ftyp.start + moov.len()) as u64)
+        .checked_sub((ftyp.len() + moov.len()) as u64)
         .ok_or(BAD)?;
     let mut out = Vec::with_capacity(usize::try_from(at).map_err(|_| UNSUPPORTED)?);
-    out.extend_from_slice(&video[ftyp.start..ftyp.end]);
+    out.extend_from_slice(&ftyp);
     out.extend(moov);
     out.extend(1u32.to_be_bytes());
     out.extend(b"mdat");
@@ -726,14 +729,15 @@ fn movie_with_inputs(
     boxed(b"moov", &body)
 }
 
-#[pyfunction]
+#[pyfunction(signature = (video, audio, mp4_brand=false))]
 pub(crate) fn mux_av_mp4<'py>(
     py: Python<'py>,
     video: Vec<u8>,
     audio: Vec<u8>,
+    mp4_brand: bool,
 ) -> PyResult<Bound<'py, PyBytes>> {
     let output = py
-        .detach(|| mux(&video, &audio))
+        .detach(|| mux(&video, &audio, mp4_brand))
         .map_err(PyValueError::new_err)?;
     Ok(PyBytes::new(py, &output))
 }

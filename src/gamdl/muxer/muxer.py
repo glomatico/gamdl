@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from os import PathLike, fspath
+from typing import Literal
 
 from gamdl import _native
 from gamdl.download.tags import Tags
@@ -21,24 +22,34 @@ class Muxer:
         """Flatten decrypted, single-track fragmented MP4 audio without transcoding.
 
         Preserves compressed samples and codec configuration. Returns an
-        ordinary seekable MP4 in memory; unsupported input fails closed.
+        ordinary seekable M4A in memory; unsupported input fails closed.
         Call after native Streamer decryption, before optional file tagging.
         """
         if not isinstance(data, bytes):
             raise TypeError("data must be MP4 bytes")
         return _native.remux_mp4(data)
 
-    def mux(self, *, video: bytes, audio: bytes) -> bytes:
-        """Combine decrypted fMP4 video and audio into a seekable MP4.
+    def mux(
+        self,
+        *,
+        video: bytes,
+        audio: bytes,
+        container: Literal["m4v", "mp4"] = "m4v",
+    ) -> bytes:
+        """Combine decrypted fMP4 video and audio into a seekable M4V/MP4.
 
         Lossless: encoded packets are copied, never transcoded. Preserves
         supported clear caption tracks embedded in the selected video stream.
+        Defaults to an M4V-branded file. Use container="mp4" for the
+        standard mp42 brand; encoded audio/video codecs remain unchanged.
         Returns bytes, suitable for writing or sending to another consumer.
         DRM removal must have already happened in separate Streamer calls.
         """
         if not isinstance(video, bytes) or not isinstance(audio, bytes):
             raise TypeError("video and audio must be MP4 bytes")
-        return _native.mux_av_mp4(video, audio)
+        if container not in ("m4v", "mp4"):
+            raise ValueError("container must be 'm4v' or 'mp4'")
+        return _native.mux_av_mp4(video, audio, container == "mp4")
 
     def tag(
         self,

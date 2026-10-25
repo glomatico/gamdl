@@ -137,6 +137,8 @@ class VideoCaptionLiveTests(unittest.IsolatedAsyncioTestCase):
                         video.read(), audio.read()
                     )
                 data = Muxer().mux(video=video_bytes, audio=audio_bytes)
+                self.assertEqual(data[4:8], b"ftyp")
+                self.assertEqual(data[8:12], b"M4V ")
                 with TemporaryDirectory() as directory:
                     output = Path(directory) / "complete.m4v"
                     output.write_bytes(data)
@@ -146,7 +148,7 @@ class VideoCaptionLiveTests(unittest.IsolatedAsyncioTestCase):
                             "-v",
                             "error",
                             "-show_entries",
-                            "stream=codec_type,codec_name",
+                            "stream=codec_type,codec_name,codec_tag_string",
                             "-of",
                             "json",
                             str(output),
@@ -161,6 +163,8 @@ class VideoCaptionLiveTests(unittest.IsolatedAsyncioTestCase):
                         [(s["codec_type"], s["codec_name"]) for s in streams],
                         [("video", "h264"), ("subtitle", "eia_608"), ("audio", "aac")],
                     )
+                    self.assertEqual(streams[0]["codec_tag_string"], "avc1")
+                    self.assertEqual(streams[2]["codec_tag_string"], "mp4a")
                     decode = subprocess.run(
                         [
                             "ffmpeg",

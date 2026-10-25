@@ -36,6 +36,14 @@ def atoms(content: bytes):
         at += size
 
 
+def brands(path: Path) -> tuple[bytes, list[bytes]]:
+    """Read major/compatible MP4 brands independently of FFprobe."""
+    atom_type, body = next(atoms(path.read_bytes()))
+    if atom_type != b"ftyp":
+        raise AssertionError("Expected ftyp as first MP4 box")
+    return body[:4], [body[offset : offset + 4] for offset in range(8, len(body), 4)]
+
+
 def mp4_tag_atoms(path: Path):
     data = path.read_bytes()
     moov = next(body for key, body in atoms(data) if key == b"moov")
@@ -186,6 +194,7 @@ class NativeAvMuxTests(unittest.TestCase):
 
     def test_video_audio_lossless_mux_with_b_frames(self):
         output = self.mux()
+        self.assertEqual(brands(output), (b"M4V ", [b"M4V ", b"mp42", b"isom"]))
         self.assertEqual(
             [kind for kind, _ in atoms(output.read_bytes())],
             [b"ftyp", b"moov", b"mdat"],
@@ -202,6 +211,44 @@ class NativeAvMuxTests(unittest.TestCase):
                 "-xerror",
                 "-i",
                 str(output),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-f",
+                "null",
+                "-",
+            ],
+            capture_output=True,
+            check=True,
+        )
+
+    def test_explicit_mp4_brand_keeps_encoded_samples_unchanged(self):
+        default = self.mux()
+        standard = self.directory / "standard.mp4"
+        standard.write_bytes(
+            Muxer().mux(
+                video=self.video.read_bytes(),
+                audio=self.audio.read_bytes(),
+                container="mp4",
+            )
+        )
+        self.assertEqual(brands(default)[0], b"M4V ")
+        self.assertEqual(
+            brands(standard),
+            (b"mp42", [b"mp42", b"isom", b"iso6", b"avc1", b"hvc1"]),
+        )
+        for kind in ("v", "a"):
+            self.assertEqual(track_hashes(default, kind), track_hashes(standard, kind))
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-xerror",
+                "-i",
+                str(standard),
                 "-map",
                 "0:v:0",
                 "-map",
@@ -252,6 +299,12 @@ class NativeAvMuxTests(unittest.TestCase):
     def test_rejects_bad_or_encrypted_track_inputs(self):
         with self.assertRaisesRegex(TypeError, "bytes"):
             Muxer().mux(video="bad", audio=self.audio.read_bytes())
+        with self.assertRaisesRegex(ValueError, "container must be"):
+            Muxer().mux(
+                video=self.video.read_bytes(),
+                audio=self.audio.read_bytes(),
+                container="mov",
+            )
         with self.assertRaisesRegex(ValueError, "Malformed|Unsupported"):
             self.mux(video=b"not mp4")
         with self.assertRaisesRegex(ValueError, "Unexpected media track"):
@@ -309,6 +362,10 @@ class NativeMp4RemuxTests(unittest.TestCase):
                 self.assertIn(b"moof", input_bytes)
                 finished = self.directory / f"finished-{codec}.m4a"
                 finished.write_bytes(self.muxer.remux(input_bytes))
+                self.assertEqual(
+                    brands(finished),
+                    (b"M4A ", [b"M4A ", b"mp42", b"isom"]),
+                )
                 top = [kind for kind, _ in atoms(finished.read_bytes())]
                 self.assertEqual(top, [b"ftyp", b"moov", b"mdat"])
                 self.assertEqual(packet_hashes(original), packet_hashes(finished))

@@ -92,6 +92,22 @@ pub(crate) fn fullbox(name: &[u8; 4], version_flags: u32, payload: &[u8]) -> Res
     body.extend(payload);
     boxed(name, &body)
 }
+
+/// Final-file brands, independent of Apple's HLS fragment/transport brands.
+/// Keep the codec sample descriptions (avc1/hvc1/mp4a/ec-3) unchanged.
+pub(crate) fn file_type(major_brand: &[u8; 4]) -> Result<Vec<u8>> {
+    let compatible: &[u8] = match major_brand {
+        b"M4A " => b"M4A mp42isom",
+        b"M4V " => b"M4V mp42isom",
+        b"mp42" => b"mp42isomiso6avc1hvc1",
+        _ => return Err(UNSUPPORTED),
+    };
+    let mut body = Vec::with_capacity(8 + compatible.len());
+    body.extend_from_slice(major_brand);
+    body.extend_from_slice(&0u32.to_be_bytes());
+    body.extend_from_slice(compatible);
+    boxed(b"ftyp", &body)
+}
 pub(crate) fn set_duration(data: &[u8], atom: Atom, field: usize, value: u64) -> Result<Vec<u8>> {
     let mut body = data[atom.data..atom.end].to_vec();
     let version = *body.first().ok_or(BAD)?;
@@ -521,7 +537,7 @@ fn rebuild(
 
 fn remux(input: &[u8]) -> Result<Vec<u8>> {
     let top = atoms(input, 0, input.len())?;
-    let ftyp = top
+    let _ftyp = top
         .iter()
         .find(|a| &a.name == b"ftyp")
         .copied()
@@ -555,7 +571,9 @@ fn remux(input: &[u8]) -> Result<Vec<u8>> {
     if pending.is_some() || samples.is_empty() || samples.len() > u32::MAX as usize {
         return Err(UNSUPPORTED);
     }
-    let ftyp_bytes = &input[ftyp.start..ftyp.end];
+    // The source's `iso5`/`hlsf` brands identify fragmented HLS media,
+    // not the finished, standalone audio-only file.
+    let ftyp_bytes = file_type(b"M4A ")?;
     // co64 offsets are fixed width, so a dummy-offset pass determines moov size.
     let mut offsets = vec![0u64; samples.len()];
     let dummy = rebuild(input, moov, &info, &samples, &offsets)?;
@@ -571,7 +589,7 @@ fn remux(input: &[u8]) -> Result<Vec<u8>> {
         return Err(UNSUPPORTED);
     }
     let mut out = Vec::with_capacity(usize::try_from(cursor).map_err(|_| UNSUPPORTED)?);
-    out.extend(ftyp_bytes);
+    out.extend_from_slice(&ftyp_bytes);
     out.extend(rebuilt);
     out.extend(1u32.to_be_bytes());
     out.extend(b"mdat");

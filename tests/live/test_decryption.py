@@ -69,13 +69,8 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         return max(candidates, key=lambda track: track.bitrate or 0)
 
     async def download_and_check(self, source, *, key=None, wrapper=False):
-        uri = None
-        if wrapper:
-            if self.session.wrapper is None:
-                self.skipTest("No authenticated wrapper instance available")
-            uri = (await source.get_drm_info()).fairplay_streaming
-            if not uri:
-                self.skipTest("No FairPlay URI in selected HLS stream")
+        if wrapper and self.session.wrapper is None:
+            self.skipTest("No authenticated wrapper instance available")
         # Stable per-rendition test output name, useful for later muxer tests.
         name = (
             self.id().rsplit(".", 1)[-1]
@@ -87,7 +82,6 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         async with Stream(
             source,
             wrapper_api=self.session.wrapper if wrapper else None,
-            fairplay_key=uri,
             decryption_key=key,
         ) as stream:
             await stream.save(path)

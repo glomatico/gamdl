@@ -21,6 +21,7 @@ from gamdl.media import (
     VideoStream,
     WebPlaybackStream,
 )
+from gamdl.media.exceptions import StreamManifestError
 from gamdl.stream import Stream
 
 from tests.test_cbcs_stream import (
@@ -166,15 +167,25 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(self.api.aclose)
 
     def source(
-        self, *, origin=StreamOrigin.ASSET_STANDARD_HLS, hls_type=HlsType.STANDARD
+        self,
+        *,
+        origin=StreamOrigin.ASSET_STANDARD_HLS,
+        hls_type=HlsType.STANDARD,
+        fairplay_uri="skd://local/test",
     ):
         transport = Mock()
+        key = (
+            '#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT="com.apple.streamingkeydelivery",'
+            f'URI="{fairplay_uri}"\n'
+            if fairplay_uri is not None
+            else ""
+        )
         transport.get_manifest = AsyncMock(
             return_value=manifest_url(
                 self.url,
                 fixture_playlist(
                     "#EXTINF:1,\nsegment\n",
-                    prefix='#EXT-X-MAP:URI="init"\n',
+                    prefix=key + '#EXT-X-MAP:URI="init"\n',
                 ),
             )
         )
@@ -193,7 +204,6 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         async with Stream(
             self.source(),
             wrapper_api=self.api,
-            fairplay_key="skd://local/test",
             chunk_size=1024,
         ) as stream:
             decoded = await stream.read()
@@ -213,9 +223,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         source = self.source(
             origin=StreamOrigin.ASSET_ENHANCED_HLS, hls_type=HlsType.STANDARD
         )
-        async with Stream(
-            source, wrapper_api=self.api, fairplay_key="skd://local/test"
-        ) as stream:
+        async with Stream(source, wrapper_api=self.api) as stream:
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected)
         self.assertEqual(sum(batch[2] for batch in self.wrapper.batches), 2)
@@ -230,7 +238,6 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             async with Stream(
                 self.source(),
                 wrapper_api=self.api,
-                fairplay_key="skd://local/test",
             ) as stream:
                 with self.assertRaisesRegex(OSError, "rejected"):
                     await stream.save(path)
@@ -256,14 +263,16 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 self.url,
                 fixture_playlist(
                     "#EXTINF:1,\nsegment\n#EXTINF:1,\nsecond\n",
-                    prefix='#EXT-X-MAP:URI="init"\n',
+                    prefix=(
+                        '#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT="com.apple.streamingkeydelivery",'
+                        'URI="skd://local/test"\n'
+                        '#EXT-X-MAP:URI="init"\n'
+                    ),
                 ),
             )
         )
         self.http.fixtures["second"] = second
-        async with Stream(
-            transport, wrapper_api=self.api, fairplay_key="skd://local/test"
-        ) as stream:
+        async with Stream(transport, wrapper_api=self.api) as stream:
             decoded = await stream.read()
         self.assertEqual(
             mdats(decoded[len(init) :]),
@@ -307,9 +316,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 "segment": moof + atom(b"mdat", payload),
             }
         )
-        async with Stream(
-            self.source(), wrapper_api=self.api, fairplay_key="skd://local/test"
-        ) as stream:
+        async with Stream(self.source(), wrapper_api=self.api) as stream:
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init) :]), expected_two * 65)
         self.assertEqual([batch[2] for batch in self.wrapper.batches], [128, 2])
@@ -359,9 +366,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                         "segment": moof + fragment[mdat_at:],
                     }
                 )
-                async with Stream(
-                    self.source(), wrapper_api=self.api, fairplay_key="skd://local/test"
-                ) as stream:
+                async with Stream(self.source(), wrapper_api=self.api) as stream:
                     downloaded = await stream.read()
                 self.assertEqual(mdats(downloaded[len(init) :]), expected)
 
@@ -371,20 +376,17 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             Stream(
                 source,
                 wrapper_api=self.api,
-                fairplay_key="skd://test",
                 decryption_key=KEY,
             )
-        with self.assertRaisesRegex(ValueError, "SKD URI"):
-            Stream(source, wrapper_api=self.api, fairplay_key="not-an-skd")
         with self.assertRaises(TypeError):
             Stream(source, fairplay_key="skd://test")
         source.origin = StreamOrigin.WEBPLAYBACK
         with self.assertRaisesRegex(ValueError, "HLS song audio"):
-            Stream(source, wrapper_api=self.api, fairplay_key="skd://test")
+            Stream(source, wrapper_api=self.api)
         source = self.source()
         source.media_id = None
         with self.assertRaisesRegex(ValueError, "media ID"):
-            Stream(source, wrapper_api=self.api, fairplay_key="skd://test")
+            Stream(source, wrapper_api=self.api)
         for cls in (VideoStream, WebPlaybackStream):
             bad = cls(
                 codec="h264" if cls is VideoStream else SongCodec.AAC_WEB,
@@ -394,4 +396,41 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 media_id="1559885421",
             )
             with self.assertRaisesRegex(ValueError, "HLS song audio"):
-                Stream(bad, wrapper_api=self.api, fairplay_key="skd://test")
+                Stream(bad, wrapper_api=self.api)
+
+    async def test_fairplay_uri_is_resolved_lazily_from_cached_manifest(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        source = self.source()
+        self.assertEqual(source._transport.get_manifest.await_count, 0)
+        stream = Stream(source, wrapper_api=self.api)
+        self.assertEqual(source._transport.get_manifest.await_count, 0)
+        async with stream:
+            self.assertEqual(source._transport.get_manifest.await_count, 1)
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        self.assertEqual(source._transport.get_manifest.await_count, 1)
+        self.assertEqual(
+            self.wrapper.batches, [(b"1559885421", b"skd://local/test", 2)]
+        )
+
+    async def test_missing_invalid_and_placeholder_fairplay_uri_rejected(self):
+        for uri in (
+            None,
+            "not-an-skd",
+            "skd://",
+            "skd://itunes.apple.com/P000000000/s1/e1",
+        ):
+            with self.subTest(uri=uri):
+                source = self.source(fairplay_uri=uri)
+                with self.assertRaisesRegex(
+                    StreamManifestError, "no usable FairPlay SKD URI"
+                ):
+                    async with Stream(source, wrapper_api=self.api):
+                        self.fail(
+                            "Must refuse streams without usable FairPlay metadata"
+                        )
+                self.assertEqual(source._transport.get_manifest.await_count, 1)
+                self.assertEqual(self.http.hits["init"], 0)
+                self.assertEqual(self.http.hits["segment"], 0)
+                self.assertEqual(self.wrapper.batches, [])

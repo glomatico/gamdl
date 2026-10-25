@@ -85,9 +85,11 @@ class Stream(AsyncIterator[bytes]):
     verifies the key ID) or 16-byte AES key to decrypt CENC/AES-CTR and
     CBCS/AES-CBC audio or video tracks. Enhanced HLS song CBCS automatically
     applies the legacy prefetch key to sample description 1 and the supplied
-    content key to description 2. Alternatively, use wrapper_api and
-    fairplay_key for HLS song audio, delivering encrypted samples to wrapper-v2.
-    Web-playback AAC and music videos do not support wrapper delivery.
+    content key to description 2. Alternatively, pass wrapper_api for HLS song
+    audio; the FairPlay SKD URI is resolved from the selected stream's cached
+    DRM metadata when entering the context. No separate FairPlay URI or license
+    lookup is required from the caller. Web-playback AAC and music videos do
+    not currently support wrapper delivery.
     Arbitrary key rotation and muxing are not supported yet.
     Do not share one Stream iterator between independent consumers.
     """
@@ -101,7 +103,6 @@ class Stream(AsyncIterator[bytes]):
         retries: int = 3,
         decryption_key: bytes | ContentKey | None = None,
         wrapper_api: WrapperApi | None = None,
-        fairplay_key: str | None = None,
     ) -> None:
         if not isinstance(source, HlsStream):
             raise TypeError("source must be an HlsStream")
@@ -109,15 +110,9 @@ class Stream(AsyncIterator[bytes]):
         self.concurrency = concurrency
         self.chunk_size = chunk_size
         self.retries = retries
-        if wrapper_api is not None or fairplay_key is not None:
+        if wrapper_api is not None:
             if not isinstance(wrapper_api, WrapperApi):
                 raise TypeError("wrapper_api must be a WrapperApi")
-            if (
-                not isinstance(fairplay_key, str)
-                or not fairplay_key.startswith("skd://")
-                or len(fairplay_key) <= len("skd://")
-            ):
-                raise ValueError("fairplay_key must be a non-empty SKD URI")
             if decryption_key is not None:
                 raise ValueError("Use either decryption_key or wrapper_api, not both")
             if not isinstance(source, HlsSongStream) or source.origin not in {
@@ -134,7 +129,6 @@ class Stream(AsyncIterator[bytes]):
                 wrapper_api.decrypt_host,
                 wrapper_api.decrypt_port,
                 source.media_id,
-                fairplay_key,
             )
         else:
             self._wrapper = None
@@ -159,6 +153,18 @@ class Stream(AsyncIterator[bytes]):
         self._used = True
         try:
             parts = await _plan(self.source)
+            wrapper = None
+            if self._wrapper is not None:
+                fairplay_uri = (await self.source.get_drm_info()).fairplay_streaming
+                if (
+                    not isinstance(fairplay_uri, str)
+                    or not fairplay_uri.startswith("skd://")
+                    or len(fairplay_uri) <= len("skd://")
+                ):
+                    raise StreamManifestError(
+                        "Selected HLS stream has no usable FairPlay SKD URI"
+                    )
+                wrapper = (*self._wrapper, fairplay_uri)
             enhanced_song = (
                 self.source.hls_type == HlsType.ENHANCED
                 if self._wrapper is not None and isinstance(self.source, HlsSongStream)
@@ -180,7 +186,7 @@ class Stream(AsyncIterator[bytes]):
                 self._key,
                 self._kid,
                 enhanced_song,
-                self._wrapper,
+                wrapper,
                 isinstance(self.source, HlsSongStream)
                 and self.source.origin
                 in {

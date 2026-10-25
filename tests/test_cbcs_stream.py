@@ -60,12 +60,26 @@ def fixture(
     second_description=False,
     selected_description=1,
     split_unpatterned_cbcs=False,
+    split_patterned_cbcs=False,
 ):
     """Construct init + fragment and known plaintext for two CBCS samples."""
-    sample_encrypted = CT1 + (SKIP if pattern else b"") + CT2 + b"tail"
-    sample_plain = PT1 + (SKIP if pattern else b"") + PT2 + b"tail"
-    other_encrypted = b"ABCD" + CT1 + (SKIP if pattern else b"") + CT2 + b"end"
-    other_plain = b"ABCD" + PT1 + (SKIP if pattern else b"") + PT2 + b"end"
+    assert pattern in (0, 0x11, 0x19)
+    skipped = SKIP * (pattern & 0x0F)
+    sample_encrypted = CT1 + skipped + CT2 + b"tail"
+    sample_plain = PT1 + skipped + PT2 + b"tail"
+    other_encrypted = b"ABCD" + CT1 + skipped + CT2 + b"end"
+    other_plain = b"ABCD" + PT1 + skipped + PT2 + b"end"
+
+    if split_patterned_cbcs:
+        assert pattern == 0x19 and not split_unpatterned_cbcs
+        # Each protected range starts with the same NIST CBC ciphertext:
+        # the second range must restart from IV, not chain from the first.
+        encrypted_range = CT1 + skipped + CT2
+        plain_range = PT1 + skipped + PT2
+        sample_encrypted = encrypted_range + b"GAP" + encrypted_range + b"tail"
+        sample_plain = plain_range + b"GAP" + plain_range + b"tail"
+        other_encrypted = b"ABCD" + encrypted_range + b"GAP" + encrypted_range + b"end"
+        other_plain = b"ABCD" + plain_range + b"GAP" + plain_range + b"end"
 
     if split_unpatterned_cbcs:
         assert not pattern
@@ -76,7 +90,9 @@ def fixture(
         other_plain = b"ABCD" + PT1 + PT2[:5] + gap + PT2[5:] + b"end"
 
     iv_size = 16 if per_sample_iv else 0
-    tenc_body = bytes([pattern, 0, 1, iv_size]) + KID
+    # tenc v1 fields after the FullBox header: reserved, pattern,
+    # isProtected, perSampleIVSize. The pattern is NOT the reserved byte.
+    tenc_body = bytes([0, pattern, 1, iv_size]) + KID
     if not per_sample_iv:
         tenc_body += bytes([8 if corrupt_iv else 16]) + IV
 
@@ -97,7 +113,7 @@ def fixture(
         assert not per_sample_iv
         different_iv = bytes(value ^ 0xFF for value in IV)
         descriptions.append(
-            sample_description(bytes([pattern, 0, 1, 0]) + KID + b"\x10" + different_iv)
+            sample_description(bytes([0, pattern, 1, 0]) + KID + b"\x10" + different_iv)
         )
     if selected_description == 2:
         assert second_description
@@ -125,11 +141,18 @@ def fixture(
 
     samples = (sample_encrypted, other_encrypted)
     iv = IV if per_sample_iv else b""
-    if split_unpatterned_cbcs:
-        entries = (
-            ((0, 21), (3, 11)),
-            ((4, 21), (3, 11)),
-        )
+    if split_unpatterned_cbcs or split_patterned_cbcs:
+        if split_unpatterned_cbcs:
+            entries = (
+                ((0, 21), (3, 11)),
+                ((4, 21), (3, 11)),
+            )
+        else:
+            block_range_size = len(CT1 + skipped + CT2)
+            entries = (
+                ((0, block_range_size), (3, block_range_size)),
+                ((4, block_range_size), (3, block_range_size)),
+            )
         senc_body = be32(2)
         for ranges in entries:
             senc_body += iv + len(ranges).to_bytes(2, "big")
@@ -334,6 +357,24 @@ class CbcsStreamTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_patterned_cbcs_video(self):
         await self.check_fixture(video=True, pattern=0x11)
+
+    async def test_patterned_cbcs_video_1_9(self):
+        await self.check_fixture(video=True, pattern=0x19)
+
+    async def test_patterned_cbcs_resets_iv_for_each_protected_subsample(self):
+        for video in (False, True):
+            with self.subTest(video=video):
+                init, fragment, expected = fixture(
+                    video=video, pattern=0x19, split_patterned_cbcs=True
+                )
+                self.http.fixtures.update(
+                    {"cbcs-init": init, "cbcs-fragment": fragment}
+                )
+                async with Streamer(
+                    self.source(video=video), decryption_key=ContentKey(KID, KEY)
+                ) as streamer:
+                    decoded = await streamer.read()
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
 
     async def test_music_video_with_clear_caption_track_in_same_fragment(self):
         init, fragment, expected = captioned_video_fixture()

@@ -193,7 +193,8 @@ enum EncryptionScheme {
 }
 
 /// CBCS crypt/skip patterns restart at the beginning of each encrypted
-/// subsample, but the CBC chaining IV advances only on encrypted blocks.
+/// subsample, with a fresh CBC IV per protected range supplied by the caller.
+/// Within that range, the chain advances only on encrypted blocks.
 /// Partial final blocks are always plaintext. No padding is added or removed.
 fn decrypt_cbcs_range(
     data: &mut [u8],
@@ -358,7 +359,10 @@ impl Mp4Decryptor {
                     return Err(UNSUPPORTED);
                 }
                 let pattern = if version == 1 {
-                    *buf.get(tenc.data + 4).ok_or(MALFORMED)?
+                    // FullBox: version (1), flags (3), reserved (1),
+                    // default_crypt_byte_block/default_skip_byte_block (1).
+                    // The reserved byte is at +4; the pattern is at +5.
+                    *buf.get(tenc.data + 5).ok_or(MALFORMED)?
                 } else {
                     0
                 };
@@ -749,7 +753,6 @@ impl Mp4Decryptor {
                 let mut ctr = (desc.scheme == EncryptionScheme::Cenc)
                     .then(|| Ctr128BE::<Aes128>::new(key.into(), (&full_iv).into()));
                 let cbc = (desc.scheme == EncryptionScheme::Cbcs).then(|| Aes128::new(key.into()));
-                let mut chain = full_iv;
                 for (clear, encrypted) in subsamples {
                     cursor = cursor.checked_add(clear).ok_or(MALFORMED)?;
                     let next = cursor.checked_add(encrypted).ok_or(MALFORMED)?;
@@ -759,6 +762,10 @@ impl Mp4Decryptor {
                     if let Some(cipher) = ctr.as_mut() {
                         cipher.apply_keystream(&mut sample[cursor..next]);
                     } else if let Some(cipher) = cbc.as_ref() {
+                        // Each patterned CBCS subsample starts its own CBC
+                        // chain from the sample IV. CENC/CTR instead keeps
+                        // its cipher state across protected subsamples.
+                        let mut chain = full_iv;
                         decrypt_cbcs_range(
                             &mut sample[cursor..next],
                             cipher,

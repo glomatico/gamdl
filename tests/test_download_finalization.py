@@ -12,8 +12,11 @@ from gamdl.download import (
     DownloadResult,
     MediaDatabase,
     PlaylistWriter,
+    DatabaseStatus,
+    FileStatus,
+    OverwritePolicy,
 )
-from gamdl.download.publication import publish_bytes
+from gamdl.download.publication import publish_bytes, publish_bytes_result
 from gamdl.media import MediaSource, Song, SongCodec
 from unittest.mock import Mock
 
@@ -37,6 +40,22 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertEqual(list(output.parent.glob("*.part")), [])
         with self.assertRaises(ValueError):
             publish_bytes(b"invalid", output, overwrite="bad")
+
+    def test_detailed_publisher_status_and_enum_policies(self):
+        dest = self.directory / "result.m4a"
+        self.assertEqual(
+            publish_bytes_result(b"one", dest, overwrite=OverwritePolicy.SKIP),
+            FileStatus.CREATED,
+        )
+        self.assertEqual(
+            publish_bytes_result(b"two", dest, overwrite=OverwritePolicy.SKIP),
+            FileStatus.SKIPPED,
+        )
+        self.assertEqual(
+            publish_bytes_result(b"three", dest, overwrite=OverwritePolicy.REPLACE),
+            FileStatus.OVERWRITTEN,
+        )
+        self.assertEqual(dest.read_bytes(), b"three")
 
     def test_playlist_relative_paths_order_and_duplicate_occurrences(self):
         playlist = PlaylistWriter(self.directory / "list" / "tracks.m3u8")
@@ -72,11 +91,14 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         output = self.directory / "New Rules.m4a"
         output.write_bytes(b"test bytes")
         self.assertIsNone(db.get(output))
-        db.record(
-            song,
-            DownloadResult(
-                song.id, output, "downloaded", len(b"test bytes"), SongCodec.AAC_WEB
+        self.assertEqual(
+            db.record(
+                song,
+                DownloadResult(
+                    song.id, output, "downloaded", len(b"test bytes"), SongCodec.AAC_WEB
+                ),
             ),
+            DatabaseStatus.INSERTED,
         )
         row = db.get(output)
         assert row is not None
@@ -87,7 +109,10 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertEqual(row["source_kind"], "playlist_tracks")
         self.assertEqual(row["source_index"], 2)
         # A previously downloaded file may be registered again on skip.
-        db.record(song, DownloadResult(song.id, output, "skipped", 0, None))
+        self.assertEqual(
+            db.record(song, DownloadResult(song.id, output, "skipped", 0, None)),
+            DatabaseStatus.UNCHANGED,
+        )
         self.assertEqual(db.get(output)["codec"], "aac-web")
         with closing(sqlite3.connect(db.path)) as connection:
             self.assertEqual(
@@ -97,6 +122,9 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         # Replacing the same filename with a different media ID must NOT
         # falsely preserve the old media's codec in the database.
         another = Song.from_id("other-id", api=Mock())
-        db.record(another, DownloadResult(another.id, output, "skipped", 0, None))
+        self.assertEqual(
+            db.record(another, DownloadResult(another.id, output, "skipped", 0, None)),
+            DatabaseStatus.UPDATED,
+        )
         self.assertEqual(db.get(output)["media_id"], "other-id")
         self.assertIsNone(db.get(output)["codec"])

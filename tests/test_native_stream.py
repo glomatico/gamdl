@@ -23,7 +23,7 @@ from gamdl.media import (
     StreamOrigin,
 )
 from gamdl.media import VideoStream
-from gamdl.drm import ContentKey, Drm
+from gamdl.drm import ContentKey, Drm, DRMInfo
 from gamdl.stream import Streamer, StreamProgress
 
 
@@ -196,6 +196,57 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(streamer.decryption_method, "none")
             self.assertEqual(await streamer.read(), b"B" * 4000)
         drm.get_keys.assert_not_awaited()
+
+    async def test_drm_key_lifecycle_callback_is_tied_to_real_license_request(self):
+        source = self.audio(fixture_playlist("#EXTINF:1,\na\n"))
+        source.media_id = "111"
+        source.get_drm_info = AsyncMock(
+            return_value=DRMInfo(
+                widevine_pssh=b"pssh",
+                widevine_uri="https://license.example.test/widevine",
+            )
+        )
+        drm = Drm.from_widevine(Mock())
+        drm.get_keys = AsyncMock(return_value=ContentKey(b"K" * 16, b"S" * 16))
+        events = []
+        async with Streamer(
+            source, drm=drm, key_event_callback=events.append
+        ) as stream:
+            self.assertEqual(stream.decryption_method, "widevine")
+        self.assertEqual(events, ["started", "completed"])
+        drm.get_keys.assert_awaited_once()
+
+        drm.get_keys = AsyncMock(side_effect=RuntimeError("license failed"))
+        events.clear()
+        with self.assertRaisesRegex(RuntimeError, "license failed"):
+            async with Streamer(source, drm=drm, key_event_callback=events.append):
+                pass
+        self.assertEqual(events, ["started", "failed"])
+
+    async def test_downloader_event_reports_real_native_transfer_progress(self):
+        from gamdl.download import Downloader, DownloadStage, EventState
+
+        events = []
+        callback_progress = []
+        payload, method = await Downloader()._read_track(
+            "id",
+            HttpStream(self.url + "/a"),
+            "audio",
+            callback_progress.append,
+            event_callback=events.append,
+        )
+        self.assertEqual(payload, b"A" * 3000)
+        self.assertEqual(method, "none")
+        self.assertEqual(events[0].stage, DownloadStage.DOWNLOADING)
+        self.assertEqual(events[0].state, EventState.STARTED)
+        self.assertEqual(events[-1].state, EventState.COMPLETED)
+        self.assertEqual(events[-1].stage, DownloadStage.DOWNLOADING)
+        transfer = [e for e in events if e.state == EventState.PROGRESS]
+        self.assertTrue(transfer)
+        self.assertEqual(transfer[-1].progress.emitted_bytes, 3000)
+        self.assertFalse(
+            any(e.stage == DownloadStage.FETCHING_DECRYPTION_KEYS for e in events)
+        )
 
     async def test_separate_audio_video_streamers_run_concurrently(self):
         playlist = fixture_playlist("#EXTINF:1,\na\n")

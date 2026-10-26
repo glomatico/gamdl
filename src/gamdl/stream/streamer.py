@@ -11,6 +11,7 @@ samples before yielding or saving, preserving the fragmented MP4 layout.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+from typing import Literal
 from os import PathLike
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -117,6 +118,8 @@ class Streamer(AsyncIterator[bytes]):
         decryption_key: bytes | ContentKey | None = None,
         wrapper_api: WrapperApi | None = None,
         drm: Drm | None = None,
+        key_event_callback: Callable[[Literal["started", "completed", "failed"]], None]
+        | None = None,
     ) -> None:
         if not isinstance(source, (HlsStream, HttpStream)):
             raise TypeError("source must be an HlsStream or HttpStream")
@@ -133,6 +136,7 @@ class Streamer(AsyncIterator[bytes]):
         if isinstance(source, HttpStream) and decryption_key is not None:
             raise ValueError("Progressive HTTP MP4 decryption is not supported")
         self._drm = drm
+        self._key_event_callback = key_event_callback
         wrapper_eligible = (
             isinstance(source, HlsSongStream)
             and source.origin
@@ -202,14 +206,23 @@ class Streamer(AsyncIterator[bytes]):
                 elif self._drm is not None and self._drm.has_signaling(info):
                     if not self.source.media_id:
                         raise ValueError("DRM license request requires a media ID")
-                    content_key = await self._drm.get_keys(
-                        media_id=self.source.media_id,
-                        drm_info=info,
-                        is_library=self.source.origin
-                        == StreamOrigin.LIBRARY_WEBPLAYBACK,
-                    )
-                    if content_key is None:
-                        raise DrmLicenseError("DRM license returned no content key")
+                    if self._key_event_callback is not None:
+                        self._key_event_callback("started")
+                    try:
+                        content_key = await self._drm.get_keys(
+                            media_id=self.source.media_id,
+                            drm_info=info,
+                            is_library=self.source.origin
+                            == StreamOrigin.LIBRARY_WEBPLAYBACK,
+                        )
+                        if content_key is None:
+                            raise DrmLicenseError("DRM license returned no content key")
+                    except BaseException:
+                        if self._key_event_callback is not None:
+                            self._key_event_callback("failed")
+                        raise
+                    if self._key_event_callback is not None:
+                        self._key_event_callback("completed")
                     key, kid = content_key.key, content_key.kid
                     method = self._drm.backend.value
             enhanced_song = (

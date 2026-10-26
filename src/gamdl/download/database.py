@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from gamdl.media import Media
     from .downloader import DownloadResult
+from .enums import DatabaseStatus
 
 
 class MediaDatabase:
@@ -24,10 +25,13 @@ class MediaDatabase:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
-    def record(self, media: Media, result: DownloadResult) -> None:
+    def record(self, media: Media, result: DownloadResult) -> DatabaseStatus:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         source = media.source
         with closing(sqlite3.connect(self.path, timeout=10)) as db, db:
+            # Serialize read/compare/write so two concurrent writers cannot
+            # mistakenly both report an INSERTED result.
+            db.execute("BEGIN IMMEDIATE")
             db.execute(
                 """CREATE TABLE IF NOT EXISTS media_files (
                     path TEXT PRIMARY KEY,
@@ -41,6 +45,40 @@ class MediaDatabase:
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )"""
             )
+            values = (
+                str(result.path.absolute()),
+                media.type,
+                media.id,
+                result.codec.value if result.codec is not None else None,
+                result.path.stat().st_size,
+                source.kind if source else None,
+                source.id if source else None,
+                source.index if source else None,
+            )
+            old = db.execute(
+                """SELECT media_type, media_id, codec, file_size,
+                          source_kind, source_id, source_index
+                   FROM media_files WHERE path = ?""",
+                (values[0],),
+            ).fetchone()
+            if old is not None:
+                codec = (
+                    values[3]
+                    if values[3] is not None
+                    else old[2]
+                    if old[:2] == values[1:3]
+                    else None
+                )
+                values = (
+                    *values[:3],
+                    codec,
+                    values[4],
+                    values[5] if values[5] is not None else old[4],
+                    values[6] if values[6] is not None else old[5],
+                    values[7] if values[7] is not None else old[6],
+                )
+                if old == values[1:]:
+                    return DatabaseStatus.UNCHANGED
             db.execute(
                 """INSERT INTO media_files (
                     path, media_type, media_id, codec, file_size,
@@ -48,27 +86,16 @@ class MediaDatabase:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     media_type = excluded.media_type,
-                    codec = CASE WHEN media_files.media_type = excluded.media_type
-                                 AND media_files.media_id = excluded.media_id
-                            THEN COALESCE(excluded.codec, media_files.codec)
-                            ELSE excluded.codec END,
+                    codec = excluded.codec,
                     media_id = excluded.media_id,
                     file_size = excluded.file_size,
-                    source_kind = COALESCE(excluded.source_kind, media_files.source_kind),
-                    source_id = COALESCE(excluded.source_id, media_files.source_id),
-                    source_index = COALESCE(excluded.source_index, media_files.source_index),
+                    source_kind = excluded.source_kind,
+                    source_id = excluded.source_id,
+                    source_index = excluded.source_index,
                     updated_at = CURRENT_TIMESTAMP""",
-                (
-                    str(result.path.absolute()),
-                    media.type,
-                    media.id,
-                    result.codec.value if result.codec is not None else None,
-                    result.path.stat().st_size,
-                    source.kind if source else None,
-                    source.id if source else None,
-                    source.index if source else None,
-                ),
+                values,
             )
+            return DatabaseStatus.INSERTED if old is None else DatabaseStatus.UPDATED
 
     def get(self, path: str | Path) -> dict[str, object] | None:
         """Read a stored record; return None when no database/record exists."""

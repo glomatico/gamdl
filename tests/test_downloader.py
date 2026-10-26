@@ -163,7 +163,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(FileExistsError):
             await downloader.download(song, output, overwrite="error")
         result = await downloader.download(song, output, overwrite="replace")
-        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(result.status, "overwritten")
         self.assertEqual(result.codec, SongCodec.AAC)
         self.assertEqual(result.decryption_methods, ("none",))
         self.assertEqual(result.bytes_written, output.stat().st_size)
@@ -461,6 +461,8 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             await downloader.download(song, destination)
         self.assertEqual(raised.exception.stage, "database")
         self.assertEqual(raised.exception.path, destination)
+        self.assertEqual(raised.exception.partial_result.status, "downloaded")
+        self.assertIsNone(raised.exception.partial_result.database)
         self.assertTrue(destination.is_file())
         downloader.database = MediaDatabase(self.directory / "media.sqlite3")
         downloader._read_track.reset_mock()
@@ -478,6 +480,8 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(DownloadFinalizationError) as raised:
             await downloader.download(video, output, playlist_path=playlist)
         self.assertEqual(raised.exception.stage, "playlist")
+        self.assertEqual(raised.exception.partial_result.path, output)
+        self.assertIsNone(raised.exception.partial_result.playlist_file)
         self.assertTrue(output.exists())
         self.assertEqual(playlist.read_text(), "not a valid M3U")
         playlist.unlink()
@@ -619,7 +623,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
 
         # Explicit replacement still works and never adds an ID suffix.
         replaced = await downloader.download(song, overwrite="replace")
-        self.assertEqual(replaced.status, "downloaded")
+        self.assertEqual(replaced.status, "overwritten")
         self.assertEqual(replaced.path, first.path)
         self.assertEqual(list(first.path.parent.glob("*.m4a")), [first.path])
 

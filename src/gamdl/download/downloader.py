@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Literal, Iterator
 
 import httpx
 
@@ -38,12 +39,23 @@ from gamdl.muxer import Muxer
 from gamdl.stream import Streamer, StreamProgress
 
 from .tag_resolver import TagResolver
+from .tags import Tags
 from .database import MediaDatabase
 from .exceptions import DownloadFinalizationError
 from .playlist import PlaylistWriter
-from .publication import publish_bytes
+from .publication import publish_bytes, publish_bytes_result
 from .paths import PathFormatter, PlaylistTags
 from .path_resolver import resolve_numbered_video_path, resolve_song_path
+from .enums import (
+    DatabaseStatus,
+    DecryptionMethod,
+    FileStatus,
+    MediaStatus,
+    OverwritePolicy,
+    PlaylistStatus,
+)
+from .models import DownloadResult, FileResult, PlaylistResult, DatabaseResult
+from .events import DownloadEvent, DownloadEventCallback, DownloadStage, EventState
 
 
 @dataclass(frozen=True)
@@ -53,18 +65,6 @@ class DownloadProgress:
     media_id: str
     track: Literal["audio", "video"]
     stream: StreamProgress
-
-
-@dataclass(frozen=True)
-class DownloadResult:
-    """Result of publishing a single media file; no credentials or signed URLs."""
-
-    media_id: str
-    path: Path
-    status: Literal["downloaded", "skipped"]
-    bytes_written: int
-    codec: SongCodec | MusicVideoCodec | UploadedVideoQuality | None
-    decryption_methods: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -116,27 +116,84 @@ class Downloader:
         self.path_formatter = path_formatter
         self.concurrency = concurrency
 
+    @staticmethod
+    def _emit(
+        callback: DownloadEventCallback | None,
+        media_id: str,
+        stage: DownloadStage,
+        state: EventState,
+        *,
+        track: Literal["audio", "video"] | None = None,
+        progress: StreamProgress | None = None,
+        result: DownloadResult | None = None,
+    ) -> None:
+        if callback is not None:
+            callback(DownloadEvent(media_id, stage, state, track, progress, result))
+
+    @classmethod
+    @contextmanager
+    def _stage(
+        cls,
+        callback: DownloadEventCallback | None,
+        media_id: str,
+        stage: DownloadStage,
+        *,
+        track: Literal["audio", "video"] | None = None,
+    ) -> Iterator[None]:
+        cls._emit(callback, media_id, stage, EventState.STARTED, track=track)
+        try:
+            yield
+        except BaseException:
+            cls._emit(callback, media_id, stage, EventState.FAILED, track=track)
+            raise
+        else:
+            cls._emit(callback, media_id, stage, EventState.COMPLETED, track=track)
+
     async def _read_track(
         self,
         media_id: str,
         source: AudioStream | VideoStream | HttpStream,
         track: Literal["audio", "video"],
         progress_callback: Callable[[DownloadProgress], None] | None,
+        *,
+        event_callback: DownloadEventCallback | None = None,
     ) -> tuple[bytes, str]:
         chunks = []
+
+        def report_key(state: str) -> None:
+            self._emit(
+                event_callback,
+                media_id,
+                DownloadStage.FETCHING_DECRYPTION_KEYS,
+                EventState(state),
+                track=track,
+            )
+
         async with Streamer(
             source,
             concurrency=self.concurrency,
             drm=self.drm,
             wrapper_api=self.wrapper_api,
+            key_event_callback=report_key if event_callback is not None else None,
         ) as streamer:
-            async for chunk in streamer:
-                chunks.append(chunk)
-                if progress_callback is not None:
-                    progress_callback(
-                        DownloadProgress(media_id, track, streamer.progress)
+            with self._stage(
+                event_callback, media_id, DownloadStage.DOWNLOADING, track=track
+            ):
+                async for chunk in streamer:
+                    chunks.append(chunk)
+                    if progress_callback is not None:
+                        progress_callback(
+                            DownloadProgress(media_id, track, streamer.progress)
+                        )
+                    self._emit(
+                        event_callback,
+                        media_id,
+                        DownloadStage.DOWNLOADING,
+                        EventState.PROGRESS,
+                        track=track,
+                        progress=streamer.progress,
                     )
-            return b"".join(chunks), streamer.decryption_method
+                return b"".join(chunks), streamer.decryption_method
 
     async def _prepare(
         self,
@@ -158,7 +215,25 @@ class Downloader:
         include_cover: bool,
         include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
+        event_callback: DownloadEventCallback | None = None,
+        resolved_tags: Tags | None = None,
     ) -> _PreparedMedia:
+        async def read(
+            source: AudioStream | VideoStream | HttpStream,
+            track: Literal["audio", "video"],
+        ):
+            if event_callback is None:
+                return await self._read_track(
+                    media.id, source, track, progress_callback
+                )
+            return await self._read_track(
+                media.id,
+                source,
+                track,
+                progress_callback,
+                event_callback=event_callback,
+            )
+
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
         if container not in ("m4v", "mp4"):
@@ -172,41 +247,38 @@ class Downloader:
         if isinstance(media, Song):
             if video_codec is not None:
                 raise ValueError("video_codec is only supported for music videos")
-            source = await media.get_stream(
-                codec=codec,
-                codec_priority=codec_priority,
-                ask=ask,
-                selector=selector,
-                wrapper_api=self.wrapper_api,
-                client=self.client,
-            )
-            raw, method = await self._read_track(
-                media.id, source, "audio", progress_callback
-            )
-            data = self.muxer.remux(raw)
+            with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
+                source = await media.get_stream(
+                    codec=codec,
+                    codec_priority=codec_priority,
+                    ask=ask,
+                    selector=selector,
+                    wrapper_api=self.wrapper_api,
+                    client=self.client,
+                )
+            raw, method = await read(source, "audio")
+            with self._stage(event_callback, media.id, DownloadStage.MUXING):
+                data = self.muxer.remux(raw)
             selected_codec = source.codec
             methods = (method,)
             suffix = ".m4a"
         elif isinstance(media, MusicVideo):
             if codec is not None:
                 raise ValueError("codec is only supported for songs")
-            streams = await media.get_streams(
-                video_codec=video_codec,
-                codec_priority=codec_priority,
-                max_height=max_height,
-                ask=ask,
-                selector=selector,
-                wrapper_api=self.wrapper_api,
-                itunes_api=self.itunes_api,
-                client=self.client,
-            )
+            with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
+                streams = await media.get_streams(
+                    video_codec=video_codec,
+                    codec_priority=codec_priority,
+                    max_height=max_height,
+                    ask=ask,
+                    selector=selector,
+                    wrapper_api=self.wrapper_api,
+                    itunes_api=self.itunes_api,
+                    client=self.client,
+                )
             # asyncio.gather alone does not cancel the sibling when one fails.
-            video_task = asyncio.create_task(
-                self._read_track(media.id, streams.video, "video", progress_callback)
-            )
-            audio_task = asyncio.create_task(
-                self._read_track(media.id, streams.audio, "audio", progress_callback)
-            )
+            video_task = asyncio.create_task(read(streams.video, "video"))
+            audio_task = asyncio.create_task(read(streams.audio, "audio"))
             tasks = (video_task, audio_task)
             try:
                 (
@@ -218,9 +290,10 @@ class Downloader:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
                 raise
-            data = self.muxer.mux(
-                video=video_bytes, audio=audio_bytes, container=container
-            )
+            with self._stage(event_callback, media.id, DownloadStage.MUXING):
+                data = self.muxer.mux(
+                    video=video_bytes, audio=audio_bytes, container=container
+                )
             selected_codec = streams.video.codec
             methods = (video_method, audio_method)
             suffix = f".{container}"
@@ -233,24 +306,27 @@ class Downloader:
                 raise ValueError(
                     "Codec preferences are not supported for uploaded videos"
                 )
-            source = await media.get_stream(
-                quality=quality,
-                quality_priority=quality_priority,
-                ask=ask,
-                selector=selector,
-            )
+            with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
+                source = await media.get_stream(
+                    quality=quality,
+                    quality_priority=quality_priority,
+                    ask=ask,
+                    selector=selector,
+                )
             # Progressive files already contain their audio/video tracks.
             # Preserve the original MP4 bytes and brand; never mux again.
-            data, method = await self._read_track(
-                media.id, source, "video", progress_callback
-            )
+            data, method = await read(source, "video")
             selected_codec = source.codec
             methods = (method,)
             suffix = f".{container}"
 
         artwork = None
         if tag:
-            tags = await self.tag_resolver.get_tags(media)
+            if resolved_tags is None:
+                with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
+                    tags = await self.tag_resolver.get_tags(media)
+            else:
+                tags = resolved_tags
             if include_lyrics and isinstance(media, Song):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
@@ -261,11 +337,12 @@ class Downloader:
                     artwork = await cover.get_cover_bytes()
             # The current Rust tagger is file-based. This temporary output is
             # private; neither API publishes an untagged intermediate file.
-            with TemporaryDirectory(prefix="gamdl-tag-") as directory:
-                staged = Path(directory) / f"media{suffix}"
-                staged.write_bytes(data)
-                self.muxer.tag(staged, tags=tags, cover_bytes=artwork)
-                data = staged.read_bytes()
+            with self._stage(event_callback, media.id, DownloadStage.TAGGING):
+                with TemporaryDirectory(prefix="gamdl-tag-") as directory:
+                    staged = Path(directory) / f"media{suffix}"
+                    staged.write_bytes(data)
+                    self.muxer.tag(staged, tags=tags, cover_bytes=artwork)
+                    data = staged.read_bytes()
         return _PreparedMedia(data, selected_codec, methods, artwork)
 
     async def _save_sidecars(
@@ -277,40 +354,57 @@ class Downloader:
         save_cover: bool,
         save_lyrics: bool,
         prepared_cover: bytes | None,
-    ) -> None:
+        event_callback: DownloadEventCallback | None = None,
+        on_result: Callable[[str, FileResult], None] | None = None,
+    ) -> tuple[FileResult | None, FileResult | None]:
         """Write only requested media sidecars; never alter the media file."""
+        cover_result = None
+        lyrics_result = None
         if save_cover:
-            cover_bytes = prepared_cover
-            if cover_bytes is None:
-                cover = await media.get_cover()
-                cover_bytes = (
-                    await cover.get_cover_bytes() if cover is not None else None
-                )
-            if cover_bytes:
-                if cover_bytes.startswith(b"\xff\xd8\xff"):
-                    extension = ".jpg"
-                elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-                    extension = ".png"
+            with self._stage(event_callback, media.id, DownloadStage.SAVING_COVER):
+                cover_bytes = prepared_cover
+                if cover_bytes is None:
+                    cover = await media.get_cover()
+                    cover_bytes = (
+                        await cover.get_cover_bytes() if cover is not None else None
+                    )
+                if cover_bytes:
+                    if cover_bytes.startswith(b"\xff\xd8\xff"):
+                        extension = ".jpg"
+                    elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                        extension = ".png"
+                    else:
+                        raise ValueError("Cover sidecar must contain JPEG or PNG bytes")
+                    cover_path = destination.with_suffix(extension)
+                    status = publish_bytes_result(
+                        cover_bytes, cover_path, overwrite=overwrite
+                    )
+                    cover_result = FileResult(cover_path, status)
                 else:
-                    raise ValueError("Cover sidecar must contain JPEG or PNG bytes")
-                cover_path = destination.with_suffix(extension)
-                if overwrite != "skip" or not cover_path.exists():
-                    publish_bytes(cover_bytes, cover_path, overwrite=overwrite)
+                    cover_result = FileResult(None, FileStatus.UNAVAILABLE)
+                if on_result is not None:
+                    on_result("cover", cover_result)
 
         if save_lyrics:
             assert isinstance(media, Song)
-            lyrics = await media.get_lyrics()
-            if lyrics is not None:
-                if lyrics.is_synced:
-                    sidecar = destination.with_suffix(".lrc")
-                    contents = lyrics.to_lrc()
-                else:
-                    sidecar = destination.with_suffix(".txt")
-                    contents = lyrics.to_plain_text()
-                if overwrite != "skip" or not sidecar.exists():
-                    publish_bytes(
+            with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
+                lyrics = await media.get_lyrics()
+                if lyrics is not None:
+                    if lyrics.is_synced:
+                        sidecar = destination.with_suffix(".lrc")
+                        contents = lyrics.to_lrc()
+                    else:
+                        sidecar = destination.with_suffix(".txt")
+                        contents = lyrics.to_plain_text()
+                    status = publish_bytes_result(
                         contents.encode("utf-8"), sidecar, overwrite=overwrite
                     )
+                    lyrics_result = FileResult(sidecar, status)
+                else:
+                    lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
+                if on_result is not None:
+                    on_result("lyrics", lyrics_result)
+        return cover_result, lyrics_result
 
     async def _finalize(
         self,
@@ -323,6 +417,7 @@ class Downloader:
         playlist_path: Path | None,
         playlist_index: int | None,
         prepared_cover: bytes | None = None,
+        event_callback: DownloadEventCallback | None = None,
     ) -> DownloadResult:
         """Retryable, idempotent post-publication operations.
 
@@ -330,23 +425,38 @@ class Downloader:
         its path. A subsequent call with ``overwrite='skip'`` replays only
         the finalization work, not the expensive media download.
         """
+
+        def save_result(field: str, outcome: FileResult) -> None:
+            nonlocal result
+            result = replace(result, **{field: outcome})
+
         try:
-            await self._save_sidecars(
+            cover_result, lyrics_result = await self._save_sidecars(
                 media,
                 result.path,
                 overwrite=overwrite,
                 save_cover=save_cover,
                 save_lyrics=save_lyrics,
                 prepared_cover=prepared_cover,
+                event_callback=event_callback,
+                on_result=save_result,
             )
         except Exception as exc:
-            raise DownloadFinalizationError(result.path, "sidecar") from exc
+            raise DownloadFinalizationError(result.path, "sidecar", result) from exc
 
         if self.database is not None:
             try:
-                self.database.record(media, result)
+                with self._stage(
+                    event_callback, media.id, DownloadStage.UPDATING_DATABASE
+                ):
+                    db_status = self.database.record(media, result)
+                result = replace(
+                    result, database=DatabaseResult(self.database.path, db_status)
+                )
             except Exception as exc:
-                raise DownloadFinalizationError(result.path, "database") from exc
+                raise DownloadFinalizationError(
+                    result.path, "database", result
+                ) from exc
 
         if playlist_path is not None:
             try:
@@ -362,9 +472,30 @@ class Downloader:
                     }
                 ):
                     position = source.index
-                PlaylistWriter(playlist_path).add(result.path, position=position)
+                with self._stage(
+                    event_callback, media.id, DownloadStage.UPDATING_PLAYLIST
+                ):
+                    updated = PlaylistWriter(playlist_path).add(
+                        result.path, position=position
+                    )
+                result = replace(
+                    result,
+                    playlist_file=PlaylistResult(
+                        playlist_path,
+                        PlaylistStatus.UPDATED if updated else PlaylistStatus.UNCHANGED,
+                    ),
+                )
             except Exception as exc:
-                raise DownloadFinalizationError(result.path, "playlist") from exc
+                raise DownloadFinalizationError(
+                    result.path, "playlist", result
+                ) from exc
+        self._emit(
+            event_callback,
+            media.id,
+            DownloadStage.COMPLETED,
+            EventState.COMPLETED,
+            result=result,
+        )
         return result
 
     async def get_bytes(
@@ -387,6 +518,7 @@ class Downloader:
         include_cover: bool = True,
         include_lyrics: bool = False,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
+        event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
         """Return finished MP4-family bytes without publishing a media file."""
         prepared = await self._prepare(
@@ -404,6 +536,10 @@ class Downloader:
             include_cover=include_cover,
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,
+            event_callback=event_callback,
+        )
+        self._emit(
+            event_callback, media.id, DownloadStage.COMPLETED, EventState.COMPLETED
         )
         return prepared.data
 
@@ -412,7 +548,7 @@ class Downloader:
         media: Song | MusicVideo | UploadedVideo,
         output: str | os.PathLike[str] | None = None,
         *,
-        overwrite: Literal["skip", "replace", "error"] = "skip",
+        overwrite: OverwritePolicy | str = OverwritePolicy.SKIP,
         codec: SongCodec | None = None,
         video_codec: MusicVideoCodec | None = None,
         codec_priority: Sequence[SongCodec | MusicVideoCodec] | None = None,
@@ -433,7 +569,9 @@ class Downloader:
         save_lyrics: bool = False,
         playlist_path: str | os.PathLike[str] | None = None,
         playlist_index: int | None = None,
+        save_playlist: bool = False,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
+        event_callback: DownloadEventCallback | None = None,
     ) -> DownloadResult:
         """Atomically publish a song M4A or video M4V/MP4 at ``output``.
 
@@ -448,23 +586,44 @@ class Downloader:
             raise TypeError("Unsupported media type for Downloader")
         if video_extension not in (".m4v", ".mp4"):
             raise ValueError("video_extension must be '.m4v' or '.mp4'")
-        if overwrite not in ("skip", "replace", "error"):
+        if overwrite not in OverwritePolicy._value2member_map_:
             raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
+        overwrite = OverwritePolicy(overwrite)
         if save_lyrics and not isinstance(media, Song):
             raise ValueError("save_lyrics is supported for songs only")
         if playlist_index is not None and (
-            playlist_path is None
+            (playlist_path is None and not save_playlist)
+            or (playlist_path is None and save_playlist and playlist_tags is None)
             or type(playlist_index) is not int
             or playlist_index < 0
         ):
             raise ValueError(
                 "playlist_index requires a playlist path and non-negative index"
             )
+        if save_playlist and playlist_path is None:
+            if playlist_tags is None or self.path_formatter is None:
+                raise ValueError(
+                    "save_playlist requires playlist_tags and PathFormatter"
+                )
+            playlist_path = self.path_formatter.get_playlist_path(playlist_tags)
+        if (
+            playlist_index is None
+            and playlist_tags is not None
+            and playlist_tags.track is not None
+        ):
+            if type(playlist_tags.track) is not int or playlist_tags.track < 1:
+                raise ValueError(
+                    "playlist_tags.track must be a positive one-based integer"
+                )
+            playlist_index = playlist_tags.track - 1
         generated_video_path: Path | None = None
+        resolved_tags: Tags | None = None
         if output is None:
             if self.path_formatter is None:
                 raise ValueError("output is required without a PathFormatter")
-            tags = await self.tag_resolver.get_tags(media)
+            with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
+                tags = await self.tag_resolver.get_tags(media)
+                resolved_tags = tags
             extension = ".m4a" if isinstance(media, Song) else video_extension
             destination = self.path_formatter.get_media_path(
                 media, tags, extension=extension, playlist=playlist_tags
@@ -505,7 +664,7 @@ class Downloader:
             if overwrite == "skip":
                 return await self._finalize(
                     media,
-                    DownloadResult(media.id, destination, "skipped", 0, None),
+                    DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None),
                     overwrite=overwrite,
                     save_cover=save_cover,
                     save_lyrics=save_lyrics,
@@ -513,6 +672,7 @@ class Downloader:
                     if playlist_path is not None
                     else None,
                     playlist_index=playlist_index,
+                    event_callback=event_callback,
                 )
             if overwrite == "error":
                 raise FileExistsError(destination)
@@ -532,6 +692,8 @@ class Downloader:
             include_cover=include_cover,
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,
+            event_callback=event_callback,
+            resolved_tags=resolved_tags,
         )
         # A previously empty generated video slot is never safe to replace:
         # another process may have claimed it while we downloaded the media.
@@ -544,7 +706,10 @@ class Downloader:
             and not destination_existed
             else overwrite
         )
-        published = publish_bytes(prepared.data, destination, overwrite=publish_policy)
+        with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
+            published = publish_bytes(
+                prepared.data, destination, overwrite=publish_policy
+            )
         if (
             not published
             and generated_video_path is not None
@@ -561,7 +726,10 @@ class Downloader:
                     # A competing download of this *same* catalog ID won.
                     break
                 destination = candidate
-                published = publish_bytes(prepared.data, destination, overwrite="skip")
+                with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
+                    published = publish_bytes(
+                        prepared.data, destination, overwrite="skip"
+                    )
                 if published:
                     break
             else:
@@ -570,13 +738,15 @@ class Downloader:
             DownloadResult(
                 media.id,
                 destination,
-                "downloaded",
+                MediaStatus.OVERWRITTEN
+                if overwrite == OverwritePolicy.REPLACE and destination_existed
+                else MediaStatus.DOWNLOADED,
                 len(prepared.data),
                 prepared.codec,
-                prepared.methods,
+                tuple(DecryptionMethod(method) for method in prepared.methods),
             )
             if published
-            else DownloadResult(media.id, destination, "skipped", 0, None)
+            else DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None)
         )
         return await self._finalize(
             media,
@@ -587,4 +757,5 @@ class Downloader:
             playlist_path=Path(playlist_path) if playlist_path is not None else None,
             playlist_index=playlist_index,
             prepared_cover=prepared.cover_bytes,
+            event_callback=event_callback,
         )

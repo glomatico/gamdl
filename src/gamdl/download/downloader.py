@@ -44,6 +44,7 @@ from .exceptions import DownloadFinalizationError
 from .playlist import PlaylistWriter
 from .publication import publish_bytes
 from .paths import PathFormatter, PlaylistTags
+from .path_resolver import resolve_numbered_video_path
 
 
 @dataclass(frozen=True)
@@ -437,10 +438,12 @@ class Downloader:
     ) -> DownloadResult:
         """Atomically publish a song M4A or video M4V/MP4 at ``output``.
 
-        An explicit .mp4 video path opts into mp42 branding. ``skip`` avoids
-        media transfer, but still performs requested sidecar/playlist/database
-        finalization. Sidecars, playlist entries and index updates are opt-in
-        and idempotent; ``get_bytes`` never performs them.
+        An explicit .mp4 video path opts into mp42 branding. Automatically
+        generated video paths use GAMDL 3.x's numbered suffixes (Title 2.m4v)
+        and reuse files whose catalog ID matches an index entry or MP4 cnID.
+        ``skip`` avoids media transfer, but still performs requested
+        sidecar/playlist/database finalization. Sidecars, playlist entries and
+        index updates are opt-in and idempotent; ``get_bytes`` never performs them.
         """
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
@@ -458,6 +461,7 @@ class Downloader:
             raise ValueError(
                 "playlist_index requires a playlist path and non-negative index"
             )
+        generated_video_path: Path | None = None
         if output is None:
             if self.path_formatter is None:
                 raise ValueError("output is required without a PathFormatter")
@@ -466,11 +470,13 @@ class Downloader:
             destination = self.path_formatter.get_media_path(
                 media, tags, extension=extension, playlist=playlist_tags
             )
-            if destination.exists():
-                # A formatted path could belong to a *different* catalog ID.
-                # Trust it only when the index confirms the identity. Without
-                # an index, use a stable ID-qualified filename, avoiding a
-                # false skip or clobber of an unrelated media item.
+            if isinstance(media, (MusicVideo, UploadedVideo)):
+                generated_video_path = destination
+                destination = resolve_numbered_video_path(
+                    destination, media, database=self.database
+                )
+            elif destination.exists():
+                # Songs retain their previous, ID-qualified fallback policy.
                 record = self.database.get(destination) if self.database else None
                 if (
                     record is None
@@ -506,7 +512,8 @@ class Downloader:
                 raise ValueError("Video output must end in .m4v or .mp4")
             container = "mp4" if destination.suffix.lower() == ".mp4" else "m4v"
 
-        if destination.exists():
+        destination_existed = destination.exists()
+        if destination_existed:
             if overwrite == "skip":
                 return await self._finalize(
                     media,
@@ -538,7 +545,39 @@ class Downloader:
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,
         )
-        published = publish_bytes(prepared.data, destination, overwrite=overwrite)
+        # A previously empty generated video slot is never safe to replace:
+        # another process may have claimed it while we downloaded the media.
+        # `replace` still replaces a known same-ID video that existed before
+        # preparation; only *new* generated slots use no-clobber publication.
+        publish_policy = (
+            "skip"
+            if generated_video_path is not None
+            and overwrite == "replace"
+            and not destination_existed
+            else overwrite
+        )
+        published = publish_bytes(prepared.data, destination, overwrite=publish_policy)
+        if (
+            not published
+            and generated_video_path is not None
+            and publish_policy == "skip"
+        ):
+            # The planned filename may have been claimed by another process
+            # during download. Never finalize it under the wrong media ID;
+            # resolve the updated occupied slots, then publish elsewhere.
+            for _ in range(20):
+                candidate = resolve_numbered_video_path(
+                    generated_video_path, media, database=self.database
+                )
+                if candidate == destination:
+                    # A competing download of this *same* catalog ID won.
+                    break
+                destination = candidate
+                published = publish_bytes(prepared.data, destination, overwrite="skip")
+                if published:
+                    break
+            else:
+                raise RuntimeError("Unable to resolve a stable video filename")
         result = (
             DownloadResult(
                 media.id,

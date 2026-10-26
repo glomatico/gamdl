@@ -209,3 +209,25 @@ pub(crate) fn write_mp4_tags(
     // Large container writes must not hold the Python GIL.
     py.detach(move || fields.write(&path))
 }
+
+/// Read the iTunes catalog ID without loading the entire media file into Python.
+/// Returns None for missing/unreadable/invalid metadata, since an unrecognized
+/// file should be treated as an occupied filename, never silently overwritten.
+#[pyfunction]
+pub(crate) fn read_mp4_title_id(py: Python<'_>, path: String) -> Option<String> {
+    py.detach(move || {
+        let tag = Tag::read_from_path(path).ok()?;
+        let value = tag.data_of(&Fourcc(*b"cnID")).next()?;
+        let bytes = match value {
+            Data::BeSigned(value) if (1..=8).contains(&value.len()) => value,
+            _ => return None,
+        };
+        // A leading 1 bit indicates an invalid negative catalog identifier.
+        if bytes[0] & 0x80 != 0 {
+            return None;
+        }
+        let mut padded = [0u8; 8];
+        padded[8 - bytes.len()..].copy_from_slice(bytes);
+        Some(u64::from_be_bytes(padded).to_string())
+    })
+}

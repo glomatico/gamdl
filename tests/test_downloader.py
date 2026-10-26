@@ -572,9 +572,17 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         # Identical display names, different IDs: never misattribute a skip.
         second = await downloader.download(self.uploaded_video("5555555555"))
         self.assertEqual(second.status, "downloaded")
-        self.assertEqual(second.path.name, "Original Upload [5555555555].m4v")
+        self.assertEqual(second.path.name, "Original Upload 2.m4v")
         self.assertEqual(db.get(second.path)["media_id"], "5555555555")
         self.assertEqual(db.get(first.path)["media_id"], "9876543210")
+
+        # Repeated identity reuses its matching numbered path, not the first
+        # free number or another video's filename.
+        downloader._read_track.reset_mock()
+        repeated = await downloader.download(self.uploaded_video("5555555555"))
+        self.assertEqual(repeated.status, "skipped")
+        self.assertEqual(repeated.path, second.path)
+        downloader._read_track.assert_not_awaited()
 
     async def test_auto_video_output_extension_and_mp4_brand(self):
         formatter = PathFormatter(self.directory / "Formatted")
@@ -585,7 +593,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.path.suffix, ".mp4")
         self.assertEqual(brands(result.path)[0], b"mp42")
 
-    async def test_auto_paths_without_index_do_not_claim_unknown_media(self):
+    async def test_auto_paths_without_index_recognize_embedded_cnid(self):
         formatter = PathFormatter(self.directory / "Formatted")
         downloader = Downloader(path_formatter=formatter)
         downloader._read_track = AsyncMock(
@@ -594,14 +602,107 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         video = self.uploaded_video()
         first = await downloader.download(video)
         self.assertEqual(first.status, "downloaded")
-        # Without a database/embedded-ID reader, existing files cannot be
-        # trusted as matching the input media. Use an ID-qualified fallback.
+        # As in GAMDL 3.x, re-read the native cnID tag when no index exists.
+        downloader._read_track.reset_mock()
         second = await downloader.download(video)
-        self.assertEqual(second.status, "downloaded")
-        self.assertEqual(second.path.name, "Original Upload [9876543210].m4v")
-        third = await downloader.download(video)
-        self.assertEqual(third.path, second.path)
-        self.assertEqual(third.status, "skipped")
+        self.assertEqual(second.status, "skipped")
+        self.assertEqual(second.path, first.path)
+        downloader._read_track.assert_not_awaited()
+
+        other = await downloader.download(self.uploaded_video("5555555555"))
+        self.assertEqual(other.status, "downloaded")
+        self.assertEqual(other.path.name, "Original Upload 2.m4v")
+        downloader._read_track.reset_mock()
+        repeated = await downloader.download(self.uploaded_video("5555555555"))
+        self.assertEqual(repeated.status, "skipped")
+        self.assertEqual(repeated.path, other.path)
+        downloader._read_track.assert_not_awaited()
+
+    async def test_auto_video_collision_uses_next_number_and_reuses_gaps(self):
+        formatter = PathFormatter(self.directory / "Numbered")
+        downloader = Downloader(path_formatter=formatter)
+        downloader._read_track = AsyncMock(
+            return_value=(self.video.read_bytes(), "none")
+        )
+        first = await downloader.download(self.uploaded_video("100"))
+        second = await downloader.download(self.uploaded_video("200"))
+        third = await downloader.download(self.uploaded_video("300"))
+        self.assertEqual(
+            [p.path.name for p in (first, second, third)],
+            ["Original Upload.m4v", "Original Upload 2.m4v", "Original Upload 3.m4v"],
+        )
+        second.path.unlink()
+        reuse = await downloader.download(self.uploaded_video("400"))
+        self.assertEqual(reuse.path, second.path)
+        self.assertEqual(reuse.status, "downloaded")
+        self.assertEqual(
+            (await downloader.download(self.uploaded_video("300"))).path, third.path
+        )
+
+    async def test_concurrent_collision_does_not_skip_other_video(self):
+        formatter = PathFormatter(self.directory / "Numbered")
+        database = MediaDatabase(self.directory / "index.sqlite3")
+        downloader = Downloader(path_formatter=formatter, database=database)
+        downloader._read_track = AsyncMock(
+            return_value=(self.video.read_bytes(), "none")
+        )
+        actual_publish = __import__(
+            "gamdl.download.publication", fromlist=["publish_bytes"]
+        ).publish_bytes
+        raced = False
+
+        def racing_publish(data, destination, *, overwrite):
+            nonlocal raced
+            if not raced:
+                raced = True
+                # A competing process got the original name while we were
+                # downloading. Our first atomic link attempt now fails.
+                actual_publish(b"other video", destination, overwrite="skip")
+                return False
+            return actual_publish(data, destination, overwrite=overwrite)
+
+        with patch(
+            "gamdl.download.downloader.publish_bytes", side_effect=racing_publish
+        ):
+            result = await downloader.download(self.uploaded_video("555"))
+        self.assertTrue(raced)
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(result.path.name, "Original Upload 2.m4v")
+        self.assertEqual(
+            result.path.with_name("Original Upload.m4v").read_bytes(), b"other video"
+        )
+        self.assertEqual(database.get(result.path)["media_id"], "555")
+
+    async def test_auto_replace_cannot_clobber_newly_claimed_video_slot(self):
+        formatter = PathFormatter(self.directory / "Numbered")
+        downloader = Downloader(path_formatter=formatter)
+        downloader._read_track = AsyncMock(
+            return_value=(self.video.read_bytes(), "none")
+        )
+        from gamdl.download.publication import publish_bytes as real_publish
+
+        raced = False
+
+        def competing_publish(data, destination, *, overwrite):
+            nonlocal raced
+            if not raced:
+                raced = True
+                real_publish(b"other video", destination, overwrite="skip")
+                self.assertEqual(overwrite, "skip")
+                return False
+            return real_publish(data, destination, overwrite=overwrite)
+
+        with patch(
+            "gamdl.download.downloader.publish_bytes", side_effect=competing_publish
+        ):
+            result = await downloader.download(
+                self.uploaded_video("555"), overwrite="replace"
+            )
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(result.path.name, "Original Upload 2.m4v")
+        self.assertEqual(
+            result.path.with_name("Original Upload.m4v").read_bytes(), b"other video"
+        )
 
     async def test_formatter_requires_configuration_if_output_missing(self):
         with self.assertRaises(ValueError):

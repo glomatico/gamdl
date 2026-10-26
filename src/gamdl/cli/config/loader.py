@@ -104,8 +104,8 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         raise ConfigError("auth.mode must be cookies or wrapper")
     if auth.drm_backend not in {"widevine", "playready"}:
         raise ConfigError("auth.drm_backend must be widevine or playready")
-    if auth.drm_backend == "playready" and not auth.device_path:
-        raise ConfigError("auth.device_path must be set when using PlayReady")
+    # The CLI can ask for a missing PlayReady .prd interactively. In CI, the
+    # same missing path is reported without attempting to read from stdin.
     if auth.storefront is not None and (
         len(auth.storefront) != 2
         or not auth.storefront.isascii()

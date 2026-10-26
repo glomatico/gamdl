@@ -33,7 +33,7 @@ class DownloadConfig:
     concurrency: int = 8
     concurrent_downloads: int = 2
     song_codec: str | None = None
-    song_codec_priority: list[str] = field(default_factory=lambda: ["alac", "aac-web"])
+    song_codec_priority: list[str] = field(default_factory=lambda: ["aac-web"])
     music_video_codec: str | None = None
     music_video_codec_priority: list[str] = field(
         default_factory=lambda: ["h264", "h265"]
@@ -47,8 +47,8 @@ class DownloadConfig:
 class OutputConfig:
     directory: str = "./Apple Music"
     save_cover: bool = False
-    save_lyrics: bool = False
-    save_playlist: bool = True
+    save_lyrics: bool = True
+    save_playlist: bool = False
     album_folder_template: str = "{album_artist}/{album}"
     compilation_folder_template: str = "Compilations/{album}"
     no_album_folder_template: str = "{artist}/Unknown Album"

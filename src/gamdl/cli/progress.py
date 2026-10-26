@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+from contextlib import contextmanager
 
 from rich.console import Console
 from rich.markup import escape
@@ -51,16 +52,30 @@ class RipProgress:
     def __exit__(self, *_exc):
         self.progress.stop()
 
+    @contextmanager
+    def suspend(self):
+        """Let Questionary own the terminal while a stream menu is displayed."""
+        if self.enabled:
+            self.progress.stop()
+        try:
+            yield
+        finally:
+            if self.enabled:
+                self.progress.start()
+
     def discovered(self, count: int):
         if self._discovery is not None:
             self.progress.update(
                 self._discovery, description=f"Discovered {count} tracks"
             )
 
-    def discovery_finished(self):
+    def discovery_finished(self, count: int = 0):
         if self._discovery is not None:
             self.progress.remove_task(self._discovery)
             self._discovery = None
+        self.console.print(
+            f"[green]✓[/green] Discovered {count} track{'s' if count != 1 else ''}"
+        )
 
     def add(self, occurrence: int, title: str):
         if self.enabled:
@@ -110,8 +125,10 @@ class RipProgress:
                 self.progress.update(
                     task,
                     description=f"[{color}]{mark} {escape(title)} · {status}[/{color}]",
-                    total=100,
-                    completed=100,
+                    # Skipped files weren't transferred: don't display 100%
+                    # as if bytes had been downloaded.
+                    total=None if status == "skipped" else 100,
+                    completed=0 if status == "skipped" else 100,
                     visible=True,
                 )
             self._finished.append(occurrence)

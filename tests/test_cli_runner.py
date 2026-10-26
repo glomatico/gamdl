@@ -70,6 +70,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         opts = RipOptions(
             "https://music.apple.com/br/playlist/my-playlist/playlist-id",
             progress=False,
+            save_playlist=True,
             concurrent_downloads=2,
             continue_on_error=not fail_fast,
         )
@@ -79,7 +80,11 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                 new_callable=AsyncMock,
                 return_value=(self.api, None),
             ),
-            patch("gamdl.cli.commands.runner.Drm.from_widevine", return_value=Mock()),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
             patch("gamdl.cli.commands.runner.Downloader", return_value=fake_downloader),
             patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
         ):

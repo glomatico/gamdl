@@ -3,9 +3,28 @@
 from __future__ import annotations
 
 import os
+import threading
+import weakref
 from pathlib import Path
 
 from .publication import publish_bytes
+
+
+_registry_lock = threading.Lock()
+_playlist_locks: weakref.WeakValueDictionary[Path, threading.RLock] = (
+    weakref.WeakValueDictionary()
+)
+
+
+def _lock_for(path: Path) -> threading.RLock:
+    """Reuse per-path locks without growing a permanent global path registry."""
+    with _registry_lock:
+        key = path.absolute()
+        lock = _playlist_locks.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _playlist_locks[key] = lock
+        return lock
 
 
 class PlaylistWriter:
@@ -13,14 +32,20 @@ class PlaylistWriter:
 
     ``position`` is zero-based and keeps duplicate song occurrences distinct.
     When no position is known, appending the same path twice is suppressed.
-    Writes are atomic, but concurrent writers to the *same* M3U must be
-    serialized by the caller to prevent a lost update.
+    In-process writers to the same playlist are serialized across threads.
+    Cross-process writers must still coordinate externally.
     """
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
     def add(self, media_file: str | Path, *, position: int | None = None) -> bool:
+        with _lock_for(self.path):
+            return self._add_unlocked(media_file, position=position)
+
+    def _add_unlocked(
+        self, media_file: str | Path, *, position: int | None = None
+    ) -> bool:
         if position is not None and (type(position) is not int or position < 0):
             raise ValueError("playlist position must be a non-negative integer")
         target = Path(media_file).absolute()

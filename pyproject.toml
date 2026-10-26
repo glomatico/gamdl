@@ -16,6 +16,7 @@ dependencies = [
     "m3u8>=6,<7",
     "platformdirs>=4,<6",
     "pyyaml>=6,<7",
+    "questionary>=2,<3",
     "rich>=14,<16",
     "structlog>=25.4,<27",
 ]

@@ -9,9 +9,10 @@ from gamdl import __version__
 from .config.models import config_path as default_config_path
 from .config.loader import ConfigError, click_default_map, load_config
 from .config.commands import config_group
+from .errors import CliCommand
 
 
-@click.group(context_settings={"auto_envvar_prefix": "GAMDL"})
+@click.group(cls=CliCommand, context_settings={"auto_envvar_prefix": "GAMDL"})
 @click.version_option(__version__, "--version", "-v")
 @click.option(
     "--config",

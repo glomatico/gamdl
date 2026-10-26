@@ -116,7 +116,6 @@ class CliConfigTests(unittest.TestCase):
             "download:\n  concurrent_downloads: true\n",
             "output:\n  save_cover: yes\n",  # YAML 1.1 resolves to bool, valid
             "profiles:\n  broken:\n    output:\n      album_folder_template: '{__class__}'\n",
-            "auth:\n  drm_backend: playready\n",
             "download:\n  concurrency: 3\ndownload:\n  concurrency: 4\n",
         ):
             if text.startswith("output:\n  save_cover: yes"):
@@ -144,3 +143,34 @@ class CliConfigTests(unittest.TestCase):
         )
         self.assertEqual(result.exit_code, 1)
         self.assertIn("does not exist", result.output)
+
+    def test_legacy_defaults_and_missing_prd_are_valid_for_interactive_setup(self):
+        config = load_config(None)
+        self.assertTrue(config.output.save_lyrics)
+        self.assertFalse(config.output.save_playlist)
+        self.assertEqual(config.download.song_codec_priority, ["aac-web"])
+        self._write("auth:\n  drm_backend: playready\n")
+        self.assertEqual(load_config(self.path).auth.drm_backend, "playready")
+
+    def test_invalid_click_option_uses_same_error_style(self):
+        result = CliRunner().invoke(main, ["rip", "URL", "--song-codec", "invalid"])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("✗", result.output)
+        self.assertIn("--song-codec", result.output)
+        self.assertNotIn("Usage: gamdl", result.output)
+
+    def test_explicit_ask_codec_conflict_is_a_click_usage_error(self):
+        with patch("gamdl.cli.commands.runner.interactive", return_value=True):
+            result = CliRunner().invoke(
+                main,
+                [
+                    "--no-config",
+                    "rip",
+                    "URL",
+                    "--ask-song-codec",
+                    "--song-codec",
+                    "alac",
+                ],
+            )
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("--ask-song-codec conflicts", result.output)

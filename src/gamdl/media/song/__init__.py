@@ -4,6 +4,7 @@ from .enums import SongCodec
 from .lyrics import Lyrics, LyricsLine, LyricsSegment
 from .media import Song
 from .models import (
+    SongStreamSelector,
     StreamSelectionOption,
     StreamSelectionRequest,
     StreamSourceOption,
@@ -18,6 +19,7 @@ __all__ = [
     "LyricsLine",
     "LyricsSegment",
     "SongStreamResolver",
+    "SongStreamSelector",
     "StreamSelectionOption",
     "StreamSelectionRequest",
     "StreamSourceOption",

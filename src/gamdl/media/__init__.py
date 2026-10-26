@@ -19,7 +19,7 @@ from .resolver import (
     SelectionOption,
     SelectionRequest,
 )
-from .song import Song
+from .song import Song, SongStreamSelector
 from .song.enums import SongCodec
 from .song.stream import SongStreamResolver
 from .song.models import (
@@ -37,7 +37,15 @@ from .stream import (
     VideoStream,
     WebPlaybackStream,
 )
-from .music_video import MusicVideo
+from .music_video import (
+    MusicVideo,
+    MusicVideoCodec,
+    VideoSelectionOption,
+    VideoSelectionRequest,
+    AudioSelectionOption,
+    AudioSelectionRequest,
+    MusicVideoStreamSelector,
+)
 from .music_video.stream import MusicVideoStreams
 from .uploaded_video import UploadedVideo
 
@@ -58,12 +66,19 @@ __all__ = [
     "MediaResolver",
     "MediaSource",
     "MusicVideo",
+    "MusicVideoCodec",
+    "MusicVideoStreamSelector",
+    "VideoSelectionOption",
+    "VideoSelectionRequest",
+    "AudioSelectionOption",
+    "AudioSelectionRequest",
     "MusicVideoStreams",
     "SelectionKind",
     "SelectionOption",
     "SelectionRequest",
     "SelectionRequiredError",
     "Song",
+    "SongStreamSelector",
     "SongCodec",
     "SongStreamResolver",
     "StreamManifestError",

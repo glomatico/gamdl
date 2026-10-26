@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class SongCodec(str, Enum):
-    """Compatible with Gamdl 3.x's song codec and preference identifiers."""
+    """Actual song codec preferences; interactive selection is separate."""
 
     AAC_WEB = "aac-web"
     AAC_HE_WEB = "aac-he-web"
@@ -19,7 +19,6 @@ class SongCodec(str, Enum):
     ATMOS = "atmos"
     AC3 = "ac3"
     ALAC = "alac"
-    ASK = "ask"
 
     @property
     def is_web(self) -> bool:

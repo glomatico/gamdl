@@ -5,18 +5,30 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 
-from gamdl.media import AudioStream, MusicVideo, VideoStream, StreamSource
+from gamdl.media import (
+    AudioSelectionRequest,
+    AudioStream,
+    MusicVideo,
+    MusicVideoCodec,
+    SelectionRequiredError,
+    VideoSelectionRequest,
+    VideoStream,
+    StreamSource,
+)
 from gamdl.media.exceptions import StreamNotAvailableError
 from tests.test_media import VIDEO_DATA, fake_api
 
 MASTER = """#EXTM3U
 #EXT-X-VERSION:7
-#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-stereo",NAME="English",DEFAULT=YES,URI="audio.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-stereo",NAME="English",LANGUAGE="en",DEFAULT=YES,URI="audio.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-stereo",NAME="Español",LANGUAGE="es",DEFAULT=NO,URI="audio-es.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-atmos",NAME="Spatial",DEFAULT=YES,URI="atmos.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="unrelated",NAME="Other",DEFAULT=YES,URI="unrelated.m3u8"
 #EXT-X-STREAM-INF:BANDWIDTH=3500000,CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,AUDIO="audio-stereo",FRAME-RATE=29.970
 v1080.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=1800000,CODECS="avc1.4d401f,mp4a.40.2",RESOLUTION=1280x720,AUDIO="audio-stereo"
 v720.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=5000000,CODECS="hvc1.1.6.L123,mp4a.40.2",RESOLUTION=3840x2160,AUDIO="audio-stereo"
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,CODECS="hvc1.1.6.L123,ec-3",RESOLUTION=3840x2160,AUDIO="audio-atmos"
 v4k.m3u8
 """
 PAGE = {
@@ -72,6 +84,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(streams.audio, AudioStream)
         self.assertEqual((streams.video.width, streams.video.height), (1280, 720))
         self.assertEqual(streams.video.codec, "h264")
+        self.assertIs(streams.video.codec, MusicVideoCodec.H264)
         self.assertEqual(streams.video.url, "https://cdn.example.com/v720.m3u8")
         self.assertEqual(streams.audio.url, "https://cdn.example.com/audio.m3u8")
         self.assertEqual(streams.video.frame_rate, None)
@@ -109,13 +122,142 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         streams = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
-            video_codec="h265",
+            video_codec=MusicVideoCodec.H265,
             max_height=2160,
         )
         self.assertEqual(streams.video.width, 3840)
-        with self.assertRaises(StreamNotAvailableError):
+        with self.assertRaises(ValueError):
             await self.media.get_streams(
                 client=self.client, wrapper_api=wrapper, video_codec="av1"
+            )
+
+    async def test_strict_max_height_and_unlimited(self):
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        with self.assertRaises(StreamNotAvailableError):
+            await self.media.get_streams(
+                client=self.client, wrapper_api=wrapper, max_height=360
+            )
+        with self.assertRaises(StreamNotAvailableError):
+            await self.media.get_streams(
+                client=self.client,
+                wrapper_api=wrapper,
+                video_codec=MusicVideoCodec.H265,
+                max_height=1080,
+            )
+        streams = await self.media.get_streams(
+            client=self.client,
+            wrapper_api=wrapper,
+            video_codec=MusicVideoCodec.H265,
+            max_height=None,
+        )
+        self.assertEqual(streams.video.height, 2160)
+        for invalid in (0, -1, True, 1080.0, "1080"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                await self.media.get_streams(max_height=invalid)
+
+    async def test_interactive_video_and_independent_audio_selection(self):
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        requests = []
+
+        async def choose(request):
+            requests.append(request)
+            if isinstance(request, VideoSelectionRequest):
+                self.assertEqual(
+                    [o.codec for o in request.options],
+                    [MusicVideoCodec.H264, MusicVideoCodec.H264, MusicVideoCodec.H265],
+                )
+                self.assertEqual([o.height for o in request.options], [1080, 720, 2160])
+                self.assertAlmostEqual(request.options[0].frame_rate, 29.970)
+                return 1
+            self.assertIsInstance(request, AudioSelectionRequest)
+            self.assertEqual(request.video.height, 720)
+            self.assertEqual(
+                [o.name for o in request.options], ["English", "Español", "Spatial"]
+            )
+            self.assertEqual([o.language for o in request.options], ["en", "es", None])
+            self.assertEqual(
+                [o.group_id for o in request.options],
+                ["audio-stereo", "audio-stereo", "audio-atmos"],
+            )
+            self.assertEqual(request.options[2].codec.value, "atmos")
+            return 2
+
+        streams = await self.media.get_streams(
+            client=self.client,
+            wrapper_api=wrapper,
+            max_height=None,
+            ask=True,
+            selector=choose,
+        )
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(streams.video.url, "https://cdn.example.com/v720.m3u8")
+        self.assertEqual(streams.audio.url, "https://cdn.example.com/atmos.m3u8")
+        self.assertEqual(streams.audio.codec.value, "atmos")
+        # Choices aren't cached: callbacks must run for each interactive call.
+        await self.media.get_streams(
+            client=self.client,
+            wrapper_api=wrapper,
+            max_height=None,
+            ask=True,
+            selector=choose,
+        )
+        self.assertEqual(len(requests), 4)
+
+    async def test_interactive_limits_and_selector_validation(self):
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        with self.assertRaises(SelectionRequiredError):
+            await self.media.get_streams(ask=True)
+        with self.assertRaisesRegex(ValueError, "ask cannot be combined"):
+            await self.media.get_streams(
+                ask=True, video_codec=MusicVideoCodec.H264, selector=lambda _: 0
+            )
+        with self.assertRaisesRegex(ValueError, "selector requires ask"):
+            await self.media.get_streams(selector=lambda _: 0)
+        for bad in (True, -1, 30):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                await self.media.get_streams(
+                    client=self.client,
+                    wrapper_api=wrapper,
+                    ask=True,
+                    selector=lambda _: bad,
+                )
+        with self.assertRaises(ValueError):
+            await self.media.get_streams(
+                client=self.client,
+                wrapper_api=wrapper,
+                ask=True,
+                selector=lambda request: (
+                    0 if isinstance(request, VideoSelectionRequest) else 12
+                ),
+            )
+        with self.assertRaises(StreamNotAvailableError):
+            await self.media.get_streams(
+                client=self.client,
+                wrapper_api=wrapper,
+                max_height=360,
+                ask=True,
+                selector=lambda _: 0,
             )
 
     async def test_no_audio_rendition_rejected(self):

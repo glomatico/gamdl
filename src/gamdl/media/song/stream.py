@@ -325,15 +325,24 @@ class SongStreamResolver:
         *,
         codec: SongCodec | None = None,
         codec_priority: Sequence[SongCodec] | None = None,
+        ask: bool = False,
         selector: StreamSelector | None = None,
     ) -> AudioStream:
-        """Pick best matching bitrate or request a choice for ASK.
+        """Pick highest bitrate among preferred codecs, or explicitly prompt.
 
-        ``codec`` and ``codec_priority`` are mutually exclusive; the default
-        is AAC Webplayback. The callback only runs if ASK is actually reached.
+        In interactive mode, codec preferences are not applied. The default
+        noninteractive codec is AAC Webplayback.
         """
         if codec is not None and codec_priority is not None:
             raise ValueError("Provide either codec or codec_priority, not both")
+        if ask:
+            if codec is not None or codec_priority is not None:
+                raise ValueError("ask cannot be combined with codec preferences")
+            if selector is None:
+                raise SelectionRequiredError("song_stream")
+            return await self._ask(selector)
+        if selector is not None:
+            raise ValueError("selector requires ask=True")
         priorities = (
             (SongCodec(codec),)
             if codec is not None
@@ -344,10 +353,6 @@ class SongStreamResolver:
         if not priorities:
             raise ValueError("codec_priority must not be empty")
         for preferred in priorities:
-            if preferred == SongCodec.ASK:
-                if selector is None:
-                    raise SelectionRequiredError("song_stream")
-                return await self._ask(selector)
             if preferred.is_web:
                 matches = [
                     item

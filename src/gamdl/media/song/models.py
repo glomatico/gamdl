@@ -20,7 +20,7 @@ class StreamSourceOption:
 
 @dataclass(frozen=True)
 class StreamSourceSelectionRequest:
-    """First ASK prompt: choose a source before fetching any streams."""
+    """First interactive prompt: choose a source before fetching streams."""
 
     media_id: str
     options: tuple[StreamSourceOption, ...]
@@ -28,7 +28,7 @@ class StreamSourceSelectionRequest:
 
 @dataclass(frozen=True)
 class StreamSelectionOption:
-    """Second ASK prompt: choose a variant from the chosen source only."""
+    """Second interactive prompt: choose from the selected source only."""
 
     index: int
     stream: AudioStream
@@ -62,3 +62,6 @@ class StreamSelectionRequest:
 StreamSelector = Callable[
     [StreamSourceSelectionRequest | StreamSelectionRequest], int | Awaitable[int]
 ]
+
+# Public name consistent with MusicVideoStreamSelector.
+SongStreamSelector = StreamSelector

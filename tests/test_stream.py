@@ -1,4 +1,4 @@
-"""Offline stream contracts: discovery, HLS codecs, ASK and lazy inspection."""
+"""Offline stream contracts: discovery, codecs and explicit interactive choice."""
 
 import asyncio
 import base64
@@ -304,7 +304,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client()
         async with client:
             chosen = await song.get_stream(
-                codec=SongCodec.ASK, selector=choose_assets_enhanced, client=client
+                ask=True, selector=choose_assets_enhanced, client=client
             )
             self.assertEqual(chosen.codec, SongCodec.ALAC)
             self.assertEqual(seen[0].media_id, "111")
@@ -353,7 +353,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client()
         async with client:
             result = await song.get_stream(
-                codec=SongCodec.ASK, selector=choose, wrapper_api=wrapper, client=client
+                ask=True, selector=choose, wrapper_api=wrapper, client=client
             )
             self.assertEqual(result.codec, SongCodec.AAC_HE_WEB)
             self.assertEqual(result.origin, StreamOrigin.WEBPLAYBACK)
@@ -380,9 +380,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
 
         client, calls = stream_client()
         async with client:
-            stream = await song.get_stream(
-                codec=SongCodec.ASK, selector=choose, client=client
-            )
+            stream = await song.get_stream(ask=True, selector=choose, client=client)
             self.assertEqual(stream.origin, StreamOrigin.ASSET_STANDARD_HLS)
             self.assertEqual(stream.source_api, StreamSource.ASSETS)
             self.assertEqual(stream.hls_type, HlsType.STANDARD)
@@ -417,7 +415,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client()
         async with client:
             result = await song.get_stream(
-                codec=SongCodec.ASK, selector=select, wrapper_api=wrapper, client=client
+                ask=True, selector=select, wrapper_api=wrapper, client=client
             )
             self.assertEqual(result.origin, StreamOrigin.WRAPPER_HLS)
             self.assertEqual(result.hls_type, HlsType.ENHANCED)
@@ -440,9 +438,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
 
         client, calls = stream_client()
         async with client:
-            stream = await song.get_stream(
-                codec=SongCodec.ASK, selector=select, client=client
-            )
+            stream = await song.get_stream(ask=True, selector=select, client=client)
             self.assertEqual(stream.origin, StreamOrigin.LIBRARY_WEBPLAYBACK)
             self.assertEqual(
                 [o.origin for o in prompts[0].options],
@@ -489,7 +485,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         api = fake_api()
         song = Song.from_id("111", api=api)
         with self.assertRaises(SelectionRequiredError):
-            await song.get_stream(codec=SongCodec.ASK)
+            await song.get_stream(ask=True)
         api.get_assets.assert_not_awaited()
         api.get_webplayback.assert_not_awaited()
 
@@ -503,42 +499,33 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, _ = stream_client()
         async with client:
             with self.assertRaises(ValueError):
-                await song.get_stream(
-                    codec=SongCodec.ASK, selector=lambda _: True, client=client
-                )
+                await song.get_stream(ask=True, selector=lambda _: True, client=client)
+            with self.assertRaises(ValueError):
+                await song.get_stream(ask=True, selector=lambda _: 777, client=client)
             with self.assertRaises(ValueError):
                 await song.get_stream(
-                    codec=SongCodec.ASK, selector=lambda _: 777, client=client
-                )
-            with self.assertRaises(ValueError):
-                await song.get_stream(
-                    codec=SongCodec.ASK,
+                    ask=True,
                     selector=lambda request: (
                         0 if isinstance(request, StreamSourceSelectionRequest) else 99
                     ),
                     client=client,
                 )
 
-    async def test_priority_ask_callback_only_if_fallback_reached(self):
+    async def test_ask_is_exclusive_of_codec_preferences(self):
         api = fake_api()
         song = Song.from_id("111", api=api)
         callback = Mock(return_value=0)
-        client, _ = stream_client()
-        async with client:
-            selected = await song.get_stream(
-                codec_priority=[SongCodec.AAC_WEB, SongCodec.ASK],
-                selector=callback,
-                client=client,
+        with self.assertRaisesRegex(ValueError, "ask cannot be combined"):
+            await song.get_stream(
+                codec_priority=[SongCodec.AAC_WEB], ask=True, selector=callback
             )
-            self.assertEqual(selected.codec, SongCodec.AAC_WEB)
-            callback.assert_not_called()
-            selected = await song.get_stream(
-                codec_priority=[SongCodec.AC3, SongCodec.ASK],
-                selector=callback,
-                client=client,
-            )
-            self.assertEqual(selected.codec, SongCodec.AAC_WEB)
-        self.assertEqual(callback.call_count, 2)
+        with self.assertRaisesRegex(ValueError, "ask cannot be combined"):
+            await song.get_stream(codec=SongCodec.AAC_WEB, ask=True, selector=callback)
+        with self.assertRaisesRegex(ValueError, "selector requires ask"):
+            await song.get_stream(selector=callback)
+        with self.assertRaises(ValueError):
+            SongCodec("ask")
+        callback.assert_not_called()
 
     async def test_library_stream_is_direct_and_drm_free(self):
         api = fake_api()

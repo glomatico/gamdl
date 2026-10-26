@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 from ..base import Media, _first_resource
+from .enums import MusicVideoCodec
+from .models import MusicVideoStreamSelector
 
 if TYPE_CHECKING:
     import httpx
@@ -29,15 +31,26 @@ class MusicVideo(Media):
     async def get_streams(
         self,
         *,
-        video_codec: str = "h264",
-        max_height: int = 1080,
+        video_codec: MusicVideoCodec | None = None,
+        max_height: int | None = 1080,
+        ask: bool = False,
+        selector: MusicVideoStreamSelector | None = None,
         wrapper_api: WrapperApi | None = None,
         itunes_api: ItunesApi | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> MusicVideoStreams:
-        """Select separate HLS video and audio tracks from the same master."""
+        """Select video and associated audio, or ask separately for both.
+
+        In interactive mode, ``video_codec`` is not applied; ``max_height``
+        still limits which video variants are offered to the selector.
+        """
         from .stream import MusicVideoStreamResolver
 
         return await MusicVideoStreamResolver(
             self, wrapper_api=wrapper_api, itunes_api=itunes_api, client=client
-        ).get_streams(video_codec=video_codec, max_height=max_height)
+        ).get_streams(
+            video_codec=video_codec,
+            max_height=max_height,
+            ask=ask,
+            selector=selector,
+        )

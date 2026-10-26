@@ -46,18 +46,22 @@ class Song(Media):
         *,
         codec: SongCodec | None = None,
         codec_priority: Sequence[SongCodec] | None = None,
+        ask: bool = False,
         selector: StreamSelector | None = None,
         wrapper_api: WrapperApi | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> AudioStream:
-        """Select a codec or ASK for a source first, then its advertised variant.
+        """Select a preferred codec, or interactively choose source and variant.
 
-        With ASK the selector receives StreamSourceSelectionRequest followed by
-        StreamSelectionRequest. Only the selected source is fetched.
+        With ``ask=True`` the selector receives a StreamSourceSelectionRequest
+        followed by StreamSelectionRequest. Only the chosen source is fetched;
+        codec preferences cannot override an interactive choice.
         """
         return await SongStreamResolver(
             self, wrapper_api=wrapper_api, client=client
-        ).get_stream(codec=codec, codec_priority=codec_priority, selector=selector)
+        ).get_stream(
+            codec=codec, codec_priority=codec_priority, ask=ask, selector=selector
+        )
 
     async def _fetch_metadata(self) -> dict[str, Any]:
         payload = (

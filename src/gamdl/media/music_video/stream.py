@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -11,8 +12,17 @@ import httpx
 from gamdl.api.exceptions import GamdlApiError
 
 from ..enums import StreamOrigin
-from ..exceptions import StreamNotAvailableError
+from ..exceptions import SelectionRequiredError, StreamNotAvailableError
 from ..stream import AudioStream, StreamTransport, VideoStream
+from ..song.enums import SongCodec
+from .enums import MusicVideoCodec
+from .models import (
+    AudioSelectionOption,
+    AudioSelectionRequest,
+    MusicVideoStreamSelector,
+    VideoSelectionOption,
+    VideoSelectionRequest,
+)
 
 if TYPE_CHECKING:
     from gamdl.api import ItunesApi
@@ -28,17 +38,15 @@ class MusicVideoStreams:
     audio: AudioStream
 
 
-def _video_codec(codecs: str | None) -> str | None:
+def _video_codec(codecs: str | None) -> MusicVideoCodec | None:
     if not isinstance(codecs, str):
         return None
     for part in codecs.split(","):
         part = part.strip().lower()
         if part.startswith(("avc1.", "avc3.")):
-            return "h264"
+            return MusicVideoCodec.H264
         if part.startswith(("hvc1.", "hev1.", "dvh1.", "dvhe.")):
-            return "h265"
-        if part.startswith("av01."):
-            return "av1"
+            return MusicVideoCodec.H265
     return None
 
 
@@ -119,16 +127,44 @@ class MusicVideoStreamResolver:
             raise StreamNotAvailableError("No HLS URL in music-video iTunes metadata")
         return hls_url, StreamOrigin.ITUNES_HLS
 
+    @staticmethod
+    async def _select_index(
+        selector: MusicVideoStreamSelector,
+        request: VideoSelectionRequest | AudioSelectionRequest,
+        count: int,
+    ) -> int:
+        selected = selector(request)
+        if inspect.isawaitable(selected):
+            selected = await selected
+        if type(selected) is not int or not 0 <= selected < count:
+            raise ValueError("Music-video selector returned an invalid index")
+        return selected
+
     async def get_streams(
         self,
         *,
-        video_codec: str = "h264",
-        max_height: int = 1080,
+        video_codec: MusicVideoCodec | None = None,
+        max_height: int | None = 1080,
+        ask: bool = False,
+        selector: MusicVideoStreamSelector | None = None,
     ) -> MusicVideoStreams:
-        if video_codec not in {"h264", "h265", "av1"}:
-            raise ValueError("video_codec must be h264, h265, or av1")
-        if max_height <= 0:
-            raise ValueError("max_height must be positive")
+        """Return an HLS video/audio pair with an optional two-stage selector."""
+        if max_height is not None and (type(max_height) is not int or max_height <= 0):
+            raise ValueError("max_height must be a positive integer or None")
+        if ask:
+            if video_codec is not None:
+                raise ValueError("ask cannot be combined with video_codec")
+            if selector is None:
+                raise SelectionRequiredError("music_video_streams")
+        else:
+            if selector is not None:
+                raise ValueError("selector requires ask=True")
+            try:
+                video_codec = MusicVideoCodec(
+                    video_codec if video_codec is not None else MusicVideoCodec.H264
+                )
+            except ValueError:
+                raise ValueError("video_codec must be h264 or h265") from None
 
         async def discover() -> MusicVideoStreams:
             master_url, origin = await self._master_url()
@@ -136,88 +172,143 @@ class MusicVideoStreamResolver:
             choices = []
             for playlist in manifest.playlists:
                 info = playlist.stream_info
-                codec_string = getattr(info, "codecs", None)
-                if _video_codec(codec_string) != video_codec:
+                codec = _video_codec(getattr(info, "codecs", None))
+                if codec is None or (not ask and codec != video_codec):
                     continue
                 resolution = getattr(info, "resolution", None)
                 if not resolution or len(resolution) != 2:
                     continue
                 width, height = resolution
-                if not width or not height:
+                if (
+                    not width
+                    or not height
+                    or (max_height is not None and height > max_height)
+                ):
                     continue
                 bandwidth = getattr(info, "average_bandwidth", None) or getattr(
                     info, "bandwidth", None
                 )
-                choices.append((playlist, width, height, bandwidth or 0))
+                video_stream = VideoStream(
+                    codec=codec,
+                    codec_string=info.codecs,
+                    width=width,
+                    height=height,
+                    frame_rate=getattr(info, "frame_rate", None),
+                    bitrate=bandwidth or 0,
+                    origin=origin,
+                    url=playlist.absolute_uri,
+                    transport=self.transport,
+                    media_id=self.media.id,
+                )
+                choices.append((playlist, video_stream))
 
             if not choices:
-                raise StreamNotAvailableError("No matching music-video HLS rendition")
-            # Choose the highest rendition within the requested ceiling;
-            # otherwise the smallest available rendition above it.
-            eligible = [c for c in choices if c[2] <= max_height]
-            video_playlist, width, height, bitrate = (
-                max(eligible, key=lambda c: (c[2], c[3]))
-                if eligible
-                else min(choices, key=lambda c: (c[2], -c[3]))
-            )
+                raise StreamNotAvailableError(
+                    "No music-video HLS rendition matches the codec and height limit"
+                )
+            if ask:
+                assert selector is not None
+                request = VideoSelectionRequest(
+                    media_id=self.media.id,
+                    options=tuple(
+                        VideoSelectionOption(i, stream)
+                        for i, (_, stream) in enumerate(choices)
+                    ),
+                )
+                index = await self._select_index(selector, request, len(choices))
+            else:
+                index = max(
+                    range(len(choices)),
+                    key=lambda i: (choices[i][1].height, choices[i][1].bitrate or 0),
+                )
+            video_playlist, video_stream = choices[index]
             video_info = video_playlist.stream_info
             video_group = getattr(video_info, "audio", None)
+            # Separate A/V tracks can be chosen independently. Audio groups
+            # from other variants in the same master may offer different
+            # codecs (such as AAC versus Atmos), as in GAMDL 3.x.
+            group_codecs = {
+                group: str(getattr(playlist.stream_info, "codecs", "") or "").lower()
+                for playlist in manifest.playlists
+                if _video_codec(getattr(playlist.stream_info, "codecs", None))
+                is not None
+                if (group := getattr(playlist.stream_info, "audio", None))
+            }
             renditions = [
                 audio
                 for audio in manifest.media
                 if audio.type == "AUDIO"
                 and audio.uri
-                and (video_group is None or audio.group_id == video_group)
+                and (
+                    audio.group_id in group_codecs
+                    if ask and group_codecs
+                    else video_group is None or audio.group_id == video_group
+                )
             ]
             if not renditions:
                 raise StreamNotAvailableError(
                     "Video rendition has no separate audio HLS track"
                 )
-            # Prefer stereo/default renditions if the master exposes multiple.
-            audio = sorted(
-                renditions,
-                key=lambda a: (
-                    str(getattr(a, "default", "")).upper() not in {"YES", "TRUE"},
-                    "stereo" not in str(a.group_id).lower(),
-                    str(a.name),
-                ),
-            )[0]
-            from ..song.enums import SongCodec
 
-            audio_codec_value = str(video_info.codecs or "").lower()
-            audio_group = str(audio.group_id).lower()
-            if "ec-3" in audio_codec_value or "atmos" in audio_group:
-                audio_codec = SongCodec.ATMOS
-            elif "ac-3" in audio_codec_value:
-                audio_codec = SongCodec.AC3
-            elif "mp4a.40.5" in audio_codec_value:
-                audio_codec = SongCodec.AAC_HE
-            else:
-                audio_codec = SongCodec.AAC
-
-            return MusicVideoStreams(
-                video=VideoStream(
-                    codec=video_codec,
-                    codec_string=video_info.codecs,
-                    width=width,
-                    height=height,
-                    frame_rate=getattr(video_info, "frame_rate", None),
-                    bitrate=bitrate,
-                    origin=origin,
-                    url=video_playlist.absolute_uri,
-                    transport=self.transport,
-                    media_id=self.media.id,
-                ),
-                audio=AudioStream(
+            audio_options = []
+            for audio in renditions:
+                audio_group = str(audio.group_id).lower()
+                audio_codec_value = group_codecs.get(
+                    audio.group_id, str(video_info.codecs or "").lower()
+                )
+                if "ec-3" in audio_codec_value or "atmos" in audio_group:
+                    audio_codec = SongCodec.ATMOS
+                elif "ac-3" in audio_codec_value:
+                    audio_codec = SongCodec.AC3
+                elif "mp4a.40.5" in audio_codec_value:
+                    audio_codec = SongCodec.AAC_HE
+                else:
+                    audio_codec = SongCodec.AAC
+                audio_stream = AudioStream(
                     codec=audio_codec,
                     codec_string=audio_codec_value,
                     origin=origin,
                     url=audio.absolute_uri,
                     transport=self.transport,
                     media_id=self.media.id,
-                ),
+                )
+                audio_options.append(
+                    AudioSelectionOption(
+                        index=len(audio_options),
+                        stream=audio_stream,
+                        group_id=audio.group_id,
+                        name=audio.name,
+                        language=getattr(audio, "language", None),
+                    )
+                )
+            if ask:
+                assert selector is not None
+                audio_request = AudioSelectionRequest(
+                    media_id=self.media.id,
+                    video=video_stream,
+                    options=tuple(audio_options),
+                )
+                selected = await self._select_index(
+                    selector, audio_request, len(audio_options)
+                )
+            else:
+                selected = min(
+                    range(len(renditions)),
+                    key=lambda i: (
+                        str(getattr(renditions[i], "default", "")).upper()
+                        not in {"YES", "TRUE"},
+                        "stereo" not in str(renditions[i].group_id).lower(),
+                        str(renditions[i].name),
+                    ),
+                )
+            return MusicVideoStreams(
+                video=video_stream, audio=audio_options[selected].stream
             )
 
+        if ask:
+            # Interactive decisions are intentionally not memoized: the next
+            # invocation must give the user a fresh opportunity to choose.
+            return await discover()
         return await self.media._load(
             (
                 "video_streams",

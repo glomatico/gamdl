@@ -68,7 +68,7 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(request, StreamSelectionRequest)
             return next(o.index for o in request.options if o.codec == SongCodec.AAC)
 
-        stream = await self.song.get_stream(codec=SongCodec.ASK, selector=choose)
+        stream = await self.song.get_stream(ask=True, selector=choose)
         self.assertEqual(stream.origin, StreamOrigin.ASSET_STANDARD_HLS)
         self.assertEqual(stream.hls_type, HlsType.STANDARD)
         self.assertEqual(calls, [StreamSourceSelectionRequest, StreamSelectionRequest])
@@ -100,7 +100,7 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             asked = await self.song.get_stream(
-                codec=SongCodec.ASK, selector=choose, wrapper_api=wrapper
+                ask=True, selector=choose, wrapper_api=wrapper
             )
             self.assertIsInstance(asked, HlsSongStream)
             self.assertEqual(asked.codec, SongCodec.ALAC)

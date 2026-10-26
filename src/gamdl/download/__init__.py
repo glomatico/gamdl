@@ -1,7 +1,15 @@
-"""Preparation of output metadata and download orchestration."""
+"""Metadata, safe publication, and single-item download orchestration."""
 
+from .downloader import Downloader, DownloadProgress, DownloadResult
 from .exceptions import TagResolutionError
 from .tag_resolver import TagResolver
 from .tags import Tags
 
-__all__ = ["Tags", "TagResolver", "TagResolutionError"]
+__all__ = [
+    "Downloader",
+    "DownloadProgress",
+    "DownloadResult",
+    "Tags",
+    "TagResolver",
+    "TagResolutionError",
+]

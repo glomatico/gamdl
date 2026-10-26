@@ -33,6 +33,13 @@ jobs:
       - name: Install Python
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Install and require FFmpeg test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+          ffprobe -version
+
       - name: Verify dependency lock
         run: uv lock --check
 
@@ -45,6 +52,10 @@ jobs:
 
       - name: Run offline API tests
         run: uv run --no-sync --python ${{ matrix.python-version }} python -m unittest discover -s tests -v
+
+      - name: Run Rust unit tests
+        if: matrix.python-version == '3.14'
+        run: cargo test --manifest-path native/Cargo.toml --locked
 
       - name: Check formatting
         run: |

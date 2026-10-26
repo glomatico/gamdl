@@ -36,26 +36,58 @@ class StreamTransport:
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self.client = client
 
+    @staticmethod
+    def _validate_url(url: str) -> None:
+        try:
+            parts = urlsplit(url)
+            if (
+                parts.scheme != "https"
+                or not parts.hostname
+                or parts.username is not None
+                or parts.password is not None
+            ):
+                raise ValueError
+        except ValueError:
+            raise StreamManifestError("Expected a valid HTTPS streaming URL") from None
+
+    @classmethod
+    async def _fetch(
+        cls, client: httpx.AsyncClient, url: str, headers: dict[str, str]
+    ) -> bytes:
+        # A client's .get() merges its Authorization and Cookie headers. Even
+        # client.send(httpx.Request(...), auth=None, follow_redirects=True)
+        # can insert cookies from the client's jar on redirected requests.
+        # Every hop therefore uses an isolated Request with NO auto redirects.
+        for _ in range(11):
+            cls._validate_url(url)
+            response = await client.send(
+                httpx.Request("GET", url, headers=headers),
+                auth=None,
+                follow_redirects=False,
+            )
+            if response.status_code in {301, 302, 303, 307, 308}:
+                location = response.headers.get("location")
+                if not location:
+                    response.raise_for_status()
+                    raise StreamManifestError("CDN redirect had no destination")
+                url = str(response.url.join(location))
+                continue
+            response.raise_for_status()
+            return response.content
+        raise StreamManifestError("Too many CDN redirects")
+
     async def get(self, url: str, *, byte_range: str | None = None) -> bytes:
-        parts = urlsplit(url)
-        if parts.scheme != "https" or not parts.hostname or parts.username:
-            raise StreamManifestError("Expected a valid HTTPS streaming URL")
+        self._validate_url(url)
         headers = {"Range": f"bytes={byte_range}"} if byte_range else {}
         try:
             if self.client is not None:
-                reply = await self.client.get(
-                    url, headers=headers, follow_redirects=True
-                )
+                return await self._fetch(self.client, url, headers)
             else:
                 async with httpx.AsyncClient(timeout=30) as client:
-                    reply = await client.get(
-                        url, headers=headers, follow_redirects=True
-                    )
-            reply.raise_for_status()
-        except httpx.HTTPError:
+                    return await self._fetch(client, url, headers)
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError):
             # CDN URLs and query strings may contain sensitive signed tokens.
             raise StreamManifestError("Unable to retrieve streaming resource") from None
-        return reply.content
 
     async def get_manifest(self, url: str) -> M3U8:
         data = await self.get(url)

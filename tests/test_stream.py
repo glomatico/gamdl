@@ -605,6 +605,70 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(StreamManifestError):
                 await transport.get_manifest("http://localhost/private.m3u8")
 
+    async def test_cdn_requests_and_redirects_never_inherit_credentials(self):
+        observed = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            observed.append(request)
+            if request.url.path == "/start.m3u8":
+                return httpx.Response(
+                    302, headers={"Location": "https://next.example.test/final.m3u8"}
+                )
+            return httpx.Response(200, content=b"#EXTM3U\n#EXT-X-ENDLIST\n")
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            headers={"Authorization": "Bearer secret", "Cookie": "session=secret"},
+            auth=httpx.BasicAuth("private", "secret"),
+        ) as client:
+            client.cookies.set("session", "redirect-secret", domain="next.example.test")
+            transport = StreamTransport(client)
+            value = await transport.get(
+                "https://cdn.example.test/start.m3u8", byte_range="0-1023"
+            )
+            self.assertEqual(value, b"#EXTM3U\n#EXT-X-ENDLIST\n")
+        self.assertEqual(len(observed), 2)
+        for request in observed:
+            self.assertNotIn("authorization", request.headers)
+            self.assertNotIn("cookie", request.headers)
+            self.assertEqual(request.headers["range"], "bytes=0-1023")
+
+    async def test_cdn_redirects_validate_every_url_and_limit_hops(self):
+        unsafe_redirects = (
+            "http://cdn.example.test/insecure",
+            "https://user:secret@cdn.example.test/hidden",
+            "file:///etc/passwd",
+        )
+        for redirected_to in unsafe_redirects:
+            seen = []
+
+            def handler(request):
+                seen.append(request)
+                return httpx.Response(302, headers={"Location": redirected_to})
+
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(handler)
+            ) as client:
+                with self.subTest(redirected_to=redirected_to):
+                    with self.assertRaises(StreamManifestError):
+                        await StreamTransport(client).get(
+                            "https://cdn.example.test/start.m3u8"
+                        )
+                    self.assertEqual(len(seen), 1)
+
+        seen = []
+
+        def infinite_redirect(request):
+            seen.append(request)
+            return httpx.Response(302, headers={"Location": "/start.m3u8"})
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(infinite_redirect)
+        ) as client:
+            with self.assertRaisesRegex(StreamManifestError, "Too many"):
+                await StreamTransport(client).get("https://cdn.example.test/start.m3u8")
+        self.assertEqual(len(seen), 11)
+
     async def test_cdn_failure_not_cached(self):
         count = 0
 

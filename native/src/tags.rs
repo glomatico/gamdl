@@ -87,7 +87,10 @@ impl TagFields {
             }
         }
 
-        // iTunes uses 64 bits for playlist/album ID and 32 bits for other IDs.
+        // iTunes normally writes 32-bit IDs (and 64-bit playlist IDs), but
+        // newer Apple Music content IDs exceed i32::MAX. As in Mutagen's
+        // integer renderer, widen these IDs to signed 64-bit rather than
+        // truncating them or failing after the media has downloaded.
         const NUMBERS: [(&str, [u8; 4], usize); 6] = [
             ("title_id", *b"cnID", 4),
             ("artist_id", *b"atID", 4),
@@ -97,19 +100,19 @@ impl TagFields {
             ("storefront", *b"sfID", 4),
         ];
         let mut integers = Vec::new();
-        for (field, atom, bytes) in NUMBERS {
+        for (field, atom, minimum_bytes) in NUMBERS {
             if let Some(value) = number(tags, field)? {
                 // Apple's iTunes integer atoms carry big-endian signed data.
-                let bound = if bytes == 4 {
-                    i32::MAX as u64
-                } else {
-                    i64::MAX as u64
-                };
-                if value > bound {
+                if value > i64::MAX as u64 {
                     return Err(PyValueError::new_err(format!(
-                        "{field} exceeds {bytes}-byte signed MP4 limit"
+                        "{field} exceeds 8-byte signed MP4 limit"
                     )));
                 }
+                let bytes = if minimum_bytes == 4 && value > i32::MAX as u64 {
+                    8
+                } else {
+                    minimum_bytes
+                };
                 let raw = value.to_be_bytes();
                 integers.push((atom, raw[8 - bytes..].to_vec()));
             }

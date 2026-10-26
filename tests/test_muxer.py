@@ -594,6 +594,45 @@ class NativeMp4TagTests(unittest.TestCase):
         self.assertEqual(boxes[b"\xa9ART"], [(1, b"second")])
         self.assertEqual(boxes[b"\xa9cmt"], [(1, b"original")])
 
+    def test_large_apple_music_ids_use_lossless_signed_64_bit_atoms(self):
+        """Apple Music catalog IDs now exceed 32 bits (e.g. video 6805195215)."""
+        self.muxer.tag(
+            self.path,
+            tags=Tags(
+                title="Say Say Say",
+                title_id=6805195215,
+                artist_id=2**31,
+                album_id=2**31,
+                composer_id=2**32,
+                genre_id=2**31 - 1,
+                storefront=143503,
+            ),
+        )
+        boxes = mp4_tag_atoms(self.path)
+        for fourcc, value, width in (
+            (b"cnID", 6805195215, 8),
+            (b"atID", 2**31, 8),
+            (b"plID", 2**31, 8),
+            (b"cmID", 2**32, 8),
+            (b"geID", 2**31 - 1, 4),
+            (b"sfID", 143503, 4),
+        ):
+            with self.subTest(fourcc=fourcc):
+                self.assertEqual(boxes[fourcc], [(21, value.to_bytes(width, "big"))])
+        self.assertEqual(boxes[b"\xa9nam"], [(1, b"Say Say Say")])
+
+    def test_signed_integer_boundary_preserves_4_byte_default(self):
+        self.muxer.tag(self.path, tags=Tags(title_id=2**31 - 1))
+        self.assertEqual(
+            mp4_tag_atoms(self.path)[b"cnID"],
+            [(21, (2**31 - 1).to_bytes(4, "big"))],
+        )
+        self.muxer.tag(self.path, tags=Tags(title_id=2**31))
+        self.assertEqual(
+            mp4_tag_atoms(self.path)[b"cnID"],
+            [(21, (2**31).to_bytes(8, "big"))],
+        )
+
     def test_jpeg_artwork_metadata(self):
         self.muxer.tag(self.path, tags=Tags(), cover_bytes=JPEG)
         self.assertEqual(mp4_tag_atoms(self.path)[b"covr"], [(13, JPEG)])
@@ -603,7 +642,7 @@ class NativeMp4TagTests(unittest.TestCase):
         for tag, cover in (
             (Tags(title="bad art"), b"not an image"),
             (Tags(track_number=65536), None),
-            (Tags(title_id=2**40), None),
+            (Tags(title_id=2**63), None),
             (Tags(rating=256), None),
         ):
             with self.subTest(tag=tag, cover=cover):

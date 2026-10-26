@@ -19,6 +19,7 @@ from gamdl.api import ItunesApi
 from gamdl.download import Downloader
 from gamdl.drm import Drm
 from gamdl.media import MusicVideo, Song, SongCodec
+from tests.test_muxer import mp4_tag_atoms
 
 from tests.live_auth import LiveSettings, open_live_session
 
@@ -98,6 +99,30 @@ class DownloaderLiveTests(unittest.IsolatedAsyncioTestCase):
                     self.assertGreater(output.stat().st_size, 100_000)
                     with output.open("rb") as file:
                         self.assertEqual(file.read(12)[8:12], b"mp42")
+                    self.assertIn("h264,avc1", _probe(output, "V:0"))
+                    self.assertIn("aac,mp4a", _probe(output, "a:0"))
+                    _strict_decode(output, video=True)
+
+    async def test_large_catalog_id_video_tags_and_decodes(self):
+        """Regression for Say Say Say (6805195215), whose cnID needs 8 bytes."""
+        settings = LiveSettings.from_env()
+        async with open_live_session(settings, interval=0.75) as session:
+            async with await ItunesApi.create(storefront=settings.storefront) as itunes:
+                downloader = Downloader(
+                    drm=Drm.from_widevine(session.api),
+                    wrapper_api=session.wrapper,
+                    itunes_api=itunes,
+                )
+                video = MusicVideo.from_id("6805195215", api=session.api)
+                with TemporaryDirectory() as directory:
+                    output = Path(directory) / "say-say-say.m4v"
+                    result = await downloader.download(video, output, max_height=360)
+                    self.assertEqual(result.status, "downloaded")
+                    self.assertGreater(output.stat().st_size, 100_000)
+                    self.assertEqual(
+                        mp4_tag_atoms(output)[b"cnID"],
+                        [(21, (6805195215).to_bytes(8, "big"))],
+                    )
                     self.assertIn("h264,avc1", _probe(output, "V:0"))
                     self.assertIn("aac,mp4a", _probe(output, "a:0"))
                     _strict_decode(output, video=True)

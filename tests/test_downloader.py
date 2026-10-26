@@ -205,6 +205,23 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(video.get_streams.call_args.kwargs["ask"])
         self.assertIs(video.get_streams.call_args.kwargs["selector"], callback)
 
+    async def test_video_download_preserves_large_catalog_id_during_tagging(self):
+        """Regression: video 6805195215 used to fail after both tracks downloaded."""
+        downloader, tag_resolver = self.downloader()
+        tag_resolver.get_tags.return_value = Tags(
+            title="Say Say Say", title_id=6805195215, media_type=6
+        )
+        destination = self.directory / "say-say-say.m4v"
+        result = await downloader.download(self.music_video(), destination)
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(
+            mp4_tag_atoms(destination)[b"cnID"],
+            [(21, (6805195215).to_bytes(8, "big"))],
+        )
+        self.assertEqual(brands(destination)[0], b"M4V ")
+        self.assertEqual(track_hashes(self.video, "v"), track_hashes(destination, "v"))
+        self.assertEqual(track_hashes(self.audio, "a"), track_hashes(destination, "a"))
+
     async def test_failed_video_track_cancels_sibling_and_cleans_publication(self):
         downloader, _ = self.downloader()
         video = self.music_video()

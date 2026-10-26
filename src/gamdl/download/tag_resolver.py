@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from async_lru import alru_cache
 
 from gamdl.api.exceptions import GamdlApiError
-from gamdl.media import Media, MusicVideo, Song
+from gamdl.media import Media, MusicVideo, Song, UploadedVideo
 
 from .exceptions import TagResolutionError
 from .tags import Tags
@@ -109,7 +109,7 @@ class TagResolver:
 
     async def get_tags(self, media: Media) -> Tags:
         """Resolve tags once per media instance and resolver configuration."""
-        if not isinstance(media, (Song, MusicVideo)):
+        if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TagResolutionError(
                 "Tag resolution is not supported for this media type"
             )
@@ -117,6 +117,8 @@ class TagResolver:
         async def load() -> Tags:
             if isinstance(media, Song):
                 return await self._song_tags(media)
+            if isinstance(media, UploadedVideo):
+                return await self._uploaded_video_tags(media)
             return await self._video_tags(media)
 
         return await media._load(("download_tags", self._cache_key), load)
@@ -245,5 +247,23 @@ class TagResolver:
             ),
             explicit=(rating == 1) if rating is not None else None,
             rating=rating,
+            media_type=6,
+        )
+
+    async def _uploaded_video_tags(self, video: UploadedVideo) -> Tags:
+        """Uploaded videos have catalog metadata but no playback tag asset."""
+        record = await video.get_metadata()
+        attributes = record.get("attributes", {})
+        if not isinstance(attributes, dict):
+            attributes = {}
+        name = _text(attributes.get("name"))
+        if name is None:
+            raise TagResolutionError("Uploaded video has no title")
+        return Tags(
+            title=name,
+            artist=_text(attributes.get("artistName")),
+            release_date=_text(attributes.get("uploadDate")),
+            title_id=_number(record.get("id")),
+            storefront=self.itunes_api.storefront_id if self.itunes_api else None,
             media_type=6,
         )

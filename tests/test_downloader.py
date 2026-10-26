@@ -15,9 +15,18 @@ from gamdl.download import (
     Downloader,
     DownloadProgress,
     MediaDatabase,
+    PathFormatter,
     Tags,
 )
-from gamdl.media import MediaSource, MusicVideo, MusicVideoCodec, Song, SongCodec
+from gamdl.media import (
+    MediaSource,
+    MusicVideo,
+    MusicVideoCodec,
+    Song,
+    SongCodec,
+    UploadedVideo,
+    UploadedVideoQuality,
+)
 from gamdl.media.song.lyrics import Lyrics, LyricsLine
 from gamdl.media.music_video.stream import MusicVideoStreams
 from gamdl.stream import StreamProgress
@@ -486,3 +495,122 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(data.startswith(b"\x00\x00"))
         self.assertFalse(index_path.exists())
         self.assertEqual(list(self.directory.glob("*.jpg")), [])
+
+    def uploaded_video(self, media_id="9876543210"):
+        return UploadedVideo.from_metadata(
+            {
+                "id": media_id,
+                "type": "uploaded-videos",
+                "attributes": {
+                    "name": "Original Upload",
+                    "artistName": ".private artist",
+                    "uploadDate": "2020-05-01",
+                    "assetTokens": {"720pHdVideo": "https://cdn.example.test/file.mp4"},
+                },
+            },
+            api=Mock(),
+        )
+
+    async def test_uploaded_video_progressive_download_and_metadata(self):
+        video = self.uploaded_video()
+        downloader = Downloader()
+        downloader._read_track = AsyncMock(
+            return_value=(self.video.read_bytes(), "none")
+        )
+        out = self.directory / "uploaded.m4v"
+        result = await downloader.download(
+            video,
+            out,
+            quality_priority=[
+                UploadedVideoQuality.HD_1080P,
+                UploadedVideoQuality.HD_720P,
+            ],
+        )
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(result.codec, UploadedVideoQuality.HD_720P)
+        self.assertEqual(result.decryption_methods, ("none",))
+        self.assertEqual(
+            brands(out), brands(self.video)
+        )  # progressive bytes are not remuxed
+        self.assertEqual(track_hashes(self.video, "v"), track_hashes(out, "v"))
+        self.assertEqual(
+            mp4_tag_atoms(out)[b"cnID"],
+            [(21, (9876543210).to_bytes(8, "big"))],
+        )
+        args = downloader._read_track.call_args.args
+        self.assertEqual(args[0], video.id)
+        self.assertEqual(args[1].codec, UploadedVideoQuality.HD_720P)
+        self.assertEqual(args[2], "video")
+
+        downloader._read_track.reset_mock()
+        second = await downloader.download(video, out)
+        self.assertEqual(second.status, "skipped")
+        downloader._read_track.assert_not_awaited()
+
+    async def test_uploaded_video_auto_paths_index_and_collision(self):
+        db = MediaDatabase(self.directory / "index.sqlite3")
+        formatter = PathFormatter(self.directory / "Library")
+        downloader = Downloader(path_formatter=formatter, database=db)
+        downloader._read_track = AsyncMock(
+            return_value=(self.video.read_bytes(), "none")
+        )
+        video = self.uploaded_video()
+        first = await downloader.download(video)
+        self.assertEqual(
+            first.path,
+            self.directory
+            / "Library/_private artist/Unknown Album/Original Upload.m4v",
+        )
+        self.assertEqual(first.status, "downloaded")
+        self.assertEqual(
+            db.get(first.path)["codec"], UploadedVideoQuality.HD_720P.value
+        )
+        downloader._read_track.reset_mock()
+        self.assertEqual((await downloader.download(video)).status, "skipped")
+        downloader._read_track.assert_not_awaited()
+
+        # Identical display names, different IDs: never misattribute a skip.
+        second = await downloader.download(self.uploaded_video("5555555555"))
+        self.assertEqual(second.status, "downloaded")
+        self.assertEqual(second.path.name, "Original Upload [5555555555].m4v")
+        self.assertEqual(db.get(second.path)["media_id"], "5555555555")
+        self.assertEqual(db.get(first.path)["media_id"], "9876543210")
+
+    async def test_auto_video_output_extension_and_mp4_brand(self):
+        formatter = PathFormatter(self.directory / "Formatted")
+        downloader, _ = self.downloader()
+        downloader.path_formatter = formatter
+        video = self.music_video()
+        result = await downloader.download(video, video_extension=".mp4")
+        self.assertEqual(result.path.suffix, ".mp4")
+        self.assertEqual(brands(result.path)[0], b"mp42")
+
+    async def test_auto_paths_without_index_do_not_claim_unknown_media(self):
+        formatter = PathFormatter(self.directory / "Formatted")
+        downloader = Downloader(path_formatter=formatter)
+        downloader._read_track = AsyncMock(
+            return_value=(self.video.read_bytes(), "none")
+        )
+        video = self.uploaded_video()
+        first = await downloader.download(video)
+        self.assertEqual(first.status, "downloaded")
+        # Without a database/embedded-ID reader, existing files cannot be
+        # trusted as matching the input media. Use an ID-qualified fallback.
+        second = await downloader.download(video)
+        self.assertEqual(second.status, "downloaded")
+        self.assertEqual(second.path.name, "Original Upload [9876543210].m4v")
+        third = await downloader.download(video)
+        self.assertEqual(third.path, second.path)
+        self.assertEqual(third.status, "skipped")
+
+    async def test_formatter_requires_configuration_if_output_missing(self):
+        with self.assertRaises(ValueError):
+            await Downloader().download(self.song())
+
+    async def test_uploaded_video_codec_and_quality_validation(self):
+        video = self.uploaded_video()
+        downloader = Downloader()
+        with self.assertRaises(ValueError):
+            await downloader.get_bytes(video, codec=SongCodec.AAC)
+        with self.assertRaises(ValueError):
+            await downloader.get_bytes(self.song(), quality=UploadedVideoQuality.SD)

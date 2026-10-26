@@ -12,6 +12,7 @@ class StreamOrigin(str, Enum):
     ASSET_ENHANCED_HLS = "asset-enhanced-hls"
     ASSET_STANDARD_HLS = "asset-standard-hls"
     ITUNES_HLS = "itunes-hls"
+    UPLOADED_VIDEO = "uploaded-video"
 
 
 class StreamSource(str, Enum):

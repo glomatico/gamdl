@@ -3,6 +3,7 @@
 from .downloader import Downloader, DownloadProgress, DownloadResult
 from .database import MediaDatabase
 from .playlist import PlaylistWriter
+from .paths import PathFormatter, PlaylistTags
 from .exceptions import DownloadFinalizationError, TagResolutionError
 from .tag_resolver import TagResolver
 from .tags import Tags
@@ -13,6 +14,8 @@ __all__ = [
     "DownloadResult",
     "MediaDatabase",
     "PlaylistWriter",
+    "PathFormatter",
+    "PlaylistTags",
     "DownloadFinalizationError",
     "Tags",
     "TagResolver",

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -21,9 +22,13 @@ from gamdl.api.wrapper import WrapperApi
 from gamdl.drm import Drm
 from gamdl.media import (
     AudioStream,
+    HttpStream,
     MusicVideo,
     MusicVideoCodec,
     MusicVideoStreamSelector,
+    UploadedVideo,
+    UploadedVideoQuality,
+    UploadedVideoStreamSelector,
     SelectionKind,
     Song,
     SongCodec,
@@ -38,6 +43,7 @@ from .database import MediaDatabase
 from .exceptions import DownloadFinalizationError
 from .playlist import PlaylistWriter
 from .publication import publish_bytes
+from .paths import PathFormatter, PlaylistTags
 
 
 @dataclass(frozen=True)
@@ -57,20 +63,20 @@ class DownloadResult:
     path: Path
     status: Literal["downloaded", "skipped"]
     bytes_written: int
-    codec: SongCodec | MusicVideoCodec | None
+    codec: SongCodec | MusicVideoCodec | UploadedVideoQuality | None
     decryption_methods: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class _PreparedMedia:
     data: bytes
-    codec: SongCodec | MusicVideoCodec
+    codec: SongCodec | MusicVideoCodec | UploadedVideoQuality
     methods: tuple[str, ...]
     cover_bytes: bytes | None = None
 
 
 class Downloader:
-    """Download, decrypt, remux, and optionally tag one Song or MusicVideo.
+    """Download, decrypt and tag Song, MusicVideo or UploadedVideo.
 
     The same preparation path powers ``get_bytes`` and atomic ``download``.
     Only ``download`` publishes a path and runs optional post-publication
@@ -93,6 +99,7 @@ class Downloader:
         tag_resolver: TagResolver | None = None,
         muxer: Muxer | None = None,
         database: MediaDatabase | None = None,
+        path_formatter: PathFormatter | None = None,
         concurrency: int = 8,
     ) -> None:
         if type(concurrency) is not int or concurrency < 1:
@@ -106,12 +113,13 @@ class Downloader:
         )
         self.muxer = muxer or Muxer()
         self.database = database
+        self.path_formatter = path_formatter
         self.concurrency = concurrency
 
     async def _read_track(
         self,
         media_id: str,
-        source: AudioStream | VideoStream,
+        source: AudioStream | VideoStream | HttpStream,
         track: Literal["audio", "video"],
         progress_callback: Callable[[DownloadProgress], None] | None,
     ) -> tuple[bytes, str]:
@@ -132,24 +140,35 @@ class Downloader:
 
     async def _prepare(
         self,
-        media: Song | MusicVideo,
+        media: Song | MusicVideo | UploadedVideo,
         *,
         codec: SongCodec | None,
         video_codec: MusicVideoCodec | None,
         codec_priority: Sequence[SongCodec | MusicVideoCodec] | None,
         max_height: int | None,
         ask: bool,
-        selector: SongStreamSelector | MusicVideoStreamSelector | None,
+        selector: SongStreamSelector
+        | MusicVideoStreamSelector
+        | UploadedVideoStreamSelector
+        | None,
+        quality: UploadedVideoQuality | None,
+        quality_priority: Sequence[UploadedVideoQuality] | None,
         container: Literal["m4v", "mp4"],
         tag: bool,
         include_cover: bool,
         include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
     ) -> _PreparedMedia:
-        if not isinstance(media, (Song, MusicVideo)):
-            raise TypeError("Downloader supports Song and MusicVideo only")
+        if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
+            raise TypeError("Unsupported media type for Downloader")
         if container not in ("m4v", "mp4"):
             raise ValueError("container must be 'm4v' or 'mp4'")
+        if not isinstance(media, UploadedVideo) and (
+            quality is not None or quality_priority is not None
+        ):
+            raise ValueError(
+                "quality preferences are only supported for uploaded videos"
+            )
         if isinstance(media, Song):
             if video_codec is not None:
                 raise ValueError("video_codec is only supported for music videos")
@@ -168,7 +187,7 @@ class Downloader:
             selected_codec = source.codec
             methods = (method,)
             suffix = ".m4a"
-        else:
+        elif isinstance(media, MusicVideo):
             if codec is not None:
                 raise ValueError("codec is only supported for songs")
             streams = await media.get_streams(
@@ -205,6 +224,29 @@ class Downloader:
             selected_codec = streams.video.codec
             methods = (video_method, audio_method)
             suffix = f".{container}"
+        else:
+            if (
+                codec is not None
+                or video_codec is not None
+                or codec_priority is not None
+            ):
+                raise ValueError(
+                    "Codec preferences are not supported for uploaded videos"
+                )
+            source = await media.get_stream(
+                quality=quality,
+                quality_priority=quality_priority,
+                ask=ask,
+                selector=selector,
+            )
+            # Progressive files already contain their audio/video tracks.
+            # Preserve the original MP4 bytes and brand; never mux again.
+            data, method = await self._read_track(
+                media.id, source, "video", progress_callback
+            )
+            selected_codec = source.codec
+            methods = (method,)
+            suffix = f".{container}"
 
         artwork = None
         if tag:
@@ -228,7 +270,7 @@ class Downloader:
 
     async def _save_sidecars(
         self,
-        media: Song | MusicVideo,
+        media: Song | MusicVideo | UploadedVideo,
         destination: Path,
         *,
         overwrite: str,
@@ -272,7 +314,7 @@ class Downloader:
 
     async def _finalize(
         self,
-        media: Song | MusicVideo,
+        media: Song | MusicVideo | UploadedVideo,
         result: DownloadResult,
         *,
         overwrite: str,
@@ -327,14 +369,19 @@ class Downloader:
 
     async def get_bytes(
         self,
-        media: Song | MusicVideo,
+        media: Song | MusicVideo | UploadedVideo,
         *,
         codec: SongCodec | None = None,
         video_codec: MusicVideoCodec | None = None,
         codec_priority: Sequence[SongCodec | MusicVideoCodec] | None = None,
         max_height: int | None = 1080,
         ask: bool = False,
-        selector: SongStreamSelector | MusicVideoStreamSelector | None = None,
+        selector: SongStreamSelector
+        | MusicVideoStreamSelector
+        | UploadedVideoStreamSelector
+        | None = None,
+        quality: UploadedVideoQuality | None = None,
+        quality_priority: Sequence[UploadedVideoQuality] | None = None,
         container: Literal["m4v", "mp4"] = "m4v",
         tag: bool = True,
         include_cover: bool = True,
@@ -350,6 +397,8 @@ class Downloader:
             max_height=max_height,
             ask=ask,
             selector=selector,
+            quality=quality,
+            quality_priority=quality_priority,
             container=container,
             tag=tag,
             include_cover=include_cover,
@@ -360,8 +409,8 @@ class Downloader:
 
     async def download(
         self,
-        media: Song | MusicVideo,
-        output: str | os.PathLike[str],
+        media: Song | MusicVideo | UploadedVideo,
+        output: str | os.PathLike[str] | None = None,
         *,
         overwrite: Literal["skip", "replace", "error"] = "skip",
         codec: SongCodec | None = None,
@@ -369,7 +418,14 @@ class Downloader:
         codec_priority: Sequence[SongCodec | MusicVideoCodec] | None = None,
         max_height: int | None = 1080,
         ask: bool = False,
-        selector: SongStreamSelector | MusicVideoStreamSelector | None = None,
+        selector: SongStreamSelector
+        | MusicVideoStreamSelector
+        | UploadedVideoStreamSelector
+        | None = None,
+        quality: UploadedVideoQuality | None = None,
+        quality_priority: Sequence[UploadedVideoQuality] | None = None,
+        playlist_tags: PlaylistTags | None = None,
+        video_extension: Literal[".m4v", ".mp4"] = ".m4v",
         tag: bool = True,
         include_cover: bool = True,
         include_lyrics: bool = False,
@@ -386,8 +442,10 @@ class Downloader:
         finalization. Sidecars, playlist entries and index updates are opt-in
         and idempotent; ``get_bytes`` never performs them.
         """
-        if not isinstance(media, (Song, MusicVideo)):
-            raise TypeError("Downloader supports Song and MusicVideo only")
+        if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
+            raise TypeError("Unsupported media type for Downloader")
+        if video_extension not in (".m4v", ".mp4"):
+            raise ValueError("video_extension must be '.m4v' or '.mp4'")
         if overwrite not in ("skip", "replace", "error"):
             raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
         if save_lyrics and not isinstance(media, Song):
@@ -400,14 +458,52 @@ class Downloader:
             raise ValueError(
                 "playlist_index requires a playlist path and non-negative index"
             )
-        destination = Path(output)
+        if output is None:
+            if self.path_formatter is None:
+                raise ValueError("output is required without a PathFormatter")
+            tags = await self.tag_resolver.get_tags(media)
+            extension = ".m4a" if isinstance(media, Song) else video_extension
+            destination = self.path_formatter.get_media_path(
+                media, tags, extension=extension, playlist=playlist_tags
+            )
+            if destination.exists():
+                # A formatted path could belong to a *different* catalog ID.
+                # Trust it only when the index confirms the identity. Without
+                # an index, use a stable ID-qualified filename, avoiding a
+                # false skip or clobber of an unrelated media item.
+                record = self.database.get(destination) if self.database else None
+                if (
+                    record is None
+                    or record["media_id"] != media.id
+                    or record["media_type"] != media.type
+                ):
+                    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", media.id)
+                    suffix = f" [{safe_id}]{destination.suffix}"
+                    available = 255 - len(suffix.encode("utf-8"))
+                    if available < 1:
+                        raise ValueError("Media ID is too long for a filename")
+                    stem = destination.stem
+                    while len(stem.encode("utf-8")) > available:
+                        stem = stem[:-1]
+                    destination = destination.with_name(f"{stem}{suffix}")
+                    if self.database:
+                        alternative = self.database.get(destination)
+                        if alternative is not None and (
+                            alternative["media_id"] != media.id
+                            or alternative["media_type"] != media.type
+                        ):
+                            raise FileExistsError(
+                                "ID-qualified destination already belongs to another media"
+                            )
+        else:
+            destination = Path(output)
         if isinstance(media, Song):
             if destination.suffix.lower() != ".m4a":
                 raise ValueError("Song output must end in .m4a")
             container: Literal["m4v", "mp4"] = "m4v"
         else:
             if destination.suffix.lower() not in (".m4v", ".mp4"):
-                raise ValueError("Music-video output must end in .m4v or .mp4")
+                raise ValueError("Video output must end in .m4v or .mp4")
             container = "mp4" if destination.suffix.lower() == ".mp4" else "m4v"
 
         if destination.exists():
@@ -434,6 +530,8 @@ class Downloader:
             max_height=max_height,
             ask=ask,
             selector=selector,
+            quality=quality,
+            quality_priority=quality_priority,
             container=container,
             tag=tag,
             include_cover=include_cover,

@@ -47,7 +47,13 @@ from .music_video import (
     MusicVideoStreamSelector,
 )
 from .music_video.stream import MusicVideoStreams
-from .uploaded_video import UploadedVideo
+from .uploaded_video import (
+    UploadedVideo,
+    UploadedVideoQuality,
+    UploadedVideoSelectionOption,
+    UploadedVideoSelectionRequest,
+    UploadedVideoStreamSelector,
+)
 
 __all__ = [
     "AudioStream",
@@ -93,5 +99,9 @@ __all__ = [
     "StreamSelectionRequest",
     "UnsupportedMediaError",
     "UploadedVideo",
+    "UploadedVideoQuality",
+    "UploadedVideoSelectionOption",
+    "UploadedVideoSelectionRequest",
+    "UploadedVideoStreamSelector",
     "WebPlaybackStream",
 ]

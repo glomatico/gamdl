@@ -11,7 +11,7 @@ import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 import httpx
@@ -24,6 +24,7 @@ from gamdl.media import (
     MusicVideo,
     MusicVideoCodec,
     MusicVideoStreamSelector,
+    SelectionKind,
     Song,
     SongCodec,
     SongStreamSelector,
@@ -33,6 +34,10 @@ from gamdl.muxer import Muxer
 from gamdl.stream import Streamer, StreamProgress
 
 from .tag_resolver import TagResolver
+from .database import MediaDatabase
+from .exceptions import DownloadFinalizationError
+from .playlist import PlaylistWriter
+from .publication import publish_bytes
 
 
 @dataclass(frozen=True)
@@ -61,12 +66,16 @@ class _PreparedMedia:
     data: bytes
     codec: SongCodec | MusicVideoCodec
     methods: tuple[str, ...]
+    cover_bytes: bytes | None = None
 
 
 class Downloader:
     """Download, decrypt, remux, and optionally tag one Song or MusicVideo.
 
     The same preparation path powers ``get_bytes`` and atomic ``download``.
+    Only ``download`` publishes a path and runs optional post-publication
+    sidecars, index and playlist updates. Retrying a skipped file still runs
+    those steps so interrupted finalization can be repaired.
     Existing bytes-first muxing temporarily holds full tracks in memory;
     file-backed muxing is a separate planned optimization.
 
@@ -83,6 +92,7 @@ class Downloader:
         client: httpx.AsyncClient | None = None,
         tag_resolver: TagResolver | None = None,
         muxer: Muxer | None = None,
+        database: MediaDatabase | None = None,
         concurrency: int = 8,
     ) -> None:
         if type(concurrency) is not int or concurrency < 1:
@@ -95,6 +105,7 @@ class Downloader:
             wrapper_api=wrapper_api, itunes_api=itunes_api
         )
         self.muxer = muxer or Muxer()
+        self.database = database
         self.concurrency = concurrency
 
     async def _read_track(
@@ -195,13 +206,13 @@ class Downloader:
             methods = (video_method, audio_method)
             suffix = f".{container}"
 
+        artwork = None
         if tag:
             tags = await self.tag_resolver.get_tags(media)
             if include_lyrics and isinstance(media, Song):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
                     tags = replace(tags, lyrics=lyrics.to_plain_text())
-            artwork = None
             if include_cover:
                 cover = await media.get_cover()
                 if cover is not None:
@@ -213,7 +224,106 @@ class Downloader:
                 staged.write_bytes(data)
                 self.muxer.tag(staged, tags=tags, cover_bytes=artwork)
                 data = staged.read_bytes()
-        return _PreparedMedia(data, selected_codec, methods)
+        return _PreparedMedia(data, selected_codec, methods, artwork)
+
+    async def _save_sidecars(
+        self,
+        media: Song | MusicVideo,
+        destination: Path,
+        *,
+        overwrite: str,
+        save_cover: bool,
+        save_lyrics: bool,
+        prepared_cover: bytes | None,
+    ) -> None:
+        """Write only requested media sidecars; never alter the media file."""
+        if save_cover:
+            cover_bytes = prepared_cover
+            if cover_bytes is None:
+                cover = await media.get_cover()
+                cover_bytes = (
+                    await cover.get_cover_bytes() if cover is not None else None
+                )
+            if cover_bytes:
+                if cover_bytes.startswith(b"\xff\xd8\xff"):
+                    extension = ".jpg"
+                elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                    extension = ".png"
+                else:
+                    raise ValueError("Cover sidecar must contain JPEG or PNG bytes")
+                cover_path = destination.with_suffix(extension)
+                if overwrite != "skip" or not cover_path.exists():
+                    publish_bytes(cover_bytes, cover_path, overwrite=overwrite)
+
+        if save_lyrics:
+            assert isinstance(media, Song)
+            lyrics = await media.get_lyrics()
+            if lyrics is not None:
+                if lyrics.is_synced:
+                    sidecar = destination.with_suffix(".lrc")
+                    contents = lyrics.to_lrc()
+                else:
+                    sidecar = destination.with_suffix(".txt")
+                    contents = lyrics.to_plain_text()
+                if overwrite != "skip" or not sidecar.exists():
+                    publish_bytes(
+                        contents.encode("utf-8"), sidecar, overwrite=overwrite
+                    )
+
+    async def _finalize(
+        self,
+        media: Song | MusicVideo,
+        result: DownloadResult,
+        *,
+        overwrite: str,
+        save_cover: bool,
+        save_lyrics: bool,
+        playlist_path: Path | None,
+        playlist_index: int | None,
+        prepared_cover: bytes | None = None,
+    ) -> DownloadResult:
+        """Retryable, idempotent post-publication operations.
+
+        If an operation fails, leave the finished file untouched and report
+        its path. A subsequent call with ``overwrite='skip'`` replays only
+        the finalization work, not the expensive media download.
+        """
+        try:
+            await self._save_sidecars(
+                media,
+                result.path,
+                overwrite=overwrite,
+                save_cover=save_cover,
+                save_lyrics=save_lyrics,
+                prepared_cover=prepared_cover,
+            )
+        except Exception as exc:
+            raise DownloadFinalizationError(result.path, "sidecar") from exc
+
+        if self.database is not None:
+            try:
+                self.database.record(media, result)
+            except Exception as exc:
+                raise DownloadFinalizationError(result.path, "database") from exc
+
+        if playlist_path is not None:
+            try:
+                source = media.source
+                position = playlist_index
+                if (
+                    position is None
+                    and source is not None
+                    and source.kind
+                    in {
+                        SelectionKind.PLAYLIST_TRACKS.value,
+                        SelectionKind.ALBUM_TRACKS.value,
+                    }
+                ):
+                    position = source.index
+                PlaylistWriter(playlist_path).add(result.path, position=position)
+            except Exception as exc:
+                raise DownloadFinalizationError(result.path, "playlist") from exc
+        return result
 
     async def get_bytes(
         self,
@@ -263,19 +373,33 @@ class Downloader:
         tag: bool = True,
         include_cover: bool = True,
         include_lyrics: bool = False,
+        save_cover: bool = False,
+        save_lyrics: bool = False,
+        playlist_path: str | os.PathLike[str] | None = None,
+        playlist_index: int | None = None,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
     ) -> DownloadResult:
         """Atomically publish a song M4A or video M4V/MP4 at ``output``.
 
         An explicit .mp4 video path opts into mp42 branding. ``skip`` avoids
-        download if the destination exists; it also handles concurrent
-        publications without overwriting a winner. ``replace`` uses atomic
-        os.replace. All failures/cancellations clean up staged output.
+        media transfer, but still performs requested sidecar/playlist/database
+        finalization. Sidecars, playlist entries and index updates are opt-in
+        and idempotent; ``get_bytes`` never performs them.
         """
         if not isinstance(media, (Song, MusicVideo)):
             raise TypeError("Downloader supports Song and MusicVideo only")
         if overwrite not in ("skip", "replace", "error"):
             raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
+        if save_lyrics and not isinstance(media, Song):
+            raise ValueError("save_lyrics is supported for songs only")
+        if playlist_index is not None and (
+            playlist_path is None
+            or type(playlist_index) is not int
+            or playlist_index < 0
+        ):
+            raise ValueError(
+                "playlist_index requires a playlist path and non-negative index"
+            )
         destination = Path(output)
         if isinstance(media, Song):
             if destination.suffix.lower() != ".m4a":
@@ -288,7 +412,17 @@ class Downloader:
 
         if destination.exists():
             if overwrite == "skip":
-                return DownloadResult(media.id, destination, "skipped", 0, None)
+                return await self._finalize(
+                    media,
+                    DownloadResult(media.id, destination, "skipped", 0, None),
+                    overwrite=overwrite,
+                    save_cover=save_cover,
+                    save_lyrics=save_lyrics,
+                    playlist_path=Path(playlist_path)
+                    if playlist_path is not None
+                    else None,
+                    playlist_index=playlist_index,
+                )
             if overwrite == "error":
                 raise FileExistsError(destination)
 
@@ -306,28 +440,9 @@ class Downloader:
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,
         )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        staged: Path | None = None
-        try:
-            with NamedTemporaryFile(
-                mode="wb",
-                prefix=f".{destination.name}.",
-                suffix=".part",
-                dir=destination.parent,
-                delete=False,
-            ) as temporary:
-                staged = Path(temporary.name)
-                temporary.write(prepared.data)
-            if overwrite == "replace":
-                staged.replace(destination)
-            else:
-                try:
-                    os.link(staged, destination)
-                except FileExistsError:
-                    if overwrite == "error":
-                        raise
-                    return DownloadResult(media.id, destination, "skipped", 0, None)
-            return DownloadResult(
+        published = publish_bytes(prepared.data, destination, overwrite=overwrite)
+        result = (
+            DownloadResult(
                 media.id,
                 destination,
                 "downloaded",
@@ -335,6 +450,16 @@ class Downloader:
                 prepared.codec,
                 prepared.methods,
             )
-        finally:
-            if staged is not None:
-                staged.unlink(missing_ok=True)
+            if published
+            else DownloadResult(media.id, destination, "skipped", 0, None)
+        )
+        return await self._finalize(
+            media,
+            result,
+            overwrite=overwrite,
+            save_cover=save_cover,
+            save_lyrics=save_lyrics,
+            playlist_path=Path(playlist_path) if playlist_path is not None else None,
+            playlist_index=playlist_index,
+            prepared_cover=prepared.cover_bytes,
+        )

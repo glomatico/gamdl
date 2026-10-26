@@ -10,11 +10,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
-from gamdl.download import Downloader, DownloadProgress, Tags
-from gamdl.media import MusicVideo, MusicVideoCodec, Song, SongCodec
+from gamdl.download import (
+    DownloadFinalizationError,
+    Downloader,
+    DownloadProgress,
+    MediaDatabase,
+    Tags,
+)
+from gamdl.media import MediaSource, MusicVideo, MusicVideoCodec, Song, SongCodec
+from gamdl.media.song.lyrics import Lyrics, LyricsLine
 from gamdl.media.music_video.stream import MusicVideoStreams
 from gamdl.stream import StreamProgress
-from tests.test_muxer import brands, mp4_tag_atoms, track_hashes
+from tests.test_muxer import JPEG, PNG, brands, mp4_tag_atoms, track_hashes
 
 
 @unittest.skipUnless(
@@ -251,7 +258,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         song = self.song()
         output = self.directory / "existing.m4a"
         output.write_bytes(b"keep")
-        with patch("gamdl.download.downloader.os.link", side_effect=FileExistsError):
+        with patch("gamdl.download.publication.os.link", side_effect=FileExistsError):
             result = await downloader.download(song, output, overwrite="skip")
         self.assertEqual(result.status, "skipped")
         self.assertEqual(output.read_bytes(), b"keep")
@@ -341,3 +348,141 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             await downloader.get_bytes(video, container="avi")
         with self.assertRaises(ValueError):
             Downloader(concurrency=0)
+
+    async def test_published_song_sidecars_index_playlist_and_retry_on_skip(self):
+        downloader, _ = self.downloader()
+        db = MediaDatabase(self.directory / "db" / "media.sqlite3")
+        downloader.database = db
+        song = self.song()
+        song.source = MediaSource("playlist_tracks", "playlist-id", 1)
+        cover = Mock(get_cover_bytes=AsyncMock(return_value=JPEG))
+        song.get_cover.return_value = cover
+        lyrics = Lyrics(stanzas=[[LyricsLine("Sample synced line", start=2000)]])
+        song.get_lyrics = AsyncMock(return_value=lyrics)
+        output = self.directory / "music" / "song.m4a"
+        playlist = self.directory / "playlists" / "tracks.m3u8"
+        result = await downloader.download(
+            song,
+            output,
+            include_cover=True,
+            save_cover=True,
+            save_lyrics=True,
+            playlist_path=playlist,
+        )
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertEqual(
+            output.with_suffix(".lrc").read_text(), "[00:02.00]Sample synced line"
+        )
+        self.assertEqual(playlist.read_text(), "#EXTM3U\n\n../music/song.m4a\n")
+        self.assertEqual(db.get(output)["codec"], SongCodec.AAC.value)
+        self.assertEqual(db.get(output)["source_id"], "playlist-id")
+        song.get_cover.assert_awaited_once()  # embedded art reused for sidecar
+
+        output.with_suffix(".jpg").unlink()
+        output.with_suffix(".lrc").unlink()
+        playlist.unlink()
+        db.path.unlink()
+        downloader._read_track.reset_mock()
+        song.get_stream.reset_mock()
+        retry = await downloader.download(
+            song, output, save_cover=True, save_lyrics=True, playlist_path=playlist
+        )
+        self.assertEqual(retry.status, "skipped")
+        downloader._read_track.assert_not_awaited()
+        song.get_stream.assert_not_awaited()
+        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertTrue(output.with_suffix(".lrc").exists())
+        self.assertTrue(playlist.exists())
+        self.assertEqual(db.get(output)["media_id"], "111")
+        # Further retries don't duplicate entries or rewrite existing sidecars.
+        self.assertEqual(
+            (await downloader.download(song, output, playlist_path=playlist)).status,
+            "skipped",
+        )
+        self.assertEqual(playlist.read_text(), "#EXTM3U\n\n../music/song.m4a\n")
+
+    async def test_unsynced_song_lyrics_use_txt_and_png_cover(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        song.get_lyrics = AsyncMock(
+            return_value=Lyrics(stanzas=[[LyricsLine("Hello")]])
+        )
+        song.get_cover.return_value = Mock(get_cover_bytes=AsyncMock(return_value=PNG))
+        output = self.directory / "unsynced.m4a"
+        await downloader.download(
+            song, output, tag=False, save_cover=True, save_lyrics=True
+        )
+        self.assertEqual(output.with_suffix(".txt").read_text(), "Hello")
+        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+        self.assertFalse(output.with_suffix(".lrc").exists())
+
+    async def test_video_sidecar_and_explicit_playlist_position(self):
+        downloader, _ = self.downloader()
+        video = self.music_video()
+        video.get_cover.return_value = Mock(get_cover_bytes=AsyncMock(return_value=PNG))
+        output = self.directory / "album" / "video.m4v"
+        playlist = self.directory / "collection.m3u8"
+        result = await downloader.download(
+            video,
+            output,
+            save_cover=True,
+            playlist_path=playlist,
+            playlist_index=2,
+        )
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+        self.assertEqual(playlist.read_text(), "#EXTM3U\n\n\nalbum/video.m4v\n")
+        with self.assertRaises(ValueError):
+            await downloader.download(video, output, save_lyrics=True)
+        with self.assertRaises(ValueError):
+            await downloader.download(video, output, playlist_index=1)
+        with self.assertRaises(ValueError):
+            await downloader.download(
+                video, output, playlist_path=playlist, playlist_index=-1
+            )
+
+    async def test_failed_finalization_keeps_file_then_skip_retries(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        destination = self.directory / "repair.m4a"
+        failure = Mock(record=Mock(side_effect=OSError("database busy")))
+        downloader.database = failure
+        with self.assertRaises(DownloadFinalizationError) as raised:
+            await downloader.download(song, destination)
+        self.assertEqual(raised.exception.stage, "database")
+        self.assertEqual(raised.exception.path, destination)
+        self.assertTrue(destination.is_file())
+        downloader.database = MediaDatabase(self.directory / "media.sqlite3")
+        downloader._read_track.reset_mock()
+        result = await downloader.download(song, destination)
+        self.assertEqual(result.status, "skipped")
+        downloader._read_track.assert_not_awaited()
+        self.assertEqual(downloader.database.get(destination)["media_id"], "111")
+
+    async def test_playlist_failure_is_retryable_after_successful_publication(self):
+        downloader, _ = self.downloader()
+        video = self.music_video()
+        output = self.directory / "video.m4v"
+        playlist = self.directory / "playlist.m3u8"
+        playlist.write_text("not a valid M3U", encoding="utf-8")
+        with self.assertRaises(DownloadFinalizationError) as raised:
+            await downloader.download(video, output, playlist_path=playlist)
+        self.assertEqual(raised.exception.stage, "playlist")
+        self.assertTrue(output.exists())
+        self.assertEqual(playlist.read_text(), "not a valid M3U")
+        playlist.unlink()
+        downloader._read_track.reset_mock()
+        retry = await downloader.download(video, output, playlist_path=playlist)
+        self.assertEqual(retry.status, "skipped")
+        downloader._read_track.assert_not_awaited()
+        self.assertEqual(playlist.read_text(), "#EXTM3U\nvideo.m4v\n")
+
+    async def test_get_bytes_does_not_create_database_or_sidecars(self):
+        downloader, _ = self.downloader()
+        index_path = self.directory / "index.sqlite3"
+        downloader.database = MediaDatabase(index_path)
+        data = await downloader.get_bytes(self.song())
+        self.assertTrue(data.startswith(b"\x00\x00"))
+        self.assertFalse(index_path.exists())
+        self.assertEqual(list(self.directory.glob("*.jpg")), [])

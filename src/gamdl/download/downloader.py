@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -44,7 +43,7 @@ from .exceptions import DownloadFinalizationError
 from .playlist import PlaylistWriter
 from .publication import publish_bytes
 from .paths import PathFormatter, PlaylistTags
-from .path_resolver import resolve_numbered_video_path
+from .path_resolver import resolve_numbered_video_path, resolve_song_path
 
 
 @dataclass(frozen=True)
@@ -475,32 +474,21 @@ class Downloader:
                 destination = resolve_numbered_video_path(
                     destination, media, database=self.database
                 )
-            elif destination.exists():
-                # Songs retain their previous, ID-qualified fallback policy.
-                record = self.database.get(destination) if self.database else None
-                if (
-                    record is None
-                    or record["media_id"] != media.id
-                    or record["media_type"] != media.type
-                ):
-                    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", media.id)
-                    suffix = f" [{safe_id}]{destination.suffix}"
-                    available = 255 - len(suffix.encode("utf-8"))
-                    if available < 1:
-                        raise ValueError("Media ID is too long for a filename")
-                    stem = destination.stem
-                    while len(stem.encode("utf-8")) > available:
-                        stem = stem[:-1]
-                    destination = destination.with_name(f"{stem}{suffix}")
-                    if self.database:
-                        alternative = self.database.get(destination)
-                        if alternative is not None and (
-                            alternative["media_id"] != media.id
-                            or alternative["media_type"] != media.type
-                        ):
-                            raise FileExistsError(
-                                "ID-qualified destination already belongs to another media"
-                            )
+            else:
+                # PathFormatter is pure. Filesystem identity checks belong to
+                # this resolver, using the same native cnID reader as videos.
+                destination = resolve_song_path(
+                    destination,
+                    media,
+                    catalog_id=(
+                        str(tags.title_id)
+                        if tags.title_id is not None
+                        else media.id
+                        if media.id.isdecimal()
+                        else None
+                    ),
+                    database=self.database,
+                )
         else:
             destination = Path(output)
         if isinstance(media, Song):

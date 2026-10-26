@@ -43,6 +43,64 @@ def _index_for_path(base: Path, candidate: Path) -> int | None:
     return index if _numbered_video_path(base, index).name == candidate.name else None
 
 
+def _matches_media_id(
+    path: Path,
+    media: Media,
+    *,
+    database: MediaDatabase | None,
+    catalog_id: str | None,
+) -> bool:
+    """Identify an existing MP4 by its index record or embedded catalog ID.
+
+    Never mistake an untagged, unreadable or symlinked file for a match.
+    For library songs the catalog ID comes from the resolved output tags,
+    while the database retains the original library media ID.
+    """
+    if path.is_symlink() or not path.is_file():
+        return False
+    record = database.get(path) if database is not None else None
+    if record is not None:
+        return record["media_id"] == media.id and record["media_type"] == media.type
+    return bool(catalog_id) and _native.read_mp4_title_id(str(path)) == catalog_id
+
+
+def resolve_song_path(
+    path: Path,
+    media: Media,
+    *,
+    catalog_id: str | None,
+    database: MediaDatabase | None = None,
+) -> Path:
+    """Reuse a song with a matching ID; otherwise retain the ID-suffix policy.
+
+    This intentionally differs from video's numbered-file collision scheme.
+    An existing ID-qualified fallback is verified as well, so a repeated
+    download neither creates duplicates nor silently claims another song.
+    """
+    if not (path.exists() or path.is_symlink()):
+        return path
+    if _matches_media_id(path, media, database=database, catalog_id=catalog_id):
+        return path
+
+    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", media.id)
+    suffix = f" [{safe_id}]{path.suffix}"
+    available = 255 - len(suffix.encode("utf-8"))
+    if available < 1:
+        raise ValueError("Media ID is too long for a filename")
+    stem = path.stem
+    while len(stem.encode("utf-8")) > available:
+        stem = stem[:-1]
+    fallback = path.with_name(f"{stem}{suffix}")
+
+    if (fallback.exists() or fallback.is_symlink()) and not _matches_media_id(
+        fallback, media, database=database, catalog_id=catalog_id
+    ):
+        raise FileExistsError(
+            "Generated song filename is already occupied by another media"
+        )
+    return fallback
+
+
 def resolve_numbered_video_path(
     path: Path,
     media: Media,
@@ -71,11 +129,7 @@ def resolve_numbered_video_path(
     for index, candidate in sorted(candidates.items()):
         if candidate.is_symlink() or not candidate.is_file():
             continue
-        record = database.get(candidate) if database else None
-        if record is not None:
-            if record["media_id"] == media.id and record["media_type"] == media.type:
-                return candidate
-        elif _native.read_mp4_title_id(str(candidate)) == media.id:
+        if _matches_media_id(candidate, media, database=database, catalog_id=media.id):
             return candidate
 
     index = 1

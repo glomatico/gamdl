@@ -593,6 +593,74 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.path.suffix, ".mp4")
         self.assertEqual(brands(result.path)[0], b"mp42")
 
+    async def test_auto_song_without_database_skips_matching_cnid(self):
+        """Regression: `dump_stream --auto-path` created an unwanted [cnID] copy."""
+        downloader, _ = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Library")
+        song = self.song()
+        first = await downloader.download(song)
+        self.assertEqual(first.status, "downloaded")
+        self.assertEqual(first.path.name, "Sample Track.m4a")
+        self.assertEqual(
+            mp4_tag_atoms(first.path)[b"cnID"], [(21, (111).to_bytes(4, "big"))]
+        )
+
+        original_bytes = first.path.read_bytes()
+        downloader._read_track.reset_mock()
+        song.get_stream.reset_mock()
+        duplicate = await downloader.download(song)
+        self.assertEqual(duplicate.status, "skipped")
+        self.assertEqual(duplicate.path, first.path)
+        self.assertEqual(duplicate.bytes_written, 0)
+        self.assertEqual(first.path.read_bytes(), original_bytes)
+        downloader._read_track.assert_not_awaited()
+        song.get_stream.assert_not_awaited()
+        self.assertEqual(list(first.path.parent.glob("*.m4a")), [first.path])
+
+        # Explicit replacement still works and never adds an ID suffix.
+        replaced = await downloader.download(song, overwrite="replace")
+        self.assertEqual(replaced.status, "downloaded")
+        self.assertEqual(replaced.path, first.path)
+        self.assertEqual(list(first.path.parent.glob("*.m4a")), [first.path])
+
+    async def test_auto_song_without_database_mismatched_id_uses_checked_fallback(self):
+        downloader, tag_resolver = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Library")
+        song = self.song()
+        tags = await tag_resolver.get_tags(song)
+        expected = downloader.path_formatter.get_media_path(
+            song, tags, extension=".m4a"
+        )
+        expected.parent.mkdir(parents=True)
+        expected.write_bytes(downloader.muxer.remux(self.audio.read_bytes()))
+        downloader.muxer.tag(expected, tags=Tags(title_id=222))
+        original_bytes = expected.read_bytes()
+
+        other = await downloader.download(song)
+        self.assertEqual(other.status, "downloaded")
+        self.assertEqual(other.path.name, "Sample Track [111].m4a")
+        self.assertEqual(expected.read_bytes(), original_bytes)
+        downloader._read_track.reset_mock()
+        self.assertEqual((await downloader.download(song)).status, "skipped")
+        downloader._read_track.assert_not_awaited()
+
+        # Unknown ownership at the qualified location fails safely.
+        other.path.write_bytes(b"unrecognized file")
+        with self.assertRaises(FileExistsError):
+            await downloader.download(song, overwrite="skip")
+
+    async def test_auto_library_song_matches_catalog_cnid(self):
+        downloader, _ = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Library")
+        song = Song.from_id("i.library-song", api=Mock(), is_library=True)
+        song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
+        song.get_cover = AsyncMock(return_value=None)
+        first = await downloader.download(song)
+        self.assertEqual(first.status, "downloaded")
+        downloader._read_track.reset_mock()
+        self.assertEqual((await downloader.download(song)).status, "skipped")
+        downloader._read_track.assert_not_awaited()
+
     async def test_auto_paths_without_index_recognize_embedded_cnid(self):
         formatter = PathFormatter(self.directory / "Formatted")
         downloader = Downloader(path_formatter=formatter)

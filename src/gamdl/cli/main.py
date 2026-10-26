@@ -1,0 +1,50 @@
+"""GAMDL command group; YAML is loaded before subcommand option parsing."""
+
+from pathlib import Path
+
+import click
+
+from gamdl import __version__
+
+from .config.models import config_path as default_config_path
+from .config.loader import ConfigError, click_default_map, load_config
+from .config.commands import config_group
+
+
+@click.group(context_settings={"auto_envvar_prefix": "GAMDL"})
+@click.version_option(__version__, "--version", "-v")
+@click.option(
+    "--config",
+    "config_file",
+    type=click.Path(path_type=Path, dir_okay=False),
+    envvar="GAMDL_CONFIG",
+    help="YAML configuration path",
+)
+@click.option("--no-config", is_flag=True, help="Ignore YAML and profiles")
+@click.option("--profile", envvar="GAMDL_PROFILE", help="YAML profile to use")
+@click.pass_context
+def main(
+    ctx: click.Context, config_file: Path | None, no_config: bool, profile: str | None
+) -> None:
+    """GAMDL 4.0 — download Apple Music with configurable codecs and progress."""
+    path = (config_file or default_config_path()).expanduser()
+    ctx.obj = {
+        "config_path": path,
+        "config_explicit": config_file is not None,
+        "no_config": no_config,
+        "profile": profile,
+    }
+    try:
+        config = load_config(
+            None if no_config else path, profile=None if no_config else profile
+        )
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from None
+    ctx.obj["settings"] = config
+    ctx.default_map = {"rip": click_default_map(config)}
+
+
+from .commands.rip import rip
+
+main.add_command(rip)
+main.add_command(config_group)

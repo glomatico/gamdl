@@ -9,11 +9,17 @@ authors = [
 ]
 dependencies = [
     "async-lru>=2.0,<3",
+    "click>=8.3,<9",
+    "dataclass-click>=1.0.4,<2",
     "httpx>=0.28.1,<1",
     "httpx-retries>=0.6,<1",
     "m3u8>=6,<7",
+    "platformdirs>=4,<6",
+    "pyyaml>=6,<7",
+    "rich>=14,<16",
     "structlog>=25.4,<27",
 ]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -29,6 +35,9 @@ classifiers = [
     "Topic :: Multimedia :: Video",
     "Topic :: Utilities",
 ]
+
+[project.scripts]
+gamdl = "gamdl.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/glomatico/gamdl"

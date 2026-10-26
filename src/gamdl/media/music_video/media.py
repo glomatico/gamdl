@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 from ..base import Media, _first_resource
 from .enums import MusicVideoCodec
@@ -32,6 +33,7 @@ class MusicVideo(Media):
         self,
         *,
         video_codec: MusicVideoCodec | None = None,
+        codec_priority: Sequence[MusicVideoCodec] | None = None,
         max_height: int | None = 1080,
         ask: bool = False,
         selector: MusicVideoStreamSelector | None = None,
@@ -41,8 +43,9 @@ class MusicVideo(Media):
     ) -> MusicVideoStreams:
         """Select video and associated audio, or ask separately for both.
 
-        In interactive mode, ``video_codec`` is not applied; ``max_height``
-        still limits which video variants are offered to the selector.
+        ``video_codec`` selects one exact codec, while ``codec_priority``
+        tries codecs in order (default: H264, H265). In interactive mode,
+        neither preference is used; ``max_height`` still limits offered video.
         """
         from .stream import MusicVideoStreamResolver
 
@@ -50,6 +53,7 @@ class MusicVideo(Media):
             self, wrapper_api=wrapper_api, itunes_api=itunes_api, client=client
         ).get_streams(
             video_codec=video_codec,
+            codec_priority=codec_priority,
             max_height=max_height,
             ask=ask,
             selector=selector,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -144,6 +145,7 @@ class MusicVideoStreamResolver:
         self,
         *,
         video_codec: MusicVideoCodec | None = None,
+        codec_priority: Sequence[MusicVideoCodec] | None = None,
         max_height: int | None = 1080,
         ask: bool = False,
         selector: MusicVideoStreamSelector | None = None,
@@ -151,20 +153,35 @@ class MusicVideoStreamResolver:
         """Return an HLS video/audio pair with an optional two-stage selector."""
         if max_height is not None and (type(max_height) is not int or max_height <= 0):
             raise ValueError("max_height must be a positive integer or None")
+        if video_codec is not None and codec_priority is not None:
+            raise ValueError("Provide either video_codec or codec_priority, not both")
         if ask:
-            if video_codec is not None:
-                raise ValueError("ask cannot be combined with video_codec")
+            if video_codec is not None or codec_priority is not None:
+                raise ValueError("ask cannot be combined with codec preferences")
             if selector is None:
                 raise SelectionRequiredError("music_video_streams")
+            priorities: tuple[MusicVideoCodec, ...] = ()
         else:
             if selector is not None:
                 raise ValueError("selector requires ask=True")
             try:
-                video_codec = MusicVideoCodec(
-                    video_codec if video_codec is not None else MusicVideoCodec.H264
+                if codec_priority is not None and isinstance(
+                    codec_priority, (str, bytes)
+                ):
+                    raise ValueError(
+                        "codec_priority must be a sequence of video codecs"
+                    )
+                priorities = (
+                    (MusicVideoCodec(video_codec),)
+                    if video_codec is not None
+                    else tuple(MusicVideoCodec(codec) for codec in codec_priority)
+                    if codec_priority is not None
+                    else (MusicVideoCodec.H264, MusicVideoCodec.H265)
                 )
-            except ValueError:
-                raise ValueError("video_codec must be h264 or h265") from None
+            except (ValueError, TypeError):
+                raise ValueError("video codecs must be h264 or h265") from None
+            if not priorities:
+                raise ValueError("codec_priority must not be empty")
 
         async def discover() -> MusicVideoStreams:
             master_url, origin = await self._master_url()
@@ -173,7 +190,7 @@ class MusicVideoStreamResolver:
             for playlist in manifest.playlists:
                 info = playlist.stream_info
                 codec = _video_codec(getattr(info, "codecs", None))
-                if codec is None or (not ask and codec != video_codec):
+                if codec is None or (not ask and codec not in priorities):
                     continue
                 resolution = getattr(info, "resolution", None)
                 if not resolution or len(resolution) != 2:
@@ -217,9 +234,33 @@ class MusicVideoStreamResolver:
                 )
                 index = await self._select_index(selector, request, len(choices))
             else:
-                index = max(
+                # Codec order outweighs resolution/bitrate: try the best
+                # eligible rendition of each codec before the next codec.
+                # A video with no separate audio is not a usable A/V pair.
+                ranked = sorted(
                     range(len(choices)),
-                    key=lambda i: (choices[i][1].height, choices[i][1].bitrate or 0),
+                    key=lambda i: (
+                        priorities.index(choices[i][1].codec),
+                        -choices[i][1].height,
+                        -(choices[i][1].bitrate or 0),
+                    ),
+                )
+                index = next(
+                    (
+                        i
+                        for i in ranked
+                        if any(
+                            rendition.type == "AUDIO"
+                            and rendition.uri
+                            and (
+                                getattr(choices[i][0].stream_info, "audio", None)
+                                is None
+                                or rendition.group_id == choices[i][0].stream_info.audio
+                            )
+                            for rendition in manifest.media
+                        )
+                    ),
+                    ranked[0],
                 )
             video_playlist, video_stream = choices[index]
             video_info = video_playlist.stream_info
@@ -312,7 +353,7 @@ class MusicVideoStreamResolver:
         return await self.media._load(
             (
                 "video_streams",
-                video_codec,
+                priorities,
                 max_height,
                 id(self.wrapper_api),
                 id(self.itunes_api),

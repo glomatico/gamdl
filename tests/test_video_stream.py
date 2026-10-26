@@ -131,6 +131,134 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 client=self.client, wrapper_api=wrapper, video_codec="av1"
             )
 
+    async def test_video_codec_priority_order_and_height(self):
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        # Priorities outrank resolution: prefer 1080p AVC over 2160p HEVC.
+        avc_first = await self.media.get_streams(
+            client=self.client,
+            wrapper_api=wrapper,
+            max_height=None,
+            codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
+        )
+        self.assertEqual(
+            (avc_first.video.codec, avc_first.video.height), ("h264", 1080)
+        )
+        hevc_first = await self.media.get_streams(
+            client=self.client,
+            wrapper_api=wrapper,
+            max_height=None,
+            codec_priority=[MusicVideoCodec.H265, MusicVideoCodec.H264],
+        )
+        self.assertEqual(
+            (hevc_first.video.codec, hevc_first.video.height), ("h265", 2160)
+        )
+        self.assertEqual(hevc_first.audio.url, "https://cdn.example.com/atmos.m3u8")
+        # Height is a hard limit even when HEVC is preferred.
+        fallback = await self.media.get_streams(
+            client=self.client,
+            wrapper_api=wrapper,
+            max_height=720,
+            codec_priority=[MusicVideoCodec.H265, MusicVideoCodec.H264],
+        )
+        self.assertEqual((fallback.video.codec, fallback.video.height), ("h264", 720))
+        # Identical normalized preference tuples reuse cached discovery results.
+        calls_before = len(self.calls)
+        self.assertIs(
+            await self.media.get_streams(
+                client=self.client,
+                wrapper_api=wrapper,
+                max_height=None,
+                codec_priority=["h264", "h265"],
+            ),
+            avc_first,
+        )
+        self.assertEqual(len(self.calls), calls_before)
+
+    async def test_priority_fallback_when_first_codec_missing(self):
+        hevc_only = MASTER.replace('CODECS="avc1.', 'CODECS="unsupported.')
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, text=hevc_only))
+        ) as client:
+            wrapper = Mock()
+            wrapper.get_playback = AsyncMock(
+                return_value={
+                    "songList": [
+                        {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                    ]
+                }
+            )
+            result = await self.media.get_streams(
+                client=client,
+                wrapper_api=wrapper,
+                codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
+                max_height=None,
+            )
+            self.assertEqual(result.video.codec, MusicVideoCodec.H265)
+            # Single codec remains an exact requirement, not a preference fallback.
+            with self.assertRaises(StreamNotAvailableError):
+                await self.media.get_streams(
+                    client=client,
+                    wrapper_api=wrapper,
+                    video_codec=MusicVideoCodec.H264,
+                    max_height=None,
+                )
+
+    async def test_priority_without_usable_audio_falls_back(self):
+        video_with_orphan_audio = MASTER.replace(
+            'RESOLUTION=1920x1080,AUDIO="audio-stereo"',
+            'RESOLUTION=1920x1080,AUDIO="missing-group"',
+        ).replace(
+            'RESOLUTION=1280x720,AUDIO="audio-stereo"',
+            'RESOLUTION=1280x720,AUDIO="missing-group"',
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, text=video_with_orphan_audio)
+            )
+        ) as client:
+            wrapper = Mock()
+            wrapper.get_playback = AsyncMock(
+                return_value={
+                    "songList": [
+                        {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                    ]
+                }
+            )
+            chosen = await self.media.get_streams(
+                client=client,
+                wrapper_api=wrapper,
+                codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
+                max_height=None,
+            )
+            self.assertEqual(chosen.video.codec, MusicVideoCodec.H265)
+            self.assertEqual(chosen.audio.codec.value, "atmos")
+
+    async def test_priority_validation_before_network(self):
+        for kwargs in (
+            {"codec_priority": []},
+            {"codec_priority": ["av1"]},
+            {"codec_priority": "h264"},
+            {
+                "codec_priority": [MusicVideoCodec.H264],
+                "video_codec": MusicVideoCodec.H265,
+            },
+            {
+                "codec_priority": [MusicVideoCodec.H264],
+                "ask": True,
+                "selector": lambda _: 0,
+            },
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                await self.media.get_streams(**kwargs)
+        self.api.get_music_video.assert_not_awaited()
+
     async def test_strict_max_height_and_unlimited(self):
         wrapper = Mock()
         wrapper.get_playback = AsyncMock(

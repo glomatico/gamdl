@@ -173,14 +173,6 @@ async def run_rip(options: RipOptions) -> int:
 
                 async def process(occurrence: int, media, title: str) -> None:
                     try:
-                        if (
-                            isinstance(media, MusicVideo)
-                            and downloader.itunes_api is None
-                            and wrapper is None
-                        ):
-                            # This happens before first music-video transfer;
-                            # the orchestrator sets it once in the producer.
-                            raise RuntimeError("iTunes metadata client not initialized")
                         kwargs = {
                             "overwrite": options.overwrite,
                             "save_cover": options.save_cover,
@@ -285,13 +277,22 @@ async def run_rip(options: RipOptions) -> int:
                         if (
                             isinstance(media, MusicVideo)
                             and downloader.itunes_api is None
-                            and wrapper is None
                         ):
-                            downloader.itunes_api = await stack.enter_async_context(
-                                await ItunesApi.create(
-                                    storefront=api.storefront, language=options.language
+                            # Wrapper is only an authentication/tagging source:
+                            # iTunes HLS is preferred even with wrapper enabled.
+                            # If iTunes initialization fails, the video resolver
+                            # can still use authenticated Apple web playback.
+                            from gamdl.api import GamdlApiError
+
+                            try:
+                                downloader.itunes_api = await stack.enter_async_context(
+                                    await ItunesApi.create(
+                                        storefront=api.storefront,
+                                        language=options.language,
+                                    )
                                 )
-                            )
+                            except GamdlApiError:
+                                pass
                         progress.add(found, title)
                         pending.add(asyncio.create_task(process(found, media, title)))
                         max_active = (

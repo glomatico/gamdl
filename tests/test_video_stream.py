@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 
+from gamdl.api.exceptions import GamdlApiResponseError
 from gamdl.media import (
     AudioSelectionRequest,
     AudioStream,
@@ -66,9 +67,11 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.client.__aenter__()
         self.addAsyncCleanup(self.client.__aexit__, None, None, None)
         self.api = video_api()
+        self.itunes = Mock()
+        self.itunes.get_itunes_page = AsyncMock(return_value=PAGE)
         self.media = MusicVideo.from_id("299199411", api=self.api)
 
-    async def test_wrapper_source_and_quality_preference(self):
+    async def test_wrapper_does_not_supply_video_hls_and_itunes_is_used(self):
         wrapper = Mock()
         wrapper.get_playback = AsyncMock(
             return_value={
@@ -78,7 +81,10 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             }
         )
         streams = await self.media.get_streams(
-            client=self.client, wrapper_api=wrapper, max_height=720
+            client=self.client,
+            wrapper_api=wrapper,
+            itunes_api=self.itunes,
+            max_height=720,
         )
         self.assertIsInstance(streams.video, VideoStream)
         self.assertIsInstance(streams.audio, AudioStream)
@@ -90,12 +96,15 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(streams.video.frame_rate, None)
         self.assertIs(
             await self.media.get_streams(
-                client=self.client, wrapper_api=wrapper, max_height=720
+                client=self.client,
+                wrapper_api=wrapper,
+                itunes_api=self.itunes,
+                max_height=720,
             ),
             streams,
         )
-        wrapper.get_playback.assert_awaited_once()
-        self.api.get_music_video.assert_not_awaited()
+        wrapper.get_playback.assert_not_awaited()
+        self.itunes.get_itunes_page.assert_awaited_once_with("music-video", "299199411")
 
     async def test_itunes_fallback_and_highest_resolution(self):
         itunes = Mock()
@@ -110,6 +119,100 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(streams.audio.url, "https://cdn.example.com/audio.m3u8")
         itunes.get_itunes_page.assert_awaited_once_with("music-video", "299199411")
 
+    async def test_wrapper_alone_is_not_a_video_hls_source(self):
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://invalid.example/wrapper.m3u8"}
+                ]
+            }
+        )
+        self.api.get_webplayback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        streams = await self.media.get_streams(
+            client=self.client, wrapper_api=wrapper, max_height=720
+        )
+        self.assertEqual(streams.video.origin, "webplayback")
+        wrapper.get_playback.assert_not_awaited()
+        self.api.get_webplayback.assert_awaited_once_with("299199411", is_library=False)
+
+    async def test_itunes_without_hls_falls_back_to_direct_webplayback(self):
+        self.itunes.get_itunes_page.return_value = {
+            "storePlatformData": {
+                "product-dv": {"results": {"299199411": {"offers": []}}}
+            }
+        }
+        self.api.get_webplayback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        streams = await self.media.get_streams(
+            client=self.client, itunes_api=self.itunes, max_height=720
+        )
+        self.assertEqual(streams.video.origin, "webplayback")
+        self.itunes.get_itunes_page.assert_awaited_once()
+        self.api.get_webplayback.assert_awaited_once()
+
+    async def test_itunes_api_error_falls_back_to_direct_webplayback(self):
+        self.itunes.get_itunes_page.side_effect = GamdlApiResponseError(
+            "missing", status_code=404
+        )
+        self.api.get_webplayback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        streams = await self.media.get_streams(
+            client=self.client, itunes_api=self.itunes
+        )
+        self.assertEqual(streams.video.origin, "webplayback")
+
+    async def test_mismatched_canonical_video_id_prefers_webplayback(self):
+        self.api.get_music_video.return_value = {
+            "data": [
+                {
+                    "id": "299199411",
+                    "type": "music-videos",
+                    "attributes": {
+                        "url": "https://music.apple.com/us/music-video/alternate/7654321"
+                    },
+                }
+            ]
+        }
+        self.api.get_webplayback = AsyncMock(
+            return_value={
+                "songList": [
+                    {"hls-playlist-url": "https://cdn.example.com/master.m3u8"}
+                ]
+            }
+        )
+        streams = await self.media.get_streams(
+            client=self.client, itunes_api=self.itunes
+        )
+        self.assertEqual(streams.video.origin, "webplayback")
+        self.itunes.get_itunes_page.assert_not_awaited()
+
+    async def test_no_public_hls_returns_specific_source_error(self):
+        self.itunes.get_itunes_page.return_value = {
+            "storePlatformData": {"product-dv": {"results": {}}}
+        }
+        self.api.get_webplayback = AsyncMock(return_value={"songList": [{}]})
+        with self.assertRaisesRegex(
+            StreamNotAvailableError, "iTunes or Apple Music web playback"
+        ):
+            await self.media.get_streams(client=self.client, itunes_api=self.itunes)
+
     async def test_hevc_and_unsupported_codecs(self):
         wrapper = Mock()
         wrapper.get_playback = AsyncMock(
@@ -122,13 +225,17 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         streams = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             video_codec=MusicVideoCodec.H265,
             max_height=2160,
         )
         self.assertEqual(streams.video.width, 3840)
         with self.assertRaises(ValueError):
             await self.media.get_streams(
-                client=self.client, wrapper_api=wrapper, video_codec="av1"
+                client=self.client,
+                wrapper_api=wrapper,
+                itunes_api=self.itunes,
+                video_codec="av1",
             )
 
     async def test_video_codec_priority_order_and_height(self):
@@ -144,6 +251,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         avc_first = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             max_height=None,
             codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
         )
@@ -153,6 +261,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         hevc_first = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             max_height=None,
             codec_priority=[MusicVideoCodec.H265, MusicVideoCodec.H264],
         )
@@ -164,6 +273,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         fallback = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             max_height=720,
             codec_priority=[MusicVideoCodec.H265, MusicVideoCodec.H264],
         )
@@ -174,6 +284,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             await self.media.get_streams(
                 client=self.client,
                 wrapper_api=wrapper,
+                itunes_api=self.itunes,
                 max_height=None,
                 codec_priority=["h264", "h265"],
             ),
@@ -197,6 +308,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             result = await self.media.get_streams(
                 client=client,
                 wrapper_api=wrapper,
+                itunes_api=self.itunes,
                 codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
                 max_height=None,
             )
@@ -206,6 +318,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 await self.media.get_streams(
                     client=client,
                     wrapper_api=wrapper,
+                    itunes_api=self.itunes,
                     video_codec=MusicVideoCodec.H264,
                     max_height=None,
                 )
@@ -234,6 +347,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             chosen = await self.media.get_streams(
                 client=client,
                 wrapper_api=wrapper,
+                itunes_api=self.itunes,
                 codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
                 max_height=None,
             )
@@ -270,18 +384,23 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(StreamNotAvailableError):
             await self.media.get_streams(
-                client=self.client, wrapper_api=wrapper, max_height=360
+                client=self.client,
+                wrapper_api=wrapper,
+                itunes_api=self.itunes,
+                max_height=360,
             )
         with self.assertRaises(StreamNotAvailableError):
             await self.media.get_streams(
                 client=self.client,
                 wrapper_api=wrapper,
+                itunes_api=self.itunes,
                 video_codec=MusicVideoCodec.H265,
                 max_height=1080,
             )
         streams = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             video_codec=MusicVideoCodec.H265,
             max_height=None,
         )
@@ -327,6 +446,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         streams = await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             max_height=None,
             ask=True,
             selector=choose,
@@ -339,6 +459,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.media.get_streams(
             client=self.client,
             wrapper_api=wrapper,
+            itunes_api=self.itunes,
             max_height=None,
             ask=True,
             selector=choose,
@@ -367,6 +488,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 await self.media.get_streams(
                     client=self.client,
                     wrapper_api=wrapper,
+                    itunes_api=self.itunes,
                     ask=True,
                     selector=lambda _: bad,
                 )
@@ -374,6 +496,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             await self.media.get_streams(
                 client=self.client,
                 wrapper_api=wrapper,
+                itunes_api=self.itunes,
                 ask=True,
                 selector=lambda request: (
                     0 if isinstance(request, VideoSelectionRequest) else 12
@@ -383,6 +506,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             await self.media.get_streams(
                 client=self.client,
                 wrapper_api=wrapper,
+                itunes_api=self.itunes,
                 max_height=360,
                 ask=True,
                 selector=lambda _: 0,
@@ -406,7 +530,9 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 }
             )
             with self.assertRaisesRegex(StreamNotAvailableError, "separate audio"):
-                await self.media.get_streams(wrapper_api=wrapper, client=client)
+                await self.media.get_streams(
+                    wrapper_api=wrapper, itunes_api=self.itunes, client=client
+                )
 
     async def test_invalid_codec_and_no_source(self):
         with self.assertRaises(ValueError):

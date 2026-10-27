@@ -97,36 +97,69 @@ class MusicVideoStreamResolver:
         self.transport = StreamTransport(client)
 
     async def _master_url(self) -> tuple[str, StreamOrigin]:
-        if self.wrapper_api is not None and not self.media.is_library:
-            try:
-                playback = await self.media._get_wrapper_playback(self.wrapper_api)
-            except GamdlApiError:
-                playback = {}
-            songs = playback.get("songList")
-            if isinstance(songs, list) and songs and isinstance(songs[0], dict):
-                url = songs[0].get("hls-playlist-url")
-                if isinstance(url, str) and url:
-                    return url, StreamOrigin.WRAPPER_HLS
+        """Use iTunes HLS for normal videos and Apple web playback as fallback.
 
-        if self.itunes_api is None:
-            raise StreamNotAvailableError("Video HLS requires wrapper or iTunes API")
+        Wrapper supplies account credentials and sometimes tagging metadata,
+        but its playback endpoint does not offer music-video HLS streams.
+        Catalog videos with a different ID in their canonical URL should use
+        web playback first, matching GAMDL 3.x's behavior.
+        """
         metadata = await self.media.get_metadata()
         attributes = metadata.get("attributes")
         url = attributes.get("url") if isinstance(attributes, dict) else None
         identifier = (
             urlsplit(url).path.rsplit("/", 1)[-1] if isinstance(url, str) else ""
         )
+        catalog_id = (
+            await self.media._catalog_id() if self.media.is_library else self.media.id
+        )
         if not identifier.isdigit():
-            identifier = (
-                await self.media._catalog_id()
-                if self.media.is_library
-                else self.media.id
+            identifier = catalog_id
+
+        async def itunes_url() -> str | None:
+            if self.itunes_api is None:
+                return None
+            try:
+                page = await self.itunes_api.get_itunes_page("music-video", identifier)
+            except GamdlApiError:
+                return None
+            return _itunes_hls_url(page, identifier)
+
+        async def webplayback_url() -> str | None:
+            try:
+                playback = await self.media._load(
+                    "music_video_webplayback",
+                    lambda: self.media.api.get_webplayback(
+                        self.media.id, is_library=self.media.is_library
+                    ),
+                )
+            except GamdlApiError:
+                return None
+            entries = playback.get("songList") if isinstance(playback, dict) else None
+            for entry in entries if isinstance(entries, list) else ():
+                if isinstance(entry, dict):
+                    hls_url = entry.get("hls-playlist-url")
+                    if isinstance(hls_url, str) and hls_url:
+                        return hls_url
+            return None
+
+        sources = (
+            (
+                (itunes_url, StreamOrigin.ITUNES_HLS),
+                (webplayback_url, StreamOrigin.WEBPLAYBACK),
             )
-        page = await self.itunes_api.get_itunes_page("music-video", identifier)
-        hls_url = _itunes_hls_url(page, identifier)
-        if hls_url is None:
-            raise StreamNotAvailableError("No HLS URL in music-video iTunes metadata")
-        return hls_url, StreamOrigin.ITUNES_HLS
+            if identifier == catalog_id
+            else (
+                (webplayback_url, StreamOrigin.WEBPLAYBACK),
+                (itunes_url, StreamOrigin.ITUNES_HLS),
+            )
+        )
+        for fetch, origin in sources:
+            if hls_url := await fetch():
+                return hls_url, origin
+        raise StreamNotAvailableError(
+            "No music-video HLS stream available from iTunes or Apple Music web playback"
+        )
 
     @staticmethod
     async def _select_index(

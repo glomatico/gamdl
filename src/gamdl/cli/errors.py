@@ -16,6 +16,15 @@ from gamdl.media.exceptions import StreamNotAvailableError, UnsupportedMediaErro
 
 def short_error(error: Exception) -> tuple[str, bool]:
     if isinstance(error, StreamNotAvailableError):
+        # These resolver messages are static and safe to expose. Keep codec
+        # failures generic rather than leaking stream URLs or manifest data.
+        for prefix in (
+            "No music-video HLS stream available",
+            "No music-video HLS rendition matches",
+            "Video rendition has no separate audio HLS track",
+        ):
+            if str(error).startswith(prefix):
+                return str(error), True
         return "Requested codec or stream unavailable", True
     if isinstance(error, UnsupportedMediaError):
         return "Unsupported or unavailable media", True

@@ -10,7 +10,15 @@ from unittest.mock import AsyncMock, Mock, patch
 from gamdl.cli.commands.rip import RipOptions
 from gamdl.cli.commands.runner import _short_error, run_rip
 from gamdl.download import DownloadFinalizationError, DownloadResult, MediaStatus
-from gamdl.media import MediaSource, Playlist, Song, SongCodec
+from gamdl.media import (
+    MediaSource,
+    MusicVideo,
+    MusicVideoCodec,
+    Playlist,
+    Song,
+    SongCodec,
+)
+from gamdl.api.exceptions import GamdlApiResponseError
 from gamdl.media.exceptions import StreamNotAvailableError
 
 
@@ -143,6 +151,114 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                 _short_error(exc)[0],
                 "Media saved, but couldn't save lyrics: permission denied",
             )
+
+    async def test_wrapper_auth_video_initializes_itunes_and_ignores_song_codec(self):
+        """Regression: wrapper auth must not prevent iTunes HLS initialization."""
+        video = MusicVideo.from_id("1445836237", api=self.api)
+        video.get_metadata = AsyncMock(
+            return_value={"attributes": {"name": "Rhythm Nation"}}
+        )
+
+        class Resolver:
+            def __init__(self, api):
+                pass
+
+            async def from_url(self, url):
+                yield video
+
+        itunes = AsyncMock()
+        itunes.__aenter__.return_value = itunes
+        downloader = Mock(itunes_api=None)
+        downloader.download = AsyncMock(
+            return_value=DownloadResult(
+                video.id, Path("Rhythm Nation.m4v"), MediaStatus.SKIPPED, 0, None
+            )
+        )
+        wrapper = Mock()
+        with (
+            patch(
+                "gamdl.cli.commands.runner._authenticate",
+                new_callable=AsyncMock,
+                return_value=(self.api, wrapper),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
+            patch("gamdl.cli.commands.runner.Downloader", return_value=downloader),
+            patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
+            patch(
+                "gamdl.cli.commands.runner.ItunesApi.create",
+                new_callable=AsyncMock,
+                return_value=itunes,
+            ) as create_itunes,
+        ):
+            status = await run_rip(
+                RipOptions(
+                    "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
+                    auth_mode="wrapper",
+                    song_codec="alac",
+                    progress=False,
+                )
+            )
+        self.assertEqual(status, 0)
+        create_itunes.assert_awaited_once_with(storefront="br", language="en-US")
+        self.assertIs(downloader.itunes_api, itunes)
+        kwargs = downloader.download.await_args.kwargs
+        self.assertNotIn("codec", kwargs)
+        # Direct dataclass construction has no Click default_map; the resolver
+        # uses its own H.264/H.265 defaults when priority is None.
+        self.assertIsNone(kwargs["codec_priority"])
+
+    async def test_video_falls_back_when_itunes_client_cannot_initialize(self):
+        video = MusicVideo.from_id("1445836237", api=self.api)
+        video.get_metadata = AsyncMock(
+            return_value={"attributes": {"name": "Rhythm Nation"}}
+        )
+
+        class Resolver:
+            def __init__(self, api):
+                pass
+
+            async def from_url(self, url):
+                yield video
+
+        downloader = Mock(itunes_api=None)
+        downloader.download = AsyncMock(
+            return_value=DownloadResult(
+                video.id, Path("Rhythm Nation.m4v"), MediaStatus.SKIPPED, 0, None
+            )
+        )
+        with (
+            patch(
+                "gamdl.cli.commands.runner._authenticate",
+                new_callable=AsyncMock,
+                return_value=(self.api, Mock()),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
+            patch("gamdl.cli.commands.runner.Downloader", return_value=downloader),
+            patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
+            patch(
+                "gamdl.cli.commands.runner.ItunesApi.create",
+                new_callable=AsyncMock,
+                side_effect=GamdlApiResponseError("Storefront lookup unavailable"),
+            ),
+        ):
+            code = await run_rip(
+                RipOptions(
+                    "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
+                    auth_mode="wrapper",
+                    progress=False,
+                )
+            )
+        self.assertEqual(code, 0)
+        self.assertIsNone(downloader.itunes_api)
+        downloader.download.assert_awaited_once()
 
     async def test_fail_fast_stops_scheduling_additional_tracks(self):
         code, received, _ = await self._execute(fail_on="1001", fail_fast=True)

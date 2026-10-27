@@ -12,6 +12,8 @@ from gamdl.media.music_video.models import AudioSelectionRequest, VideoSelection
 from gamdl.media.song.models import StreamSelectionRequest, StreamSourceSelectionRequest
 from gamdl.media.uploaded_video.stream import UploadedVideoSelectionRequest
 from gamdl.media.models import CollectionSelectionRequest, SelectionRequest
+from gamdl.media.models import ArtistBrowseRequest, ArtistBrowseResult
+from .browser import browse_artist
 
 
 PROMPT_STYLE = questionary.Style(
@@ -105,10 +107,12 @@ async def select_stream(request) -> int:
 
 
 async def select_media(
-    request: SelectionRequest | CollectionSelectionRequest,
-) -> list[int]:
+    request: SelectionRequest | CollectionSelectionRequest | ArtistBrowseRequest,
+) -> list[int] | ArtistBrowseResult:
     """Multiselect source occurrences or artist content with Space/Enter."""
     require_terminal("Media selection")
+    if isinstance(request, ArtistBrowseRequest):
+        return await browse_artist(request)
     if isinstance(request, CollectionSelectionRequest):
         title = request.prompt
     else:

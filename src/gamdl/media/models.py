@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from .enums import SelectionKind
@@ -61,3 +62,26 @@ class CollectionSelectionRequest:
     source_id: str
     prompt: str
     options: tuple[CollectionOption, ...]
+
+
+@dataclass(frozen=True)
+class ArtistBrowseRequest:
+    """UI-independent artist browser; category contents load on expansion."""
+
+    source_id: str
+    artist_name: str
+    categories: tuple[tuple[SelectionKind, str], ...]
+    load_items: Callable[[SelectionKind], Awaitable[tuple[CollectionOption, ...]]]
+
+
+@dataclass(frozen=True)
+class ArtistCategorySelection:
+    """None means all items, without requiring category metadata to be loaded."""
+
+    kind: SelectionKind
+    indices: tuple[int, ...] | None = None
+
+
+@dataclass(frozen=True)
+class ArtistBrowseResult:
+    selections: tuple[ArtistCategorySelection, ...]

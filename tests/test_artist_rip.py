@@ -10,7 +10,13 @@ from click.testing import CliRunner
 
 from gamdl.cli.config.loader import ConfigError, load_config
 from gamdl.cli.main import main
-from gamdl.media import CollectionSelectionRequest, MediaResolver, SelectionKind
+from gamdl.media import (
+    ArtistBrowseRequest,
+    ArtistBrowseResult,
+    ArtistCategorySelection,
+    MediaResolver,
+    SelectionKind,
+)
 from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
 from gamdl.media.exceptions import SelectionRequiredError
 
@@ -95,21 +101,21 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
 
         async def select(request):
             requests.append(request)
-            if request.kind is SelectionKind.ARTIST:
-                return [0]  # main albums
-            if request.kind is SelectionKind.ARTIST_MAIN_ALBUMS:
-                return [1]  # choose second album only
-            return list(range(len(request.options)))
+            options = await request.load_items(SelectionKind.ARTIST_MAIN_ALBUMS)
+            self.assertEqual(
+                [item.title for item in options], ["Main Album", "Other Album"]
+            )
+            return ArtistBrowseResult(
+                (ArtistCategorySelection(SelectionKind.ARTIST_MAIN_ALBUMS, (1,)),)
+            )
 
         resolver = MediaResolver(self.api, selector=select)
         media = [item async for item in resolver.from_artist("artist")]
         self.assertEqual([item.id for item in media], ["a2-track"])
-        self.assertIsInstance(requests[0], CollectionSelectionRequest)
-        self.assertEqual(requests[0].prompt, "Select content for Janet:")
-        self.assertEqual(requests[1].kind, SelectionKind.ARTIST_MAIN_ALBUMS)
-        self.assertEqual(
-            [item.title for item in requests[1].options], ["Main Album", "Other Album"]
-        )
+        self.assertIsInstance(requests[0], ArtistBrowseRequest)
+        self.assertEqual(requests[0].artist_name, "Janet")
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(self.calls, [("view", "full-albums"), ("album", "a2")])
 
     async def test_artist_without_category_or_selector_raises(self):
         resolver = MediaResolver(self.api)
@@ -117,7 +123,7 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
             _ = [item async for item in resolver.from_artist("artist")]
         self.api.get_artist.assert_not_awaited()
 
-    async def test_nested_album_tracks_are_selected_when_not_automatic(self):
+    async def test_artist_album_selection_does_not_prompt_for_tracks(self):
         requests = []
 
         async def select(request):
@@ -129,7 +135,7 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
         )
         media = [item async for item in resolver.from_artist("artist")]
         self.assertEqual(len(media), 2)
-        self.assertEqual(requests, [SelectionKind.ALBUM_TRACKS] * 2)
+        self.assertEqual(requests, [])
 
     async def test_manual_top_songs_keep_original_occurrence_positions(self):
         async def songs(_id, _view):
@@ -139,14 +145,51 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
         self.api.iter_artist_view = Mock(side_effect=songs)
 
         async def select(request):
-            if request.kind is SelectionKind.ARTIST:
-                return [5]  # top songs category
-            return [2]
+            await request.load_items(SelectionKind.ARTIST_TOP_SONGS)
+            return ArtistBrowseResult(
+                (ArtistCategorySelection(SelectionKind.ARTIST_TOP_SONGS, (2,)),)
+            )
 
         resolver = MediaResolver(self.api, selector=select)
         tracks = [track async for track in resolver.from_artist("artist")]
         self.assertEqual([track.id for track in tracks], ["2"])
         self.assertEqual(tracks[0].source.index, 2)
+
+    async def test_whole_category_selected_without_fetching_until_download(self):
+        async def select(request):
+            self.assertEqual(self.calls, [])
+            return ArtistBrowseResult(
+                (ArtistCategorySelection(SelectionKind.ARTIST_MAIN_ALBUMS),)
+            )
+
+        resolver = MediaResolver(self.api, selector=select)
+        media = [item async for item in resolver.from_artist("artist")]
+        self.assertEqual([item.id for item in media], ["a1-track", "a2-track"])
+        self.assertEqual(
+            self.calls,
+            [
+                ("view", "full-albums"),
+                ("album", "a1"),
+                ("album", "a2"),
+            ],
+        )
+
+    async def test_opened_category_uses_cached_items_once(self):
+        async def select(request):
+            first = await request.load_items(SelectionKind.ARTIST_MAIN_ALBUMS)
+            second = await request.load_items(SelectionKind.ARTIST_MAIN_ALBUMS)
+            self.assertEqual(first, second)
+            self.assertEqual(self.calls, [("view", "full-albums")])
+            return ArtistBrowseResult(
+                (ArtistCategorySelection(SelectionKind.ARTIST_MAIN_ALBUMS),)
+            )
+
+        resolver = MediaResolver(self.api, selector=select)
+        self.assertEqual(
+            [item.id async for item in resolver.from_artist("artist")],
+            ["a1-track", "a2-track"],
+        )
+        self.assertEqual(self.calls.count(("view", "full-albums")), 1)
 
 
 class RipCliSettingsTests(unittest.TestCase):

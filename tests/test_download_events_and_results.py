@@ -22,6 +22,8 @@ from gamdl.download import (
     Tags,
 )
 from gamdl.media.song.lyrics import Lyrics, LyricsLine
+from gamdl.media import Song
+from tests.test_media import SONG_DATA, fake_api
 from tests import test_downloader as downloader_fixtures
 from tests.test_muxer import JPEG
 
@@ -146,6 +148,29 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.playlist_file.path, explicit)
         self.assertEqual(result.playlist_file.status, PlaylistStatus.UPDATED)
         self.assertIsNone(result.database)
+
+    async def test_missing_apple_lyrics_is_successful_media_with_unavailable_sidecar(
+        self,
+    ):
+        downloader, _ = self.downloader()
+        api = fake_api()
+        song = Song.from_metadata(
+            {
+                **SONG_DATA,
+                "attributes": {**SONG_DATA["attributes"], "hasLyrics": False},
+            },
+            api=api,
+        )
+        target = self.directory / "already-downloaded.m4a"
+        target.write_bytes(b"existing downloaded audio")
+        result = await downloader.download(song, target, save_lyrics=True)
+        self.assertEqual(result.status, MediaStatus.SKIPPED)
+        self.assertEqual(result.lyrics.status, FileStatus.UNAVAILABLE)
+        self.assertIsNone(result.lyrics.path)
+        self.assertEqual(target.read_bytes(), b"existing downloaded audio")
+        self.assertFalse(target.with_suffix(".lrc").exists())
+        api.get_lyrics.assert_not_awaited()
+        downloader._read_track.assert_not_awaited()
 
     async def test_sidecar_failure_includes_previous_partial_result(self):
         downloader, _ = self.downloader()

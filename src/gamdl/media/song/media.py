@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from gamdl.api.exceptions import GamdlApiResponseError
+
 from ..base import Media
 from ..exceptions import GamdlMediaError
 from .lyrics import Lyrics
@@ -90,17 +92,31 @@ class Song(Media):
         key = ("lyrics", syllable, language, lyrics_language, script)
 
         async def load() -> Lyrics | None:
+            # Interludes and instrumental tracks explicitly advertise that
+            # lyrics do not exist. Apple returns HTTP 404 for their lyrics
+            # endpoint, which must not fail an otherwise successful download.
+            metadata = await self.get_metadata()
+            if metadata.get("attributes", {}).get("hasLyrics") is False:
+                return None
             catalog_id = await self._catalog_id()
-            if syllable:
-                payload = await self.api.get_syllable_lyrics(
-                    catalog_id,
-                    language=language,
-                    lyrics_language=lyrics_language,
-                    script=script,
-                    extend="ttmlLocalizations",
-                )
-            else:
-                payload = await self.api.get_lyrics(catalog_id, language=language)
+            try:
+                if syllable:
+                    payload = await self.api.get_syllable_lyrics(
+                        catalog_id,
+                        language=language,
+                        lyrics_language=lyrics_language,
+                        script=script,
+                        extend="ttmlLocalizations",
+                    )
+                else:
+                    payload = await self.api.get_lyrics(catalog_id, language=language)
+            except GamdlApiResponseError as exc:
+                # Some catalog resources omit `hasLyrics`, while the endpoint
+                # still returns 404 for unavailable lyrics. Do not suppress
+                # authorization, rate limits, transport or other API errors.
+                if exc.status_code != 404:
+                    raise
+                return None
             items = payload.get("data") or []
             if not items:
                 return None

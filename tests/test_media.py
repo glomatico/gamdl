@@ -4,6 +4,11 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, Mock
 
+from gamdl.api.exceptions import (
+    GamdlApiResponseError,
+    GamdlAuthenticationError,
+    GamdlRateLimitError,
+)
 from gamdl.media import (
     DEFAULT_AUTO_SELECT,
     Cover,
@@ -286,6 +291,43 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await song.get_lyrics())
         self.assertIsNone(await song.get_lyrics())
         api.get_lyrics.assert_awaited_once()
+
+    async def test_no_lyrics_metadata_does_not_request_missing_resource(self):
+        api = fake_api()
+        song = Song.from_metadata(
+            {
+                **SONG_DATA,
+                "attributes": {**SONG_DATA["attributes"], "hasLyrics": False},
+            },
+            api=api,
+        )
+        self.assertIsNone(await song.get_lyrics())
+        self.assertIsNone(await song.get_lyrics(syllable=True))
+        api.get_lyrics.assert_not_awaited()
+        api.get_syllable_lyrics.assert_not_awaited()
+
+    async def test_lyrics_endpoint_404_is_unavailable_not_download_failure(self):
+        api = fake_api()
+        api.get_lyrics.side_effect = GamdlApiResponseError(
+            "No lyrics", service="apple_music", status_code=404
+        )
+        song = Song.from_id("1559885421", api=api)
+        self.assertIsNone(await song.get_lyrics())
+        self.assertIsNone(await song.get_lyrics())
+        api.get_lyrics.assert_awaited_once()
+
+    async def test_lyrics_other_http_failures_still_propagate(self):
+        for exception in (
+            GamdlApiResponseError("Server error", status_code=500),
+            GamdlAuthenticationError("Forbidden", status_code=403),
+            GamdlRateLimitError(),
+        ):
+            with self.subTest(exception=type(exception).__name__):
+                api = fake_api()
+                api.get_lyrics.side_effect = exception
+                song = Song.from_id("1559885421", api=api)
+                with self.assertRaises(type(exception)):
+                    await song.get_lyrics()
 
 
 class LyricsTests(unittest.TestCase):

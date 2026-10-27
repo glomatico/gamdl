@@ -27,8 +27,9 @@ from gamdl.media import (
     UploadedVideo,
     UploadedVideoQuality,
 )
+from gamdl.media.constants import RIP_AUTO_SELECT_NAMES
 from ..progress import RipProgress
-from ..prompts import interactive, select_stream
+from ..prompts import interactive, select_media, select_stream
 from ..errors import short_error as _short_error
 from ..output import banner, console as output_console, success, warning
 from ..session import authenticate as _authenticate, create_drm
@@ -136,6 +137,10 @@ def _formatter(options: RipOptions) -> PathFormatter:
 async def run_rip(options: RipOptions) -> int:
     """Process discovered tracks concurrently, returning a stable CLI exit code."""
     _check_options(options)
+    if not options.urls:
+        raise click.UsageError("Provide at least one Apple Music URL")
+    if any(value not in RIP_AUTO_SELECT_NAMES for value in options.auto_select):
+        raise click.UsageError("Invalid --auto-select option")
     console = output_console()
     banner(console)
     formatter = _formatter(options)
@@ -159,8 +164,6 @@ async def run_rip(options: RipOptions) -> int:
                 else None,
                 concurrency=options.concurrency,
             )
-            resolver = MediaResolver(api)
-
             with RipProgress(
                 enabled=options.progress,
                 max_visible=options.max_visible_tracks,
@@ -170,6 +173,18 @@ async def run_rip(options: RipOptions) -> int:
                 async def choose(request):
                     with progress.suspend():
                         return await select_stream(request)
+
+                async def choose_media(request):
+                    with progress.suspend():
+                        return await select_media(request)
+
+                resolver = MediaResolver(
+                    api,
+                    auto_select=[
+                        RIP_AUTO_SELECT_NAMES[name] for name in options.auto_select
+                    ],
+                    selector=choose_media,
+                )
 
                 async def process(occurrence: int, media, title: str) -> None:
                     try:
@@ -262,56 +277,71 @@ async def run_rip(options: RipOptions) -> int:
 
                 stopped = False
                 try:
-                    async for media in resolver.from_url(options.url):
-                        found += 1
-                        progress.discovered(found)
-                        title = f"Track {found}"
-                        # Catalog/playlist iteration seeds metadata. Avoid a
-                        # separate network request solely to print track titles.
+                    for url in options.urls:
                         try:
-                            meta = await media.get_metadata()
-                            title = meta.get("attributes", {}).get("name") or media.id
-                        except GamdlError:
-                            pass
-
-                        if (
-                            isinstance(media, MusicVideo)
-                            and downloader.itunes_api is None
-                        ):
-                            # Wrapper is only an authentication/tagging source:
-                            # iTunes HLS is preferred even with wrapper enabled.
-                            # If iTunes initialization fails, the video resolver
-                            # can still use authenticated Apple web playback.
-                            from gamdl.api import GamdlApiError
-
-                            try:
-                                downloader.itunes_api = await stack.enter_async_context(
-                                    await ItunesApi.create(
-                                        storefront=api.storefront,
-                                        language=options.language,
+                            async for media in resolver.from_url(url):
+                                found += 1
+                                progress.discovered(found)
+                                title = f"Track {found}"
+                                # Catalog/playlist iterators supply metadata;
+                                # avoid an extra request just to print titles.
+                                try:
+                                    meta = await media.get_metadata()
+                                    title = (
+                                        meta.get("attributes", {}).get("name")
+                                        or media.id
                                     )
+                                except GamdlError:
+                                    pass
+
+                                if (
+                                    isinstance(media, MusicVideo)
+                                    and downloader.itunes_api is None
+                                ):
+                                    from gamdl.api import GamdlApiError
+
+                                    try:
+                                        downloader.itunes_api = (
+                                            await stack.enter_async_context(
+                                                await ItunesApi.create(
+                                                    storefront=api.storefront,
+                                                    language=options.language,
+                                                )
+                                            )
+                                        )
+                                    except GamdlApiError:
+                                        pass
+                                progress.add(found, title)
+                                pending.add(
+                                    asyncio.create_task(process(found, media, title))
                                 )
-                            except GamdlApiError:
-                                pass
-                        progress.add(found, title)
-                        pending.add(asyncio.create_task(process(found, media, title)))
-                        max_active = (
-                            1
-                            if any(
-                                (
-                                    options.ask_song_codec,
-                                    options.ask_music_video_streams,
-                                    options.ask_uploaded_video_quality,
+                                max_active = (
+                                    1
+                                    if any(
+                                        (
+                                            options.ask_song_codec,
+                                            options.ask_music_video_streams,
+                                            options.ask_uploaded_video_quality,
+                                        )
+                                    )
+                                    else options.concurrent_downloads
                                 )
-                            )
-                            else options.concurrent_downloads
-                        )
-                        if len(pending) >= max_active:
-                            done, pending = await asyncio.wait(
-                                pending, return_when=asyncio.FIRST_COMPLETED
-                            )
-                            for finished in done:
-                                await finished
+                                if len(pending) >= max_active:
+                                    done, pending = await asyncio.wait(
+                                        pending, return_when=asyncio.FIRST_COMPLETED
+                                    )
+                                    for finished in done:
+                                        await finished
+                        except (_StopRip, click.Abort):
+                            raise
+                        except Exception as error:
+                            counts["failed"] += 1
+                            message, known = _short_error(error)
+                            console.print(f"[red]✗ Source: {message}[/red]")
+                            if options.debug and not known:
+                                console.print_exception(show_locals=False)
+                            if not options.continue_on_error:
+                                raise _StopRip() from error
                 except _StopRip:
                     stopped = True
                     for task in pending:

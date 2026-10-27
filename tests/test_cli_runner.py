@@ -19,7 +19,7 @@ from gamdl.media import (
     SongCodec,
 )
 from gamdl.api.exceptions import GamdlApiResponseError
-from gamdl.media.exceptions import StreamNotAvailableError
+from gamdl.media.exceptions import StreamNotAvailableError, UnsupportedMediaError
 
 
 class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
@@ -32,7 +32,14 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def _execute(
-        self, *, fail_on=None, fail_fast=False, n=4, finalization_failure=False
+        self,
+        *,
+        fail_on=None,
+        fail_fast=False,
+        n=4,
+        finalization_failure=False,
+        urls=None,
+        fail_source=None,
     ):
         songs = []
         playlist = Playlist("playlist-id", api=self.api)
@@ -45,10 +52,12 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             songs.append(song)
 
         class Resolver:
-            def __init__(self, api):
+            def __init__(self, api, **kwargs):
                 pass
 
             async def from_url(self, url):
+                if url == fail_source:
+                    raise UnsupportedMediaError("Bad URL")
                 for song in songs:
                     yield song
 
@@ -90,7 +99,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         fake_downloader.download = AsyncMock(side_effect=fake_download)
         fake_downloader.itunes_api = None
         opts = RipOptions(
-            "https://music.apple.com/br/playlist/my-playlist/playlist-id",
+            urls or ("https://music.apple.com/br/playlist/my-playlist/playlist-id",),
             progress=False,
             save_playlist=True,
             concurrent_downloads=2,
@@ -133,6 +142,24 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             "Requested codec or stream unavailable",
         )
 
+    async def test_multiple_urls_share_session_and_aggregate_track_downloads(self):
+        code, received, peak = await self._execute(urls=("URL1", "URL2"))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(received), 8)
+        self.assertLessEqual(peak, 2)
+
+    async def test_bad_url_does_not_stop_later_urls_by_default(self):
+        code, received, _ = await self._execute(urls=("BAD", "GOOD"), fail_source="BAD")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(received), 4)
+
+    async def test_fail_fast_bad_url_stops_later_urls(self):
+        code, received, _ = await self._execute(
+            urls=("BAD", "GOOD"), fail_source="BAD", fail_fast=True
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(received, [])
+
     async def test_media_saved_finalization_failure_is_not_a_failed_download(self):
         code, received, _ = await self._execute(
             fail_on="1001", finalization_failure=True
@@ -160,7 +187,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         class Resolver:
-            def __init__(self, api):
+            def __init__(self, api, **kwargs):
                 pass
 
             async def from_url(self, url):
@@ -196,7 +223,9 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         ):
             status = await run_rip(
                 RipOptions(
-                    "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
+                    (
+                        "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
+                    ),
                     auth_mode="wrapper",
                     song_codec="alac",
                     progress=False,
@@ -218,7 +247,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         class Resolver:
-            def __init__(self, api):
+            def __init__(self, api, **kwargs):
                 pass
 
             async def from_url(self, url):
@@ -251,7 +280,9 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         ):
             code = await run_rip(
                 RipOptions(
-                    "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
+                    (
+                        "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
+                    ),
                     auth_mode="wrapper",
                     progress=False,
                 )

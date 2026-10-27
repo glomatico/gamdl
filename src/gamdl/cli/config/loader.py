@@ -10,6 +10,7 @@ import yaml
 
 from gamdl.download import PathFormatter, PlaylistTags, Tags
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
+from gamdl.media.constants import RIP_AUTO_SELECT_NAMES
 
 from .models import (
     AppConfig,
@@ -114,6 +115,10 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         raise ConfigError("auth.storefront must be a two-letter country code")
     if download.overwrite not in {"skip", "replace", "error"}:
         raise ConfigError("download.overwrite must be skip, replace, or error")
+    if any(value not in RIP_AUTO_SELECT_NAMES for value in download.rip_auto_select):
+        raise ConfigError("Invalid download.rip_auto_select")
+    if len(download.rip_auto_select) != len(set(download.rip_auto_select)):
+        raise ConfigError("download.rip_auto_select must not contain duplicates")
     if download.song_codec is not None and download.song_codec not in {
         c.value for c in SongCodec
     }:
@@ -243,6 +248,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "save_lyrics": o.save_lyrics,
         "save_playlist": o.save_playlist,
         "continue_on_error": d.continue_on_error,
+        "auto_select": tuple(d.rip_auto_select),
         "album_folder_template": o.album_folder_template,
         "compilation_folder_template": o.compilation_folder_template,
         "no_album_folder_template": o.no_album_folder_template,

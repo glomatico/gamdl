@@ -7,6 +7,7 @@ import click
 from dataclass_click import argument, option as dataclass_option
 
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
+from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
 
 
 def option(*names, **kwargs):
@@ -16,7 +17,17 @@ def option(*names, **kwargs):
 
 @dataclass
 class RipOptions:
-    url: Annotated[str, argument(type=str)]
+    urls: Annotated[tuple[str, ...], argument(nargs=-1)]
+    auto_select: Annotated[
+        tuple[str, ...],
+        option(
+            "--auto-select",
+            multiple=True,
+            type=click.Choice(list(RIP_AUTO_SELECT_NAMES)),
+            help="Repeat to select album/playlist tracks or artist content automatically",
+            show_default=True,
+        ),
+    ] = DEFAULT_RIP_AUTO_SELECT
     output_dir: Annotated[str, option("--output-dir", help="Destination root")] = (
         "./Apple Music"
     )

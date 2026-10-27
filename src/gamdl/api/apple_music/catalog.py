@@ -269,3 +269,21 @@ class CatalogEndpoints:
         )
         async for item in self._iterate_pages(page):
             yield item
+
+    async def iter_artist_relationship(
+        self,
+        artist_id: str,
+        relationship: str,
+        *,
+        limit: int = 100,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream all artist albums or music videos across API pages."""
+        if relationship not in {"albums", "music-videos"}:
+            raise ValueError("Unsupported artist relationship")
+        page = await self._get(
+            f"/v1/catalog/{self.storefront}/artists/{artist_id}/{relationship}",
+            operation="iter_artist_relationship",
+            params={"limit": limit},
+        )
+        async for item in self._iterate_pages(page):
+            yield item

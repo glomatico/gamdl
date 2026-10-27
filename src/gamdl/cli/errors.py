@@ -11,10 +11,19 @@ from gamdl.api import (
 from gamdl.download import DownloadFinalizationError
 from gamdl.drm import DrmLicenseError
 from gamdl.exceptions import GamdlError
-from gamdl.media.exceptions import StreamNotAvailableError, UnsupportedMediaError
+from gamdl.media.exceptions import (
+    SelectionRequiredError,
+    StreamNotAvailableError,
+    UnsupportedMediaError,
+)
 
 
 def short_error(error: Exception) -> tuple[str, bool]:
+    if isinstance(error, SelectionRequiredError):
+        return (
+            "Interactive selection required (use --auto-select or run in a terminal)",
+            True,
+        )
     if isinstance(error, StreamNotAvailableError):
         # These resolver messages are static and safe to expose. Keep codec
         # failures generic rather than leaking stream URLs or manifest data.

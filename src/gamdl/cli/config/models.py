@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from platformdirs import user_config_path, user_data_path
+from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT
 
 
 def config_path() -> Path:
@@ -41,6 +42,9 @@ class DownloadConfig:
     max_height: int = 1080
     uploaded_video_quality: str | None = None
     continue_on_error: bool = True
+    rip_auto_select: list[str] = field(
+        default_factory=lambda: list(DEFAULT_RIP_AUTO_SELECT)
+    )
 
 
 @dataclass(frozen=True)

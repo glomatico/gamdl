@@ -20,6 +20,7 @@ from .resolver import (
     SelectionOption,
     SelectionRequest,
 )
+from .models import CollectionOption, CollectionSelectionRequest
 from .song import Song, SongStreamSelector
 from .song.enums import SongCodec
 from .song.stream import SongStreamResolver
@@ -57,6 +58,8 @@ from .uploaded_video import (
 )
 
 __all__ = [
+    "CollectionOption",
+    "CollectionSelectionRequest",
     "Playlist",
     "PlaylistMetadata",
     "AudioStream",

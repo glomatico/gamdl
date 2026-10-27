@@ -11,6 +11,7 @@ import questionary
 from gamdl.media.music_video.models import AudioSelectionRequest, VideoSelectionRequest
 from gamdl.media.song.models import StreamSelectionRequest, StreamSourceSelectionRequest
 from gamdl.media.uploaded_video.stream import UploadedVideoSelectionRequest
+from gamdl.media.models import CollectionSelectionRequest, SelectionRequest
 
 
 PROMPT_STYLE = questionary.Style(
@@ -96,6 +97,31 @@ async def select_stream(request) -> int:
         choices=choices,
         use_arrow_keys=True,
         instruction="(↑/↓ to navigate, Enter to select)",
+        style=PROMPT_STYLE,
+    ).ask_async()
+    if answer is None:
+        raise click.Abort()
+    return answer
+
+
+async def select_media(
+    request: SelectionRequest | CollectionSelectionRequest,
+) -> list[int]:
+    """Multiselect source occurrences or artist content with Space/Enter."""
+    require_terminal("Media selection")
+    if isinstance(request, CollectionSelectionRequest):
+        title = request.prompt
+    else:
+        title = f"Select {request.kind.value.replace('_', ' ')} to download:"
+    if not request.options:
+        return []
+    choices = [
+        questionary.Choice(item.title, value=item.index) for item in request.options
+    ]
+    answer = await questionary.checkbox(
+        title,
+        choices=choices,
+        instruction="(↑/↓ navigate, Space select, Enter confirm)",
         style=PROMPT_STYLE,
     ).ask_async()
     if answer is None:

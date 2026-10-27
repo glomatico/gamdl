@@ -11,7 +11,7 @@ from gamdl.cli.options import RipOptions
 @click.command("rip")
 @dataclass_click(RipOptions)
 def rip(options: RipOptions) -> None:
-    """Download a song, album, playlist or video from an Apple Music URL."""
+    """Download one or more Apple Music URLs in a shared session."""
     from .runner import run_rip
 
     try:

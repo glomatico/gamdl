@@ -7,7 +7,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import click
 
-from gamdl.cli.prompts import ask_file, select_stream, stream_choices
+from gamdl.cli.prompts import ask_file, select_media, select_stream, stream_choices
+from gamdl.media.models import CollectionOption, CollectionSelectionRequest
+from gamdl.media.enums import SelectionKind
 from gamdl.media.enums import StreamOrigin
 from gamdl.media.song.enums import SongCodec
 from gamdl.media.song.models import (
@@ -31,6 +33,36 @@ from gamdl.media.uploaded_video.stream import (
 
 
 class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_artist_multiselect_checkbox_and_abort(self):
+        request = CollectionSelectionRequest(
+            SelectionKind.ARTIST,
+            "1272779",
+            "Select content for Janet:",
+            (CollectionOption(0, "Main Albums"), CollectionOption(1, "Music Videos")),
+        )
+        prompt = Mock(ask_async=AsyncMock(return_value=[0, 1]))
+        with (
+            patch("gamdl.cli.prompts.interactive", return_value=True),
+            patch(
+                "gamdl.cli.prompts.questionary.checkbox", return_value=prompt
+            ) as checkbox,
+        ):
+            self.assertEqual(await select_media(request), [0, 1])
+        self.assertEqual(checkbox.call_args.kwargs["choices"][1].value, 1)
+        self.assertIn("Space", checkbox.call_args.kwargs["instruction"])
+        with patch("gamdl.cli.prompts.interactive", return_value=False):
+            with self.assertRaises(click.ClickException):
+                await select_media(request)
+        with (
+            patch("gamdl.cli.prompts.interactive", return_value=True),
+            patch(
+                "gamdl.cli.prompts.questionary.checkbox",
+                return_value=Mock(ask_async=AsyncMock(return_value=None)),
+            ),
+        ):
+            with self.assertRaises(click.Abort):
+                await select_media(request)
+
     def requests(self):
         audio = Mock(codec=SongCodec.ALAC, bitrate=995_000)
         video = Mock(

@@ -45,3 +45,19 @@ class SelectionRequest:
     kind: SelectionKind
     source_id: str
     options: tuple[SelectionOption, ...]
+
+
+@dataclass(frozen=True)
+class CollectionOption:
+    """One category or artist item, selected by occurrence rather than ID."""
+
+    index: int
+    title: str
+
+
+@dataclass(frozen=True)
+class CollectionSelectionRequest:
+    kind: SelectionKind
+    source_id: str
+    prompt: str
+    options: tuple[CollectionOption, ...]

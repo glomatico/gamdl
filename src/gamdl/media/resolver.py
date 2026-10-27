@@ -9,10 +9,15 @@ from urllib.parse import parse_qs, urlsplit
 
 from .base import Media, MediaSource
 from .cover_cache import CoverCache
-from .constants import DEFAULT_AUTO_SELECT
+from .constants import ARTIST_COLLECTIONS, DEFAULT_AUTO_SELECT
 from .enums import SelectionKind
 from .exceptions import SelectionRequiredError, UnsupportedMediaError
-from .models import SelectionOption, SelectionRequest
+from .models import (
+    CollectionOption,
+    CollectionSelectionRequest,
+    SelectionOption,
+    SelectionRequest,
+)
 from .playlist import Playlist
 from .song import Song
 from .music_video import MusicVideo
@@ -22,7 +27,10 @@ if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
 
 
-Selector = Callable[[SelectionRequest], Sequence[int] | Awaitable[Sequence[int]]]
+Selector = Callable[
+    [SelectionRequest | CollectionSelectionRequest],
+    Sequence[int] | Awaitable[Sequence[int]],
+]
 
 
 class MediaResolver:
@@ -32,8 +40,9 @@ class MediaResolver:
     ``auto_select`` to require an explicit ``selector`` for either source. A
     selector returns occurrence indices, preserving order and duplicate IDs.
 
-    Artist and library selection will be implemented in the next resolver
-    milestone; they currently raise a specific error rather than guessing.
+    Artist selection can expand selected album categories, top songs, and music
+    videos. Only explicitly enabled artist categories are processed without
+    prompting; the default auto-selection applies to album/playlist tracks.
     """
 
     def __init__(
@@ -113,16 +122,20 @@ class MediaResolver:
         selected = self.selector(
             SelectionRequest(kind=kind, source_id=source_id, options=tuple(options))
         )
+        indices = await self._selected_indices(selected, len(options))
+        for option in options:
+            if option.index in indices:
+                yield option.media
+
+    @staticmethod
+    async def _selected_indices(selected, count: int) -> set[int]:
         if inspect.isawaitable(selected):
             selected = await selected
         if isinstance(selected, (str, bytes)) or not isinstance(selected, Sequence):
             raise ValueError("Selector must return a sequence of occurrence indices")
-        if any(type(i) is not int or i < 0 or i >= len(options) for i in selected):
+        if any(type(i) is not int or i < 0 or i >= count for i in selected):
             raise ValueError("Selector returned an invalid occurrence index")
-        indices = set(selected)
-        for option in options:
-            if option.index in indices:
-                yield option.media
+        return set(selected)
 
     async def from_album(
         self, album_id: str, *, is_library: bool = False
@@ -146,11 +159,88 @@ class MediaResolver:
             yield media
 
     async def from_artist(self, artist_id: str) -> AsyncIterator[Media]:
-        """Reserve artist selection for the next phase; never select blindly."""
-        if SelectionKind.ARTIST not in self.auto_select and self.selector is None:
-            raise SelectionRequiredError(SelectionKind.ARTIST.value)
-        raise UnsupportedMediaError("Artist selections are not implemented yet")
-        yield  # Keep this an async iterator, consistently with other sources.
+        """Expand artist categories and, where needed, individual albums.
+
+        Automatic categories stream resources page by page. Interactive artist
+        selection buffers only the category being presented as a checkbox.
+        """
+        categories = [kind for kind in ARTIST_COLLECTIONS if kind in self.auto_select]
+        if not categories:
+            if self.selector is None:
+                raise SelectionRequiredError(SelectionKind.ARTIST.value)
+            response = await self.api.get_artist(artist_id)
+            entries = response.get("data", [])
+            attributes = entries[0].get("attributes", {}) if entries else {}
+            artist_name = attributes.get("name") or artist_id
+            request = CollectionSelectionRequest(
+                kind=SelectionKind.ARTIST,
+                source_id=artist_id,
+                prompt=f"Select content for {artist_name}:",
+                options=tuple(
+                    CollectionOption(i, entry[2])
+                    for i, entry in enumerate(ARTIST_COLLECTIONS.values())
+                ),
+            )
+            indices = await self._selected_indices(
+                self.selector(request), len(request.options)
+            )
+            categories = [
+                kind for i, kind in enumerate(ARTIST_COLLECTIONS) if i in indices
+            ]
+
+        for kind in categories:
+            relation_type, path, title = ARTIST_COLLECTIONS[kind]
+            resources = (
+                self.api.iter_artist_view(artist_id, path)
+                if relation_type == "views"
+                else self.api.iter_artist_relationship(artist_id, path)
+            )
+            if kind not in self.auto_select:
+                assert self.selector is not None
+                items = [item async for item in resources]
+                request = CollectionSelectionRequest(
+                    kind=kind,
+                    source_id=artist_id,
+                    prompt=f"Select {title.lower()} to download:",
+                    options=tuple(
+                        CollectionOption(
+                            i, item.get("attributes", {}).get("name") or item["id"]
+                        )
+                        for i, item in enumerate(items)
+                    ),
+                )
+                selected = (
+                    await self._selected_indices(self.selector(request), len(items))
+                    if items
+                    else set()
+                )
+
+                async def selected_items() -> AsyncIterator[tuple[int, dict]]:
+                    for i, item in enumerate(items):
+                        if i in selected:
+                            yield i, item
+
+                indexed_resources = selected_items()
+            else:
+
+                async def indexed_items() -> AsyncIterator[tuple[int, dict]]:
+                    index = 0
+                    async for item in resources:
+                        yield index, item
+                        index += 1
+
+                indexed_resources = indexed_items()
+            async for index, item in indexed_resources:
+                media_type = item.get("type")
+                if media_type == "albums":
+                    async for media in self.from_album(item["id"]):
+                        yield media
+                elif media_type in {"songs", "music-videos"}:
+                    media = Media.from_metadata(
+                        item, api=self.api, cover_cache=self.cover_cache
+                    )
+                    media.source = MediaSource(kind.value, artist_id, index)
+                    yield media
 
     async def from_library(self) -> AsyncIterator[Media]:
         """Reserve library selection for the next phase; never select blindly."""

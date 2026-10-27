@@ -7,16 +7,10 @@ category materializes its choices once; selecting a whole category does not.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 
 import click
-from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import HSplit, Layout, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.layout.screen import Point
-from prompt_toolkit.styles import Style
 
 from gamdl.media.models import (
     ArtistBrowseRequest,
@@ -25,6 +19,9 @@ from gamdl.media.models import (
     CollectionOption,
 )
 from gamdl.media.enums import SelectionKind
+
+from .app import make_app
+from .components import footer as menu_footer, heading
 
 
 class ArtistBrowserState:
@@ -174,12 +171,7 @@ async def browse_artist(
                 label for kind, label in request.categories if kind == state.category
             )
         )
-        fragments.extend(
-            [
-                ("class:heading", f"{request.artist_name} / {subtitle}\n"),
-                ("class:muted", "─" * 64 + "\n"),
-            ]
-        )
+        fragments.extend(heading(request.artist_name, subtitle))
         if state.category is None:
             rows = [
                 (state.mark(kind), f"{title}  ›") for kind, title in request.categories
@@ -204,49 +196,20 @@ async def browse_artist(
             fragments.append(("class:error", f"\n  {state.error}\n"))
         return FormattedText(fragments)
 
-    def cursor_position() -> Point:
-        return Point(0, state.cursor + 2)
-
     def footer() -> FormattedText:
         summary = f"{len(state.selected)} categories selected"
-        return FormattedText(
-            [
-                (
-                    "class:muted",
-                    f" {summary}  ·  ↑/↓ navigate  ·  Space mark  ·  Enter open/download\n",
-                ),
-                (
-                    "class:muted",
-                    " Ctrl+A select all  ·  Esc/Backspace back  ·  Ctrl+C cancel",
-                ),
-            ]
+        return menu_footer(
+            summary + "  ·  ↑/↓ navigate  ·  Space mark  ·  Enter open/download",
+            "Ctrl+A select all  ·  Esc/Backspace back  ·  Ctrl+C cancel",
         )
 
-    body_window = Window(
-        content=FormattedTextControl(
-            body, focusable=True, get_cursor_position=cursor_position
-        ),
-        wrap_lines=False,
-        always_hide_cursor=True,
-    )
-    footer_window = Window(content=FormattedTextControl(footer), height=2)
-    app: Application[ArtistBrowseResult | None] = Application(
-        layout=Layout(
-            HSplit([body_window, footer_window]), focused_element=body_window
-        ),
-        key_bindings=kb,
-        full_screen=True,
-        style=Style.from_dict(
-            {
-                "heading": "bold #69b5ff",
-                "muted": "#8894a6",
-                "focused": "reverse bold",
-                "action": "bold #63d89c",
-                "error": "#ff7777",
-            }
-        ),
-        **({"input": input} if input is not None else {}),
-        **({"output": output} if output is not None else {}),
+    app = make_app(
+        body=body,
+        footer=footer,
+        cursor_row=lambda: state.cursor + 2,
+        keys=kb,
+        input=input,
+        output=output,
     )
 
     @kb.add("up")

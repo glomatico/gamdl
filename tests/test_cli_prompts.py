@@ -33,31 +33,32 @@ from gamdl.media.uploaded_video.stream import (
 
 
 class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_artist_multiselect_checkbox_and_abort(self):
+    async def test_collection_multiselect_uses_full_screen_router(self):
         request = CollectionSelectionRequest(
             SelectionKind.ARTIST,
             "1272779",
             "Select content for Janet:",
             (CollectionOption(0, "Main Albums"), CollectionOption(1, "Music Videos")),
         )
-        prompt = Mock(ask_async=AsyncMock(return_value=[0, 1]))
         with (
             patch("gamdl.cli.prompts.interactive", return_value=True),
             patch(
-                "gamdl.cli.prompts.questionary.checkbox", return_value=prompt
-            ) as checkbox,
+                "gamdl.cli.prompts.select_many",
+                new_callable=AsyncMock,
+                return_value=[0, 1],
+            ) as selector,
         ):
             self.assertEqual(await select_media(request), [0, 1])
-        self.assertEqual(checkbox.call_args.kwargs["choices"][1].value, 1)
-        self.assertIn("Space", checkbox.call_args.kwargs["instruction"])
+        self.assertEqual(selector.await_args.args[1][1].value, 1)
         with patch("gamdl.cli.prompts.interactive", return_value=False):
             with self.assertRaises(click.ClickException):
                 await select_media(request)
         with (
             patch("gamdl.cli.prompts.interactive", return_value=True),
             patch(
-                "gamdl.cli.prompts.questionary.checkbox",
-                return_value=Mock(ask_async=AsyncMock(return_value=None)),
+                "gamdl.cli.prompts.select_many",
+                new_callable=AsyncMock,
+                side_effect=click.Abort(),
             ),
         ):
             with self.assertRaises(click.Abort):
@@ -114,28 +115,23 @@ class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-    async def test_each_stream_request_uses_arrow_selection_and_async_questionary(self):
+    async def test_each_stream_request_routes_to_full_screen_selector(self):
         for request, word, visible in self.requests():
             with self.subTest(word=word):
                 title, choices = stream_choices(request)
                 self.assertIn(word, title.lower())
-                self.assertIn(visible, choices[0].title)
-                prompt = Mock(ask_async=AsyncMock(return_value=0))
+                self.assertIn(visible, choices[0].title + " " + choices[0].detail)
                 with (
                     patch("gamdl.cli.prompts.interactive", return_value=True),
                     patch(
-                        "gamdl.cli.prompts.questionary.select", return_value=prompt
+                        "gamdl.cli.prompts._select_stream",
+                        new_callable=AsyncMock,
+                        return_value=0,
                     ) as selection,
                 ):
                     result = await select_stream(request)
                 self.assertEqual(result, 0)
-                self.assertTrue(selection.call_args.kwargs["use_arrow_keys"])
-                selected = selection.call_args.kwargs["choices"]
-                self.assertEqual(
-                    [(choice.title, choice.value) for choice in selected],
-                    [(choice.title, choice.value) for choice in choices],
-                )
-                prompt.ask_async.assert_awaited_once()
+                selection.assert_awaited_once_with(request, title=None)
 
     async def test_prompt_cancellation_and_noninteractive_mode(self):
         request = self.requests()[0][0]
@@ -145,8 +141,9 @@ class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("gamdl.cli.prompts.interactive", return_value=True),
             patch(
-                "gamdl.cli.prompts.questionary.select",
-                return_value=Mock(ask_async=AsyncMock(return_value=None)),
+                "gamdl.cli.prompts._select_stream",
+                new_callable=AsyncMock,
+                side_effect=click.Abort(),
             ),
         ):
             with self.assertRaises(click.Abort):

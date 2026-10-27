@@ -169,14 +169,24 @@ async def run_rip(options: RipOptions) -> int:
                 max_visible=options.max_visible_tracks,
                 console=console,
             ) as progress:
+                ui_lock = asyncio.Lock()
 
-                async def choose(request):
-                    with progress.suspend():
-                        return await select_stream(request)
+                async def choose(request, *, media_title: str):
+                    async with ui_lock:
+                        with progress.suspend():
+                            return await select_stream(request, media_title=media_title)
 
                 async def choose_media(request):
-                    with progress.suspend():
-                        return await select_media(request)
+                    # An earlier URL can have workers still running. Finish
+                    # them before opening an alternate-screen prompt so their
+                    # Rich messages never print over the live menu.
+                    if pending:
+                        completed = tuple(pending)
+                        await asyncio.gather(*completed)
+                        pending.difference_update(completed)
+                    async with ui_lock:
+                        with progress.suspend():
+                            return await select_media(request)
 
                 resolver = MediaResolver(
                     api,
@@ -188,6 +198,10 @@ async def run_rip(options: RipOptions) -> int:
 
                 async def process(occurrence: int, media, title: str) -> None:
                     try:
+
+                        async def choose_for_track(request):
+                            return await choose(request, media_title=title)
+
                         kwargs = {
                             "overwrite": options.overwrite,
                             "save_cover": options.save_cover,
@@ -210,7 +224,9 @@ async def run_rip(options: RipOptions) -> int:
                                 else [SongCodec(c) for c in options.song_codec_priority]
                                 or None,
                                 ask=options.ask_song_codec,
-                                selector=choose if options.ask_song_codec else None,
+                                selector=choose_for_track
+                                if options.ask_song_codec
+                                else None,
                             )
                         elif isinstance(media, MusicVideo):
                             kwargs.update(
@@ -228,7 +244,7 @@ async def run_rip(options: RipOptions) -> int:
                                 or None,
                                 max_height=options.max_height,
                                 ask=options.ask_music_video_streams,
-                                selector=choose
+                                selector=choose_for_track
                                 if options.ask_music_video_streams
                                 else None,
                             )
@@ -241,7 +257,7 @@ async def run_rip(options: RipOptions) -> int:
                                 and not options.ask_uploaded_video_quality
                                 else None,
                                 ask=options.ask_uploaded_video_quality,
-                                selector=choose
+                                selector=choose_for_track
                                 if options.ask_uploaded_video_quality
                                 else None,
                             )

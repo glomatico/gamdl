@@ -6,7 +6,7 @@ import unittest
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 
-from gamdl.cli.browser import ArtistBrowserState, browse_artist
+from gamdl.cli.tui.browser import ArtistBrowserState, browse_artist
 from gamdl.media import (
     ArtistBrowseRequest,
     ArtistCategorySelection,

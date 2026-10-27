@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from .enums import SelectionKind
+from gamdl.pagination import MediaPage
 
 if TYPE_CHECKING:
     from .base import Media
@@ -71,15 +72,18 @@ class ArtistBrowseRequest:
     source_id: str
     artist_name: str
     categories: tuple[tuple[SelectionKind, str], ...]
-    load_items: Callable[[SelectionKind], Awaitable[tuple[CollectionOption, ...]]]
+    load_page: Callable[
+        [SelectionKind, int], Awaitable[MediaPage[CollectionOption] | None]
+    ]
 
 
 @dataclass(frozen=True)
 class ArtistCategorySelection:
-    """None means all items, without requiring category metadata to be loaded."""
+    """None means all items; exclusions preserve unseen page selections."""
 
     kind: SelectionKind
     indices: tuple[int, ...] | None = None
+    excluded_indices: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

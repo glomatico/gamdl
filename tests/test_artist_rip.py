@@ -19,6 +19,7 @@ from gamdl.media import (
 )
 from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
 from gamdl.media.exceptions import SelectionRequiredError
+from gamdl.pagination import MediaPage
 
 
 def resource(kind: str, media_id: str, title: str) -> dict:
@@ -57,6 +58,27 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
         self.api.iter_artist_view = Mock(side_effect=view)
         self.api.iter_artist_relationship = Mock(side_effect=relationship)
         self.api.iter_album_tracks = Mock(side_effect=album_tracks)
+
+        async def page_view(_id, view_name, *, cursor=None, limit=25):
+            items = [item async for item in view(_id, view_name)]
+            offset = int(cursor or 0)
+            portion = items[offset : offset + limit]
+            return MediaPage(
+                tuple(portion),
+                str(offset + limit) if offset + limit < len(items) else None,
+            )
+
+        async def page_relationship(_id, relation, *, cursor=None, limit=25):
+            items = [item async for item in relationship(_id, relation)]
+            offset = int(cursor or 0)
+            portion = items[offset : offset + limit]
+            return MediaPage(
+                tuple(portion),
+                str(offset + limit) if offset + limit < len(items) else None,
+            )
+
+        self.api.get_artist_view_page = AsyncMock(side_effect=page_view)
+        self.api.get_artist_relationship_page = AsyncMock(side_effect=page_relationship)
 
     async def test_multiple_automatic_artist_categories_stream_albums_and_videos(self):
         resolver = MediaResolver(
@@ -101,9 +123,9 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
 
         async def select(request):
             requests.append(request)
-            options = await request.load_items(SelectionKind.ARTIST_MAIN_ALBUMS)
+            page = await request.load_page(SelectionKind.ARTIST_MAIN_ALBUMS, 0)
             self.assertEqual(
-                [item.title for item in options], ["Main Album", "Other Album"]
+                [item.title for item in page.items], ["Main Album", "Other Album"]
             )
             return ArtistBrowseResult(
                 (ArtistCategorySelection(SelectionKind.ARTIST_MAIN_ALBUMS, (1,)),)
@@ -114,6 +136,9 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.id for item in media], ["a2-track"])
         self.assertIsInstance(requests[0], ArtistBrowseRequest)
         self.assertEqual(requests[0].artist_name, "Janet")
+        self.api.get_artist.assert_awaited_once_with(
+            "artist", include="", views="", limit=1
+        )
         self.assertEqual(len(requests), 1)
         self.assertEqual(self.calls, [("view", "full-albums"), ("album", "a2")])
 
@@ -143,9 +168,14 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
                 yield resource("songs", str(i), f"Song {i}")
 
         self.api.iter_artist_view = Mock(side_effect=songs)
+        self.api.get_artist_view_page = AsyncMock(
+            side_effect=lambda *_a, **_k: MediaPage(
+                tuple(resource("songs", str(i), f"Song {i}") for i in range(3))
+            )
+        )
 
         async def select(request):
-            await request.load_items(SelectionKind.ARTIST_TOP_SONGS)
+            await request.load_page(SelectionKind.ARTIST_TOP_SONGS, 0)
             return ArtistBrowseResult(
                 (ArtistCategorySelection(SelectionKind.ARTIST_TOP_SONGS, (2,)),)
             )
@@ -176,8 +206,8 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_opened_category_uses_cached_items_once(self):
         async def select(request):
-            first = await request.load_items(SelectionKind.ARTIST_MAIN_ALBUMS)
-            second = await request.load_items(SelectionKind.ARTIST_MAIN_ALBUMS)
+            first = await request.load_page(SelectionKind.ARTIST_MAIN_ALBUMS, 0)
+            second = await request.load_page(SelectionKind.ARTIST_MAIN_ALBUMS, 0)
             self.assertEqual(first, second)
             self.assertEqual(self.calls, [("view", "full-albums")])
             return ArtistBrowseResult(
@@ -190,6 +220,87 @@ class ArtistResolverTests(unittest.IsolatedAsyncioTestCase):
             ["a1-track", "a2-track"],
         )
         self.assertEqual(self.calls.count(("view", "full-albums")), 1)
+
+    async def test_paged_artist_item_selection_and_download_reuses_loaded_pages(self):
+        seen = []
+
+        async def fetch(_id, view, *, cursor=None, limit=25):
+            seen.append(cursor)
+            if cursor is None:
+                return MediaPage(
+                    (
+                        resource("albums", "one", "First"),
+                        resource("albums", "two", "Second"),
+                    ),
+                    "next",
+                )
+            return MediaPage((resource("albums", "three", "Third"),))
+
+        self.api.get_artist_view_page = AsyncMock(side_effect=fetch)
+
+        async def select(request):
+            first = await request.load_page(SelectionKind.ARTIST_MAIN_ALBUMS, 0)
+            self.assertEqual([i.index for i in first.items], [0, 1])
+            second = await request.load_page(SelectionKind.ARTIST_MAIN_ALBUMS, 1)
+            self.assertEqual([i.index for i in second.items], [2])
+            await request.load_page(SelectionKind.ARTIST_MAIN_ALBUMS, 0)
+            return ArtistBrowseResult(
+                (ArtistCategorySelection(SelectionKind.ARTIST_MAIN_ALBUMS, (2,)),)
+            )
+
+        resolver = MediaResolver(self.api, selector=select)
+        tracks = [m async for m in resolver.from_artist("artist")]
+        self.assertEqual([m.id for m in tracks], ["three-track"])
+        self.assertEqual(seen, [None, "next"])
+
+    async def test_all_except_first_unloaded_artist_pages_stay_selected(self):
+        seen = []
+
+        async def fetch(_id, view, *, cursor=None, limit=25):
+            seen.append(cursor)
+            return (
+                MediaPage((resource("music-videos", "mv0", "Skip"),), "next")
+                if cursor is None
+                else MediaPage((resource("music-videos", "mv1", "Keep"),))
+            )
+
+        self.api.get_artist_relationship_page = AsyncMock(side_effect=fetch)
+
+        async def select(request):
+            await request.load_page(SelectionKind.ARTIST_MUSIC_VIDEOS, 0)
+            self.assertEqual(seen, [None])
+            return ArtistBrowseResult(
+                (
+                    ArtistCategorySelection(
+                        SelectionKind.ARTIST_MUSIC_VIDEOS, None, (0,)
+                    ),
+                )
+            )
+
+        resolver = MediaResolver(self.api, selector=select)
+        self.assertEqual([m.id async for m in resolver.from_artist("artist")], ["mv1"])
+        self.assertEqual(seen, [None, "next"])
+
+    async def test_selecting_only_first_page_does_not_discover_later_pages(self):
+        seen = []
+
+        async def fetch(_id, _name, *, cursor=None, limit=25):
+            seen.append(cursor)
+            if cursor is not None:
+                raise AssertionError("Unselected continuation must not be fetched")
+            return MediaPage((resource("music-videos", "mv0", "Chosen"),), "next")
+
+        self.api.get_artist_relationship_page = AsyncMock(side_effect=fetch)
+
+        async def select(request):
+            await request.load_page(SelectionKind.ARTIST_MUSIC_VIDEOS, 0)
+            return ArtistBrowseResult(
+                (ArtistCategorySelection(SelectionKind.ARTIST_MUSIC_VIDEOS, (0,)),)
+            )
+
+        resolver = MediaResolver(self.api, selector=select)
+        self.assertEqual([m.id async for m in resolver.from_artist("artist")], ["mv0"])
+        self.assertEqual(seen, [None])
 
 
 class RipCliSettingsTests(unittest.TestCase):

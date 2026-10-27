@@ -21,6 +21,7 @@ from .models import (
     SelectionRequest,
 )
 from .playlist import Playlist
+from gamdl.pagination import MediaPage, PageCache
 from .song import Song
 from .music_video import MusicVideo
 from .uploaded_video import UploadedVideo
@@ -168,34 +169,58 @@ class MediaResolver:
         a category only on expansion; selected unloaded categories stream later.
         """
         categories = [kind for kind in ARTIST_COLLECTIONS if kind in self.auto_select]
-        cache: dict[SelectionKind, list[dict]] = {}
+        cache: dict[SelectionKind, PageCache[dict]] = {}
         selected_items: dict[SelectionKind, set[int] | None] = {}
+        excluded_items: dict[SelectionKind, set[int]] = {}
         if not categories:
             if self.selector is None:
                 raise SelectionRequiredError(SelectionKind.ARTIST.value)
-            response = await self.api.get_artist(artist_id)
+            # Only fetch the artist's name. No album or video view should be
+            # populated before the user opens that category in the browser.
+            response = await self.api.get_artist(
+                artist_id, include="", views="", limit=1
+            )
             entries = response.get("data", [])
             attributes = entries[0].get("attributes", {}) if entries else {}
             artist_name = attributes.get("name") or artist_id
 
-            async def load_category(
+            async def load_category_page(
                 kind: SelectionKind,
-            ) -> tuple[CollectionOption, ...]:
+                page_number: int,
+            ) -> MediaPage[CollectionOption] | None:
                 if kind not in ARTIST_COLLECTIONS:
                     raise ValueError("Unknown artist category")
                 if kind not in cache:
                     relation, path, _ = ARTIST_COLLECTIONS[kind]
-                    resources = (
-                        self.api.iter_artist_view(artist_id, path)
-                        if relation == "views"
-                        else self.api.iter_artist_relationship(artist_id, path)
-                    )
-                    cache[kind] = [item async for item in resources]
-                return tuple(
-                    CollectionOption(
-                        i, item.get("attributes", {}).get("name") or item["id"]
-                    )
-                    for i, item in enumerate(cache[kind])
+
+                    async def fetch(cursor: str | None) -> MediaPage[dict]:
+                        if relation == "views":
+                            return await self.api.get_artist_view_page(
+                                artist_id,
+                                path,
+                                cursor=cursor,
+                            )
+                        return await self.api.get_artist_relationship_page(
+                            artist_id,
+                            path,
+                            cursor=cursor,
+                        )
+
+                    cache[kind] = PageCache(fetch)
+                collection = cache[kind]
+                page = await collection.get(page_number)
+                if page is None:
+                    return None
+                offset = collection.offset(page_number)
+                return MediaPage(
+                    tuple(
+                        CollectionOption(
+                            offset + i,
+                            item.get("attributes", {}).get("name") or item["id"],
+                        )
+                        for i, item in enumerate(page.items)
+                    ),
+                    page.next_cursor,
                 )
 
             request = ArtistBrowseRequest(
@@ -204,7 +229,7 @@ class MediaResolver:
                 categories=tuple(
                     (kind, info[2]) for kind, info in ARTIST_COLLECTIONS.items()
                 ),
-                load_items=load_category,
+                load_page=load_category_page,
             )
             result = self.selector(request)
             if inspect.isawaitable(result):
@@ -223,16 +248,29 @@ class MediaResolver:
                         raise ValueError(
                             "Artist item selection requires category metadata"
                         )
+                    valid = set(range(sum(len(page.items) for page in items.pages)))
                     if any(
-                        type(i) is not int or i < 0 or i >= len(items)
-                        for i in selected.indices
+                        type(i) is not int or i not in valid for i in selected.indices
                     ):
                         raise ValueError(
                             "Artist browser returned an invalid item index"
                         )
+                if selected.excluded_indices:
+                    pages = cache.get(selected.kind)
+                    valid = (
+                        set(range(sum(len(page.items) for page in pages.pages)))
+                        if pages
+                        else set()
+                    )
+                    if selected.indices is not None or any(
+                        type(i) is not int or i not in valid
+                        for i in selected.excluded_indices
+                    ):
+                        raise ValueError("Invalid artist selection exclusions")
                 selected_items[selected.kind] = (
                     set(selected.indices) if selected.indices is not None else None
                 )
+                excluded_items[selected.kind] = set(selected.excluded_indices)
             categories = [kind for kind in ARTIST_COLLECTIONS if kind in selected_items]
 
         for kind in categories:
@@ -240,8 +278,18 @@ class MediaResolver:
 
             async def indexed_resources() -> AsyncIterator[tuple[int, dict]]:
                 if kind in cache:
-                    for i, item in enumerate(cache[kind]):
-                        yield i, item
+                    if selected_items.get(kind) is not None:
+                        # Explicit item selections are entirely inside the
+                        # pages already visited. Do not fetch unseen pages
+                        # just to discard their media.
+                        collection = cache[kind]
+                        for page_no, page in enumerate(collection.pages):
+                            start = collection.offset(page_no)
+                            for i, item in enumerate(page.items):
+                                yield start + i, item
+                    else:
+                        async for i, item in cache[kind].iter_items():
+                            yield i, item
                 else:
                     resources = (
                         self.api.iter_artist_view(artist_id, path)
@@ -259,6 +307,8 @@ class MediaResolver:
                     and selected_items[kind] is not None
                     and index not in selected_items[kind]
                 ):
+                    continue
+                if index in excluded_items.get(kind, ()):
                     continue
                 media_type = item.get("type")
                 if media_type == "albums":

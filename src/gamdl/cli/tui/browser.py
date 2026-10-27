@@ -7,6 +7,7 @@ category materializes its choices once; selecting a whole category does not.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 import click
 from prompt_toolkit.formatted_text import FormattedText
@@ -22,6 +23,7 @@ from gamdl.media.enums import SelectionKind
 
 from .app import make_app
 from .components import footer as menu_footer, heading
+from .pagination import PaginatedChoices
 
 
 class ArtistBrowserState:
@@ -32,20 +34,44 @@ class ArtistBrowserState:
         self.category: SelectionKind | None = None
         self.cursor = 0
         self.root_cursor = 0
-        self.loaded: dict[SelectionKind, tuple[CollectionOption, ...]] = {}
+        self.loaded: dict[SelectionKind, PaginatedChoices[CollectionOption]] = {}
         # A category mapped to None means all items, even if never loaded.
         self.selected: dict[SelectionKind, set[int] | None] = {}
+        # In all-selected mode, exclusions can reference any visited page.
+        self.excluded: dict[SelectionKind, set[int]] = {}
         self.loading = False
+        self.loading_page: int | None = None
         self.error: str | None = None
         self._generation = 0
+        self.on_update: Callable[[], None] = lambda: None
 
     @property
     def rows(self) -> int:
         return (
             len(self.request.categories) + 1
             if self.category is None
-            else len(self.loaded.get(self.category, ())) + 1
+            else len(self.items) + 1
         )
+
+    @property
+    def items(self) -> tuple[CollectionOption, ...]:
+        if self.category is None:
+            return ()
+        page = self.loaded[self.category].current
+        return page.items if page else ()
+
+    @property
+    def page_number(self) -> int:
+        if self.category is None:
+            return 0
+        return self.loaded[self.category].index + 1
+
+    def _collection(self, kind: SelectionKind) -> PaginatedChoices[CollectionOption]:
+        if kind not in self.loaded:
+            self.loaded[kind] = PaginatedChoices(
+                lambda index: self.request.load_page(kind, index)
+            )
+        return self.loaded[kind]
 
     def move(self, change: int):
         if not self.loading:
@@ -60,38 +86,67 @@ class ArtistBrowserState:
             kind = self.request.categories[self.cursor][0]
             if kind in self.selected:
                 del self.selected[kind]
+                self.excluded.pop(kind, None)
             else:
                 self.selected[kind] = None
+                self.excluded.pop(kind, None)
             return
         kind = self.category
-        idx = self.loaded[kind][self.cursor].index
+        idx = self.items[self.cursor].index
         current = self.selected.get(kind)
-        if kind not in self.selected:
-            current = set()
-        elif current is None:
-            current = {choice.index for choice in self.loaded[kind]}
-        assert current is not None
-        if idx in current:
-            current.remove(idx)
+        if kind in self.selected and current is None:
+            excluded = self.excluded.setdefault(kind, set())
+            if idx in excluded:
+                excluded.remove(idx)
+            else:
+                excluded.add(idx)
         else:
-            current.add(idx)
-        if not current:
-            self.selected.pop(kind, None)
-        elif len(current) == len(self.loaded[kind]):
-            self.selected[kind] = None
-        else:
-            self.selected[kind] = current
+            if current is None:
+                current = set()
+            if idx in current:
+                current.remove(idx)
+            else:
+                current.add(idx)
+            if current:
+                self.selected[kind] = current
+            else:
+                self.selected.pop(kind, None)
 
-    def select_all(self):
-        """Ctrl+A selects all currently visible items, without extra I/O."""
+    async def select_all(self):
+        """Ctrl+A fetches remaining pages before marking every category item."""
         if self.loading:
             return
         if self.category is None:
             for kind, _ in self.request.categories:
                 self.selected[kind] = None
-        elif self.loaded.get(self.category):
+                self.excluded.pop(kind, None)
+        else:
+            collection = self.loaded[self.category]
+            self.loading = True
+            self.loading_page = collection.index + 1
+            self.error = None
+            try:
+                await collection.load_all(self._loading_page)
+            except asyncio.CancelledError:
+                return  # Keep previous selections when load-all is cancelled.
+            except Exception as exc:
+                self.error = self._error_message(exc)
+                return
+            finally:
+                self.loading = False
+                self.loading_page = None
             self.selected[self.category] = None
+            self.excluded.pop(self.category, None)
         self.error = None
+
+    def _loading_page(self, page: int):
+        self.loading_page = page
+        self.on_update()
+
+    @staticmethod
+    def _error_message(exc: Exception) -> str:
+        code = getattr(exc, "status_code", None)
+        return f"Unable to load page ({'HTTP ' + str(code) if code is not None else type(exc).__name__})"
 
     async def expand(self):
         """Enter on a root category expands it; never triggers a download."""
@@ -103,18 +158,42 @@ class ArtistBrowserState:
         self.error = None
         generation = self._generation
         try:
-            if kind not in self.loaded:
-                self.loaded[kind] = tuple(await self.request.load_items(kind))
+            collection = self._collection(kind)
+            await collection.fetch(collection.index)
             if generation == self._generation:
                 self.category = kind
                 self.cursor = 0
         except Exception as exc:
-            # Never display raw endpoint URLs or credentials in terminal UI.
             if generation == self._generation:
-                code = getattr(exc, "status_code", None)
-                self.error = f"Unable to load category ({'HTTP ' + str(code) if code is not None else type(exc).__name__})"
+                self.error = self._error_message(exc)
         finally:
             self.loading = False
+
+    async def next_page(self):
+        if self.loading or self.category is None:
+            return
+        collection = self.loaded[self.category]
+        if not collection.has_next:
+            return
+        self.loading = True
+        self.loading_page = collection.index + 2
+        try:
+            if await collection.next():
+                self.cursor = 0
+                self.error = None
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            self.error = self._error_message(exc)
+        finally:
+            self.loading = False
+            self.loading_page = None
+
+    def previous_page(self):
+        if self.category is not None and not self.loading:
+            if self.loaded[self.category].previous():
+                self.cursor = 0
+                self.error = None
 
     def back(self) -> bool:
         if self.category is None and not self.loading:
@@ -129,7 +208,7 @@ class ArtistBrowserState:
         if kind not in self.selected:
             return "[ ]"
         chosen = self.selected[kind]
-        return "[x]" if chosen is None else "[-]"
+        return "[x]" if chosen is None and not self.excluded.get(kind) else "[-]"
 
     def mark_item(self, index: int) -> str:
         assert self.category is not None
@@ -137,7 +216,15 @@ class ArtistBrowserState:
         if kind not in self.selected:
             return "[ ]"
         items = self.selected[kind]
-        return "[x]" if items is None or index in items else "[ ]"
+        return (
+            "[x]"
+            if (
+                index not in self.excluded.get(kind, set())
+                if items is None
+                else index in items
+            )
+            else "[ ]"
+        )
 
     def result(self) -> ArtistBrowseResult:
         return ArtistBrowseResult(
@@ -147,6 +234,7 @@ class ArtistBrowserState:
                     None
                     if self.selected[kind] is None
                     else tuple(sorted(self.selected[kind])),
+                    tuple(sorted(self.excluded.get(kind, ()))),
                 )
                 for kind, _ in self.request.categories
                 if kind in self.selected
@@ -177,10 +265,19 @@ async def browse_artist(
                 (state.mark(kind), f"{title}  ›") for kind, title in request.categories
             ]
         else:
-            rows = [
-                (state.mark_item(item.index), item.title)
-                for item in state.loaded.get(state.category, ())
-            ]
+            rows = [(state.mark_item(item.index), item.title) for item in state.items]
+            has_next = state.loaded[state.category].has_next
+            page_hint = (
+                f"Loading page {state.loading_page}... Esc cancels"
+                if state.loading
+                else f"{'→ Next page' if has_next else 'Last page'}  ·  ← Previous page"
+            )
+            fragments.append(
+                (
+                    "class:muted",
+                    f" Page {state.page_number}  ·  {page_hint}\n",
+                )
+            )
         rows.append(("", "Download selected"))
         for i, (mark, label) in enumerate(rows):
             selected = i == state.cursor
@@ -190,8 +287,13 @@ async def browse_artist(
                 else ("class:action" if i == len(rows) - 1 else "")
             )
             fragments.append((style, f" {'❯' if selected else ' '} {mark:4} {label}\n"))
-        if state.loading:
-            fragments.append(("class:muted", "\n  Loading category...\n"))
+        if state.loading and state.category is None:
+            fragments.append(
+                (
+                    "class:muted",
+                    f"\n  Loading page {state.loading_page or 1}... (Esc to cancel)\n",
+                )
+            )
         if state.error:
             fragments.append(("class:error", f"\n  {state.error}\n"))
         return FormattedText(fragments)
@@ -199,18 +301,20 @@ async def browse_artist(
     def footer() -> FormattedText:
         summary = f"{len(state.selected)} categories selected"
         return menu_footer(
-            summary + "  ·  ↑/↓ navigate  ·  Space mark  ·  Enter open/download",
-            "Ctrl+A select all  ·  Esc/Backspace back  ·  Ctrl+C cancel",
+            summary
+            + "  ·  ↑/↓ navigate  ·  ←/→ pages  ·  Space mark  ·  Enter open/download",
+            "Ctrl+A load & select all  ·  Esc/Backspace back  ·  Ctrl+C cancel",
         )
 
     app = make_app(
         body=body,
         footer=footer,
-        cursor_row=lambda: state.cursor + 2,
+        cursor_row=lambda: state.cursor + (3 if state.category is not None else 2),
         keys=kb,
         input=input,
         output=output,
     )
+    state.on_update = app.invalidate
 
     @kb.add("up")
     @kb.add("k")
@@ -238,7 +342,21 @@ async def browse_artist(
 
     @kb.add("c-a")
     def select_all(event):
-        state.select_all()
+        start_task(state.select_all())
+
+    def start_task(coroutine):
+        task = asyncio.create_task(coroutine)
+        tasks.add(task)
+        task.add_done_callback(lambda t: (tasks.discard(t), app.invalidate()))
+
+    @kb.add("right")
+    def right(event):
+        if state.category is not None and not state.loading:
+            start_task(state.next_page())
+
+    @kb.add("left")
+    def left(event):
+        state.previous_page()
 
     @kb.add("enter")
     def enter(event):
@@ -252,13 +370,15 @@ async def browse_artist(
         elif state.category is not None:
             state.toggle()
         else:
-            task = asyncio.create_task(state.expand())
-            tasks.add(task)
-            task.add_done_callback(lambda t: (tasks.discard(t), app.invalidate()))
+            start_task(state.expand())
 
     @kb.add("escape")
     @kb.add("backspace")
     def back(event):
+        if state.loading:
+            for task in tuple(tasks):
+                task.cancel()
+            return
         if not state.back():
             app.exit(result=None)
 

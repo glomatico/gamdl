@@ -27,6 +27,7 @@ from .models import (
     CollectionOption,
     CollectionSelectionRequest,
 )
+from gamdl.pagination import MediaPage, PageCache
 from .song import Song, SongStreamSelector
 from .song.enums import SongCodec
 from .song.stream import SongStreamResolver
@@ -64,6 +65,8 @@ from .uploaded_video import (
 )
 
 __all__ = [
+    "MediaPage",
+    "PageCache",
     "ArtistBrowseRequest",
     "ArtistBrowseResult",
     "ArtistCategorySelection",

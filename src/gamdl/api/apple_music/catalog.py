@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
+from gamdl.pagination import MediaPage
+
 
 class CatalogEndpoints:
     """Catalog reads, including playlist, album and artist relationships."""
@@ -167,11 +169,12 @@ class CatalogEndpoints:
             f"/v1/catalog/{self.storefront}/artists/{artist_id}",
             operation="get_artist",
             params={
-                "include": include,
-                "views": views,
+                **({"include": include} if include else {}),
+                **({"views": views} if views else {}),
                 **{
                     f"limit[{section}]": limit
                     for section in [*include.split(","), *views.split(",")]
+                    if section
                 },
             },
         )
@@ -269,6 +272,61 @@ class CatalogEndpoints:
         )
         async for item in self._iterate_pages(page):
             yield item
+
+    async def get_artist_view_page(
+        self,
+        artist_id: str,
+        view: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 25,
+    ) -> MediaPage[dict[str, Any]]:
+        """Fetch one artist view page without traversing its continuation."""
+        if not view or any(char in view for char in "/?#"):
+            raise ValueError("Invalid artist view")
+        if cursor is None:
+            page = await self._get(
+                f"/v1/catalog/{self.storefront}/artists/{artist_id}/view/{view}",
+                operation="get_artist_view_page",
+                params={"limit": limit},
+            )
+        else:
+            page = await self.get_extended_api_data(cursor)
+        return self._to_media_page(page)
+
+    async def get_artist_relationship_page(
+        self,
+        artist_id: str,
+        relationship: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 25,
+    ) -> MediaPage[dict[str, Any]]:
+        """Fetch one artist relationship page, including its next cursor."""
+        if relationship not in {"albums", "music-videos"}:
+            raise ValueError("Unsupported artist relationship")
+        if cursor is None:
+            page = await self._get(
+                f"/v1/catalog/{self.storefront}/artists/{artist_id}/{relationship}",
+                operation="get_artist_relationship_page",
+                params={"limit": limit},
+            )
+        else:
+            page = await self.get_extended_api_data(cursor)
+        return self._to_media_page(page)
+
+    def _to_media_page(self, page: dict[str, Any]) -> MediaPage[dict[str, Any]]:
+        data = page.get("data")
+        cursor = page.get("next")
+        if not isinstance(data, list) or any(
+            not isinstance(item, dict) for item in data
+        ):
+            raise ValueError("Invalid Apple Music pagination data")
+        if cursor is not None:
+            if not isinstance(cursor, str) or not cursor:
+                raise ValueError("Invalid Apple Music pagination cursor")
+            self._amp_url(cursor)  # Reject non-AMP hosts before exposing a cursor.
+        return MediaPage(tuple(data), cursor)
 
     async def iter_artist_relationship(
         self,

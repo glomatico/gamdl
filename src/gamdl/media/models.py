@@ -9,6 +9,7 @@ from .enums import SelectionKind
 
 if TYPE_CHECKING:
     from .base import Media
+    from .playlist import Playlist
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class MediaSource:
     kind: str
     id: str
     index: int
+    playlist: Playlist | None = None
 
 
 @dataclass(frozen=True)

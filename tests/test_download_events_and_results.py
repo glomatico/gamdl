@@ -188,7 +188,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
                 event_callback=events.append,
             )
         error = failure.exception
-        self.assertEqual(error.stage, "sidecar")
+        self.assertEqual(error.stage, "lyrics")
         self.assertEqual(error.partial_result.status, MediaStatus.DOWNLOADED)
         self.assertEqual(error.partial_result.cover.status, FileStatus.CREATED)
         self.assertIsNone(error.partial_result.lyrics)
@@ -198,6 +198,19 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
             [ev.state for ev in events if ev.stage == DownloadStage.SAVING_LYRICS],
             [EventState.STARTED, EventState.FAILED],
         )
+
+    async def test_cover_finalization_identifies_its_own_stage_and_cause(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        song.get_cover.side_effect = PermissionError("cannot read cover")
+        target = self.directory / "ready.m4a"
+        target.write_bytes(b"already published")
+        with self.assertRaises(DownloadFinalizationError) as raised:
+            await downloader.download(song, target, save_cover=True)
+        self.assertEqual(raised.exception.stage, "cover")
+        self.assertIsInstance(raised.exception.__cause__, PermissionError)
+        self.assertEqual(raised.exception.partial_result.status, "skipped")
+        self.assertEqual(target.read_bytes(), b"already published")
 
     async def test_skip_does_not_emit_transfer_stages_and_get_bytes_no_side_effects(
         self,

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from gamdl.cli.commands.rip import RipOptions
 from gamdl.cli.commands.runner import _short_error, run_rip
-from gamdl.download import DownloadResult, MediaStatus
-from gamdl.media import MediaSource, Song, SongCodec
+from gamdl.download import DownloadFinalizationError, DownloadResult, MediaStatus
+from gamdl.media import MediaSource, Playlist, Song, SongCodec
 from gamdl.media.exceptions import StreamNotAvailableError
 
 
@@ -23,11 +23,14 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-    async def _execute(self, *, fail_on=None, fail_fast=False, n=4):
+    async def _execute(
+        self, *, fail_on=None, fail_fast=False, n=4, finalization_failure=False
+    ):
         songs = []
+        playlist = Playlist("playlist-id", api=self.api)
         for index in range(n):
             song = Song.from_id(str(1000 + index), api=self.api)
-            song.source = MediaSource("playlist_tracks", "playlist-id", index)
+            song.source = MediaSource("playlist_tracks", "playlist-id", index, playlist)
             song.get_metadata = AsyncMock(
                 return_value={"attributes": {"name": f"Song {index}"}}
             )
@@ -52,6 +55,17 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             try:
                 received.append((media.id, kwargs))
                 await asyncio.sleep(0.003)
+                if media.id == fail_on and finalization_failure:
+                    partial = DownloadResult(
+                        media.id,
+                        Path(f"{media.id}.m4a"),
+                        MediaStatus.DOWNLOADED,
+                        1024,
+                        SongCodec.AAC,
+                    )
+                    raise DownloadFinalizationError(
+                        partial.path, "lyrics", partial
+                    ) from PermissionError("secret path")
                 if media.id == fail_on:
                     raise StreamNotAvailableError("Codec unavailable")
                 return DownloadResult(
@@ -98,10 +112,9 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(peak, 1)
         self.assertLessEqual(peak, 2)
         for index, (media_id, options) in enumerate(received):
-            self.assertEqual(options["playlist_tags"].track, index + 1)
-            self.assertEqual(options["playlist_tags"].title, "My Playlist")
+            self.assertNotIn("playlist_tags", options)
             self.assertTrue(options["save_playlist"])
-        self.api.get_playlist.assert_awaited_once_with("playlist-id", limit_tracks=1)
+        self.api.get_playlist.assert_not_awaited()  # CLI never fetches playlist metadata
 
     async def test_known_track_failure_does_not_abort_playlist(self):
         code, received, _ = await self._execute(fail_on="1001")
@@ -111,6 +124,25 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             _short_error(StreamNotAvailableError("No stream"))[0],
             "Requested codec or stream unavailable",
         )
+
+    async def test_media_saved_finalization_failure_is_not_a_failed_download(self):
+        code, received, _ = await self._execute(
+            fail_on="1001", finalization_failure=True
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(len(received), 4)
+        partial = DownloadResult(
+            "1001", Path("1001.m4a"), MediaStatus.DOWNLOADED, 1024, SongCodec.AAC
+        )
+        try:
+            raise DownloadFinalizationError(
+                partial.path, "lyrics", partial
+            ) from PermissionError("private filename")
+        except DownloadFinalizationError as exc:
+            self.assertEqual(
+                _short_error(exc)[0],
+                "Media saved, but couldn't save lyrics: permission denied",
+            )
 
     async def test_fail_fast_stops_scheduling_additional_tracks(self):
         code, received, _ = await self._execute(fail_on="1001", fail_fast=True)

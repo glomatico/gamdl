@@ -58,6 +58,14 @@ from .models import DownloadResult, FileResult, PlaylistResult, DatabaseResult
 from .events import DownloadEvent, DownloadEventCallback, DownloadStage, EventState
 
 
+class _SidecarError(Exception):
+    """Identify which optional sidecar operation failed, keeping its cause."""
+
+    def __init__(self, stage: str):
+        self.stage = stage
+        super().__init__(stage)
+
+
 @dataclass(frozen=True)
 class DownloadProgress:
     """A progress observation for one of a download's source tracks."""
@@ -361,49 +369,57 @@ class Downloader:
         cover_result = None
         lyrics_result = None
         if save_cover:
-            with self._stage(event_callback, media.id, DownloadStage.SAVING_COVER):
-                cover_bytes = prepared_cover
-                if cover_bytes is None:
-                    cover = await media.get_cover()
-                    cover_bytes = (
-                        await cover.get_cover_bytes() if cover is not None else None
-                    )
-                if cover_bytes:
-                    if cover_bytes.startswith(b"\xff\xd8\xff"):
-                        extension = ".jpg"
-                    elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-                        extension = ".png"
+            try:
+                with self._stage(event_callback, media.id, DownloadStage.SAVING_COVER):
+                    cover_bytes = prepared_cover
+                    if cover_bytes is None:
+                        cover = await media.get_cover()
+                        cover_bytes = (
+                            await cover.get_cover_bytes() if cover is not None else None
+                        )
+                    if cover_bytes:
+                        if cover_bytes.startswith(b"\xff\xd8\xff"):
+                            extension = ".jpg"
+                        elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                            extension = ".png"
+                        else:
+                            raise ValueError(
+                                "Cover sidecar must contain JPEG or PNG bytes"
+                            )
+                        cover_path = destination.with_suffix(extension)
+                        status = publish_bytes_result(
+                            cover_bytes, cover_path, overwrite=overwrite
+                        )
+                        cover_result = FileResult(cover_path, status)
                     else:
-                        raise ValueError("Cover sidecar must contain JPEG or PNG bytes")
-                    cover_path = destination.with_suffix(extension)
-                    status = publish_bytes_result(
-                        cover_bytes, cover_path, overwrite=overwrite
-                    )
-                    cover_result = FileResult(cover_path, status)
-                else:
-                    cover_result = FileResult(None, FileStatus.UNAVAILABLE)
-                if on_result is not None:
-                    on_result("cover", cover_result)
+                        cover_result = FileResult(None, FileStatus.UNAVAILABLE)
+                    if on_result is not None:
+                        on_result("cover", cover_result)
+            except Exception as exc:
+                raise _SidecarError("cover") from exc
 
         if save_lyrics:
             assert isinstance(media, Song)
-            with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
-                lyrics = await media.get_lyrics()
-                if lyrics is not None:
-                    if lyrics.is_synced:
-                        sidecar = destination.with_suffix(".lrc")
-                        contents = lyrics.to_lrc()
+            try:
+                with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
+                    lyrics = await media.get_lyrics()
+                    if lyrics is not None:
+                        if lyrics.is_synced:
+                            sidecar = destination.with_suffix(".lrc")
+                            contents = lyrics.to_lrc()
+                        else:
+                            sidecar = destination.with_suffix(".txt")
+                            contents = lyrics.to_plain_text()
+                        status = publish_bytes_result(
+                            contents.encode("utf-8"), sidecar, overwrite=overwrite
+                        )
+                        lyrics_result = FileResult(sidecar, status)
                     else:
-                        sidecar = destination.with_suffix(".txt")
-                        contents = lyrics.to_plain_text()
-                    status = publish_bytes_result(
-                        contents.encode("utf-8"), sidecar, overwrite=overwrite
-                    )
-                    lyrics_result = FileResult(sidecar, status)
-                else:
-                    lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
-                if on_result is not None:
-                    on_result("lyrics", lyrics_result)
+                        lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
+                    if on_result is not None:
+                        on_result("lyrics", lyrics_result)
+            except Exception as exc:
+                raise _SidecarError("lyrics") from exc
         return cover_result, lyrics_result
 
     async def _finalize(
@@ -431,7 +447,7 @@ class Downloader:
             result = replace(result, **{field: outcome})
 
         try:
-            cover_result, lyrics_result = await self._save_sidecars(
+            await self._save_sidecars(
                 media,
                 result.path,
                 overwrite=overwrite,
@@ -441,8 +457,10 @@ class Downloader:
                 event_callback=event_callback,
                 on_result=save_result,
             )
-        except Exception as exc:
-            raise DownloadFinalizationError(result.path, "sidecar", result) from exc
+        except _SidecarError as exc:
+            raise DownloadFinalizationError(
+                result.path, exc.stage, result
+            ) from exc.__cause__
 
         if self.database is not None:
             try:
@@ -593,7 +611,6 @@ class Downloader:
             raise ValueError("save_lyrics is supported for songs only")
         if playlist_index is not None and (
             (playlist_path is None and not save_playlist)
-            or (playlist_path is None and save_playlist and playlist_tags is None)
             or type(playlist_index) is not int
             or playlist_index < 0
         ):
@@ -601,9 +618,23 @@ class Downloader:
                 "playlist_index requires a playlist path and non-negative index"
             )
         if save_playlist and playlist_path is None:
-            if playlist_tags is None or self.path_formatter is None:
-                raise ValueError(
-                    "save_playlist requires playlist_tags and PathFormatter"
+            if self.path_formatter is None:
+                raise ValueError("save_playlist requires a PathFormatter")
+            if playlist_tags is None:
+                source = media.source
+                if source is None or source.playlist is None:
+                    raise ValueError(
+                        "save_playlist requires media.source.playlist or explicit playlist_tags"
+                    )
+                playlist = await source.playlist.get_metadata()
+                playlist_tags = PlaylistTags(
+                    title=playlist.title,
+                    artist=playlist.artist,
+                    playlist_id=playlist.id,
+                    track=(
+                        playlist_index if playlist_index is not None else source.index
+                    )
+                    + 1,
                 )
             playlist_path = self.path_formatter.get_playlist_path(playlist_tags)
         if (

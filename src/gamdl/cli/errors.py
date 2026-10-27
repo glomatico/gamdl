@@ -4,6 +4,7 @@ import click
 
 from gamdl.api import (
     GamdlAuthenticationError,
+    GamdlApiResponseError,
     GamdlRateLimitError,
     GamdlTransportError,
 )
@@ -27,7 +28,31 @@ def short_error(error: Exception) -> tuple[str, bool]:
     if isinstance(error, GamdlTransportError):
         return "Network request failed", True
     if isinstance(error, DownloadFinalizationError):
-        return f"Media saved; {error.stage} finalization failed", True
+        cause = error.__cause__
+        if isinstance(cause, GamdlApiResponseError) and cause.status_code is not None:
+            reason = f"Apple Music request failed (HTTP {cause.status_code})"
+        elif isinstance(cause, GamdlAuthenticationError):
+            reason = "authentication failed"
+        elif isinstance(cause, GamdlTransportError):
+            reason = "network request failed"
+        elif isinstance(cause, PermissionError):
+            reason = "permission denied"
+        elif isinstance(cause, FileNotFoundError):
+            reason = "file or directory not found"
+        elif isinstance(cause, OSError):
+            reason = "file I/O error"
+        else:
+            reason = "unexpected error"
+        actions = {
+            "lyrics": "save lyrics",
+            "cover": "save artwork",
+            "playlist": "update playlist",
+            "database": "update database",
+        }
+        return (
+            f"Media saved, but couldn't {actions.get(error.stage, 'finish media')}: {reason}",
+            True,
+        )
     if isinstance(error, FileExistsError):
         return "Output already exists", True
     if isinstance(error, GamdlError):

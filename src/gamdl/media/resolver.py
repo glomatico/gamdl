@@ -13,6 +13,7 @@ from .constants import DEFAULT_AUTO_SELECT
 from .enums import SelectionKind
 from .exceptions import SelectionRequiredError, UnsupportedMediaError
 from .models import SelectionOption, SelectionRequest
+from .playlist import Playlist
 from .song import Song
 from .music_video import MusicVideo
 from .uploaded_video import UploadedVideo
@@ -75,6 +76,8 @@ class MediaResolver:
         source_id: str,
         kind: SelectionKind,
         resources: AsyncIterator[dict],
+        *,
+        playlist: Playlist | None = None,
     ) -> AsyncIterator[Media]:
         """Stream auto-selected resources, materialize only for explicit UI selection."""
         if kind not in self.auto_select and self.selector is None:
@@ -84,7 +87,9 @@ class MediaResolver:
             media = Media.from_metadata(
                 metadata, api=self.api, cover_cache=self.cover_cache
             )
-            media.source = MediaSource(kind=kind.value, id=source_id, index=index)
+            media.source = MediaSource(
+                kind=kind.value, id=source_id, index=index, playlist=playlist
+            )
             return media
 
         if kind in self.auto_select:
@@ -134,8 +139,9 @@ class MediaResolver:
     ) -> AsyncIterator[Media]:
         """Yield playlist tracks without deduplicating repeated entries."""
         resources = self.api.iter_playlist_tracks(playlist_id, is_library=is_library)
+        playlist = Playlist(playlist_id, api=self.api, is_library=is_library)
         async for media in self._from_collection(
-            playlist_id, SelectionKind.PLAYLIST_TRACKS, resources
+            playlist_id, SelectionKind.PLAYLIST_TRACKS, resources, playlist=playlist
         ):
             yield media
 

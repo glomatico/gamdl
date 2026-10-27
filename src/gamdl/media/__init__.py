@@ -3,6 +3,7 @@
 from .base import Media, MediaSource
 from .cover import Cover
 from .cover_cache import CoverCache
+from .playlist import Playlist, PlaylistMetadata
 from .enums import HlsType, StreamOrigin, StreamSource
 from .exceptions import (
     GamdlMediaError,
@@ -56,6 +57,8 @@ from .uploaded_video import (
 )
 
 __all__ = [
+    "Playlist",
+    "PlaylistMetadata",
     "AudioStream",
     "HlsStream",
     "Cover",

@@ -112,13 +112,14 @@ class RipProgress:
     ):
         if self.enabled and occurrence in self._rows:
             task = self._rows[occurrence]
-            if status == "failed":
+            if status in {"failed", "partial"}:
                 percent = self._last_percent.get(occurrence)
+                color = "yellow" if status == "partial" else "red"
                 self.progress.update(
                     task,
-                    description=f"[red]✗ {escape(title)} · {escape(message or 'failed')}[/red]",
-                    total=100 if percent is not None else None,
-                    completed=percent or 0,
+                    description=f"[{color}]{'!' if status == 'partial' else '✗'} {escape(title)} · {escape(message or 'failed')}[/{color}]",
+                    total=100 if status == "partial" or percent is not None else None,
+                    completed=100 if status == "partial" else percent or 0,
                 )
             else:
                 mark, color = ("↷", "yellow") if status == "skipped" else ("✓", "green")
@@ -140,10 +141,19 @@ class RipProgress:
                 self._transfer.pop(previous, None)
                 self._last_percent.pop(previous, None)
         if not self.enabled:
-            symbol = "✗" if status == "failed" else "↷" if status == "skipped" else "✓"
+            symbol = (
+                "!"
+                if status == "partial"
+                else "✗"
+                if status == "failed"
+                else "↷"
+                if status == "skipped"
+                else "✓"
+            )
             self.console.print(f"{symbol} {escape(title)}: {escape(message or status)}")
-        elif status == "failed":
+        elif status in {"failed", "partial"}:
             # Persistent log line survives removal of old failed progress rows.
+            color = "yellow" if status == "partial" else "red"
             self.console.print(
-                f"[red]✗ {escape(title)}: {escape(message or 'failed')}[/red]"
+                f"[{color}]{'!' if status == 'partial' else '✗'} {escape(title)}: {escape(message or 'failed')}[/{color}]"
             )

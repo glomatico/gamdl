@@ -11,13 +11,17 @@ from typing import TYPE_CHECKING
 import click
 
 from gamdl.api import ItunesApi
-from gamdl.download import Downloader, MediaDatabase, PathFormatter, PlaylistTags
+from gamdl.download import (
+    DownloadFinalizationError,
+    Downloader,
+    MediaDatabase,
+    PathFormatter,
+)
 from gamdl.exceptions import GamdlError
 from gamdl.media import (
     MediaResolver,
     MusicVideo,
     MusicVideoCodec,
-    SelectionKind,
     Song,
     SongCodec,
     UploadedVideo,
@@ -129,18 +133,6 @@ def _formatter(options: RipOptions) -> PathFormatter:
     )
 
 
-def _playlist_tags(payload: dict, playlist_id: str, index: int) -> PlaylistTags:
-    resources = payload.get("data") if isinstance(payload, dict) else None
-    item = resources[0] if isinstance(resources, list) and resources else {}
-    attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
-    return PlaylistTags(
-        title=attrs.get("name") or playlist_id,
-        artist=attrs.get("curatorName") or "Unknown Playlist Artist",
-        playlist_id=playlist_id,
-        track=index + 1,
-    )
-
-
 async def run_rip(options: RipOptions) -> int:
     """Process discovered tracks concurrently, returning a stable CLI exit code."""
     _check_options(options)
@@ -168,7 +160,6 @@ async def run_rip(options: RipOptions) -> int:
                 concurrency=options.concurrency,
             )
             resolver = MediaResolver(api)
-            metadata_by_playlist: dict[str, dict] = {}
 
             with RipProgress(
                 enabled=options.progress,
@@ -182,19 +173,6 @@ async def run_rip(options: RipOptions) -> int:
 
                 async def process(occurrence: int, media, title: str) -> None:
                     try:
-                        playlist_tags = None
-                        if (
-                            options.save_playlist
-                            and media.source is not None
-                            and media.source.kind == SelectionKind.PLAYLIST_TRACKS.value
-                        ):
-                            # Metadata is fetched once per playlist before workers
-                            # are scheduled, preserving relative M3U positions.
-                            info = metadata_by_playlist.get(media.source.id)
-                            if info is not None:
-                                playlist_tags = _playlist_tags(
-                                    info, media.source.id, media.source.index
-                                )
                         if (
                             isinstance(media, MusicVideo)
                             and downloader.itunes_api is None
@@ -208,8 +186,9 @@ async def run_rip(options: RipOptions) -> int:
                             "save_cover": options.save_cover,
                             "save_lyrics": options.save_lyrics
                             and isinstance(media, Song),
-                            "save_playlist": bool(playlist_tags),
-                            "playlist_tags": playlist_tags,
+                            "save_playlist": options.save_playlist
+                            and media.source is not None
+                            and media.source.playlist is not None,
                             "event_callback": lambda e: progress.event(
                                 occurrence, title, e
                             ),
@@ -264,6 +243,22 @@ async def run_rip(options: RipOptions) -> int:
                         progress.finish(occurrence, title, result.status.value)
                     except click.Abort:
                         raise
+                    except DownloadFinalizationError as error:
+                        if error.partial_result is not None:
+                            counts[error.partial_result.status.value] += 1
+                            counts["finalization_failed"] += 1
+                            progress.finish(
+                                occurrence, title, "partial", _short_error(error)[0]
+                            )
+                        else:
+                            counts["failed"] += 1
+                            progress.finish(
+                                occurrence, title, "failed", _short_error(error)[0]
+                            )
+                        if options.debug:
+                            console.print_exception(show_locals=False)
+                        if not options.continue_on_error:
+                            raise _StopRip() from error
                     except Exception as error:
                         message, known = _short_error(error)
                         counts["failed"] += 1
@@ -287,17 +282,6 @@ async def run_rip(options: RipOptions) -> int:
                         except GamdlError:
                             pass
 
-                        if (
-                            options.save_playlist
-                            and media.source is not None
-                            and media.source.kind == SelectionKind.PLAYLIST_TRACKS.value
-                        ):
-                            if media.source.id not in metadata_by_playlist:
-                                metadata_by_playlist[
-                                    media.source.id
-                                ] = await api.get_playlist(
-                                    media.source.id, limit_tracks=1
-                                )
                         if (
                             isinstance(media, MusicVideo)
                             and downloader.itunes_api is None
@@ -368,6 +352,6 @@ async def run_rip(options: RipOptions) -> int:
     console.print(
         f"[bold]Finished:[/bold] {counts['downloaded']} downloaded, "
         f"{counts['overwritten']} overwritten, {counts['skipped']} skipped, "
-        f"{counts['failed']} failed ({found} discovered)"
+        f"{counts['failed']} failed, {counts['finalization_failed']} finalization failures ({found} discovered)"
     )
-    return 1 if counts["failed"] else 0
+    return 1 if counts["failed"] or counts["finalization_failed"] else 0

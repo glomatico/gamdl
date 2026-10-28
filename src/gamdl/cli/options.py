@@ -17,7 +17,7 @@ def option(*names, **kwargs):
 
 @dataclass
 class RipOptions:
-    urls: Annotated[tuple[str, ...], argument(nargs=-1)]
+    urls: Annotated[tuple[str, ...], argument(nargs=-1)] = ()
     auto_select: Annotated[
         tuple[str, ...],
         option(

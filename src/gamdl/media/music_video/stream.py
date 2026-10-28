@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -13,9 +14,13 @@ import httpx
 from gamdl.api.exceptions import GamdlApiError
 
 from ..enums import StreamOrigin
-from ..exceptions import SelectionRequiredError, StreamNotAvailableError
-from ..stream import AudioStream, StreamTransport, VideoStream
+from ..exceptions import (
+    SelectionRequiredError,
+    StreamManifestError,
+    StreamNotAvailableError,
+)
 from ..song.enums import SongCodec
+from ..stream import AudioStream, StreamTransport, VideoStream
 from .enums import MusicVideoCodec
 from .models import (
     AudioSelectionOption,
@@ -26,8 +31,11 @@ from .models import (
 )
 
 if TYPE_CHECKING:
+    from m3u8.model import M3U8
+
     from gamdl.api import ItunesApi
     from gamdl.api.wrapper import WrapperApi
+
     from .media import MusicVideo
 
 
@@ -49,6 +57,36 @@ def _video_codec(codecs: str | None) -> MusicVideoCodec | None:
         if part.startswith(("hvc1.", "hev1.", "dvh1.", "dvhe.")):
             return MusicVideoCodec.H265
     return None
+
+
+def _audio_playlist_bitrate(manifest: M3U8) -> int | None:
+    """Estimate audio bits/s from HLS segment hints or byte ranges.
+
+    EXT-X-BITRATE is expressed in kbps. For byte-range playlists, segment
+    byte counts and durations give an average without fetching media bytes.
+    """
+    total_bits = 0.0
+    total_seconds = 0.0
+    for segment in manifest.segments:
+        duration = segment.duration
+        if not duration or duration <= 0:
+            continue
+        hint = getattr(segment, "bitrate", None)
+        if hint is not None and hint > 0:
+            bits = hint * 1000 * duration
+        elif segment.byterange:
+            try:
+                size = int(segment.byterange.split("@", 1)[0])
+            except ValueError:
+                continue
+            if size <= 0:
+                continue
+            bits = size * 8
+        else:
+            continue
+        total_bits += bits
+        total_seconds += duration
+    return round(total_bits / total_seconds) if total_seconds else None
 
 
 def _itunes_hls_url(page: dict[str, Any], media_id: str) -> str | None:
@@ -325,6 +363,17 @@ class MusicVideoStreamResolver:
                 )
 
             audio_options = []
+            # An audio-only variant can advertise its own bandwidth. Video
+            # variants advertise combined A/V bandwidth, which is NOT the
+            # bitrate of the referenced EXT-X-MEDIA audio track.
+            audio_bandwidths = {
+                playlist.absolute_uri: getattr(
+                    playlist.stream_info, "average_bandwidth", None
+                )
+                or getattr(playlist.stream_info, "bandwidth", None)
+                for playlist in manifest.playlists
+                if _video_codec(getattr(playlist.stream_info, "codecs", None)) is None
+            }
             for audio in renditions:
                 audio_group = str(audio.group_id).lower()
                 audio_codec_value = group_codecs.get(
@@ -341,6 +390,7 @@ class MusicVideoStreamResolver:
                 audio_stream = AudioStream(
                     codec=audio_codec,
                     codec_string=audio_codec_value,
+                    bitrate=audio_bandwidths.get(audio.absolute_uri),
                     origin=origin,
                     url=audio.absolute_uri,
                     transport=self.transport,
@@ -357,6 +407,21 @@ class MusicVideoStreamResolver:
                 )
             if ask:
                 assert selector is not None
+
+                async def populate_bitrate(option: AudioSelectionOption) -> None:
+                    if option.bitrate:
+                        return
+                    try:
+                        audio_manifest = await option.stream.get_manifest()
+                    except StreamManifestError:
+                        # Bitrate is optional metadata; a failed probe must not
+                        # prevent choosing an otherwise valid audio rendition.
+                        return
+                    option.stream.bitrate = _audio_playlist_bitrate(audio_manifest)
+
+                await asyncio.gather(
+                    *(populate_bitrate(option) for option in audio_options)
+                )
                 audio_request = AudioSelectionRequest(
                     media_id=self.media.id,
                     video=video_stream,

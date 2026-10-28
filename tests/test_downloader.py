@@ -6,17 +6,25 @@ import asyncio
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 from gamdl.download import (
-    DownloadFinalizationError,
     Downloader,
+    DownloadFinalizationError,
     DownloadProgress,
     MediaDatabase,
     PathFormatter,
     Tags,
+)
+from gamdl.download.playlist import PlaylistWriter
+from gamdl.download.publication import (
+    publish_bytes as original_publish_bytes,
+)
+from gamdl.download.publication import (
+    publish_bytes_result as original_publish_sidecar,
 )
 from gamdl.media import (
     MediaSource,
@@ -27,8 +35,8 @@ from gamdl.media import (
     UploadedVideo,
     UploadedVideoQuality,
 )
-from gamdl.media.song.lyrics import Lyrics, LyricsLine
 from gamdl.media.music_video.stream import MusicVideoStreams
+from gamdl.media.song.lyrics import Lyrics, LyricsLine
 from gamdl.stream import StreamProgress
 from tests.test_muxer import JPEG, PNG, brands, mp4_tag_atoms, track_hashes
 
@@ -148,6 +156,128 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             [SongCodec.ALAC, SongCodec.AAC],
         )
         tags.get_tags.assert_awaited_once_with(song)
+
+    async def test_mux_and_tagger_run_off_event_loop(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        main_thread = threading.get_ident()
+        entered = threading.Event()
+        release = threading.Event()
+        threads = {}
+        original_remux = downloader.muxer.remux
+        original_tag = downloader.muxer.tag
+
+        def remux(data):
+            threads["remux"] = threading.get_ident()
+            entered.set()
+            if not release.wait(3):
+                raise TimeoutError("The event loop never released the muxer")
+            return original_remux(data)
+
+        def tag(path, *, tags, cover_bytes=None):
+            threads["tag"] = threading.get_ident()
+            return original_tag(path, tags=tags, cover_bytes=cover_bytes)
+
+        with (
+            patch.object(downloader.muxer, "remux", side_effect=remux),
+            patch.object(downloader.muxer, "tag", side_effect=tag),
+        ):
+            task = asyncio.create_task(downloader.get_bytes(song))
+            try:
+                # This would time out if the blocking muxer ran on the loop.
+                ready = await asyncio.wait_for(asyncio.to_thread(entered.wait), 2)
+                self.assertTrue(ready)
+            finally:
+                release.set()
+            self.assertTrue((await task).startswith(b"\x00\x00"))
+        self.assertNotEqual(threads["remux"], main_thread)
+        self.assertNotEqual(threads["tag"], main_thread)
+
+    async def test_atomic_publication_completes_before_cancellation_propagates(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        output = self.directory / "atomic-cancel.m4a"
+        entered = threading.Event()
+        release = threading.Event()
+        from gamdl.download.publication import publish_bytes as original_publish
+
+        def slow_publish(data, destination, *, overwrite):
+            entered.set()
+            if not release.wait(3):
+                raise TimeoutError("Timed out awaiting completion of publication")
+            return original_publish(data, destination, overwrite=overwrite)
+
+        with patch("gamdl.download.downloader.publish_bytes", side_effect=slow_publish):
+            task = asyncio.create_task(downloader.download(song, output, tag=False))
+            try:
+                ready = await asyncio.wait_for(asyncio.to_thread(entered.wait), 2)
+                self.assertTrue(ready)
+                task.cancel()
+                await asyncio.sleep(0.02)
+                self.assertFalse(task.done())
+            finally:
+                release.set()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertTrue(output.is_file())
+        self.assertEqual(list(self.directory.glob(".atomic-cancel*")), [])
+
+    async def test_sidecar_database_and_playlist_writes_run_off_event_loop(self):
+        downloader, _ = self.downloader()
+        db = MediaDatabase(self.directory / "offloaded.sqlite3")
+        downloader.database = db
+        song = self.song()
+        song.source = MediaSource("playlist_tracks", "id", 0)
+        song.get_cover.return_value = Mock(get_cover_bytes=AsyncMock(return_value=JPEG))
+        song.get_lyrics = AsyncMock(return_value=Lyrics(stanzas=[[LyricsLine("Test")]]))
+        output = self.directory / "offloaded.m4a"
+        playlist = self.directory / "offloaded.m3u8"
+        main = threading.get_ident()
+        workers: dict[str, list[int]] = {}
+
+        def track(label, function):
+            def run(*args, **kwargs):
+                workers.setdefault(label, []).append(threading.get_ident())
+                return function(*args, **kwargs)
+
+            return run
+
+        with (
+            patch(
+                "gamdl.download.downloader.publish_bytes",
+                side_effect=track("media", original_publish_bytes),
+            ),
+            patch(
+                "gamdl.download.downloader.publish_bytes_result",
+                side_effect=track("sidecars", original_publish_sidecar),
+            ),
+            patch.object(db, "record", side_effect=track("database", db.record)),
+            patch.object(
+                PlaylistWriter,
+                "add",
+                new=track("playlist", PlaylistWriter.add),
+            ),
+        ):
+            result = await downloader.download(
+                song,
+                output,
+                tag=False,
+                save_cover=True,
+                save_lyrics=True,
+                playlist_path=playlist,
+            )
+
+        self.assertEqual(result.status.value, "downloaded")
+        self.assertEqual(
+            {name: len(ids) for name, ids in workers.items()},
+            {"media": 1, "sidecars": 2, "database": 1, "playlist": 1},
+        )
+        self.assertTrue(all(tid != main for ids in workers.values() for tid in ids))
+        self.assertTrue(output.exists())
+        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertEqual(output.with_suffix(".txt").read_text(), "Test")
+        self.assertTrue(playlist.exists())
+        self.assertIsNotNone(db.get(output))
 
     async def test_atomic_download_skip_replace_and_error(self):
         downloader, tags = self.downloader()

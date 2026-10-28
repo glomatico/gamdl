@@ -9,12 +9,13 @@ from urllib.parse import parse_qs, urlsplit
 
 from .base import Media, MediaSource
 from .cover_cache import CoverCache
-from .constants import ARTIST_COLLECTIONS, DEFAULT_AUTO_SELECT
+from .constants import ARTIST_COLLECTIONS, DEFAULT_AUTO_SELECT, LIBRARY_COLLECTIONS
 from .enums import SelectionKind
 from .exceptions import SelectionRequiredError, UnsupportedMediaError
 from .models import (
     ArtistBrowseRequest,
     ArtistBrowseResult,
+    LibraryBrowseRequest,
     CollectionOption,
     CollectionSelectionRequest,
     SelectionOption,
@@ -31,7 +32,12 @@ if TYPE_CHECKING:
 
 
 Selector = Callable[
-    [SelectionRequest | CollectionSelectionRequest | ArtistBrowseRequest],
+    [
+        SelectionRequest
+        | CollectionSelectionRequest
+        | ArtistBrowseRequest
+        | LibraryBrowseRequest
+    ],
     Sequence[int] | ArtistBrowseResult | Awaitable[Sequence[int] | ArtistBrowseResult],
 ]
 
@@ -92,7 +98,7 @@ class MediaResolver:
         playlist: Playlist | None = None,
         select_all: bool = False,
     ) -> AsyncIterator[Media]:
-        """Stream auto-selected resources, materialize only for explicit UI selection."""
+        """Stream auto-selected resources, materialize for explicit UI selection."""
         if not select_all and kind not in self.auto_select and self.selector is None:
             raise SelectionRequiredError(kind.value)
 
@@ -152,13 +158,17 @@ class MediaResolver:
             yield media
 
     async def from_playlist(
-        self, playlist_id: str, *, is_library: bool = False
+        self, playlist_id: str, *, is_library: bool = False, select_all: bool = False
     ) -> AsyncIterator[Media]:
         """Yield playlist tracks without deduplicating repeated entries."""
         resources = self.api.iter_playlist_tracks(playlist_id, is_library=is_library)
         playlist = Playlist(playlist_id, api=self.api, is_library=is_library)
         async for media in self._from_collection(
-            playlist_id, SelectionKind.PLAYLIST_TRACKS, resources, playlist=playlist
+            playlist_id,
+            SelectionKind.PLAYLIST_TRACKS,
+            resources,
+            playlist=playlist,
+            select_all=select_all,
         ):
             yield media
 
@@ -276,7 +286,9 @@ class MediaResolver:
         for kind in categories:
             relation_type, path, _title = ARTIST_COLLECTIONS[kind]
 
-            async def indexed_resources() -> AsyncIterator[tuple[int, dict]]:
+            async def indexed_resources(
+                kind=kind, path=path, relation_type=relation_type
+            ) -> AsyncIterator[tuple[int, dict]]:
                 if kind in cache:
                     if selected_items.get(kind) is not None:
                         # Explicit item selections are entirely inside the
@@ -322,11 +334,142 @@ class MediaResolver:
                     yield media
 
     async def from_library(self) -> AsyncIterator[Media]:
-        """Reserve library selection for the next phase; never select blindly."""
+        """Browse and expand selected library categories lazily.
+
+        Selecting a category never downloads its metadata up front. Only
+        visited pages are fetched for individual selections; entire categories
+        stream in Apple Music's page order after confirmation.
+        """
         if SelectionKind.LIBRARY not in self.auto_select and self.selector is None:
             raise SelectionRequiredError(SelectionKind.LIBRARY.value)
-        raise UnsupportedMediaError("Library selections are not implemented yet")
-        yield
+
+        cache: dict[SelectionKind, PageCache[dict]] = {}
+
+        async def get_page(
+            kind: SelectionKind, index: int
+        ) -> MediaPage[CollectionOption] | None:
+            if kind not in LIBRARY_COLLECTIONS:
+                raise ValueError("Unknown library category")
+            if kind not in cache:
+                endpoint = LIBRARY_COLLECTIONS[kind][0]
+
+                async def fetch(cursor: str | None) -> MediaPage[dict]:
+                    offset = int(cursor) if cursor is not None else 0
+                    response = await getattr(self.api, f"get_library_{endpoint}")(
+                        limit=100, offset=offset
+                    )
+                    items = tuple(response.get("data") or ())
+                    return MediaPage(
+                        items,
+                        str(offset + len(items))
+                        if items and response.get("next")
+                        else None,
+                    )
+
+                cache[kind] = PageCache(fetch)
+            pages = cache[kind]
+            page = await pages.get(index)
+            if page is None:
+                return None
+            start = pages.offset(index)
+            return MediaPage(
+                tuple(
+                    CollectionOption(
+                        start + i,
+                        item.get("attributes", {}).get("name") or item["id"],
+                    )
+                    for i, item in enumerate(page.items)
+                ),
+                page.next_cursor,
+            )
+
+        if SelectionKind.LIBRARY in self.auto_select:
+            selected = {kind: (None, set()) for kind in LIBRARY_COLLECTIONS}
+        else:
+            assert self.selector is not None
+            request = LibraryBrowseRequest(
+                source_id="library",
+                artist_name="Your Library",
+                categories=tuple(
+                    (kind, label) for kind, (_, label) in LIBRARY_COLLECTIONS.items()
+                ),
+                load_page=get_page,
+            )
+            result = self.selector(request)
+            if inspect.isawaitable(result):
+                result = await result
+            if not isinstance(result, ArtistBrowseResult):
+                raise ValueError("Library browser must return ArtistBrowseResult")
+            selected = {}
+            for selection in result.selections:
+                if (
+                    selection.kind not in LIBRARY_COLLECTIONS
+                    or selection.kind in selected
+                ):
+                    raise ValueError("Library browser returned an invalid category")
+                collection = cache.get(selection.kind)
+                visited_count = (
+                    sum(len(page.items) for page in collection.pages)
+                    if collection is not None
+                    else 0
+                )
+                indices = selection.indices
+                excluded = selection.excluded_indices
+                if indices is not None and any(
+                    type(index) is not int or not 0 <= index < visited_count
+                    for index in indices
+                ):
+                    raise ValueError("Library browser returned an invalid item")
+                if (indices is not None and excluded) or any(
+                    type(index) is not int or not 0 <= index < visited_count
+                    for index in excluded
+                ):
+                    raise ValueError("Invalid library selection exclusions")
+                selected[selection.kind] = (
+                    set(indices) if indices is not None else None,
+                    set(excluded),
+                )
+
+        for kind in LIBRARY_COLLECTIONS:
+            if kind not in selected:
+                continue
+            indices, excluded = selected[kind]
+            # Fetch only visited pages for individual selections; selecting an
+            # entire library category iterates later pages on demand.
+            collection = cache.get(kind)
+            if collection is None:
+                await get_page(kind, 0)
+                collection = cache[kind]
+            if indices is None:
+                resources = collection.iter_items()
+            else:
+
+                async def visited(collection=collection):
+                    for page_index, page in enumerate(collection.pages):
+                        start = collection.offset(page_index)
+                        for offset, item in enumerate(page.items):
+                            yield start + offset, item
+
+                resources = visited()
+            async for index, item in resources:
+                if (indices is not None and index not in indices) or index in excluded:
+                    continue
+                if kind == SelectionKind.LIBRARY_ALBUMS:
+                    async for media in self.from_album(
+                        item["id"], is_library=True, select_all=True
+                    ):
+                        yield media
+                elif kind == SelectionKind.LIBRARY_PLAYLISTS:
+                    async for media in self.from_playlist(
+                        item["id"], is_library=True, select_all=True
+                    ):
+                        yield media
+                else:
+                    media = Media.from_metadata(
+                        item, api=self.api, cover_cache=self.cover_cache
+                    )
+                    media.source = MediaSource(kind.value, "library", index)
+                    yield media
 
     async def from_url(self, url: str) -> AsyncIterator[Media]:
         """Resolve known Apple Music URLs without fetching their landing pages."""

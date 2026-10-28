@@ -38,6 +38,14 @@ class MultiChoiceState:
         self.selected = {item.value for item in self.choices}
         self.error = None
 
+    def clear(self):
+        self.selected.clear()
+        self.error = None
+
+    def invert(self):
+        self.selected = {item.value for item in self.choices} - self.selected
+        self.error = None
+
     def result(self):
         # Preserve the original source occurrence order, not toggle order.
         return [item.value for item in self.choices if item.value in self.selected]
@@ -75,7 +83,7 @@ async def select_many(
         body=body,
         footer=lambda: footer(
             f"{len(state.selected)} of {len(choices)} selected",
-            "↑/↓ Navigate  ·  Space Toggle  ·  Ctrl+A All  ·  Enter Toggle/Download  ·  Esc Cancel",
+            "↑/↓ Navigate  ·  PgUp/PgDn Jump  ·  Space Toggle  ·  Ctrl+A All  ·  Ctrl+I Invert  ·  Ctrl+D Clear  ·  Enter Confirm  ·  Esc Cancel",
         ),
         cursor_row=lambda: state.cursor + 2,
         keys=keys,
@@ -101,6 +109,14 @@ async def select_many(
     def end(event):
         state.cursor = state.rows - 1
 
+    @keys.add("pageup")
+    def pageup(event):
+        state.move(-10)
+
+    @keys.add("pagedown")
+    def pagedown(event):
+        state.move(10)
+
     @keys.add("space")
     def toggle(event):
         state.toggle()
@@ -108,6 +124,14 @@ async def select_many(
     @keys.add("c-a")
     def all_items(event):
         state.select_all()
+
+    @keys.add("c-i")
+    def invert(event):
+        state.invert()
+
+    @keys.add("c-d")
+    def clear(event):
+        state.clear()
 
     @keys.add("enter")
     def confirm(event):

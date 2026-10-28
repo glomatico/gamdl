@@ -78,6 +78,11 @@ class ArtistBrowseRequest:
 
 
 @dataclass(frozen=True)
+class LibraryBrowseRequest(ArtistBrowseRequest):
+    """Library categories use the same lazy browser and selection protocol."""
+
+
+@dataclass(frozen=True)
 class ArtistCategorySelection:
     """None means all items; exclusions preserve unseen page selections."""
 

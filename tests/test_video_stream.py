@@ -6,15 +6,16 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 
 from gamdl.api.exceptions import GamdlApiResponseError
+from gamdl.cli.tui.selector import stream_choices
 from gamdl.media import (
     AudioSelectionRequest,
     AudioStream,
     MusicVideo,
     MusicVideoCodec,
     SelectionRequiredError,
+    StreamSource,
     VideoSelectionRequest,
     VideoStream,
-    StreamSource,
 )
 from gamdl.media.exceptions import StreamNotAvailableError
 from tests.test_media import VIDEO_DATA, fake_api
@@ -32,6 +33,26 @@ v720.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=5000000,CODECS="hvc1.1.6.L123,ec-3",RESOLUTION=3840x2160,AUDIO="audio-atmos"
 v4k.m3u8
 """
+AUDIO_PLAYLISTS = {
+    "/audio.m3u8": """#EXTM3U
+#EXT-X-BITRATE:256
+#EXTINF:6,
+audio1.m4s
+""",
+    "/audio-es.m3u8": """#EXTM3U
+#EXTINF:6,
+#EXT-X-BYTERANGE:96000@0
+audio-es.m4s
+#EXTINF:6,
+#EXT-X-BYTERANGE:96000@96000
+audio-es.m4s
+""",
+    "/atmos.m3u8": """#EXTM3U
+#EXTINF:6,
+#EXT-X-BYTERANGE:576000@0
+atmos.m4s
+""",
+}
 PAGE = {
     "storePlatformData": {
         "product-dv": {
@@ -61,6 +82,8 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(str(request.url))
             if request.url.path == "/master.m3u8":
                 return httpx.Response(200, text=MASTER)
+            if request.url.path in AUDIO_PLAYLISTS:
+                return httpx.Response(200, text=AUDIO_PLAYLISTS[request.url.path])
             return httpx.Response(404)
 
         self.client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
@@ -441,6 +464,20 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 ["audio-stereo", "audio-stereo", "audio-atmos"],
             )
             self.assertEqual(request.options[2].codec.value, "atmos")
+            self.assertEqual(
+                [o.bitrate for o in request.options],
+                [256_000, 128_000, 768_000],
+            )
+            title, choices = stream_choices(request)
+            self.assertEqual(title, "Music-video audio")
+            self.assertEqual(
+                [choice.detail for choice in choices],
+                [
+                    "English · en · 256 kbps",
+                    "Español · es · 128 kbps",
+                    "Spatial · 768 kbps",
+                ],
+            )
             return 2
 
         streams = await self.media.get_streams(
@@ -466,6 +503,67 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(requests), 4)
 
+    async def test_audio_only_variant_bandwidth_is_used_without_media_probe(self):
+        master = MASTER + (
+            "#EXT-X-STREAM-INF:BANDWIDTH=320000,AVERAGE-BANDWIDTH=256000,"
+            'CODECS="mp4a.40.2",AUDIO="audio-stereo"\n'
+            "audio.m3u8\n"
+        )
+        calls = []
+
+        def handle(request):
+            calls.append(request.url.path)
+            if request.url.path == "/master.m3u8":
+                return httpx.Response(200, text=master)
+            if request.url.path in AUDIO_PLAYLISTS:
+                return httpx.Response(200, text=AUDIO_PLAYLISTS[request.url.path])
+            return httpx.Response(404)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+
+            def choose(request):
+                if isinstance(request, VideoSelectionRequest):
+                    self.assertEqual(len(request.options), 3)
+                    return 0
+                self.assertEqual(request.options[0].bitrate, 256_000)
+                return 0
+
+            streams = await self.media.get_streams(
+                client=client,
+                itunes_api=self.itunes,
+                max_height=None,
+                ask=True,
+                selector=choose,
+            )
+        self.assertEqual(streams.audio.bitrate, 256_000)
+        self.assertNotIn("/audio.m3u8", calls)
+
+    async def test_missing_audio_bitrate_does_not_block_selection(self):
+        # No EXT-X-BITRATE, byte ranges or audio-only variants are available.
+        def handle(request):
+            if request.url.path == "/master.m3u8":
+                return httpx.Response(200, text=MASTER)
+            if request.url.path == "/audio.m3u8":
+                return httpx.Response(200, text="#EXTM3U\n#EXTINF:6,\npart.m4s\n")
+            return httpx.Response(404)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+
+            def choose(request):
+                if isinstance(request, VideoSelectionRequest):
+                    return 0
+                self.assertEqual([o.bitrate for o in request.options], [None] * 3)
+                return 0
+
+            streams = await self.media.get_streams(
+                client=client,
+                itunes_api=self.itunes,
+                ask=True,
+                selector=choose,
+            )
+        self.assertIsNone(streams.audio.bitrate)
+        self.assertEqual(streams.audio.url, "https://cdn.example.com/audio.m3u8")
+
     async def test_interactive_limits_and_selector_validation(self):
         wrapper = Mock()
         wrapper.get_playback = AsyncMock(
@@ -490,7 +588,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                     wrapper_api=wrapper,
                     itunes_api=self.itunes,
                     ask=True,
-                    selector=lambda _: bad,
+                    selector=lambda _, bad=bad: bad,
                 )
         with self.assertRaises(ValueError):
             await self.media.get_streams(

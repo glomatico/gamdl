@@ -42,10 +42,13 @@ def main(
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from None
     ctx.obj["settings"] = config
-    ctx.default_map = {"rip": click_default_map(config)}
+    defaults = click_default_map(config)
+    ctx.default_map = {"rip": defaults, "library": defaults}
 
 
 from .commands.rip import rip
+from .commands.library import library
 
 main.add_command(rip)
+main.add_command(library)
 main.add_command(config_group)

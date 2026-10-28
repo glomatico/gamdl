@@ -72,12 +72,12 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
         await state.expand()
         self.assertEqual(self.calls, [(MAIN, 0)])
         await state.select_all()
-        self.assertEqual(self.calls, [(MAIN, 0), (MAIN, 1)])
+        self.assertEqual(self.calls, [(MAIN, 0)])
         self.assertEqual(state.result().selections, (ArtistCategorySelection(MAIN),))
         self.assertTrue(state.back())
         state.move(1)
         await state.expand()
-        self.assertEqual(self.calls, [(MAIN, 0), (MAIN, 1), (VIDEOS, 0)])
+        self.assertEqual(self.calls, [(MAIN, 0), (VIDEOS, 0)])
         state.toggle()  # Only first music video
         self.assertEqual(
             state.result().selections,
@@ -126,19 +126,21 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             state.result().selections, (ArtistCategorySelection(MAIN, None, (0,)),)
         )
 
-    async def test_ctrl_a_fetches_every_page_and_clears_exclusions(self):
+    async def test_ctrl_a_selects_unseen_pages_without_fetching_and_clears_exclusions(
+        self,
+    ):
         state = ArtistBrowserState(self.request)
         state.toggle()
         await state.expand()
         state.toggle()  # exclude one
         await state.select_all()
-        self.assertEqual(self.calls, [(MAIN, 0), (MAIN, 1)])
+        self.assertEqual(self.calls, [(MAIN, 0)])
         self.assertEqual(state.result().selections, (ArtistCategorySelection(MAIN),))
         self.assertEqual(state.page_number, 1)
         await state.next_page()
         self.assertEqual(self.calls, [(MAIN, 0), (MAIN, 1)])
 
-    async def test_cancelled_load_all_does_not_change_selections(self):
+    async def test_cancelled_page_load_does_not_change_selections(self):
         request = self.request
         in_progress = asyncio.Event()
 
@@ -158,7 +160,7 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
         )
         await state.expand()
         state.toggle()  # Select one occurrence before Ctrl+A.
-        task = asyncio.create_task(state.select_all())
+        task = asyncio.create_task(state.next_page())
         await asyncio.wait_for(in_progress.wait(), timeout=2)
         task.cancel()
         await task
@@ -166,6 +168,19 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             state.result().selections, (ArtistCategorySelection(MAIN, (0,)),)
         )
+
+    async def test_clear_selection_at_root_and_within_category(self):
+        state = ArtistBrowserState(self.request)
+        await state.select_all()
+        self.assertEqual(len(state.selected), 2)
+        await state.expand()
+        state.clear()
+        self.assertEqual(state.mark(MAIN), "[ ]")
+        self.assertEqual(state.mark_item(0), "[ ]")
+        self.assertTrue(state.back())
+        state.clear()
+        self.assertEqual(state.selected, {})
+        self.assertEqual(self.calls, [(MAIN, 0)])
 
     async def test_real_ptk_right_left_page_keys_and_selection(self):
         with create_pipe_input() as pipe:

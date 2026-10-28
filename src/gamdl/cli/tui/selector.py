@@ -141,11 +141,19 @@ async def select_one(
 
     @keys.add("home")
     def home(event):
-        state.cursor = 0
+        state.move(-len(choices))
 
     @keys.add("end")
     def end(event):
-        state.cursor = len(choices) - 1
+        state.move(len(choices))
+
+    @keys.add("pageup")
+    def pageup(event):
+        state.move(-10)
+
+    @keys.add("pagedown")
+    def pagedown(event):
+        state.move(10)
 
     @keys.add("enter")
     def confirm(event):

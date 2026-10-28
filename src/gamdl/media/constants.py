@@ -6,6 +6,13 @@ DEFAULT_AUTO_SELECT = frozenset(
     {SelectionKind.ALBUM_TRACKS, SelectionKind.PLAYLIST_TRACKS}
 )
 
+LIBRARY_COLLECTIONS: dict[SelectionKind, tuple[str, str]] = {
+    SelectionKind.LIBRARY_PLAYLISTS: ("playlists", "Playlists"),
+    SelectionKind.LIBRARY_ALBUMS: ("albums", "Albums"),
+    SelectionKind.LIBRARY_SONGS: ("songs", "Songs"),
+    SelectionKind.LIBRARY_MUSIC_VIDEOS: ("music_videos", "Music Videos"),
+}
+
 ARTIST_COLLECTIONS: dict[SelectionKind, tuple[str, str, str]] = {
     SelectionKind.ARTIST_MAIN_ALBUMS: ("views", "full-albums", "Main Albums"),
     SelectionKind.ARTIST_COMPILATION_ALBUMS: (

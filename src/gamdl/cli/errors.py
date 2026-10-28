@@ -3,8 +3,8 @@
 import click
 
 from gamdl.api import (
-    GamdlAuthenticationError,
     GamdlApiResponseError,
+    GamdlAuthenticationError,
     GamdlRateLimitError,
     GamdlTransportError,
 )
@@ -31,6 +31,7 @@ def short_error(error: Exception) -> tuple[str, bool]:
             "No music-video HLS stream available",
             "No music-video HLS rendition matches",
             "Video rendition has no separate audio HLS track",
+            "Library song has no playable catalog equivalent",
         ):
             if str(error).startswith(prefix):
                 return str(error), True
@@ -68,8 +69,9 @@ def short_error(error: Exception) -> tuple[str, bool]:
             "database": "update database",
         }
         return (
-            f"Media saved, but couldn't {actions.get(error.stage, 'finish media')}: {reason}",
-            True,
+            "Media saved, but couldn't "
+            f"{actions.get(error.stage, 'finish media')}: {reason}",
+            reason != "unexpected error",
         )
     if isinstance(error, FileExistsError):
         return "Output already exists", True

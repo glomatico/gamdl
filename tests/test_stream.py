@@ -21,8 +21,7 @@ from gamdl.media import (
     StreamSelectionRequest,
     WebPlaybackStream,
 )
-from gamdl.drm import DRMInfo
-from gamdl.media.song.stream import SongStreamResolver, _default_master_url
+from gamdl.media.song.stream import _default_master_url
 from gamdl.media.stream import StreamTransport
 
 BASE = "https://cdn.example.test/media/"
@@ -424,12 +423,18 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             api.get_assets.assert_not_awaited()
             api.get_webplayback.assert_not_awaited()
 
-    async def test_ask_library_only_offers_webplayback(self):
+    async def test_library_ask_uses_catalog_sources_instead_of_encrypted_library_hls(
+        self,
+    ):
         api = fake_api()
-        api.get_webplayback.return_value = {
-            "songList": [{"songId": "i.123", "assets": [{"URL": WEB_MASTER}]}]
-        }
-        song = Song.from_id("i.123", api=api, is_library=True)
+        song = Song.from_metadata(
+            {
+                "id": "i.123",
+                "type": "library-songs",
+                "relationships": {"catalog": {"data": [{"id": "111"}]}},
+            },
+            api=api,
+        )
         prompts = []
 
         def select(request):
@@ -439,14 +444,19 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client()
         async with client:
             stream = await song.get_stream(ask=True, selector=select, client=client)
-            self.assertEqual(stream.origin, StreamOrigin.LIBRARY_WEBPLAYBACK)
+            self.assertEqual(stream.origin, StreamOrigin.WEBPLAYBACK)
             self.assertEqual(
                 [o.origin for o in prompts[0].options],
-                [StreamOrigin.LIBRARY_WEBPLAYBACK],
+                [
+                    StreamOrigin.WEBPLAYBACK,
+                    StreamOrigin.ASSET_ENHANCED_HLS,
+                    StreamOrigin.ASSET_STANDARD_HLS,
+                ],
             )
             self.assertEqual(len(prompts), 2)
             self.assertEqual(calls, [])
             api.get_assets.assert_not_awaited()
+            api.get_webplayback.assert_awaited_once_with("111", is_library=False)
 
     async def test_full_discovery_preserves_all_distinct_origins(self):
         api = fake_api()
@@ -527,21 +537,48 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             SongCodec("ask")
         callback.assert_not_called()
 
-    async def test_library_stream_is_direct_and_drm_free(self):
+    async def test_library_catalog_web_stream_keeps_drm_and_catalog_media_id(self):
         api = fake_api()
-        api.get_webplayback.return_value = {
-            "songList": [{"songId": "i.123", "assets": [{"URL": WEB_MASTER}]}]
-        }
-        song = Song.from_id("i.123", api=api, is_library=True)
+        song = Song.from_metadata(
+            {
+                "id": "i.123",
+                "type": "library-songs",
+                "relationships": {"catalog": {"data": [{"id": "111"}]}},
+            },
+            api=api,
+        )
         client, calls = stream_client()
         async with client:
             stream = await song.get_stream(codec=SongCodec.AAC_WEB, client=client)
-            self.assertTrue(stream.drm_free)
-            self.assertEqual(stream.origin, StreamOrigin.LIBRARY_WEBPLAYBACK)
-            self.assertEqual(await stream.get_drm_info(), DRMInfo())
-            self.assertEqual(calls, [])
-            api.get_webplayback.assert_awaited_once_with("i.123", is_library=True)
-            api.get_assets.assert_not_awaited()
+            self.assertFalse(stream.drm_free)
+            self.assertEqual(stream.origin, StreamOrigin.WEBPLAYBACK)
+            self.assertEqual(stream.media_id, "111")
+            self.assertTrue((await stream.get_drm_info()).is_protected)
+            self.assertEqual(stream.codec, SongCodec.AAC_WEB)
+            self.assertEqual(stream.url, WEB_MASTER)
+            all_streams = await song.get_streams(client=client)
+            self.assertIn(
+                StreamOrigin.ASSET_ENHANCED_HLS, {s.origin for s in all_streams}
+            )
+            self.assertTrue(all(s.media_id == "111" for s in all_streams))
+            self.assertIn(("GET", "/media/web-asset.m3u8", None), calls)
+            api.get_webplayback.assert_awaited_with("111", is_library=False)
+
+    async def test_library_without_catalog_counterpart_fails_explicitly(self):
+        api = fake_api()
+        song = Song.from_metadata(
+            {
+                "id": "i.upload",
+                "type": "library-songs",
+                "relationships": {"catalog": {"data": []}},
+            },
+            api=api,
+        )
+        with self.assertRaisesRegex(
+            StreamNotAvailableError, "no playable catalog equivalent"
+        ):
+            await song.get_stream()
+        api.get_webplayback.assert_not_awaited()
 
 
 class StreamLazyTests(unittest.IsolatedAsyncioTestCase):

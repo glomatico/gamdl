@@ -77,6 +77,18 @@ class ArtistBrowserState:
         if not self.loading:
             self.cursor = max(0, min(self.rows - 1, self.cursor + change))
 
+    def clear(self):
+        """Deselect the current category or all categories without fetching."""
+        if self.loading:
+            return
+        if self.category is None:
+            self.selected.clear()
+            self.excluded.clear()
+        else:
+            self.selected.pop(self.category, None)
+            self.excluded.pop(self.category, None)
+        self.error = None
+
     def toggle(self):
         """Space toggles categories or individual item occurrence indices."""
         if self.loading or self.cursor == self.rows - 1:
@@ -113,7 +125,7 @@ class ArtistBrowserState:
                 self.selected.pop(kind, None)
 
     async def select_all(self):
-        """Ctrl+A fetches remaining pages before marking every category item."""
+        """Select every item lazily, including pages not visited yet."""
         if self.loading:
             return
         if self.category is None:
@@ -121,20 +133,6 @@ class ArtistBrowserState:
                 self.selected[kind] = None
                 self.excluded.pop(kind, None)
         else:
-            collection = self.loaded[self.category]
-            self.loading = True
-            self.loading_page = collection.index + 1
-            self.error = None
-            try:
-                await collection.load_all(self._loading_page)
-            except asyncio.CancelledError:
-                return  # Keep previous selections when load-all is cancelled.
-            except Exception as exc:
-                self.error = self._error_message(exc)
-                return
-            finally:
-                self.loading = False
-                self.loading_page = None
             self.selected[self.category] = None
             self.excluded.pop(self.category, None)
         self.error = None
@@ -303,7 +301,7 @@ async def browse_artist(
         return menu_footer(
             summary
             + "  ·  ↑/↓ navigate  ·  ←/→ pages  ·  Space mark  ·  Enter open/download",
-            "Ctrl+A load & select all  ·  Esc/Backspace back  ·  Ctrl+C cancel",
+            "Ctrl+A select all  ·  Ctrl+D clear  ·  PgUp/PgDn jump  ·  Esc back  ·  Ctrl+C cancel",
         )
 
     app = make_app(
@@ -336,6 +334,14 @@ async def browse_artist(
         if not state.loading:
             state.cursor = state.rows - 1
 
+    @kb.add("pageup")
+    def pageup(event):
+        state.move(-10)
+
+    @kb.add("pagedown")
+    def pagedown(event):
+        state.move(10)
+
     @kb.add("space")
     def toggle(event):
         state.toggle()
@@ -343,6 +349,10 @@ async def browse_artist(
     @kb.add("c-a")
     def select_all(event):
         start_task(state.select_all())
+
+    @kb.add("c-d")
+    def clear(event):
+        state.clear()
 
     def start_task(coroutine):
         task = asyncio.create_task(coroutine)

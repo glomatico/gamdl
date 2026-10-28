@@ -12,6 +12,7 @@ import httpx
 from ...api.exceptions import GamdlApiError
 from ..enums import HlsType, StreamOrigin
 from ..exceptions import (
+    GamdlMediaError,
     SelectionRequiredError,
     StreamManifestError,
     StreamNotAvailableError,
@@ -88,8 +89,39 @@ class SongStreamResolver:
         self._client_key = id(client) if client else None
         self._wrapper_key = id(wrapper_api) if wrapper_api else None
 
+    async def _catalog_resolver(self) -> SongStreamResolver:
+        """Use playable catalog streams for matched personal-library songs.
+
+        Apple may return FairPlay-encrypted ``enca`` samples for library
+        webplayback, even if the library track was previously treated as
+        DRM-free. A catalog counterpart supports our tested key/decryption
+        paths and must carry its own catalog ID for license requests.
+        """
+        from .media import Song
+
+        try:
+            catalog_id = await self.song._catalog_id()
+        except GamdlMediaError as exc:
+            raise StreamNotAvailableError(
+                "Library song has no playable catalog equivalent"
+            ) from exc
+        if not catalog_id.isdecimal():
+            raise StreamNotAvailableError(
+                "Library song has no playable catalog equivalent"
+            )
+        catalog_song = Song.from_id(
+            catalog_id, api=self.song.api, cover_cache=self.song.cover_cache
+        )
+        return SongStreamResolver(
+            catalog_song,
+            wrapper_api=self.wrapper_api,
+            client=self.transport.client,
+        )
+
     async def get_web_streams(self) -> tuple[WebPlaybackStream, ...]:
         """Discover direct playback flavors without requesting any playlists."""
+        if self.song.is_library:
+            return await (await self._catalog_resolver()).get_web_streams()
 
         async def discover() -> tuple[WebPlaybackStream, ...]:
             record = _first_song(await self.song._get_webplayback())
@@ -102,20 +134,6 @@ class SongStreamResolver:
                     continue
                 url = asset.get("URL")
                 if not isinstance(url, str) or not url:
-                    continue
-                if self.song.is_library:
-                    if result:
-                        break
-                    result.append(
-                        WebPlaybackStream(
-                            codec=SongCodec.AAC_WEB,
-                            origin=StreamOrigin.LIBRARY_WEBPLAYBACK,
-                            url=url,
-                            transport=self.transport,
-                            drm_free=True,
-                            media_id=self.song.id,
-                        )
-                    )
                     continue
                 codec = next(
                     (
@@ -231,6 +249,8 @@ class SongStreamResolver:
             StreamOrigin.ASSET_STANDARD_HLS,
         }:
             raise ValueError("Unsupported HLS source")
+        if self.song.is_library:
+            return await (await self._catalog_resolver()).get_hls_streams(origin=origin)
         key = (
             "streams_hls",
             origin,
@@ -239,8 +259,6 @@ class SongStreamResolver:
         )
 
         async def discover() -> tuple[HlsSongStream, ...]:
-            if self.song.is_library:
-                return ()
             source = (
                 await self._wrapper_hls_source()
                 if origin == StreamOrigin.WRAPPER_HLS
@@ -257,10 +275,11 @@ class SongStreamResolver:
 
     async def get_streams(self) -> tuple[AudioStream, ...]:
         """Explicit, full discovery of all eligible sources, including both profiles."""
+        if self.song.is_library:
+            return await (await self._catalog_resolver()).get_streams()
         candidates: list[AudioStream] = list(await self.get_web_streams())
-        if not self.song.is_library:
-            for origin in self._hls_origins():
-                candidates.extend(await self.get_hls_streams(origin=origin))
+        for origin in self._hls_origins():
+            candidates.extend(await self.get_hls_streams(origin=origin))
         return tuple(candidates)
 
     def _hls_origins(self) -> tuple[StreamOrigin, ...]:
@@ -271,13 +290,7 @@ class SongStreamResolver:
         )
 
     def _source_options(self) -> tuple[StreamSourceOption, ...]:
-        origins = [
-            StreamOrigin.LIBRARY_WEBPLAYBACK
-            if self.song.is_library
-            else StreamOrigin.WEBPLAYBACK
-        ]
-        if not self.song.is_library:
-            origins.extend(self._hls_origins())
+        origins = [StreamOrigin.WEBPLAYBACK, *self._hls_origins()]
         return tuple(StreamSourceOption(i, origin) for i, origin in enumerate(origins))
 
     async def _streams_for_source(
@@ -340,9 +353,18 @@ class SongStreamResolver:
                 raise ValueError("ask cannot be combined with codec preferences")
             if selector is None:
                 raise SelectionRequiredError("song_stream")
-            return await self._ask(selector)
-        if selector is not None:
+        elif selector is not None:
             raise ValueError("selector requires ask=True")
+        if self.song.is_library:
+            return await (await self._catalog_resolver()).get_stream(
+                codec=codec,
+                codec_priority=codec_priority,
+                ask=ask,
+                selector=selector,
+            )
+        if ask:
+            assert selector is not None
+            return await self._ask(selector)
         priorities = (
             (SongCodec(codec),)
             if codec is not None

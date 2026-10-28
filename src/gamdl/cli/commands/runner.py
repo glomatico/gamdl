@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import traceback
 from collections import Counter
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, aclosing
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
+from rich.text import Text
 
 from gamdl.api import ItunesApi
 from gamdl.download import (
-    DownloadFinalizationError,
     Downloader,
+    DownloadFinalizationError,
     MediaDatabase,
     PathFormatter,
 )
+from gamdl.download.events import DownloadStage, EventState
 from gamdl.exceptions import GamdlError
 from gamdl.media import (
     MediaResolver,
@@ -28,11 +32,15 @@ from gamdl.media import (
     UploadedVideoQuality,
 )
 from gamdl.media.constants import RIP_AUTO_SELECT_NAMES
+
+from ..errors import short_error as _short_error
+from ..output import banner
+from ..output import console as output_console
 from ..progress import RipProgress
 from ..prompts import interactive, select_media, select_stream
-from ..errors import short_error as _short_error
-from ..output import banner, console as output_console, success, warning
-from ..session import authenticate as _authenticate, create_drm
+from ..session import authenticate as _authenticate
+from ..session import create_drm
+from ..terminal import TerminalController
 
 if TYPE_CHECKING:
     from ..options import RipOptions
@@ -40,6 +48,35 @@ if TYPE_CHECKING:
 
 class _StopRip(Exception):
     """Signal that the failed track was already counted under --fail-fast."""
+
+
+@dataclass(frozen=True)
+class _Failure:
+    label: str
+    message: str
+    exception_type: str
+    expected: bool
+    traceback: str | None
+
+
+def _print_failures(console, failures: list[_Failure], *, debug: bool) -> None:
+    """Render errors after the live progress display has been stopped."""
+    if not failures:
+        return
+    console.print(f"[bold red]Errors ({len(failures)}):[/bold red]")
+    for failure in failures:
+        suffix = "" if failure.expected else f" ({failure.exception_type})"
+        console.print(Text(f"  ✗ {failure.label}: {failure.message}{suffix}"))
+        if debug and failure.traceback is not None:
+            console.print(Text(failure.traceback))
+    has_unexpected = any(not failure.expected for failure in failures)
+    if has_unexpected and not debug:
+        console.print("[dim]Run with --debug for tracebacks.[/dim]")
+    elif any(failure.traceback is not None for failure in failures):
+        console.print(
+            "[yellow]Debug tracebacks may contain signed URLs or account details; "
+            "review before sharing.[/yellow]"
+        )
 
 
 def _check_options(options: RipOptions) -> None:
@@ -115,7 +152,8 @@ def _check_options(options: RipOptions) -> None:
                 ParameterSource.ENVIRONMENT,
             }:
                 raise click.UsageError(
-                    "--music-video-codec cannot be combined with --music-video-codec-priority"
+                    "--music-video-codec cannot be combined with "
+                    "--music-video-codec-priority"
                 )
 
 
@@ -147,13 +185,31 @@ async def run_rip(options: RipOptions) -> int:
     counts: Counter[str] = Counter()
     found = 0
     pending: set[asyncio.Task] = set()
+    failures: list[_Failure] = []
+
+    def record_failure(label: str, error: Exception) -> None:
+        message, expected = _short_error(error)
+        failures.append(
+            _Failure(
+                label,
+                message,
+                type(error).__name__,
+                expected,
+                "".join(traceback.format_exception(error))
+                if options.debug and not expected
+                else None,
+            )
+        )
 
     try:
         async with AsyncExitStack() as stack:
             api, wrapper = await _authenticate(options, stack, console=console)
-            success("Authenticated")
+            console.print("[green]✓[/green] Authenticated")
             if not api.active_subscription:
-                warning("An active Apple Music subscription was not confirmed")
+                console.print(
+                    "[yellow]![/yellow] An active Apple Music subscription "
+                    "was not confirmed"
+                )
             drm = await create_drm(options, api)
             downloader = Downloader(
                 drm=drm,
@@ -169,24 +225,38 @@ async def run_rip(options: RipOptions) -> int:
                 max_visible=options.max_visible_tracks,
                 console=console,
             ) as progress:
-                ui_lock = asyncio.Lock()
+                terminal = TerminalController(progress)
+                stop_requested: asyncio.Future[BaseException] = (
+                    asyncio.get_running_loop().create_future()
+                )
+
+                def request_stop(error: BaseException) -> None:
+                    # Signal before the worker yields, so queued selectors
+                    # cannot open another menu after its lease is released.
+                    if not stop_requested.done():
+                        stop_requested.set_result(error)
+
+                def check_stopped() -> None:
+                    if stop_requested.done():
+                        raise stop_requested.result()
 
                 async def choose(request, *, media_title: str):
-                    async with ui_lock:
-                        with progress.suspend():
-                            return await select_stream(request, media_title=media_title)
+                    check_stopped()
+                    return await terminal.prompt(
+                        select_stream(request, media_title=media_title)
+                    )
 
                 async def choose_media(request):
-                    # An earlier URL can have workers still running. Finish
-                    # them before opening an alternate-screen prompt so their
-                    # Rich messages never print over the live menu.
-                    if pending:
-                        completed = tuple(pending)
-                        await asyncio.gather(*completed)
-                        pending.difference_update(completed)
-                    async with ui_lock:
-                        with progress.suspend():
-                            return await select_media(request)
+                    # Previously selected tracks may keep downloading. Only
+                    # competing menus are serialized, not their transfers.
+                    check_stopped()
+                    async with terminal.session():
+                        check_stopped()
+                        try:
+                            return await terminal.prompt(select_media(request))
+                        except click.Abort as error:
+                            request_stop(error)
+                            raise
 
                 resolver = MediaResolver(
                     api,
@@ -198,9 +268,25 @@ async def run_rip(options: RipOptions) -> int:
 
                 async def process(occurrence: int, media, title: str) -> None:
                     try:
+                        lease = None
+                        check_stopped()
 
                         async def choose_for_track(request):
+                            nonlocal lease
+                            check_stopped()
+                            if lease is None:
+                                lease = await terminal.acquire()
                             return await choose(request, media_title=title)
+
+                        def on_event(event):
+                            progress.event(occurrence, title, event)
+                            if (
+                                lease is not None
+                                and event.stage == DownloadStage.FETCHING_STREAMS
+                                and event.state
+                                in {EventState.COMPLETED, EventState.FAILED}
+                            ):
+                                lease.release()
 
                         kwargs = {
                             "overwrite": options.overwrite,
@@ -210,9 +296,7 @@ async def run_rip(options: RipOptions) -> int:
                             "save_playlist": options.save_playlist
                             and media.source is not None
                             and media.source.playlist is not None,
-                            "event_callback": lambda e: progress.event(
-                                occurrence, title, e
-                            ),
+                            "event_callback": on_event,
                         }
                         if isinstance(media, Song):
                             kwargs.update(
@@ -261,136 +345,176 @@ async def run_rip(options: RipOptions) -> int:
                                 if options.ask_uploaded_video_quality
                                 else None,
                             )
-                        result = await downloader.download(media, **kwargs)
+                        # The first prompt acquires the lease, allowing tags,
+                        # path checks and stream discovery to run concurrently.
+                        # Keep it through subsequent menus for this track;
+                        # the stream-stage event releases it before transfer.
+                        try:
+                            result = await downloader.download(media, **kwargs)
+                        finally:
+                            if lease is not None:
+                                lease.release()
                         counts[result.status.value] += 1
-                        progress.finish(occurrence, title, result.status.value)
-                    except click.Abort:
+                        progress.finish(
+                            occurrence, title, result.status.value, path=result.path
+                        )
+                    except _StopRip:
+                        # Another worker already recorded the fatal failure.
+                        raise
+                    except click.Abort as error:
+                        request_stop(error)
                         raise
                     except DownloadFinalizationError as error:
+                        record_failure(title, error)
                         if error.partial_result is not None:
                             counts[error.partial_result.status.value] += 1
                             counts["finalization_failed"] += 1
                             progress.finish(
-                                occurrence, title, "partial", _short_error(error)[0]
+                                occurrence,
+                                title,
+                                "partial",
+                                _short_error(error)[0],
+                                path=error.partial_result.path,
                             )
                         else:
                             counts["failed"] += 1
                             progress.finish(
                                 occurrence, title, "failed", _short_error(error)[0]
                             )
-                        if options.debug:
-                            console.print_exception(show_locals=False)
                         if not options.continue_on_error:
-                            raise _StopRip() from error
+                            stop = _StopRip()
+                            request_stop(stop)
+                            raise stop from error
                     except Exception as error:
-                        message, known = _short_error(error)
+                        record_failure(title, error)
+                        message, _ = _short_error(error)
                         counts["failed"] += 1
                         progress.finish(occurrence, title, "failed", message)
-                        if options.debug and not known:
-                            console.print_exception(show_locals=False)
                         if not options.continue_on_error:
-                            raise _StopRip() from error
+                            stop = _StopRip()
+                            request_stop(stop)
+                            raise stop from error
 
-                stopped = False
-                try:
+                async def wait_for_worker() -> None:
+                    nonlocal pending
+                    done, pending = await asyncio.wait(
+                        pending, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    # Retrieve every completed outcome even if one stops the
+                    # run, so simultaneous failures cannot become orphan tasks.
+                    results = await asyncio.gather(*done, return_exceptions=True)
+                    for result in results:
+                        if isinstance(result, click.Abort):
+                            raise result
+                    for result in results:
+                        if isinstance(result, BaseException):
+                            raise result
+
+                async def discover() -> None:
+                    nonlocal found
                     for url in options.urls:
+                        check_stopped()
                         try:
-                            async for media in resolver.from_url(url):
-                                found += 1
-                                progress.discovered(found)
-                                title = f"Track {found}"
-                                # Catalog/playlist iterators supply metadata;
-                                # avoid an extra request just to print titles.
-                                try:
-                                    meta = await media.get_metadata()
-                                    title = (
-                                        meta.get("attributes", {}).get("name")
-                                        or media.id
-                                    )
-                                except GamdlError:
-                                    pass
-
-                                if (
-                                    isinstance(media, MusicVideo)
-                                    and downloader.itunes_api is None
-                                ):
-                                    from gamdl.api import GamdlApiError
-
+                            async with aclosing(resolver.from_url(url)) as source:
+                                async for media in source:
+                                    check_stopped()
+                                    found += 1
+                                    progress.discovered(found)
+                                    title = f"Track {found}"
+                                    # Catalog/playlist iterators supply metadata;
+                                    # avoid an extra request just to print titles.
                                     try:
-                                        downloader.itunes_api = (
-                                            await stack.enter_async_context(
-                                                await ItunesApi.create(
-                                                    storefront=api.storefront,
-                                                    language=options.language,
+                                        meta = await media.get_metadata()
+                                        title = (
+                                            meta.get("attributes", {}).get("name")
+                                            or media.id
+                                        )
+                                    except GamdlError:
+                                        pass
+
+                                    if (
+                                        isinstance(media, MusicVideo)
+                                        and downloader.itunes_api is None
+                                    ):
+                                        from gamdl.api import GamdlApiError
+
+                                        try:
+                                            downloader.itunes_api = (
+                                                await stack.enter_async_context(
+                                                    await ItunesApi.create(
+                                                        storefront=api.storefront,
+                                                        language=options.language,
+                                                    )
                                                 )
                                             )
-                                        )
-                                    except GamdlApiError:
-                                        pass
-                                progress.add(found, title)
-                                pending.add(
-                                    asyncio.create_task(process(found, media, title))
-                                )
-                                max_active = (
-                                    1
-                                    if any(
-                                        (
-                                            options.ask_song_codec,
-                                            options.ask_music_video_streams,
-                                            options.ask_uploaded_video_quality,
+                                        except GamdlApiError:
+                                            pass
+                                    check_stopped()
+                                    progress.add(
+                                        found,
+                                        title,
+                                        tracks=("audio", "video")
+                                        if isinstance(media, MusicVideo)
+                                        else ("video",)
+                                        if isinstance(media, UploadedVideo)
+                                        else ("audio",),
+                                    )
+                                    pending.add(
+                                        asyncio.create_task(
+                                            process(found, media, title)
                                         )
                                     )
-                                    else options.concurrent_downloads
-                                )
-                                if len(pending) >= max_active:
-                                    done, pending = await asyncio.wait(
-                                        pending, return_when=asyncio.FIRST_COMPLETED
-                                    )
-                                    for finished in done:
-                                        await finished
-                        except (_StopRip, click.Abort):
+                                    max_active = options.concurrent_downloads
+                                    if len(pending) >= max_active:
+                                        await wait_for_worker()
+                        except (_StopRip, click.Abort) as error:
+                            request_stop(error)
                             raise
                         except Exception as error:
+                            record_failure("Source", error)
                             counts["failed"] += 1
-                            message, known = _short_error(error)
-                            console.print(f"[red]✗ Source: {message}[/red]")
-                            if options.debug and not known:
-                                console.print_exception(show_locals=False)
                             if not options.continue_on_error:
-                                raise _StopRip() from error
+                                stop = _StopRip()
+                                request_stop(stop)
+                                raise stop from error
+                    progress.discovery_finished(found)
+                    while pending:
+                        await wait_for_worker()
+
+                discovery = asyncio.create_task(discover())
+                try:
+                    # A worker may abort while discovery awaits a page,
+                    # metadata, or a collection menu. Observe that failure
+                    # immediately instead of waiting to fill the worker pool.
+                    await asyncio.wait(
+                        (discovery, stop_requested),
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    check_stopped()
+                    await discovery
                 except _StopRip:
-                    stopped = True
-                    for task in pending:
-                        task.cancel()
+                    pass
                 except click.Abort:
-                    for task in pending:
-                        task.cancel()
                     raise
                 except Exception as error:
+                    record_failure("Source", error)
                     counts["failed"] += 1
-                    message, known = _short_error(error)
-                    console.print(f"[red]✗ Source: {message}[/red]")
-                    if options.debug and not known:
-                        console.print_exception(show_locals=False)
                 finally:
+                    # Abort, fail-fast and external cancellation must stop
+                    # downloads and menus before their terminal UI is closed.
+                    discovery.cancel()
+                    for task in pending:
+                        task.cancel()
+                    await asyncio.gather(discovery, *pending, return_exceptions=True)
+                    stop_requested.cancel()
+                    pending.clear()
                     progress.discovery_finished(found)
-                    if pending:
-                        done = await asyncio.gather(*pending, return_exceptions=True)
-                        for failure in done:
-                            if stopped and isinstance(failure, asyncio.CancelledError):
-                                continue
-                            if isinstance(failure, BaseException) and not isinstance(
-                                failure, Exception
-                            ):
-                                raise failure
 
     except click.Abort:
         raise
     except Exception as error:
-        message, known = _short_error(error)
-        console.print(f"[red]✗ {message}[/red]")
-        if options.debug and not known:
-            console.print_exception(show_locals=False)
+        record_failure("Session", error)
+        _print_failures(console, failures, debug=options.debug)
         return 1
 
     if found == 0 and not counts["failed"]:
@@ -399,6 +523,8 @@ async def run_rip(options: RipOptions) -> int:
     console.print(
         f"[bold]Finished:[/bold] {counts['downloaded']} downloaded, "
         f"{counts['overwritten']} overwritten, {counts['skipped']} skipped, "
-        f"{counts['failed']} failed, {counts['finalization_failed']} finalization failures ({found} discovered)"
+        f"{counts['failed']} failed, {counts['finalization_failed']} "
+        f"finalization failures ({found} discovered)"
     )
+    _print_failures(console, failures, debug=options.debug)
     return 1 if counts["failed"] or counts["finalization_failed"] else 0

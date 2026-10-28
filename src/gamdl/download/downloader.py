@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal, Iterator
+from typing import Any, Iterator, Literal
 
 import httpx
 
@@ -26,36 +26,35 @@ from gamdl.media import (
     MusicVideo,
     MusicVideoCodec,
     MusicVideoStreamSelector,
-    UploadedVideo,
-    UploadedVideoQuality,
-    UploadedVideoStreamSelector,
     SelectionKind,
     Song,
     SongCodec,
     SongStreamSelector,
+    UploadedVideo,
+    UploadedVideoQuality,
+    UploadedVideoStreamSelector,
     VideoStream,
 )
 from gamdl.muxer import Muxer
 from gamdl.stream import Streamer, StreamProgress
 
-from .tag_resolver import TagResolver
-from .tags import Tags
 from .database import MediaDatabase
-from .exceptions import DownloadFinalizationError
-from .playlist import PlaylistWriter
-from .publication import publish_bytes, publish_bytes_result
-from .paths import PathFormatter, PlaylistTags
-from .path_resolver import resolve_numbered_video_path, resolve_song_path
 from .enums import (
-    DatabaseStatus,
     DecryptionMethod,
     FileStatus,
     MediaStatus,
     OverwritePolicy,
     PlaylistStatus,
 )
-from .models import DownloadResult, FileResult, PlaylistResult, DatabaseResult
 from .events import DownloadEvent, DownloadEventCallback, DownloadStage, EventState
+from .exceptions import DownloadFinalizationError
+from .models import DatabaseResult, DownloadResult, FileResult, PlaylistResult
+from .path_resolver import resolve_numbered_video_path, resolve_song_path
+from .paths import PathFormatter, PlaylistTags
+from .playlist import PlaylistWriter
+from .publication import publish_bytes, publish_bytes_result
+from .tag_resolver import TagResolver
+from .tags import Tags
 
 
 class _SidecarError(Exception):
@@ -64,6 +63,41 @@ class _SidecarError(Exception):
     def __init__(self, stage: str):
         self.stage = stage
         super().__init__(stage)
+
+
+def _tag_bytes(
+    muxer: Muxer,
+    data: bytes,
+    suffix: str,
+    tags: Tags,
+    artwork: bytes | None,
+) -> bytes:
+    """Keep the tagger's temporary files entirely within one worker thread."""
+    with TemporaryDirectory(prefix="gamdl-tag-") as directory:
+        staged = Path(directory) / f"media{suffix}"
+        staged.write_bytes(data)
+        muxer.tag(staged, tags=tags, cover_bytes=artwork)
+        return staged.read_bytes()
+
+
+async def _complete_write(function: Callable[..., Any], /, *args: Any, **kwargs: Any):
+    """Finish an atomic filesystem write even if its awaiting task is cancelled.
+
+    Cancelling asyncio.to_thread() does not stop the underlying worker. Wait
+    for publication/finalization to settle before propagating cancellation,
+    so a caller never abandons an in-flight write after claiming it stopped.
+    """
+    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await task
+        except Exception:
+            # Cancellation is the original failure. The write's own cleanup
+            # and rollback (if needed) have completed before we propagate it.
+            pass
+        raise
 
 
 @dataclass(frozen=True)
@@ -201,7 +235,10 @@ class Downloader:
                         track=track,
                         progress=streamer.progress,
                     )
-                return b"".join(chunks), streamer.decryption_method
+                return (
+                    await asyncio.to_thread(b"".join, chunks),
+                    streamer.decryption_method,
+                )
 
     async def _prepare(
         self,
@@ -266,7 +303,7 @@ class Downloader:
                 )
             raw, method = await read(source, "audio")
             with self._stage(event_callback, media.id, DownloadStage.MUXING):
-                data = self.muxer.remux(raw)
+                data = await asyncio.to_thread(self.muxer.remux, raw)
             selected_codec = source.codec
             methods = (method,)
             suffix = ".m4a"
@@ -299,8 +336,11 @@ class Downloader:
                 await asyncio.gather(*tasks, return_exceptions=True)
                 raise
             with self._stage(event_callback, media.id, DownloadStage.MUXING):
-                data = self.muxer.mux(
-                    video=video_bytes, audio=audio_bytes, container=container
+                data = await asyncio.to_thread(
+                    self.muxer.mux,
+                    video=video_bytes,
+                    audio=audio_bytes,
+                    container=container,
                 )
             selected_codec = streams.video.codec
             methods = (video_method, audio_method)
@@ -346,11 +386,9 @@ class Downloader:
             # The current Rust tagger is file-based. This temporary output is
             # private; neither API publishes an untagged intermediate file.
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
-                with TemporaryDirectory(prefix="gamdl-tag-") as directory:
-                    staged = Path(directory) / f"media{suffix}"
-                    staged.write_bytes(data)
-                    self.muxer.tag(staged, tags=tags, cover_bytes=artwork)
-                    data = staged.read_bytes()
+                data = await asyncio.to_thread(
+                    _tag_bytes, self.muxer, data, suffix, tags, artwork
+                )
         return _PreparedMedia(data, selected_codec, methods, artwork)
 
     async def _save_sidecars(
@@ -387,8 +425,11 @@ class Downloader:
                                 "Cover sidecar must contain JPEG or PNG bytes"
                             )
                         cover_path = destination.with_suffix(extension)
-                        status = publish_bytes_result(
-                            cover_bytes, cover_path, overwrite=overwrite
+                        status = await _complete_write(
+                            publish_bytes_result,
+                            cover_bytes,
+                            cover_path,
+                            overwrite=overwrite,
                         )
                         cover_result = FileResult(cover_path, status)
                     else:
@@ -410,8 +451,11 @@ class Downloader:
                         else:
                             sidecar = destination.with_suffix(".txt")
                             contents = lyrics.to_plain_text()
-                        status = publish_bytes_result(
-                            contents.encode("utf-8"), sidecar, overwrite=overwrite
+                        status = await _complete_write(
+                            publish_bytes_result,
+                            contents.encode("utf-8"),
+                            sidecar,
+                            overwrite=overwrite,
                         )
                         lyrics_result = FileResult(sidecar, status)
                     else:
@@ -467,7 +511,9 @@ class Downloader:
                 with self._stage(
                     event_callback, media.id, DownloadStage.UPDATING_DATABASE
                 ):
-                    db_status = self.database.record(media, result)
+                    db_status = await _complete_write(
+                        self.database.record, media, result
+                    )
                 result = replace(
                     result, database=DatabaseResult(self.database.path, db_status)
                 )
@@ -493,8 +539,10 @@ class Downloader:
                 with self._stage(
                     event_callback, media.id, DownloadStage.UPDATING_PLAYLIST
                 ):
-                    updated = PlaylistWriter(playlist_path).add(
-                        result.path, position=position
+                    updated = await _complete_write(
+                        PlaylistWriter(playlist_path).add,
+                        result.path,
+                        position=position,
                     )
                 result = replace(
                     result,
@@ -624,7 +672,8 @@ class Downloader:
                 source = media.source
                 if source is None or source.playlist is None:
                     raise ValueError(
-                        "save_playlist requires media.source.playlist or explicit playlist_tags"
+                        "save_playlist requires media.source.playlist "
+                        "or explicit playlist_tags"
                     )
                 playlist = await source.playlist.get_metadata()
                 playlist_tags = PlaylistTags(
@@ -661,13 +710,17 @@ class Downloader:
             )
             if isinstance(media, (MusicVideo, UploadedVideo)):
                 generated_video_path = destination
-                destination = resolve_numbered_video_path(
-                    destination, media, database=self.database
+                destination = await asyncio.to_thread(
+                    resolve_numbered_video_path,
+                    destination,
+                    media,
+                    database=self.database,
                 )
             else:
                 # PathFormatter is pure. Filesystem identity checks belong to
                 # this resolver, using the same native cnID reader as videos.
-                destination = resolve_song_path(
+                destination = await asyncio.to_thread(
+                    resolve_song_path,
                     destination,
                     media,
                     catalog_id=(
@@ -690,7 +743,7 @@ class Downloader:
                 raise ValueError("Video output must end in .m4v or .mp4")
             container = "mp4" if destination.suffix.lower() == ".mp4" else "m4v"
 
-        destination_existed = destination.exists()
+        destination_existed = await asyncio.to_thread(destination.exists)
         if destination_existed:
             if overwrite == "skip":
                 return await self._finalize(
@@ -738,8 +791,11 @@ class Downloader:
             else overwrite
         )
         with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
-            published = publish_bytes(
-                prepared.data, destination, overwrite=publish_policy
+            published = await _complete_write(
+                publish_bytes,
+                prepared.data,
+                destination,
+                overwrite=publish_policy,
             )
         if (
             not published
@@ -750,16 +806,22 @@ class Downloader:
             # during download. Never finalize it under the wrong media ID;
             # resolve the updated occupied slots, then publish elsewhere.
             for _ in range(20):
-                candidate = resolve_numbered_video_path(
-                    generated_video_path, media, database=self.database
+                candidate = await asyncio.to_thread(
+                    resolve_numbered_video_path,
+                    generated_video_path,
+                    media,
+                    database=self.database,
                 )
                 if candidate == destination:
                     # A competing download of this *same* catalog ID won.
                     break
                 destination = candidate
                 with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
-                    published = publish_bytes(
-                        prepared.data, destination, overwrite="skip"
+                    published = await _complete_write(
+                        publish_bytes,
+                        prepared.data,
+                        destination,
+                        overwrite="skip",
                     )
                 if published:
                     break

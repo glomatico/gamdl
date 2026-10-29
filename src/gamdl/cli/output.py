@@ -11,7 +11,8 @@ def console(*, stderr: bool = False) -> Console:
 
 
 def banner(output: Console | None = None) -> None:
-    output = output or console()
+    # Human-facing decoration must not contaminate piped command results.
+    output = output if output is not None else console(stderr=True)
     major_minor = ".".join(__version__.split(".")[:2])
     output.print(Text(f"GAMDL {major_minor}", style="bold cyan"))
     output.print()

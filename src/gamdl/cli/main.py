@@ -48,7 +48,9 @@ def main(
 
 from .commands.rip import rip
 from .commands.library import library
+from .commands.database import database_group
 
 main.add_command(rip)
 main.add_command(library)
 main.add_command(config_group)
+main.add_command(database_group)

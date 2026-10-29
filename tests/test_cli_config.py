@@ -35,12 +35,11 @@ class CliConfigTests(unittest.TestCase):
             ).exit_code,
             0,
         )
-        self.assertEqual(
-            runner.invoke(
-                main, ["--config", str(self.path), "config", "path"]
-            ).output.strip(),
-            str(self.path),
+        path_result = runner.invoke(
+            main, ["--config", str(self.path), "config", "path"]
         )
+        self.assertEqual(path_result.stdout.strip(), str(self.path))
+        self.assertIn("GAMDL 4.0", path_result.stderr)
         self.assertEqual(
             runner.invoke(
                 main, ["--config", str(self.path), "config", "init"]

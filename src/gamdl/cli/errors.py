@@ -89,6 +89,9 @@ class CliCommand(click.Group):
 
     def main(self, *args, **kwargs):
         standalone = kwargs.pop("standalone_mode", True)
+        from .output import banner
+
+        banner()
         try:
             return super().main(*args, standalone_mode=False, **kwargs)
         except click.ClickException as exc:

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gamdl.media import Media
+
     from .downloader import DownloadResult
 from .enums import DatabaseStatus
 
@@ -108,3 +109,51 @@ class MediaDatabase:
                 (str(Path(path).absolute()),),
             ).fetchone()
         return dict(row) if row is not None else None
+
+    def index_file(self, path: Path, media_type: str, media_id: str) -> DatabaseStatus:
+        """Reconcile an existing file without requiring Apple Music API objects."""
+        path = path.absolute()
+        size = path.stat().st_size
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(self.path, timeout=10)) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                """CREATE TABLE IF NOT EXISTS media_files (
+                    path TEXT PRIMARY KEY, media_type TEXT NOT NULL,
+                    media_id TEXT NOT NULL, codec TEXT,
+                    file_size INTEGER NOT NULL, source_kind TEXT,
+                    source_id TEXT, source_index INTEGER,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )"""
+            )
+            previous = db.execute(
+                "SELECT media_type, media_id, file_size FROM media_files WHERE path = ?",
+                (str(path),),
+            ).fetchone()
+            if previous == (media_type, media_id, size):
+                return DatabaseStatus.UNCHANGED
+            db.execute(
+                """INSERT INTO media_files (path, media_type, media_id, file_size)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    media_type = excluded.media_type,
+                    media_id = excluded.media_id,
+                    file_size = excluded.file_size,
+                    codec = CASE WHEN media_files.media_id = excluded.media_id
+                        AND media_files.media_type = excluded.media_type
+                        THEN media_files.codec ELSE NULL END,
+                    source_kind = CASE WHEN media_files.media_id = excluded.media_id
+                        AND media_files.media_type = excluded.media_type
+                        THEN media_files.source_kind ELSE NULL END,
+                    source_id = CASE WHEN media_files.media_id = excluded.media_id
+                        AND media_files.media_type = excluded.media_type
+                        THEN media_files.source_id ELSE NULL END,
+                    source_index = CASE WHEN media_files.media_id = excluded.media_id
+                        AND media_files.media_type = excluded.media_type
+                        THEN media_files.source_index ELSE NULL END,
+                    updated_at = CURRENT_TIMESTAMP""",
+                (str(path), media_type, media_id, size),
+            )
+            return (
+                DatabaseStatus.INSERTED if previous is None else DatabaseStatus.UPDATED
+            )

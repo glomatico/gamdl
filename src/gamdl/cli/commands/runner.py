@@ -34,7 +34,6 @@ from gamdl.media import (
 from gamdl.media.constants import RIP_AUTO_SELECT_NAMES
 
 from ..errors import short_error as _short_error
-from ..output import banner
 from ..output import console as output_console
 from ..progress import RipProgress
 from ..prompts import interactive, select_media, select_stream
@@ -180,7 +179,6 @@ async def run_rip(options: RipOptions) -> int:
     if any(value not in RIP_AUTO_SELECT_NAMES for value in options.auto_select):
         raise click.UsageError("Invalid --auto-select option")
     console = output_console()
-    banner(console)
     formatter = _formatter(options)
     counts: Counter[str] = Counter()
     found = 0

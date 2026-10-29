@@ -1,9 +1,10 @@
 """Lazy Apple Music media models, source resolution, and data transformations."""
 
+from gamdl.pagination import MediaPage, PageCache
+
 from .base import Media, MediaSource
 from .cover import Cover
 from .cover_cache import CoverCache
-from .playlist import Playlist, PlaylistMetadata
 from .enums import HlsType, StreamOrigin, StreamSource
 from .exceptions import (
     GamdlMediaError,
@@ -12,14 +13,6 @@ from .exceptions import (
     StreamNotAvailableError,
     UnsupportedMediaError,
 )
-from .song.lyrics import Lyrics, LyricsLine, LyricsSegment
-from .resolver import (
-    DEFAULT_AUTO_SELECT,
-    MediaResolver,
-    SelectionKind,
-    SelectionOption,
-    SelectionRequest,
-)
 from .models import (
     ArtistBrowseRequest,
     ArtistBrowseResult,
@@ -27,35 +20,43 @@ from .models import (
     CollectionOption,
     CollectionSelectionRequest,
 )
-from gamdl.pagination import MediaPage, PageCache
+from .music_video import (
+    AudioSelectionOption,
+    AudioSelectionRequest,
+    MusicVideo,
+    MusicVideoCodec,
+    MusicVideoStreamSelector,
+    VideoSelectionOption,
+    VideoSelectionRequest,
+)
+from .music_video.stream import MusicVideoStreams
+from .playlist import Playlist, PlaylistMetadata
+from .resolver import (
+    DEFAULT_AUTO_SELECT,
+    MediaResolver,
+    SelectionKind,
+    SelectionOption,
+    SelectionRequest,
+)
 from .song import Song, SongStreamSelector
 from .song.enums import SongCodec
-from .song.stream import SongStreamResolver
+from .song.lyrics import Lyrics, LyricsLine, LyricsSegment
 from .song.models import (
-    StreamSourceOption,
-    StreamSourceSelectionRequest,
     StreamSelectionOption,
     StreamSelectionRequest,
+    StreamSourceOption,
+    StreamSourceSelectionRequest,
 )
+from .song.stream import SongStreamResolver
 from .stream import (
     AudioStream,
-    HttpStream,
-    HlsStream,
     HlsSongStream,
+    HlsStream,
+    HttpStream,
     StreamSegment,
     VideoStream,
     WebPlaybackStream,
 )
-from .music_video import (
-    MusicVideo,
-    MusicVideoCodec,
-    VideoSelectionOption,
-    VideoSelectionRequest,
-    AudioSelectionOption,
-    AudioSelectionRequest,
-    MusicVideoStreamSelector,
-)
-from .music_video.stream import MusicVideoStreams
 from .uploaded_video import (
     UploadedVideo,
     UploadedVideoQuality,
@@ -63,8 +64,10 @@ from .uploaded_video import (
     UploadedVideoSelectionRequest,
     UploadedVideoStreamSelector,
 )
+from .url import AppleMusicUrlInfo
 
 __all__ = [
+    "AppleMusicUrlInfo",
     "MediaPage",
     "PageCache",
     "ArtistBrowseRequest",

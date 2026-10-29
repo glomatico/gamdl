@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, urlsplit
 
 from gamdl.pagination import MediaPage, PageCache
 
@@ -27,6 +26,7 @@ from .music_video import MusicVideo
 from .playlist import Playlist
 from .song import Song
 from .uploaded_video import UploadedVideo
+from .url import AppleMusicUrlInfo
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
@@ -492,48 +492,39 @@ class MediaResolver:
 
     async def from_url(self, url: str) -> AsyncIterator[Media]:
         """Resolve known Apple Music URLs without fetching their landing pages."""
-        parsed = urlsplit(url)
-        if (
-            parsed.scheme != "https"
-            or parsed.hostname != "music.apple.com"
-            or parsed.port
-        ):
-            raise UnsupportedMediaError("Expected an HTTPS music.apple.com link")
-        segments = [s for s in parsed.path.split("/") if s]
-        if segments and len(segments[0]) == 2:
-            segments.pop(0)  # storefront prefix, e.g. /br/album/...
-        if not segments:
-            raise UnsupportedMediaError("Apple Music URL has no media type")
-        kind = segments[0]
-        media_id = segments[-1]
-        if kind == "library":
+        info = AppleMusicUrlInfo.parse(url)
+        if info.kind == "library":
             async for media in self.from_library():
                 yield media
             return
-        if len(segments) < 2 or not media_id:
-            raise UnsupportedMediaError("Apple Music URL has no media ID")
-        if kind == "album":
-            track_ids = parse_qs(parsed.query).get("i")
-            if track_ids:
-                async for media in self.from_song(track_ids[0]):
-                    yield media
-            else:
-                async for media in self.from_album(media_id):
-                    yield media
-        elif kind == "playlist":
-            async for media in self.from_playlist(media_id):
+        if info.sub_id is not None:
+            async for media in self.from_song(info.sub_id):
                 yield media
-        elif kind == "song":
-            async for media in self.from_song(media_id):
+            return
+
+        media_id = info.media_id
+        assert media_id is not None  # All non-root matches include an ID.
+        if info.kind == "album":
+            async for media in self.from_album(media_id, is_library=info.is_library):
                 yield media
-        elif kind == "music-video":
-            async for media in self.from_music_video(media_id):
+        elif info.kind == "playlist":
+            async for media in self.from_playlist(media_id, is_library=info.is_library):
                 yield media
-        elif kind == "uploaded-video":
+        elif info.kind == "song":
+            async for media in self.from_song(media_id, is_library=info.is_library):
+                yield media
+        elif info.kind == "music-video":
+            async for media in self.from_music_video(
+                media_id, is_library=info.is_library
+            ):
+                yield media
+        elif info.kind == "uploaded-video":
             async for media in self.from_uploaded_video(media_id):
                 yield media
-        elif kind == "artist":
+        elif info.kind == "artist":
             async for media in self.from_artist(media_id):
                 yield media
         else:
-            raise UnsupportedMediaError(f"Unsupported Apple Music URL type: {kind}")
+            raise UnsupportedMediaError(
+                f"Unsupported Apple Music URL type: {info.kind}"
+            )

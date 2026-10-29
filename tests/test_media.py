@@ -510,11 +510,11 @@ class ResolverTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_url_routing(self):
         resolver = MediaResolver(self.api)
-        album_url = "https://music.apple.com/br/album/record/album"
+        album_url = "https://music.apple.com/br/album/record/123456789"
         songs = [x async for x in resolver.from_url(album_url)]
         self.assertEqual(len(songs), 3)
-        single = [x async for x in resolver.from_url(album_url + "?i=track123")]
-        self.assertEqual(single[0].id, "track123")
+        single = [x async for x in resolver.from_url(album_url + "?i=987654321")]
+        self.assertEqual(single[0].id, "987654321")
         self.assertIsNone(single[0].source)
         video = [
             x

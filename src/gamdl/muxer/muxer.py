@@ -29,6 +29,12 @@ class Muxer:
             raise TypeError("data must be MP4 bytes")
         return _native.remux_mp4(data)
 
+    def remux_file(
+        self, source: str | PathLike[str], destination: str | PathLike[str]
+    ) -> None:
+        """Remux staged fMP4 audio from disk to disk with bounded memory."""
+        _native.remux_mp4_file(fspath(source), fspath(destination))
+
     def mux(
         self,
         *,
@@ -50,6 +56,21 @@ class Muxer:
         if container not in ("m4v", "mp4"):
             raise ValueError("container must be 'm4v' or 'mp4'")
         return _native.mux_av_mp4(video, audio, container == "mp4")
+
+    def mux_file(
+        self,
+        *,
+        video: str | PathLike[str],
+        audio: str | PathLike[str],
+        destination: str | PathLike[str],
+        container: Literal["m4v", "mp4"] = "m4v",
+    ) -> None:
+        """Mux staged video/audio to a completed MP4 without loading full tracks."""
+        if container not in ("m4v", "mp4"):
+            raise ValueError("container must be 'm4v' or 'mp4'")
+        _native.mux_av_mp4_file(
+            fspath(video), fspath(audio), fspath(destination), container == "mp4"
+        )
 
     def tag(
         self,

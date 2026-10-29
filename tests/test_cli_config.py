@@ -13,6 +13,35 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_configured_temp_path_and_cli_override(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        self.assertIsNone(click_default_map(load_config(None))["temp_path"])
+        self._write("output:\n  temp_path: /mnt/staging\n")
+        self.assertEqual(
+            click_default_map(load_config(self.path))["temp_path"], "/mnt/staging"
+        )
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            result = CliRunner().invoke(
+                main,
+                [
+                    "--config",
+                    str(self.path),
+                    "rip",
+                    "https://music.apple.com/us/song/example/123",
+                    "--temp-path",
+                    "/other/staging",
+                ],
+            )
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(captured[0].temp_path, "/other/staging")
+
     def test_negative_cli_flags_preserve_positive_yaml_defaults(self):
         from gamdl.cli.config.loader import click_default_map
 

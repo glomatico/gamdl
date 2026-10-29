@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from .enums import FileStatus, OverwritePolicy
 
+from .enums import FileStatus, OverwritePolicy
 
 Overwrite = OverwritePolicy | str
 
@@ -63,3 +65,66 @@ def publish_bytes(data: bytes, destination: Path, *, overwrite: Overwrite) -> bo
         publish_bytes_result(data, destination, overwrite=overwrite)
         != FileStatus.SKIPPED
     )
+
+
+def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bool:
+    """Publish an existing staged file atomically using bounded-memory I/O.
+
+    Hardlink completed media on the same filesystem, otherwise stage a chunked
+    copy beside the destination. Never publish incomplete files. Keep the
+    source intact so filename-collision retries can reuse it.
+    """
+    if overwrite not in OverwritePolicy._value2member_map_:
+        raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
+    overwrite = OverwritePolicy(overwrite)
+    if destination.exists():
+        if overwrite == OverwritePolicy.SKIP:
+            return False
+        if overwrite == OverwritePolicy.ERROR:
+            raise FileExistsError(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if overwrite != OverwritePolicy.REPLACE:
+        # Same-filesystem staging can publish the completed source without a
+        # second media copy, while still handling a competing writer safely.
+        try:
+            os.link(source, destination)
+        except FileExistsError:
+            if overwrite == OverwritePolicy.ERROR:
+                raise
+            return False
+        except OSError as exc:
+            if exc.errno not in {
+                errno.EXDEV,
+                errno.EPERM,
+                errno.EOPNOTSUPP,
+                errno.ENOTSUP,
+            }:
+                raise
+        else:
+            return True
+        # A custom temp_path may be on another filesystem: copy in chunks.
+    staged: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".part",
+            dir=destination.parent,
+            delete=False,
+        ) as output:
+            staged = Path(output.name)
+            with source.open("rb") as stream:
+                shutil.copyfileobj(stream, output, length=1024 * 1024)
+        if overwrite == OverwritePolicy.REPLACE:
+            staged.replace(destination)
+            return True
+        try:
+            os.link(staged, destination)
+        except FileExistsError:
+            if overwrite == OverwritePolicy.ERROR:
+                raise
+            return False
+        return True
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)

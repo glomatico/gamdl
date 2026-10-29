@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Callable, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Iterator, Literal
+from typing import Any, Literal
 
 import httpx
 
@@ -52,7 +52,7 @@ from .models import DatabaseResult, DownloadResult, FileResult, PlaylistResult
 from .path_resolver import resolve_numbered_video_path, resolve_song_path
 from .paths import PathFormatter, PlaylistTags
 from .playlist import PlaylistWriter
-from .publication import publish_bytes, publish_bytes_result
+from .publication import publish_bytes_result, publish_file
 from .tag_resolver import TagResolver
 from .tags import Tags
 
@@ -91,12 +91,10 @@ async def _complete_write(function: Callable[..., Any], /, *args: Any, **kwargs:
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
-        try:
+        # A worker thread cannot be interrupted. Wait until it releases its
+        # staged file before the TemporaryDirectory context can remove it.
+        with suppress(Exception):
             await task
-        except Exception:
-            # Cancellation is the original failure. The write's own cleanup
-            # and rollback (if needed) have completed before we propagate it.
-            pass
         raise
 
 
@@ -117,15 +115,22 @@ class _PreparedMedia:
     cover_bytes: bytes | None = None
 
 
+@dataclass(frozen=True)
+class _PreparedFile:
+    path: Path
+    codec: SongCodec | MusicVideoCodec | UploadedVideoQuality | None
+    methods: tuple[str, ...]
+    cover_bytes: bytes | None = None
+
+
 class Downloader:
     """Download, decrypt and tag Song, MusicVideo or UploadedVideo.
 
-    The same preparation path powers ``get_bytes`` and atomic ``download``.
+    ``get_bytes`` prepares in memory; ``download`` streams to private staged
+    files, remuxes on disk and publishes atomically with bounded memory.
     Only ``download`` publishes a path and runs optional post-publication
     sidecars, index and playlist updates. Retrying a skipped file still runs
     those steps so interrupted finalization can be repaired.
-    Existing bytes-first muxing temporarily holds full tracks in memory;
-    file-backed muxing is a separate planned optimization.
 
     Caller-owned APIs and DRM objects are never closed here. The native
     Streamer owns and closes its own HTTP worker on every track.
@@ -143,9 +148,12 @@ class Downloader:
         database: MediaDatabase | None = None,
         path_formatter: PathFormatter | None = None,
         concurrency: int = 8,
+        temp_path: str | os.PathLike[str] | None = None,
     ) -> None:
         if type(concurrency) is not int or concurrency < 1:
             raise ValueError("concurrency must be a positive integer")
+        if temp_path is not None and not os.fspath(temp_path).strip():
+            raise ValueError("temp_path must be a nonempty path or None")
         self.drm = drm
         self.wrapper_api = wrapper_api
         self.itunes_api = itunes_api
@@ -157,6 +165,7 @@ class Downloader:
         self.database = database
         self.path_formatter = path_formatter
         self.concurrency = concurrency
+        self.temp_path = Path(temp_path).expanduser() if temp_path is not None else None
 
     @staticmethod
     def _emit(
@@ -239,6 +248,52 @@ class Downloader:
                     await asyncio.to_thread(b"".join, chunks),
                     streamer.decryption_method,
                 )
+
+    async def _save_track(
+        self,
+        media_id: str,
+        source: AudioStream | VideoStream | HttpStream,
+        track: Literal["audio", "video"],
+        destination: Path,
+        progress_callback: Callable[[DownloadProgress], None] | None,
+        *,
+        event_callback: DownloadEventCallback | None = None,
+    ) -> str:
+        """Decrypt directly to a staged file; never collect track bytes."""
+
+        def report_key(state: str) -> None:
+            self._emit(
+                event_callback,
+                media_id,
+                DownloadStage.FETCHING_DECRYPTION_KEYS,
+                EventState(state),
+                track=track,
+            )
+
+        def report_progress(snapshot: StreamProgress) -> None:
+            if progress_callback is not None:
+                progress_callback(DownloadProgress(media_id, track, snapshot))
+            self._emit(
+                event_callback,
+                media_id,
+                DownloadStage.DOWNLOADING,
+                EventState.PROGRESS,
+                track=track,
+                progress=snapshot,
+            )
+
+        async with Streamer(
+            source,
+            concurrency=self.concurrency,
+            drm=self.drm,
+            wrapper_api=self.wrapper_api,
+            key_event_callback=report_key if event_callback is not None else None,
+        ) as streamer:
+            with self._stage(
+                event_callback, media_id, DownloadStage.DOWNLOADING, track=track
+            ):
+                await streamer.save(destination, progress_callback=report_progress)
+            return streamer.decryption_method
 
     async def _prepare(
         self,
@@ -410,6 +465,167 @@ class Downloader:
                     _tag_bytes, self.muxer, data, suffix, tags, artwork
                 )
         return _PreparedMedia(data, selected_codec, methods, artwork)
+
+    async def _prepare_file(
+        self,
+        media: Song | MusicVideo | UploadedVideo,
+        directory: Path,
+        *,
+        codec: SongCodec | None,
+        video_codec: MusicVideoCodec | None,
+        codec_priority: Sequence[SongCodec | MusicVideoCodec] | None,
+        max_height: int | None,
+        ask: bool,
+        selector: SongStreamSelector
+        | MusicVideoStreamSelector
+        | UploadedVideoStreamSelector
+        | None,
+        quality: UploadedVideoQuality | None,
+        quality_priority: Sequence[UploadedVideoQuality] | None,
+        container: Literal["m4v", "mp4"],
+        tag: bool,
+        exclude_tags: Sequence[str],
+        include_cover: bool,
+        include_lyrics: bool,
+        progress_callback: Callable[[DownloadProgress], None] | None,
+        event_callback: DownloadEventCallback | None = None,
+        resolved_tags: Tags | None = None,
+    ) -> _PreparedFile:
+        """Prepare one media file on disk without accumulating its samples."""
+
+        async def save(source, track, path):
+            return await self._save_track(
+                media.id,
+                source,
+                track,
+                path,
+                progress_callback,
+                event_callback=event_callback,
+            )
+
+        if not isinstance(media, UploadedVideo) and (
+            quality is not None or quality_priority is not None
+        ):
+            raise ValueError(
+                "quality preferences are only supported for uploaded videos"
+            )
+        if isinstance(media, Song):
+            if video_codec is not None:
+                raise ValueError("video_codec is only supported for music videos")
+            if await media.is_uploaded():
+                with self._stage(
+                    event_callback, media.id, DownloadStage.FETCHING_STREAMS
+                ):
+                    source, suffix = await media.get_uploaded_stream()
+                prepared_path = directory / f"media{suffix}"
+                method = await save(source, "audio", prepared_path)
+                selected_codec = None
+                methods = (method,)
+            else:
+                with self._stage(
+                    event_callback, media.id, DownloadStage.FETCHING_STREAMS
+                ):
+                    source = await media.get_stream(
+                        codec=codec,
+                        codec_priority=codec_priority,
+                        ask=ask,
+                        selector=selector,
+                        wrapper_api=self.wrapper_api,
+                        client=self.client,
+                    )
+                raw = directory / "audio.fmp4"
+                method = await save(source, "audio", raw)
+                prepared_path = directory / "media.m4a"
+                with self._stage(event_callback, media.id, DownloadStage.MUXING):
+                    await _complete_write(self.muxer.remux_file, raw, prepared_path)
+                selected_codec = source.codec
+                methods = (method,)
+        elif isinstance(media, MusicVideo):
+            if codec is not None:
+                raise ValueError("codec is only supported for music videos")
+            with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
+                streams = await media.get_streams(
+                    video_codec=video_codec,
+                    codec_priority=codec_priority,
+                    max_height=max_height,
+                    ask=ask,
+                    selector=selector,
+                    wrapper_api=self.wrapper_api,
+                    itunes_api=self.itunes_api,
+                    client=self.client,
+                )
+            raw_video = directory / "video.fmp4"
+            raw_audio = directory / "audio.fmp4"
+            video_task = asyncio.create_task(save(streams.video, "video", raw_video))
+            audio_task = asyncio.create_task(save(streams.audio, "audio", raw_audio))
+            tasks = (video_task, audio_task)
+            try:
+                video_method, audio_method = await asyncio.gather(*tasks)
+            except BaseException:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
+            prepared_path = directory / f"media.{container}"
+            with self._stage(event_callback, media.id, DownloadStage.MUXING):
+                await _complete_write(
+                    self.muxer.mux_file,
+                    video=raw_video,
+                    audio=raw_audio,
+                    destination=prepared_path,
+                    container=container,
+                )
+            selected_codec = streams.video.codec
+            methods = (video_method, audio_method)
+        else:
+            if (
+                codec is not None
+                or video_codec is not None
+                or codec_priority is not None
+            ):
+                raise ValueError(
+                    "Codec preferences are not supported for uploaded videos"
+                )
+            with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
+                source = await media.get_stream(
+                    quality=quality,
+                    quality_priority=quality_priority,
+                    ask=ask,
+                    selector=selector,
+                )
+            prepared_path = directory / f"media.{container}"
+            method = await save(source, "video", prepared_path)
+            selected_codec = source.codec
+            methods = (method,)
+
+        artwork = None
+        if tag:
+            if resolved_tags is None:
+                with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
+                    tags = await self.tag_resolver.get_tags(media)
+            else:
+                tags = resolved_tags
+            tags = replace(
+                tags,
+                **{
+                    name: (() if name == "genre" else None)
+                    for name in exclude_tags
+                    if name != "cover" and name in Tags.__dataclass_fields__
+                },
+            )
+            if include_lyrics and isinstance(media, Song):
+                lyrics = await media.get_lyrics()
+                if lyrics is not None:
+                    tags = replace(tags, lyrics=lyrics.to_plain_text())
+            if include_cover and "cover" not in exclude_tags:
+                cover = await media.get_cover()
+                if cover is not None:
+                    artwork = await cover.get_cover_bytes()
+            with self._stage(event_callback, media.id, DownloadStage.TAGGING):
+                await _complete_write(
+                    self.muxer.tag, prepared_path, tags=tags, cover_bytes=artwork
+                )
+        return _PreparedFile(prepared_path, selected_codec, methods, artwork)
 
     async def _save_sidecars(
         self,
@@ -796,87 +1012,93 @@ class Downloader:
             if overwrite == "error":
                 raise FileExistsError(destination)
 
-        prepared = await self._prepare(
-            media,
-            codec=codec,
-            video_codec=video_codec,
-            codec_priority=codec_priority,
-            max_height=max_height,
-            ask=ask,
-            selector=selector,
-            quality=quality,
-            quality_priority=quality_priority,
-            container=container,
-            tag=tag,
-            exclude_tags=exclude_tags,
-            include_cover=include_cover,
-            include_lyrics=include_lyrics,
-            progress_callback=progress_callback,
-            event_callback=event_callback,
-            resolved_tags=resolved_tags,
-        )
-        # A previously empty generated video slot is never safe to replace:
-        # another process may have claimed it while we downloaded the media.
-        # `replace` still replaces a known same-ID video that existed before
-        # preparation; only *new* generated slots use no-clobber publication.
-        publish_policy = (
-            "skip"
-            if generated_video_path is not None
-            and overwrite == "replace"
-            and not destination_existed
-            else overwrite
-        )
-        with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
-            published = await _complete_write(
-                publish_bytes,
-                prepared.data,
-                destination,
-                overwrite=publish_policy,
+        # System temporary directories may be RAM-backed (e.g. /tmp on Arch).
+        # Default to the destination filesystem for bounded-RAM staging and
+        # cheap atomic hardlink publication. An explicit temp_path overrides it.
+        scratch_root = self.temp_path or destination.parent
+        await asyncio.to_thread(scratch_root.mkdir, parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix="gamdl-", dir=scratch_root) as directory:
+            prepared = await self._prepare_file(
+                media,
+                Path(directory),
+                codec=codec,
+                video_codec=video_codec,
+                codec_priority=codec_priority,
+                max_height=max_height,
+                ask=ask,
+                selector=selector,
+                quality=quality,
+                quality_priority=quality_priority,
+                container=container,
+                tag=tag,
+                exclude_tags=exclude_tags,
+                include_cover=include_cover,
+                include_lyrics=include_lyrics,
+                progress_callback=progress_callback,
+                event_callback=event_callback,
+                resolved_tags=resolved_tags,
             )
-        if (
-            not published
-            and generated_video_path is not None
-            and publish_policy == "skip"
-        ):
-            # The planned filename may have been claimed by another process
-            # during download. Never finalize it under the wrong media ID;
-            # resolve the updated occupied slots, then publish elsewhere.
-            for _ in range(20):
-                candidate = await asyncio.to_thread(
-                    resolve_numbered_video_path,
-                    generated_video_path,
-                    media,
-                    database=self.database,
+            # A newly created generated video slot must never be replaced
+            # even when the user requested overwrite='replace'.
+            publish_policy = (
+                "skip"
+                if generated_video_path is not None
+                and overwrite == "replace"
+                and not destination_existed
+                else overwrite
+            )
+            with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
+                published = await _complete_write(
+                    publish_file,
+                    prepared.path,
+                    destination,
+                    overwrite=publish_policy,
                 )
-                if candidate == destination:
-                    # A competing download of this *same* catalog ID won.
-                    break
-                destination = candidate
-                with self._stage(event_callback, media.id, DownloadStage.PUBLISHING):
-                    published = await _complete_write(
-                        publish_bytes,
-                        prepared.data,
-                        destination,
-                        overwrite="skip",
+            if (
+                not published
+                and generated_video_path is not None
+                and publish_policy == "skip"
+            ):
+                # A different ID may have claimed the filename; retry with
+                # the same staged media without re-downloading or re-muxing.
+                for _ in range(20):
+                    candidate = await asyncio.to_thread(
+                        resolve_numbered_video_path,
+                        generated_video_path,
+                        media,
+                        database=self.database,
                     )
-                if published:
-                    break
-            else:
-                raise RuntimeError("Unable to resolve a stable video filename")
-        result = (
-            DownloadResult(
-                media.id,
-                destination,
-                MediaStatus.OVERWRITTEN
-                if overwrite == OverwritePolicy.REPLACE and destination_existed
-                else MediaStatus.DOWNLOADED,
-                len(prepared.data),
-                prepared.codec,
-                tuple(DecryptionMethod(method) for method in prepared.methods),
+                    if candidate == destination:
+                        break  # A concurrent download of the same ID won.
+                    destination = candidate
+                    with self._stage(
+                        event_callback, media.id, DownloadStage.PUBLISHING
+                    ):
+                        published = await _complete_write(
+                            publish_file,
+                            prepared.path,
+                            destination,
+                            overwrite="skip",
+                        )
+                    if published:
+                        break
+                else:
+                    raise RuntimeError("Unable to resolve a stable video filename")
+            size = prepared.path.stat().st_size if published else 0
+            result = (
+                DownloadResult(
+                    media.id,
+                    destination,
+                    MediaStatus.OVERWRITTEN
+                    if overwrite == OverwritePolicy.REPLACE and destination_existed
+                    else MediaStatus.DOWNLOADED,
+                    size,
+                    prepared.codec,
+                    tuple(DecryptionMethod(method) for method in prepared.methods),
+                )
+                if published
+                else DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None)
             )
-            if published
-            else DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None)
-        )
         return await self._finalize(
             media,
             result,

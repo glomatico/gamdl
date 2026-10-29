@@ -49,6 +49,7 @@ class DownloadConfig:
 @dataclass(frozen=True)
 class OutputConfig:
     directory: str = "./Apple Music"
+    temp_path: str | None = None
     save_cover: bool = False
     save_lyrics: bool = True
     save_playlist: bool = False

@@ -60,8 +60,15 @@ class UploadedSongTests(unittest.IsolatedAsyncioTestCase):
             database=db, path_formatter=PathFormatter(self.directory / "music")
         )
         raw = b"ID3\x02\x00\x00original mp3 bytes"
-        downloader._read_track = AsyncMock(return_value=(raw, "none"))
-        downloader.muxer.remux = Mock(side_effect=AssertionError("must not remux"))
+
+        async def save(
+            _media_id, _source, _track, destination, _callback, *, event_callback=None
+        ):
+            destination.write_bytes(raw)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
+        downloader.muxer.remux_file = Mock(side_effect=AssertionError("must not remux"))
         result = await downloader.download(
             self.song, codec=SongCodec.ALAC, ask=True, tag=False
         )
@@ -70,7 +77,7 @@ class UploadedSongTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.codec, None)
         self.assertEqual(db.get(result.path)["media_id"], "i.uploaded")
         self.assertEqual((await downloader.download(self.song)).status, "skipped")
-        downloader._read_track.assert_awaited_once()
+        downloader._save_track.assert_awaited_once()
 
     async def test_rejects_multiple_assets(self):
         self.api.get_webplayback.return_value["songList"][0]["assets"].append(

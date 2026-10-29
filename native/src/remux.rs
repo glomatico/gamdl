@@ -4,7 +4,11 @@
 //! untouched. This module does not decrypt or transcode. Reject unsupported
 //! layouts rather than silently emitting a truncated/corrupt file.
 
-use pyo3::exceptions::PyValueError;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+
+use memmap2::Mmap;
+use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -535,7 +539,7 @@ fn rebuild(
     Ok(input[atom.start..atom.end].to_vec())
 }
 
-fn remux(input: &[u8]) -> Result<Vec<u8>> {
+fn remux_plan(input: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<Sample>, u64)> {
     let top = atoms(input, 0, input.len())?;
     let _ftyp = top
         .iter()
@@ -588,19 +592,61 @@ fn remux(input: &[u8]) -> Result<Vec<u8>> {
     if rebuilt.len() != dummy.len() {
         return Err(UNSUPPORTED);
     }
+    Ok((ftyp_bytes, rebuilt, samples, cursor))
+}
+
+fn remux(input: &[u8]) -> Result<Vec<u8>> {
+    let (ftyp_bytes, rebuilt, samples, cursor) = remux_plan(input)?;
     let mut out = Vec::with_capacity(usize::try_from(cursor).map_err(|_| UNSUPPORTED)?);
     out.extend_from_slice(&ftyp_bytes);
-    out.extend(rebuilt);
+    out.extend_from_slice(&rebuilt);
     out.extend(1u32.to_be_bytes());
     out.extend(b"mdat");
     out.extend(
-        (cursor - u64::try_from(ftyp_bytes.len() + dummy.len()).map_err(|_| UNSUPPORTED)?)
+        (cursor - u64::try_from(ftyp_bytes.len() + rebuilt.len()).map_err(|_| UNSUPPORTED)?)
             .to_be_bytes(),
     );
     for s in &samples {
         out.extend_from_slice(&input[s.bytes.clone()]);
     }
     Ok(out)
+}
+
+/// Write media payloads directly from a memory-mapped staged source.
+/// Only sample metadata and small MP4 boxes are allocated in memory.
+fn remux_to_file(input: &[u8], output: &str) -> PyResult<()> {
+    let (ftyp, moov, samples, cursor) = remux_plan(input).map_err(PyValueError::new_err)?;
+    let file = File::create(output).map_err(PyOSError::new_err)?;
+    let mut writer = BufWriter::with_capacity(256 * 1024, file);
+    let result = (|| -> std::io::Result<()> {
+        writer.write_all(&ftyp)?;
+        writer.write_all(&moov)?;
+        writer.write_all(&1u32.to_be_bytes())?;
+        writer.write_all(b"mdat")?;
+        writer.write_all(&(cursor - (ftyp.len() + moov.len()) as u64).to_be_bytes())?;
+        for sample in samples {
+            writer.write_all(&input[sample.bytes])?;
+        }
+        writer.flush()
+    })();
+    if result.is_err() {
+        drop(writer);
+        let _ = std::fs::remove_file(output);
+    }
+    result.map_err(PyOSError::new_err)
+}
+
+#[pyfunction]
+pub(crate) fn remux_mp4_file(py: Python<'_>, input: String, output: String) -> PyResult<()> {
+    if input == output {
+        return Err(PyValueError::new_err("Input and output paths must differ"));
+    }
+    py.detach(|| {
+        let file = File::open(&input).map_err(PyOSError::new_err)?;
+        // Safe: the caller owns a completed, private staged input file.
+        let mapped = unsafe { Mmap::map(&file) }.map_err(PyOSError::new_err)?;
+        remux_to_file(&mapped, &output)
+    })
 }
 
 #[pyfunction]

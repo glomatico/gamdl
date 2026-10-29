@@ -367,6 +367,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "drm_backend": a.drm_backend,
         "device_path": a.device_path,
         "output_dir": o.directory,
+        "temp_path": o.temp_path,
         "overwrite": d.overwrite,
         "concurrency": d.concurrency,
         "concurrent_downloads": d.concurrent_downloads,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import shutil
 import subprocess
 import tempfile
@@ -21,10 +22,10 @@ from gamdl.download import (
 )
 from gamdl.download.playlist import PlaylistWriter
 from gamdl.download.publication import (
-    publish_bytes as original_publish_bytes,
+    publish_bytes_result as original_publish_sidecar,
 )
 from gamdl.download.publication import (
-    publish_bytes_result as original_publish_sidecar,
+    publish_file as original_publish_file,
 )
 from gamdl.media import (
     MediaSource,
@@ -46,6 +47,50 @@ from tests.test_muxer import JPEG, PNG, brands, mp4_tag_atoms, track_hashes
     "FFmpeg and FFprobe required for downloader integration fixtures",
 )
 class DownloaderTests(unittest.IsolatedAsyncioTestCase):
+    def test_file_publication_cross_filesystem_fallback(self):
+        source = self.directory / "staged.bin"
+        source.write_bytes(b"example-media" * 8000)
+        destination = self.directory / "nested" / "published.bin"
+        real_link = __import__("os").link
+        attempted = False
+
+        def simulate_other_device(old, new):
+            nonlocal attempted
+            if not attempted:
+                attempted = True
+                raise OSError(errno.EXDEV, "Cross-device link")
+            return real_link(old, new)
+
+        with patch(
+            "gamdl.download.publication.os.link", side_effect=simulate_other_device
+        ):
+            self.assertTrue(
+                original_publish_file(source, destination, overwrite="skip")
+            )
+        self.assertTrue(attempted)
+        self.assertEqual(destination.read_bytes(), source.read_bytes())
+        self.assertTrue(source.exists())
+        self.assertEqual(list(destination.parent.glob(".*.part")), [])
+
+    def test_file_publication_replaces_existing_file_and_rejects_race(self):
+        source = self.directory / "staged.bin"
+        source.write_bytes(b"new content")
+        target = self.directory / "published.bin"
+        target.write_bytes(b"old")
+        self.assertFalse(original_publish_file(source, target, overwrite="skip"))
+        with self.assertRaises(FileExistsError):
+            original_publish_file(source, target, overwrite="error")
+        self.assertTrue(original_publish_file(source, target, overwrite="replace"))
+        self.assertEqual(target.read_bytes(), b"new content")
+        self.assertTrue(source.exists())
+        self.assertEqual(list(self.directory.glob(".*.part")), [])
+
+    def test_downloader_accepts_explicit_temp_root(self):
+        root = self.directory / "scratch"
+        self.assertEqual(Downloader(temp_path=root).temp_path, root)
+        with self.assertRaises(ValueError):
+            Downloader(temp_path="")
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -130,6 +175,14 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             )
 
         downloader._read_track = AsyncMock(side_effect=read)
+
+        async def save(
+            _media_id, _source, track, destination, _callback, *, event_callback=None
+        ):
+            shutil.copyfile(self.video if track == "video" else self.audio, destination)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
         return downloader, tag_resolver
 
     async def test_song_bytes_remux_tags_and_optional_lyrics(self):
@@ -199,15 +252,14 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         output = self.directory / "atomic-cancel.m4a"
         entered = threading.Event()
         release = threading.Event()
-        from gamdl.download.publication import publish_bytes as original_publish
 
-        def slow_publish(data, destination, *, overwrite):
+        def slow_publish(source, destination, *, overwrite):
             entered.set()
             if not release.wait(3):
                 raise TimeoutError("Timed out awaiting completion of publication")
-            return original_publish(data, destination, overwrite=overwrite)
+            return original_publish_file(source, destination, overwrite=overwrite)
 
-        with patch("gamdl.download.downloader.publish_bytes", side_effect=slow_publish):
+        with patch("gamdl.download.downloader.publish_file", side_effect=slow_publish):
             task = asyncio.create_task(downloader.download(song, output, tag=False))
             try:
                 ready = await asyncio.wait_for(asyncio.to_thread(entered.wait), 2)
@@ -244,8 +296,8 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "gamdl.download.downloader.publish_bytes",
-                side_effect=track("media", original_publish_bytes),
+                "gamdl.download.downloader.publish_file",
+                side_effect=track("media", original_publish_file),
             ),
             patch(
                 "gamdl.download.downloader.publish_bytes_result",
@@ -299,6 +351,55 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.bytes_written, output.stat().st_size)
         self.assertEqual(brands(output)[0], b"M4A ")
         self.assertEqual(list(output.parent.glob(".*.part")), [])
+
+    async def test_custom_temp_path_stages_on_disk_and_cleans_on_success(self):
+        root = self.directory / "custom-staging"
+        downloader, _ = self.downloader()
+        downloader.temp_path = root
+        song = self.song()
+        output = self.directory / "destination" / "song.m4a"
+        seen = []
+        original = downloader.muxer.remux_file
+
+        def remux(source, destination):
+            seen.append((Path(source), Path(destination)))
+            self.assertEqual(Path(source).parent.parent, root)
+            self.assertGreater(Path(source).stat().st_size, 0)
+            return original(source, destination)
+
+        with (
+            patch.object(downloader.muxer, "remux_file", side_effect=remux),
+            patch.object(
+                downloader, "_read_track", side_effect=AssertionError("Not disk-backed")
+            ),
+        ):
+            result = await downloader.download(song, output)
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(list(root.iterdir()), [])
+        self.assertEqual(list(output.parent.glob("*.part")), [])
+        self.assertTrue(output.is_file())
+
+    async def test_custom_temp_path_is_cleaned_after_mux_failure(self):
+        downloader, _ = self.downloader()
+        root = self.directory / "failed-staging"
+        downloader.temp_path = root
+        output = self.directory / "broken.m4a"
+        with patch.object(
+            downloader.muxer, "remux_file", side_effect=ValueError("bad MP4")
+        ):
+            with self.assertRaisesRegex(ValueError, "bad MP4"):
+                await downloader.download(self.song(), output)
+        self.assertFalse(output.exists())
+        self.assertEqual(list(root.iterdir()), [])
+
+    async def test_get_bytes_does_not_use_disk_backed_path(self):
+        downloader, _ = self.downloader()
+        with patch.object(
+            downloader, "_save_track", side_effect=AssertionError("Not in-memory")
+        ):
+            data = await downloader.get_bytes(self.song(), tag=False)
+        self.assertTrue(data.startswith(b"\x00\x00"))
 
     async def test_video_mp4_with_audio_mux_and_codec_priority(self):
         downloader, _ = self.downloader()
@@ -374,7 +475,9 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         audio_started = asyncio.Event()
         cancelled = asyncio.Event()
 
-        async def fail_one(_media_id, _source, track, _callback):
+        async def fail_one(
+            _media_id, _source, track, _destination, _callback, *, event_callback=None
+        ):
             if track == "video":
                 await audio_started.wait()
                 raise RuntimeError("video failed")
@@ -384,7 +487,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 cancelled.set()
 
-        downloader._read_track = AsyncMock(side_effect=fail_one)
+        downloader._save_track = AsyncMock(side_effect=fail_one)
         output = self.directory / "failed.m4v"
         with self.assertRaisesRegex(RuntimeError, "video failed"):
             await downloader.download(video, output)
@@ -447,7 +550,9 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         both_cancelled = set()
         starts = set()
 
-        async def slow_track(_id, _source, track, _callback):
+        async def slow_track(
+            _id, _source, track, _destination, _callback, *, event_callback=None
+        ):
             starts.add(track)
             if len(starts) == 2:
                 both_started.set()
@@ -456,7 +561,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 both_cancelled.add(track)
 
-        downloader._read_track = AsyncMock(side_effect=slow_track)
+        downloader._save_track = AsyncMock(side_effect=slow_track)
         output = self.directory / "cancelled.mp4"
         running = asyncio.create_task(downloader.download(video, output))
         await asyncio.wait_for(both_started.wait(), timeout=2)
@@ -645,12 +750,19 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             api=Mock(),
         )
 
+    def mock_uploaded_download(self, downloader):
+        async def save(
+            _media_id, _source, _track, destination, _callback, *, event_callback=None
+        ):
+            shutil.copyfile(self.video, destination)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
+
     async def test_uploaded_video_progressive_download_and_metadata(self):
         video = self.uploaded_video()
         downloader = Downloader()
-        downloader._read_track = AsyncMock(
-            return_value=(self.video.read_bytes(), "none")
-        )
+        self.mock_uploaded_download(downloader)
         out = self.directory / "uploaded.m4v"
         result = await downloader.download(
             video,
@@ -671,23 +783,21 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             mp4_tag_atoms(out)[b"cnID"],
             [(21, (9876543210).to_bytes(8, "big"))],
         )
-        args = downloader._read_track.call_args.args
+        args = downloader._save_track.call_args.args
         self.assertEqual(args[0], video.id)
         self.assertEqual(args[1].codec, UploadedVideoQuality.HD_720P)
         self.assertEqual(args[2], "video")
 
-        downloader._read_track.reset_mock()
+        downloader._save_track.reset_mock()
         second = await downloader.download(video, out)
         self.assertEqual(second.status, "skipped")
-        downloader._read_track.assert_not_awaited()
+        downloader._save_track.assert_not_awaited()
 
     async def test_uploaded_video_auto_paths_index_and_collision(self):
         db = MediaDatabase(self.directory / "index.sqlite3")
         formatter = PathFormatter(self.directory / "Library")
         downloader = Downloader(path_formatter=formatter, database=db)
-        downloader._read_track = AsyncMock(
-            return_value=(self.video.read_bytes(), "none")
-        )
+        self.mock_uploaded_download(downloader)
         video = self.uploaded_video()
         first = await downloader.download(video)
         self.assertEqual(
@@ -699,9 +809,9 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             db.get(first.path)["codec"], UploadedVideoQuality.HD_720P.value
         )
-        downloader._read_track.reset_mock()
+        downloader._save_track.reset_mock()
         self.assertEqual((await downloader.download(video)).status, "skipped")
-        downloader._read_track.assert_not_awaited()
+        downloader._save_track.assert_not_awaited()
 
         # Identical display names, different IDs: never misattribute a skip.
         second = await downloader.download(self.uploaded_video("5555555555"))
@@ -712,11 +822,11 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
 
         # Repeated identity reuses its matching numbered path, not the first
         # free number or another video's filename.
-        downloader._read_track.reset_mock()
+        downloader._save_track.reset_mock()
         repeated = await downloader.download(self.uploaded_video("5555555555"))
         self.assertEqual(repeated.status, "skipped")
         self.assertEqual(repeated.path, second.path)
-        downloader._read_track.assert_not_awaited()
+        downloader._save_track.assert_not_awaited()
 
     async def test_auto_video_output_extension_and_mp4_brand(self):
         formatter = PathFormatter(self.directory / "Formatted")
@@ -806,34 +916,30 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
     async def test_auto_paths_without_index_recognize_embedded_cnid(self):
         formatter = PathFormatter(self.directory / "Formatted")
         downloader = Downloader(path_formatter=formatter)
-        downloader._read_track = AsyncMock(
-            return_value=(self.video.read_bytes(), "none")
-        )
+        self.mock_uploaded_download(downloader)
         video = self.uploaded_video()
         first = await downloader.download(video)
         self.assertEqual(first.status, "downloaded")
         # As in GAMDL 3.x, re-read the native cnID tag when no index exists.
-        downloader._read_track.reset_mock()
+        downloader._save_track.reset_mock()
         second = await downloader.download(video)
         self.assertEqual(second.status, "skipped")
         self.assertEqual(second.path, first.path)
-        downloader._read_track.assert_not_awaited()
+        downloader._save_track.assert_not_awaited()
 
         other = await downloader.download(self.uploaded_video("5555555555"))
         self.assertEqual(other.status, "downloaded")
         self.assertEqual(other.path.name, "Original Upload 2.m4v")
-        downloader._read_track.reset_mock()
+        downloader._save_track.reset_mock()
         repeated = await downloader.download(self.uploaded_video("5555555555"))
         self.assertEqual(repeated.status, "skipped")
         self.assertEqual(repeated.path, other.path)
-        downloader._read_track.assert_not_awaited()
+        downloader._save_track.assert_not_awaited()
 
     async def test_auto_video_collision_uses_next_number_and_reuses_gaps(self):
         formatter = PathFormatter(self.directory / "Numbered")
         downloader = Downloader(path_formatter=formatter)
-        downloader._read_track = AsyncMock(
-            return_value=(self.video.read_bytes(), "none")
-        )
+        self.mock_uploaded_download(downloader)
         first = await downloader.download(self.uploaded_video("100"))
         second = await downloader.download(self.uploaded_video("200"))
         third = await downloader.download(self.uploaded_video("300"))
@@ -853,26 +959,29 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         formatter = PathFormatter(self.directory / "Numbered")
         database = MediaDatabase(self.directory / "index.sqlite3")
         downloader = Downloader(path_formatter=formatter, database=database)
-        downloader._read_track = AsyncMock(
-            return_value=(self.video.read_bytes(), "none")
-        )
-        actual_publish = __import__(
-            "gamdl.download.publication", fromlist=["publish_bytes"]
-        ).publish_bytes
+
+        async def save(
+            _media_id, _source, track, destination, _callback, *, event_callback=None
+        ):
+            shutil.copyfile(self.video, destination)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
+        actual_publish = original_publish_file
         raced = False
 
-        def racing_publish(data, destination, *, overwrite):
+        def racing_publish(source, destination, *, overwrite):
             nonlocal raced
             if not raced:
                 raced = True
-                # A competing process got the original name while we were
-                # downloading. Our first atomic link attempt now fails.
-                actual_publish(b"other video", destination, overwrite="skip")
+                # Another process raced to claim the first candidate.
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(b"other video")
                 return False
-            return actual_publish(data, destination, overwrite=overwrite)
+            return actual_publish(source, destination, overwrite=overwrite)
 
         with patch(
-            "gamdl.download.downloader.publish_bytes", side_effect=racing_publish
+            "gamdl.download.downloader.publish_file", side_effect=racing_publish
         ):
             result = await downloader.download(self.uploaded_video("555"))
         self.assertTrue(raced)
@@ -886,24 +995,29 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
     async def test_auto_replace_cannot_clobber_newly_claimed_video_slot(self):
         formatter = PathFormatter(self.directory / "Numbered")
         downloader = Downloader(path_formatter=formatter)
-        downloader._read_track = AsyncMock(
-            return_value=(self.video.read_bytes(), "none")
-        )
-        from gamdl.download.publication import publish_bytes as real_publish
+
+        async def save(
+            _media_id, _source, track, destination, _callback, *, event_callback=None
+        ):
+            shutil.copyfile(self.video, destination)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
 
         raced = False
 
-        def competing_publish(data, destination, *, overwrite):
+        def competing_publish(source, destination, *, overwrite):
             nonlocal raced
             if not raced:
                 raced = True
-                real_publish(b"other video", destination, overwrite="skip")
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(b"other video")
                 self.assertEqual(overwrite, "skip")
                 return False
-            return real_publish(data, destination, overwrite=overwrite)
+            return original_publish_file(source, destination, overwrite=overwrite)
 
         with patch(
-            "gamdl.download.downloader.publish_bytes", side_effect=competing_publish
+            "gamdl.download.downloader.publish_file", side_effect=competing_publish
         ):
             result = await downloader.download(
                 self.uploaded_video("555"), overwrite="replace"

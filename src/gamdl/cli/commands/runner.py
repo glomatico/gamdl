@@ -237,6 +237,7 @@ async def run_rip(options: RipOptions) -> int:
             downloader = Downloader(
                 drm=drm,
                 wrapper_api=wrapper,
+                temp_path=options.temp_path,
                 path_formatter=formatter,
                 database=MediaDatabase(Path(options.database_path).expanduser())
                 if options.database and options.database_path

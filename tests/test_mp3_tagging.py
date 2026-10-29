@@ -137,9 +137,20 @@ class UploadedMp3DownloadTests(unittest.IsolatedAsyncioTestCase):
             downloader = Downloader(
                 path_formatter=PathFormatter(Path(directory) / "music"), database=db
             )
-            downloader._read_track = AsyncMock(
-                return_value=(source.read_bytes(), "none")
-            )
+
+            async def save(
+                _media_id,
+                _stream,
+                _track,
+                destination,
+                _callback,
+                *,
+                event_callback=None,
+            ):
+                shutil.copyfile(source, destination)
+                return "none"
+
+            downloader._save_track = AsyncMock(side_effect=save)
             result = await downloader.download(
                 song,
                 codec=SongCodec.ALAC,

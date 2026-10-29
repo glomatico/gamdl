@@ -192,6 +192,41 @@ class NativeAvMuxTests(unittest.TestCase):
         )
         return output
 
+    def test_disk_backed_audio_remux_matches_bytes_api(self):
+        output = self.directory / "remuxed.m4a"
+        Muxer().remux_file(self.audio, output)
+        self.assertEqual(output.read_bytes(), Muxer().remux(self.audio.read_bytes()))
+        self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
+
+    def test_disk_backed_video_mux_matches_bytes_api(self):
+        output = self.directory / "file_muxed.mp4"
+        Muxer().mux_file(
+            video=self.video, audio=self.audio, destination=output, container="mp4"
+        )
+        self.assertEqual(
+            output.read_bytes(),
+            Muxer().mux(
+                video=self.video.read_bytes(),
+                audio=self.audio.read_bytes(),
+                container="mp4",
+            ),
+        )
+        self.assertEqual(track_hashes(self.video, "v"), track_hashes(output, "v"))
+        self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
+
+    def test_disk_backed_mux_rejects_invalid_inputs(self):
+        output = self.directory / "invalid.mp4"
+        with self.assertRaises(ValueError):
+            Muxer().mux_file(
+                video=self.video,
+                audio=self.audio,
+                destination=output,
+                container="invalid",
+            )
+        with self.assertRaises(ValueError):
+            Muxer().remux_file(self.audio, self.audio)
+        self.assertFalse(output.exists())
+
     def test_video_audio_lossless_mux_with_b_frames(self):
         output = self.mux()
         self.assertEqual(brands(output), (b"M4V ", [b"M4V ", b"mp42", b"isom"]))

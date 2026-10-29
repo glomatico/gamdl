@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.30", features = ["abi3-py310"] }
 mp4ameta = "0.13"
+memmap2 = "0.9.12"
 id3 = "1"
 tokio = { version = "1.48", features = ["rt-multi-thread", "sync", "time", "net", "io-util"] }
 pyo3-async-runtimes = { version = "0.30", features = ["tokio-runtime"] }

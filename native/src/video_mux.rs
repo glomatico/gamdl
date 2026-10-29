@@ -5,9 +5,12 @@
 //! Clear caption tracks embedded in the video input are preserved. Reject
 //! encrypted sample entries or unknown extra tracks instead of transcoding.
 
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::ops::Range;
 
-use pyo3::exceptions::PyValueError;
+use memmap2::Mmap;
+use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -608,7 +611,11 @@ fn rebuild_trak(input: &[u8], track: &Track, offsets: &[u64], start_ms: u64) -> 
     }
     boxed(b"trak", &body)
 }
-fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
+fn mux_plan(
+    video: &[u8],
+    audio: &[u8],
+    mp4_brand: bool,
+) -> Result<(Vec<u8>, Vec<u8>, Vec<Track>, u64)> {
     let (_, video_moov) = locate(video)?;
     let (_, audio_moov) = locate(audio)?;
     // M4V is the GAMDL default even for HEVC; mp42 is an explicit opt-in.
@@ -657,9 +664,15 @@ fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
     if initial.len() != moov.len() {
         return Err(UNSUPPORTED);
     }
+    Ok((ftyp, moov, tracks, at))
+}
+
+fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
+    let (ftyp, moov, tracks, at) = mux_plan(video, audio, mp4_brand)?;
     let mdat_length = at
         .checked_sub((ftyp.len() + moov.len()) as u64)
         .ok_or(BAD)?;
+    let inputs = [video, audio];
     let mut out = Vec::with_capacity(usize::try_from(at).map_err(|_| UNSUPPORTED)?);
     out.extend_from_slice(&ftyp);
     out.extend(moov);
@@ -672,6 +685,54 @@ fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
         }
     }
     Ok(out)
+}
+
+fn mux_to_file(video: &[u8], audio: &[u8], output: &str, mp4_brand: bool) -> PyResult<()> {
+    let (ftyp, moov, tracks, at) =
+        mux_plan(video, audio, mp4_brand).map_err(PyValueError::new_err)?;
+    let mdat_length = at - (ftyp.len() + moov.len()) as u64;
+    let inputs = [video, audio];
+    let file = File::create(output).map_err(PyOSError::new_err)?;
+    let mut writer = BufWriter::with_capacity(256 * 1024, file);
+    let result = (|| -> std::io::Result<()> {
+        writer.write_all(&ftyp)?;
+        writer.write_all(&moov)?;
+        writer.write_all(&1u32.to_be_bytes())?;
+        writer.write_all(b"mdat")?;
+        writer.write_all(&mdat_length.to_be_bytes())?;
+        for track in tracks {
+            for packet in track.packets {
+                writer.write_all(&inputs[track.src][packet.bytes])?;
+            }
+        }
+        writer.flush()
+    })();
+    if result.is_err() {
+        drop(writer);
+        let _ = std::fs::remove_file(output);
+    }
+    result.map_err(PyOSError::new_err)
+}
+
+#[pyfunction(signature = (video, audio, output, mp4_brand=false))]
+pub(crate) fn mux_av_mp4_file(
+    py: Python<'_>,
+    video: String,
+    audio: String,
+    output: String,
+    mp4_brand: bool,
+) -> PyResult<()> {
+    if output == video || output == audio {
+        return Err(PyValueError::new_err("Input and output paths must differ"));
+    }
+    py.detach(|| {
+        let video_file = File::open(&video).map_err(PyOSError::new_err)?;
+        let audio_file = File::open(&audio).map_err(PyOSError::new_err)?;
+        // Safe: staged files are completed before being memory-mapped read-only.
+        let video_mapped = unsafe { Mmap::map(&video_file) }.map_err(PyOSError::new_err)?;
+        let audio_mapped = unsafe { Mmap::map(&audio_file) }.map_err(PyOSError::new_err)?;
+        mux_to_file(&video_mapped, &audio_mapped, &output, mp4_brand)
+    })
 }
 fn movie_with_inputs(
     inputs: [&[u8]; 2],

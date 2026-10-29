@@ -42,6 +42,10 @@ class RipOptions:
     output_dir: Annotated[str, option("--output-dir", help="Destination root")] = (
         "./Apple Music"
     )
+    temp_path: Annotated[
+        str | None,
+        option("--temp-path", help="Working directory for disk-backed downloads"),
+    ] = None
     overwrite: Annotated[
         str, option("--overwrite", type=click.Choice(["skip", "replace", "error"]))
     ] = "skip"

@@ -16,9 +16,10 @@ def database_path() -> Path:
 
 @dataclass(frozen=True)
 class AuthConfig:
-    mode: str = "cookies"
+    mode: str | None = None
     cookies_path: str = str(user_config_path("gamdl", appauthor=False) / "cookies.txt")
     wrapper_url: str = "http://127.0.0.1"
+    media_user_token: str | None = None
     wrapper_decrypt_host: str = "127.0.0.1"
     wrapper_decrypt_port: int = 10020
     storefront: str | None = None

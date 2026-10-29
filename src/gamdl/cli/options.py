@@ -9,10 +9,6 @@ from dataclass_click import option as dataclass_option
 
 from gamdl.download.tags import Tags
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
-from gamdl.media.constants import (
-    ARTIST_AUTO_SELECT_NAMES,
-    LIBRARY_AUTO_SELECT_NAMES,
-)
 
 TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
 
@@ -166,10 +162,22 @@ class RipOptions:
         bool, option("--debug/--no-debug", help="Display unexpected tracebacks")
     ] = False
     auth_mode: Annotated[
-        str, option("--auth-mode", type=click.Choice(["cookies", "wrapper"]))
-    ] = "cookies"
+        str | None,
+        option(
+            "--auth-mode",
+            type=click.Choice(["wrapper", "cookies", "media-user-token"]),
+        ),
+    ] = None
     cookies_path: Annotated[str | None, option("--cookies-path", type=str)] = None
     wrapper_url: Annotated[str, option("--wrapper-url", type=str)] = "http://127.0.0.1"
+    media_user_token: Annotated[
+        str | None,
+        option(
+            "--media-user-token",
+            type=str,
+            help="Apple Music token (prefer YAML or environment variables)",
+        ),
+    ] = None
     wrapper_decrypt_host: Annotated[str, option("--wrapper-decrypt-host", type=str)] = (
         "127.0.0.1"
     )

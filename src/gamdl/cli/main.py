@@ -46,12 +46,14 @@ def main(
     ctx.default_map = {"rip": defaults, "library": defaults, "search": defaults}
 
 
+from .commands.auth import auth
 from .commands.database import database_group
 from .commands.library import library
 from .commands.rip import rip
 from .commands.search import search
 
 main.add_command(rip)
+main.add_command(auth)
 main.add_command(library)
 main.add_command(search)
 main.add_command(config_group)

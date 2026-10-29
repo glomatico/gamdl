@@ -84,4 +84,7 @@ def show(ctx: click.Context) -> None:
     config = load_config(
         None if root["no_config"] else root["config_path"], profile=root["profile"]
     )
-    click.echo(yaml.safe_dump(asdict(config), sort_keys=False, allow_unicode=True))
+    shown = asdict(config)
+    if shown["auth"]["media_user_token"] is not None:
+        shown["auth"]["media_user_token"] = "[REDACTED]"
+    click.echo(yaml.safe_dump(shown, sort_keys=False, allow_unicode=True))

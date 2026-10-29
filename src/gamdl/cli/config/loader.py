@@ -118,8 +118,10 @@ def _validate(config: dict[str, Any]) -> AppConfig:
     output = OutputConfig(**config["output"])
     database = DatabaseConfig(**config["database"])
     ui = UiConfig(**config["ui"])
-    if auth.mode not in {"cookies", "wrapper"}:
-        raise ConfigError("auth.mode must be cookies or wrapper")
+    if auth.mode not in {None, "cookies", "wrapper", "media-user-token"}:
+        raise ConfigError(
+            "auth.mode must be null, cookies, wrapper or media-user-token"
+        )
     if auth.drm_backend not in {"widevine", "playready"}:
         raise ConfigError("auth.drm_backend must be widevine or playready")
     # The CLI can ask for a missing PlayReady .prd interactively. In CI, the
@@ -229,9 +231,12 @@ def _prune(values: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
 
 def _persist(path: Path, normalized: dict[str, Any]) -> None:
     """Back up the original and atomically write a validated normalized config."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     backup = path.with_name(path.name + ".bak")
-    if not backup.exists():
+    if path.exists() and not backup.exists():
         shutil.copy2(path, backup)
+    if backup.exists():
+        backup.chmod(0o600)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         import os
@@ -239,8 +244,56 @@ def _persist(path: Path, normalized: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             yaml.safe_dump(normalized, stream, sort_keys=False, allow_unicode=True)
         os.replace(name, path)
+        path.chmod(0o600)
     finally:
         Path(name).unlink(missing_ok=True)
+
+
+def save_auth_configuration(
+    path: Path,
+    *,
+    mode: str,
+    cookies_path: str,
+    wrapper_url: str,
+    media_user_token: str | None,
+    profile: str | None = None,
+) -> None:
+    """Persist a validated authentication choice without disturbing other settings."""
+    if path.exists():
+        try:
+            loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueLoader)
+        except (OSError, UnicodeError, yaml.YAMLError) as exc:
+            raise ConfigError(
+                "Cannot read configuration for authentication setup"
+            ) from exc
+        if loaded is None:
+            loaded = {}
+        if not isinstance(loaded, dict):
+            raise ConfigError("YAML config must be a mapping")
+    else:
+        loaded = asdict(AppConfig())
+    settings = loaded
+    if profile:
+        profiles = loaded.setdefault("profiles", {})
+        if profile not in profiles:
+            raise ConfigError(f"Unknown profile: {profile!r}")
+        settings = profiles[profile]
+    auth = settings.setdefault("auth", {})
+    auth.update(
+        mode=mode,
+        cookies_path=cookies_path,
+        wrapper_url=wrapper_url,
+        media_user_token=media_user_token,
+    )
+    defaults = asdict(AppConfig())
+    _merge(defaults, {key: value for key, value in loaded.items() if key != "profiles"})
+    if profile:
+        _merge(defaults, loaded["profiles"][profile])
+    _validate(defaults)
+    try:
+        _persist(path, loaded)
+    except OSError as exc:
+        raise ConfigError("Unable to save authentication configuration") from exc
 
 
 def load_config(path: Path | None, *, profile: str | None = None) -> AppConfig:
@@ -306,6 +359,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "auth_mode": a.mode,
         "cookies_path": a.cookies_path,
         "wrapper_url": a.wrapper_url,
+        "media_user_token": a.media_user_token,
         "wrapper_decrypt_host": a.wrapper_decrypt_host,
         "wrapper_decrypt_port": a.wrapper_decrypt_port,
         "storefront": a.storefront,

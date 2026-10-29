@@ -18,8 +18,7 @@ from gamdl.media.models import (
 from .tui.browser import browse_artist
 from .tui.components import MenuChoice
 from .tui.multiselect import select_many
-from .tui.selector import select_stream as _select_stream, stream_choices
-
+from .tui.selector import select_stream as _select_stream
 
 PROMPT_STYLE = questionary.Style(
     [
@@ -64,13 +63,13 @@ async def select_media(
     )
 
 
-async def ask_text(message: str, *, password: bool = False) -> str:
+async def ask_text(message: str, *, password: bool = False, default: str = "") -> str:
     """Small secure input prompts remain Questionary rather than full-screen."""
     require_terminal(message)
     prompt = (
-        questionary.password(message, style=PROMPT_STYLE)
+        questionary.password(message, default=default, style=PROMPT_STYLE)
         if password
-        else questionary.text(message, style=PROMPT_STYLE)
+        else questionary.text(message, default=default, style=PROMPT_STYLE)
     )
     answer = await prompt.ask_async()
     if answer is None:

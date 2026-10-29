@@ -47,17 +47,6 @@ _UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _m
 
 def _merge(defaults: dict[str, Any], values: dict[str, Any], prefix: str = "") -> None:
     for key, value in values.items():
-        if prefix == "download" and key == "rip_auto_select":
-            key = "artist_auto_select"
-            value = (
-                [
-                    item.removeprefix("artist-")
-                    for item in value
-                    if item not in {"albums-tracks", "playlist-tracks"}
-                ]
-                if isinstance(value, list)
-                else value
-            )
         name = f"{prefix}.{key}" if prefix else key
         if key not in defaults:
             raise ConfigError(f"Unknown configuration key: {name}")

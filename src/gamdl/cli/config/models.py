@@ -5,8 +5,6 @@ from pathlib import Path
 
 from platformdirs import user_config_path, user_data_path
 
-from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT
-
 
 def config_path() -> Path:
     return user_config_path("gamdl", appauthor=False) / "config.yaml"
@@ -43,9 +41,7 @@ class DownloadConfig:
     max_height: int = 1080
     uploaded_video_quality: str | None = None
     continue_on_error: bool = True
-    artist_auto_select: list[str] = field(
-        default_factory=lambda: list(DEFAULT_RIP_AUTO_SELECT)
-    )
+    artist_auto_select: list[str] = field(default_factory=list)
     library_auto_select: list[str] = field(default_factory=list)
 
 

@@ -17,7 +17,6 @@ from gamdl.media import (
     MediaResolver,
     SelectionKind,
 )
-from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
 from gamdl.media.exceptions import SelectionRequiredError
 from gamdl.pagination import MediaPage
 
@@ -334,14 +333,11 @@ class RipCliSettingsTests(unittest.TestCase):
     def test_default_auto_select_and_validated_yaml_override(self):
         self.assertEqual(
             tuple(load_config(None).download.artist_auto_select),
-            DEFAULT_RIP_AUTO_SELECT,
+            (),
         )
-        self.assertEqual(set(DEFAULT_RIP_AUTO_SELECT), set())
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "config.yaml"
-            path.write_text(
-                "download:\n  rip_auto_select: [albums-tracks, artist-main-albums]\n"
-            )
+            path.write_text("download:\n  artist_auto_select: [main-albums]\n")
             self.assertEqual(
                 load_config(path).download.artist_auto_select,
                 ["main-albums"],

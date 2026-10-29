@@ -41,5 +41,3 @@ LIBRARY_AUTO_SELECT_NAMES: dict[str, SelectionKind] = {
     "songs": SelectionKind.LIBRARY_SONGS,
     "music-videos": SelectionKind.LIBRARY_MUSIC_VIDEOS,
 }
-RIP_AUTO_SELECT_NAMES = ARTIST_AUTO_SELECT_NAMES  # Legacy internal import.
-DEFAULT_RIP_AUTO_SELECT: tuple[str, ...] = ()

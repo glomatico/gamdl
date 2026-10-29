@@ -11,7 +11,6 @@ from gamdl.download.tags import Tags
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
 from gamdl.media.constants import (
     ARTIST_AUTO_SELECT_NAMES,
-    DEFAULT_RIP_AUTO_SELECT,
     LIBRARY_AUTO_SELECT_NAMES,
 )
 
@@ -43,7 +42,7 @@ class RipOptions:
             help="Artist categories, comma-separated or repeated; all = all-albums,music-videos",
             show_default=True,
         ),
-    ] = DEFAULT_RIP_AUTO_SELECT
+    ] = ()
     output_dir: Annotated[str, option("--output-dir", help="Destination root")] = (
         "./Apple Music"
     )

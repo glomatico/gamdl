@@ -90,7 +90,9 @@ class Tags:
             artist=metadata.get("artistName"),
             album=metadata.get("playlistName"),
             album_artist=metadata.get("playlistArtistName"),
-            title_id=number("itemId"),
+            title_id=(
+                value if (value := number("itemId")) is not None and value > 0 else None
+            ),
             artist_id=number("artistId"),
             album_id=number("playlistId"),
             track_number=number("trackNumber"),

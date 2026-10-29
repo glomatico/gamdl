@@ -62,8 +62,9 @@ class UploadedSongTests(unittest.IsolatedAsyncioTestCase):
         raw = b"ID3\x02\x00\x00original mp3 bytes"
         downloader._read_track = AsyncMock(return_value=(raw, "none"))
         downloader.muxer.remux = Mock(side_effect=AssertionError("must not remux"))
-        downloader.muxer.tag = Mock(side_effect=AssertionError("must not tag"))
-        result = await downloader.download(self.song, codec=SongCodec.ALAC, ask=True)
+        result = await downloader.download(
+            self.song, codec=SongCodec.ALAC, ask=True, tag=False
+        )
         self.assertEqual(result.path.suffix, ".mp3")
         self.assertEqual(result.path.read_bytes(), raw)
         self.assertEqual(result.codec, None)

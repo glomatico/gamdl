@@ -65,4 +65,7 @@ class Muxer:
         """
         if not isinstance(tags, Tags):
             raise TypeError("tags must be a gamdl.download.Tags instance")
-        _native.write_mp4_tags(fspath(path), asdict(tags), cover_bytes)
+        if fspath(path).lower().endswith(".mp3"):
+            _native.write_mp3_tags(fspath(path), asdict(tags), cover_bytes)
+        else:
+            _native.write_mp4_tags(fspath(path), asdict(tags), cover_bytes)

@@ -296,24 +296,28 @@ class Downloader:
                 with self._stage(
                     event_callback, media.id, DownloadStage.FETCHING_STREAMS
                 ):
-                    source, _ = await media.get_uploaded_stream()
+                    source, suffix = await media.get_uploaded_stream()
                 data, method = await read(source, "audio")
-                return _PreparedMedia(data, None, (method,))
-            with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
-                source = await media.get_stream(
-                    codec=codec,
-                    codec_priority=codec_priority,
-                    ask=ask,
-                    selector=selector,
-                    wrapper_api=self.wrapper_api,
-                    client=self.client,
-                )
-            raw, method = await read(source, "audio")
-            with self._stage(event_callback, media.id, DownloadStage.MUXING):
-                data = await asyncio.to_thread(self.muxer.remux, raw)
-            selected_codec = source.codec
-            methods = (method,)
-            suffix = ".m4a"
+                selected_codec = None
+                methods = (method,)
+            else:
+                with self._stage(
+                    event_callback, media.id, DownloadStage.FETCHING_STREAMS
+                ):
+                    source = await media.get_stream(
+                        codec=codec,
+                        codec_priority=codec_priority,
+                        ask=ask,
+                        selector=selector,
+                        wrapper_api=self.wrapper_api,
+                        client=self.client,
+                    )
+                raw, method = await read(source, "audio")
+                with self._stage(event_callback, media.id, DownloadStage.MUXING):
+                    data = await asyncio.to_thread(self.muxer.remux, raw)
+                selected_codec = source.codec
+                methods = (method,)
+                suffix = ".m4a"
         elif isinstance(media, MusicVideo):
             if codec is not None:
                 raise ValueError("codec is only supported for songs")
@@ -376,7 +380,7 @@ class Downloader:
             suffix = f".{container}"
 
         artwork = None
-        if tag and not (isinstance(media, Song) and await media.is_uploaded()):
+        if tag:
             if resolved_tags is None:
                 with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
                     tags = await self.tag_resolver.get_tags(media)
@@ -709,7 +713,6 @@ class Downloader:
         uploaded_extension = None
         if uploaded_song:
             _, uploaded_extension = await media.get_uploaded_stream()
-            tag = False
             include_lyrics = False
             save_lyrics = False
         if output is None:

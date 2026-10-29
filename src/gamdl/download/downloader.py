@@ -292,6 +292,13 @@ class Downloader:
         if isinstance(media, Song):
             if video_codec is not None:
                 raise ValueError("video_codec is only supported for music videos")
+            if await media.is_uploaded():
+                with self._stage(
+                    event_callback, media.id, DownloadStage.FETCHING_STREAMS
+                ):
+                    source, _ = await media.get_uploaded_stream()
+                data, method = await read(source, "audio")
+                return _PreparedMedia(data, None, (method,))
             with self._stage(event_callback, media.id, DownloadStage.FETCHING_STREAMS):
                 source = await media.get_stream(
                     codec=codec,
@@ -369,7 +376,7 @@ class Downloader:
             suffix = f".{container}"
 
         artwork = None
-        if tag:
+        if tag and not (isinstance(media, Song) and await media.is_uploaded()):
             if resolved_tags is None:
                 with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
                     tags = await self.tag_resolver.get_tags(media)
@@ -698,13 +705,24 @@ class Downloader:
             playlist_index = playlist_tags.track - 1
         generated_video_path: Path | None = None
         resolved_tags: Tags | None = None
+        uploaded_song = isinstance(media, Song) and await media.is_uploaded()
+        uploaded_extension = None
+        if uploaded_song:
+            _, uploaded_extension = await media.get_uploaded_stream()
+            tag = False
+            include_lyrics = False
+            save_lyrics = False
         if output is None:
             if self.path_formatter is None:
                 raise ValueError("output is required without a PathFormatter")
             with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
                 tags = await self.tag_resolver.get_tags(media)
                 resolved_tags = tags
-            extension = ".m4a" if isinstance(media, Song) else video_extension
+            extension = (
+                (uploaded_extension or ".m4a")
+                if isinstance(media, Song)
+                else video_extension
+            )
             destination = self.path_formatter.get_media_path(
                 media, tags, extension=extension, playlist=playlist_tags
             )
@@ -725,7 +743,7 @@ class Downloader:
                     media,
                     catalog_id=(
                         str(tags.title_id)
-                        if tags.title_id is not None
+                        if tags.title_id is not None and tags.title_id > 0
                         else media.id
                         if media.id.isdecimal()
                         else None
@@ -735,8 +753,10 @@ class Downloader:
         else:
             destination = Path(output)
         if isinstance(media, Song):
-            if destination.suffix.lower() != ".m4a":
-                raise ValueError("Song output must end in .m4a")
+            if destination.suffix.lower() != (uploaded_extension or ".m4a"):
+                raise ValueError(
+                    f"Song output must end in {uploaded_extension or '.m4a'}"
+                )
             container: Literal["m4v", "mp4"] = "m4v"
         else:
             if destination.suffix.lower() not in (".m4v", ".mp4"):

@@ -575,10 +575,10 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             api=api,
         )
         with self.assertRaisesRegex(
-            StreamNotAvailableError, "no playable catalog equivalent"
+            StreamNotAvailableError, "no single direct asset"
         ):
             await song.get_stream()
-        api.get_webplayback.assert_not_awaited()
+        api.get_webplayback.assert_awaited_once_with("i.upload", is_library=True)
 
 
 class StreamLazyTests(unittest.IsolatedAsyncioTestCase):

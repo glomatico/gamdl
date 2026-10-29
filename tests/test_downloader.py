@@ -786,7 +786,15 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
     async def test_auto_library_song_matches_catalog_cnid(self):
         downloader, _ = self.downloader()
         downloader.path_formatter = PathFormatter(self.directory / "Library")
-        song = Song.from_id("i.library-song", api=Mock(), is_library=True)
+        song = Song(
+            "i.library-song",
+            api=Mock(),
+            is_library=True,
+            metadata={
+                "id": "i.library-song",
+                "relationships": {"catalog": {"data": [{"id": "12345"}]}},
+            },
+        )
         song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
         song.get_cover = AsyncMock(return_value=None)
         first = await downloader.download(song)

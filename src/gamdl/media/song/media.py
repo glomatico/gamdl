@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from gamdl.api.exceptions import GamdlApiResponseError
 
 from ..base import Media
-from ..exceptions import GamdlMediaError
-from .lyrics import Lyrics
-from .stream import SongStreamResolver
-from .models import StreamSelector
-from ..stream import AudioStream
+from ..exceptions import GamdlMediaError, StreamNotAvailableError
+from ..stream import AudioStream, HttpStream
 from .enums import SongCodec
+from .lyrics import Lyrics
+from .models import StreamSelector
+from .stream import SongStreamResolver
 
 if TYPE_CHECKING:
     from ...api.wrapper import WrapperApi
@@ -32,13 +32,55 @@ class Song(Media):
     resource_type = "songs"
     library_type = "library-songs"
 
+    async def is_uploaded(self) -> bool:
+        """Whether a personal-library song has no catalog counterpart."""
+        if not self.is_library:
+            return False
+        try:
+            await self._catalog_id()
+        except GamdlMediaError:
+            return True
+        return False
+
+    async def get_uploaded_stream(self) -> tuple[HttpStream, str]:
+        """Get the sole direct webplayback file for an unmatched library song."""
+        if not await self.is_uploaded():
+            raise StreamNotAvailableError("Song is not an unmatched library upload")
+
+        async def load() -> tuple[HttpStream, str]:
+            payload = await self._get_webplayback()
+            songs = payload.get("songList") or []
+            assets = songs[0].get("assets") or [] if songs else []
+            if len(assets) != 1 or not isinstance(assets[0], dict):
+                raise StreamNotAvailableError(
+                    "Uploaded song has no single direct asset"
+                )
+            asset = assets[0]
+            url = asset.get("URL")
+            extension = (asset.get("metadata") or {}).get("fileExtension")
+            if not isinstance(url, str) or not url.startswith("https://"):
+                raise StreamNotAvailableError("Uploaded song has no HTTPS asset")
+            if not isinstance(extension, str) or extension.lower() not in {
+                "mp3",
+                "m4a",
+                "mp4",
+                "aac",
+            }:
+                raise StreamNotAvailableError("Unsupported uploaded song format")
+            return HttpStream(url, media_id=self.id), "." + extension.lower()
+
+        return await self._load("uploaded_stream", load)
+
     async def get_streams(
         self,
         *,
         wrapper_api: WrapperApi | None = None,
         client: httpx.AsyncClient | None = None,
-    ) -> tuple[AudioStream, ...]:
+    ) -> tuple[AudioStream | HttpStream, ...]:
         """Discover every source, including both assets profiles, without media bytes."""
+        if await self.is_uploaded():
+            stream, _ = await self.get_uploaded_stream()
+            return (stream,)
         return await SongStreamResolver(
             self, wrapper_api=wrapper_api, client=client
         ).get_streams()
@@ -52,13 +94,16 @@ class Song(Media):
         selector: StreamSelector | None = None,
         wrapper_api: WrapperApi | None = None,
         client: httpx.AsyncClient | None = None,
-    ) -> AudioStream:
+    ) -> AudioStream | HttpStream:
         """Select a preferred codec, or interactively choose source and variant.
 
         With ``ask=True`` the selector receives a StreamSourceSelectionRequest
         followed by StreamSelectionRequest. Only the chosen source is fetched;
         codec preferences cannot override an interactive choice.
         """
+        if await self.is_uploaded():
+            stream, _ = await self.get_uploaded_stream()
+            return stream
         return await SongStreamResolver(
             self, wrapper_api=wrapper_api, client=client
         ).get_stream(

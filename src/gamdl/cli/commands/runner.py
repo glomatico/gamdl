@@ -13,10 +13,8 @@ from typing import TYPE_CHECKING
 import click
 from rich.text import Text
 
-from gamdl.api import ItunesApi
-from gamdl.cli.tui.components import MenuChoice
+from gamdl.api import GamdlApiResponseError, ItunesApi
 from gamdl.cli.tui.search import select_search_results
-from gamdl.cli.tui.selector import select_one
 from gamdl.download import (
     Downloader,
     DownloadFinalizationError,
@@ -471,36 +469,27 @@ async def run_rip(options: RipOptions) -> int:
                                         return await terminal.prompt(operation)
 
                                 async def search_source():
-                                    while True:
-                                        kind = options.search_type
-                                        if kind is None:
-                                            kind = (
-                                                "song",
-                                                "music-video",
-                                                "uploaded-video",
-                                            )[
-                                                await prompt_search(
-                                                    select_one(
-                                                        "Search media type",
-                                                        [
-                                                            MenuChoice("Songs", 0),
-                                                            MenuChoice(
-                                                                "Music videos", 1
-                                                            ),
-                                                            MenuChoice(
-                                                                "Uploaded videos", 2
-                                                            ),
-                                                        ],
-                                                    )
-                                                )
-                                            ]
-                                        resource_type = {
-                                            "song": "songs",
-                                            "music-video": "music-videos",
-                                            "uploaded-video": "uploaded-videos",
-                                        }[kind]
+                                    type_map = {
+                                        "song": "songs",
+                                        "music-video": "music-videos",
+                                        "uploaded-video": "uploaded-videos",
+                                    }
+                                    chosen_type = (
+                                        type_map[options.search_type]
+                                        if options.search_type is not None
+                                        else None
+                                    )
+                                    resource_types = (
+                                        (chosen_type,)
+                                        if chosen_type is not None
+                                        else tuple(type_map.values())
+                                    )
+                                    caches = {}
+                                    for resource_type in resource_types:
 
-                                        async def load(cursor):
+                                        async def load(
+                                            cursor, resource_type=resource_type
+                                        ):
                                             response = (
                                                 await api.get_extended_api_data(cursor)
                                                 if cursor is not None
@@ -510,45 +499,67 @@ async def run_rip(options: RipOptions) -> int:
                                                     limit=50,
                                                 )
                                             )
-                                            group = response.get("results", {}).get(
-                                                resource_type, {}
-                                            )
-                                            data = group.get("data", [])
+                                            results = response.get("results")
+                                            if not isinstance(results, dict):
+                                                raise GamdlApiResponseError(
+                                                    "Invalid Apple Music search response"
+                                                )
+                                            group = results.get(resource_type)
+                                            if group is None:
+                                                if cursor is not None:
+                                                    raise GamdlApiResponseError(
+                                                        "Missing Apple Music search result type in pagination"
+                                                    )
+                                                return MediaPage(())
+                                            if not isinstance(
+                                                group, dict
+                                            ) or not isinstance(
+                                                group.get("data"), list
+                                            ):
+                                                raise GamdlApiResponseError(
+                                                    "Invalid Apple Music search results"
+                                                )
                                             return MediaPage(
-                                                tuple(data), group.get("next")
+                                                tuple(group["data"]), group.get("next")
                                             )
 
-                                        cache = PageCache(load)
-                                        if options.feeling_lucky:
-                                            first = await cache.get(0)
-                                            indices = (
-                                                [0] if first and first.items else []
-                                            )
-                                        else:
-                                            indices = await prompt_search(
-                                                select_search_results(
-                                                    cache, options.search_term
-                                                )
-                                            )
-                                        if indices == "back":
-                                            if options.search_type is not None:
-                                                raise click.Abort()
-                                            continue
-                                        break
-                                    wanted = set(indices)
-                                    if not wanted:
-                                        raise click.ClickException(
-                                            f"No {kind} search results for {options.search_term!r}"
+                                        caches[resource_type] = PageCache(load)
+
+                                    if options.feeling_lucky:
+                                        assert chosen_type is not None
+                                        first = await caches[chosen_type].get(0)
+                                        selected = (
+                                            {chosen_type: (0,)}
+                                            if first and first.items
+                                            else {}
                                         )
-                                    async for index, metadata in cache.iter_items():
-                                        if index in wanted:
-                                            yield Media.from_metadata(
-                                                metadata,
-                                                api=api,
-                                                cover_cache=resolver.cover_cache,
+                                    else:
+                                        selected = await prompt_search(
+                                            select_search_results(
+                                                caches,
+                                                options.search_term,
+                                                media_type=chosen_type,
                                             )
-                                        if wanted and index >= max(wanted):
-                                            break
+                                        )
+                                    if not selected:
+                                        raise click.ClickException(
+                                            f"No search results selected for {options.search_term!r}"
+                                        )
+                                    for resource_type, indices in selected.items():
+                                        cache = caches[resource_type]
+                                        wanted = set(indices)
+                                        if not wanted:
+                                            continue
+                                        last_index = max(wanted)
+                                        async for index, metadata in cache.iter_items():
+                                            if index in wanted:
+                                                yield Media.from_metadata(
+                                                    metadata,
+                                                    api=api,
+                                                    cover_cache=resolver.cover_cache,
+                                                )
+                                            if index >= last_index:
+                                                break
 
                                 source_iterator = search_source()
                             else:
@@ -634,7 +645,7 @@ async def run_rip(options: RipOptions) -> int:
                     pass
                 except click.Abort:
                     raise
-                except Exception as error:
+                except Exception as error:  # noqa: BLE001 - report discovery failures
                     record_failure("Source", error)
                     counts["failed"] += 1
                 finally:
@@ -650,7 +661,7 @@ async def run_rip(options: RipOptions) -> int:
 
     except click.Abort:
         raise
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - report session failures
         record_failure("Session", error)
         _print_failures(console, failures, debug=options.debug)
         return 1

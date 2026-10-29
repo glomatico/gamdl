@@ -60,7 +60,7 @@ async def select_many(
     keys = KeyBindings()
 
     def body() -> FormattedText:
-        fragments = heading("GAMDL 4.0", title)
+        fragments = heading(title)
         for i, item in enumerate(choices):
             mark = "[x]" if item.value in state.selected else "[ ]"
             fragments.append(

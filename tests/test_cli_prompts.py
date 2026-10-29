@@ -162,12 +162,12 @@ class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
                     await ask_file(
                         str(file) + "missing", label="PlayReady .prd", extension=".prd"
                     )
-            replacement = Mock(ask_async=AsyncMock(return_value=str(file)))
             with (
                 patch("gamdl.cli.prompts.interactive", return_value=True),
                 patch(
-                    "gamdl.cli.prompts.questionary.text",
-                    return_value=replacement,
+                    "gamdl.cli.prompts.ask_text",
+                    new_callable=AsyncMock,
+                    return_value=str(file),
                 ),
             ):
                 result = await ask_file(None, label="PlayReady .prd", extension=".prd")

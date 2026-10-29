@@ -29,7 +29,7 @@ async def select_search_results(cache, term: str, *, input=None, output=None):
         return cache.pages[page].items
 
     def body():
-        fragments = heading("GAMDL 4.0", f"Search · {term} · Page {page + 1}")
+        fragments = heading(f"Search · {term}", f"Page {page + 1}")
         start = cache.offset(page)
         for i, item in enumerate(items()):
             attrs = item.get("attributes", {})
@@ -114,7 +114,7 @@ async def select_search_results(cache, term: str, *, input=None, output=None):
                     cursor = 0
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - show fetch errors in the UI
                 status = getattr(exc, "status_code", None)
                 error = f"Unable to load page ({'HTTP ' + str(status) if status else type(exc).__name__}). Press → to retry."
             finally:
@@ -149,7 +149,7 @@ async def select_search_results(cache, term: str, *, input=None, output=None):
                     selected.add(index)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - show fetch errors in the UI
                 status = getattr(exc, "status_code", None)
                 error = f"Unable to load results ({'HTTP ' + str(status) if status else type(exc).__name__})."
             finally:

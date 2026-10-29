@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import click
-import questionary
 
 from gamdl.media.models import (
     ArtistBrowseRequest,
@@ -19,16 +18,8 @@ from .tui.browser import browse_artist
 from .tui.components import MenuChoice
 from .tui.multiselect import select_many
 from .tui.selector import select_stream as _select_stream
-
-PROMPT_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:#69b5ff bold"),
-        ("question", "bold"),
-        ("pointer", "fg:#63d89c bold"),
-        ("highlighted", "fg:#63d89c bold"),
-        ("selected", "fg:#63d89c"),
-    ]
-)
+from .tui.selector import stream_choices  # noqa: F401 - public re-export
+from .tui.wizard import FullScreenWizard
 
 
 def interactive() -> bool:
@@ -64,17 +55,19 @@ async def select_media(
 
 
 async def ask_text(message: str, *, password: bool = False, default: str = "") -> str:
-    """Small secure input prompts remain Questionary rather than full-screen."""
+    """Use the same alternate-screen input as other interactive workflows."""
     require_terminal(message)
-    prompt = (
-        questionary.password(message, default=default, style=PROMPT_STYLE)
-        if password
-        else questionary.text(message, default=default, style=PROMPT_STYLE)
-    )
-    answer = await prompt.ask_async()
-    if answer is None:
-        raise click.Abort()
-    return answer
+    wizard = FullScreenWizard()
+
+    async def flow(ui: FullScreenWizard) -> str:
+        return await ui.ask(
+            message.removesuffix(":"),
+            message.removesuffix(":"),
+            default=default,
+            password=password,
+        )
+
+    return await wizard.run(flow)
 
 
 async def ask_file(
@@ -92,13 +85,10 @@ async def ask_file(
                 "--cookies-path/--device-path or YAML configuration"
             )
         suggestion = str(candidate) if candidate else ""
-        answer = await questionary.text(
+        answer = await ask_text(
             f"{label} file missing. Enter a path or drag the file here:",
             default=suggestion,
-            style=PROMPT_STYLE,
-        ).ask_async()
-        if answer is None:
-            raise click.Abort()
+        )
         value = answer.strip().strip("\"'")
         candidate = Path(value).expanduser() if value else None
     return candidate

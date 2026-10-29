@@ -99,9 +99,7 @@ async def select_one(
     keys = KeyBindings()
 
     def body() -> FormattedText:
-        fragments = heading(
-            "GAMDL 4.0", title if not subtitle else f"{title} · {subtitle}"
-        )
+        fragments = heading(title, subtitle)
         for i, choice in enumerate(choices):
             label = choice.title
             if choice.detail:

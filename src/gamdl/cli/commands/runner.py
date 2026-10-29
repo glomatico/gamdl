@@ -31,9 +31,10 @@ from gamdl.media import (
     UploadedVideo,
     UploadedVideoQuality,
 )
-from gamdl.media.constants import RIP_AUTO_SELECT_NAMES
+from gamdl.media.constants import DEFAULT_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
 
 from ..errors import short_error as _short_error
+from ..options import TAG_NAMES
 from ..output import console as output_console
 from ..progress import RipProgress
 from ..prompts import interactive, select_media, select_stream
@@ -178,6 +179,13 @@ async def run_rip(options: RipOptions) -> int:
         raise click.UsageError("Provide at least one Apple Music URL")
     if any(value not in RIP_AUTO_SELECT_NAMES for value in options.auto_select):
         raise click.UsageError("Invalid --auto-select option")
+    excluded = tuple(
+        name.strip() for group in options.exclude_tags for name in group.split(",")
+    )
+    if any(name not in TAG_NAMES for name in excluded):
+        raise click.UsageError(
+            "Invalid --exclude-tags field (valid: " + ", ".join(TAG_NAMES) + ")"
+        )
     console = output_console()
     formatter = _formatter(options)
     counts: Counter[str] = Counter()
@@ -259,8 +267,10 @@ async def run_rip(options: RipOptions) -> int:
                 resolver = MediaResolver(
                     api,
                     auto_select=[
-                        RIP_AUTO_SELECT_NAMES[name] for name in options.auto_select
+                        *DEFAULT_AUTO_SELECT,
+                        *(RIP_AUTO_SELECT_NAMES[name] for name in options.auto_select),
                     ],
+                    select=options.select,
                     selector=choose_media,
                 )
 
@@ -288,6 +298,8 @@ async def run_rip(options: RipOptions) -> int:
 
                         kwargs = {
                             "overwrite": options.overwrite,
+                            "tag": not options.no_tag,
+                            "exclude_tags": excluded,
                             "save_cover": options.save_cover,
                             "save_lyrics": options.save_lyrics
                             and isinstance(media, Song),

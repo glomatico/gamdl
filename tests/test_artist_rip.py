@@ -320,7 +320,7 @@ class RipCliSettingsTests(unittest.TestCase):
                     "https://music.apple.com/br/song/a/1",
                     "https://music.apple.com/br/song/b/2",
                     "--auto-select",
-                    "albums-tracks",
+                    "artist-main-albums",
                     "--auto-select",
                     "artist-music-videos",
                 ],
@@ -328,16 +328,14 @@ class RipCliSettingsTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertEqual(len(received[0].urls), 2)
         self.assertEqual(
-            received[0].auto_select, ("albums-tracks", "artist-music-videos")
+            received[0].auto_select, ("artist-main-albums", "artist-music-videos")
         )
 
     def test_default_auto_select_and_validated_yaml_override(self):
         self.assertEqual(
             tuple(load_config(None).download.rip_auto_select), DEFAULT_RIP_AUTO_SELECT
         )
-        self.assertEqual(
-            set(DEFAULT_RIP_AUTO_SELECT), {"albums-tracks", "playlist-tracks"}
-        )
+        self.assertEqual(set(DEFAULT_RIP_AUTO_SELECT), set())
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "config.yaml"
             path.write_text(
@@ -345,7 +343,7 @@ class RipCliSettingsTests(unittest.TestCase):
             )
             self.assertEqual(
                 load_config(path).download.rip_auto_select,
-                ["albums-tracks", "artist-main-albums"],
+                ["artist-main-albums"],
             )
             captured = []
 
@@ -364,9 +362,7 @@ class RipCliSettingsTests(unittest.TestCase):
                     ],
                 )
             self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(
-                captured[0].auto_select, ("albums-tracks", "artist-main-albums")
-            )
+            self.assertEqual(captured[0].auto_select, ("artist-main-albums",))
             for bad in ("unknown-category", "album-tracks"):
                 path.write_text(f"download:\n  rip_auto_select: [{bad}]\n")
                 with self.assertRaisesRegex(ConfigError, "rip_auto_select"):

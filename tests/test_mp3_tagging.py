@@ -141,7 +141,11 @@ class UploadedMp3DownloadTests(unittest.IsolatedAsyncioTestCase):
                 return_value=(source.read_bytes(), "none")
             )
             result = await downloader.download(
-                song, codec=SongCodec.ALAC, ask=True, include_cover=False
+                song,
+                codec=SongCodec.ALAC,
+                ask=True,
+                include_cover=False,
+                exclude_tags=("artist", "cover"),
             )
             self.assertEqual(result.path.suffix, ".mp3")
             self.assertEqual(db.get(result.path)["media_id"], "i.upload")
@@ -160,8 +164,10 @@ class UploadedMp3DownloadTests(unittest.IsolatedAsyncioTestCase):
                 text=True,
                 check=True,
             )
-            for value in ("Uploaded Title", "Uploaded Artist", "Uploaded Album"):
+            for value in ("Uploaded Title", "Uploaded Album"):
                 self.assertIn(value, probe.stdout)
+            self.assertNotIn("Uploaded Artist", probe.stdout)
+            self.assertIn("Uploaded Title", str(result.path))
 
 
 if __name__ == "__main__":

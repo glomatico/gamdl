@@ -87,17 +87,30 @@ def _validate(config: dict[str, Any]) -> AppConfig:
             elif isinstance(hint, list):
                 if (
                     not isinstance(value, list)
-                    or not value
+                    or (not value and path != "download.rip_auto_select")
                     or any(
                         not isinstance(item, str) or not item.strip() for item in value
                     )
                 ):
-                    raise ConfigError(f"{path} must be a nonempty list of strings")
+                    raise ConfigError(
+                        f"{path} must be a list of strings"
+                        if path == "download.rip_auto_select"
+                        else f"{path} must be a nonempty list of strings"
+                    )
             elif not isinstance(value, str) or not value.strip():
                 raise ConfigError(f"{path} must be a nonempty string")
 
     auth = AuthConfig(**config["auth"])
     download = DownloadConfig(**config["download"])
+    # Ignore obsolete mandatory defaults in existing 4.x configuration files.
+    download = replace(
+        download,
+        rip_auto_select=[
+            name
+            for name in download.rip_auto_select
+            if name not in {"albums-tracks", "playlist-tracks"}
+        ],
+    )
     output = OutputConfig(**config["output"])
     database = DatabaseConfig(**config["database"])
     ui = UiConfig(**config["ui"])

@@ -257,6 +257,7 @@ class Downloader:
         quality_priority: Sequence[UploadedVideoQuality] | None,
         container: Literal["m4v", "mp4"],
         tag: bool,
+        exclude_tags: Sequence[str],
         include_cover: bool,
         include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
@@ -386,11 +387,19 @@ class Downloader:
                     tags = await self.tag_resolver.get_tags(media)
             else:
                 tags = resolved_tags
+            tags = replace(
+                tags,
+                **{
+                    name: (() if name == "genre" else None)
+                    for name in exclude_tags
+                    if name != "cover" and name in Tags.__dataclass_fields__
+                },
+            )
             if include_lyrics and isinstance(media, Song):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
                     tags = replace(tags, lyrics=lyrics.to_plain_text())
-            if include_cover:
+            if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
                     artwork = await cover.get_cover_bytes()
@@ -592,6 +601,7 @@ class Downloader:
         quality_priority: Sequence[UploadedVideoQuality] | None = None,
         container: Literal["m4v", "mp4"] = "m4v",
         tag: bool = True,
+        exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         include_lyrics: bool = False,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
@@ -610,6 +620,7 @@ class Downloader:
             quality_priority=quality_priority,
             container=container,
             tag=tag,
+            exclude_tags=exclude_tags,
             include_cover=include_cover,
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,
@@ -640,6 +651,7 @@ class Downloader:
         playlist_tags: PlaylistTags | None = None,
         video_extension: Literal[".m4v", ".mp4"] = ".m4v",
         tag: bool = True,
+        exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         include_lyrics: bool = False,
         save_cover: bool = False,
@@ -796,6 +808,7 @@ class Downloader:
             quality_priority=quality_priority,
             container=container,
             tag=tag,
+            exclude_tags=exclude_tags,
             include_cover=include_cover,
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,

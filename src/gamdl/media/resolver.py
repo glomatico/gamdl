@@ -7,24 +7,25 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequen
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
+from gamdl.pagination import MediaPage, PageCache
+
 from .base import Media, MediaSource
-from .cover_cache import CoverCache
 from .constants import ARTIST_COLLECTIONS, DEFAULT_AUTO_SELECT, LIBRARY_COLLECTIONS
+from .cover_cache import CoverCache
 from .enums import SelectionKind
 from .exceptions import SelectionRequiredError, UnsupportedMediaError
 from .models import (
     ArtistBrowseRequest,
     ArtistBrowseResult,
-    LibraryBrowseRequest,
     CollectionOption,
     CollectionSelectionRequest,
+    LibraryBrowseRequest,
     SelectionOption,
     SelectionRequest,
 )
-from .playlist import Playlist
-from gamdl.pagination import MediaPage, PageCache
-from .song import Song
 from .music_video import MusicVideo
+from .playlist import Playlist
+from .song import Song
 from .uploaded_video import UploadedVideo
 
 if TYPE_CHECKING:
@@ -60,11 +61,13 @@ class MediaResolver:
         *,
         selector: Selector | None = None,
         auto_select: Iterable[SelectionKind | str] = DEFAULT_AUTO_SELECT,
+        select: bool = False,
         cover_cache: CoverCache | None = None,
     ) -> None:
         self.api = api
         self.selector = selector
         self.auto_select = frozenset(SelectionKind(item) for item in auto_select)
+        self.select = select
         self.cover_cache = cover_cache if cover_cache is not None else CoverCache()
 
     async def from_song(
@@ -99,7 +102,11 @@ class MediaResolver:
         select_all: bool = False,
     ) -> AsyncIterator[Media]:
         """Stream auto-selected resources, materialize for explicit UI selection."""
-        if not select_all and kind not in self.auto_select and self.selector is None:
+        if (
+            not select_all
+            and (self.select or kind not in self.auto_select)
+            and self.selector is None
+        ):
             raise SelectionRequiredError(kind.value)
 
         def as_media(metadata: dict, index: int) -> Media:
@@ -111,7 +118,7 @@ class MediaResolver:
             )
             return media
 
-        if select_all or kind in self.auto_select:
+        if select_all or (not self.select and kind in self.auto_select):
             index = 0
             async for metadata in resources:
                 yield as_media(metadata, index)
@@ -178,7 +185,11 @@ class MediaResolver:
         Automatic categories stream resources page by page. The browser fetches
         a category only on expansion; selected unloaded categories stream later.
         """
-        categories = [kind for kind in ARTIST_COLLECTIONS if kind in self.auto_select]
+        categories = [
+            kind
+            for kind in ARTIST_COLLECTIONS
+            if kind in self.auto_select and not self.select
+        ]
         cache: dict[SelectionKind, PageCache[dict]] = {}
         selected_items: dict[SelectionKind, set[int] | None] = {}
         excluded_items: dict[SelectionKind, set[int]] = {}
@@ -324,7 +335,9 @@ class MediaResolver:
                     continue
                 media_type = item.get("type")
                 if media_type == "albums":
-                    async for media in self.from_album(item["id"], select_all=True):
+                    async for media in self.from_album(
+                        item["id"], select_all=not self.select
+                    ):
                         yield media
                 elif media_type in {"songs", "music-videos"}:
                     media = Media.from_metadata(

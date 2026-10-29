@@ -1,13 +1,17 @@
 """Dataclass-Click option schema for the rip command."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields, make_dataclass
 from typing import Annotated
 
 import click
-from dataclass_click import argument, option as dataclass_option
+from dataclass_click import argument
+from dataclass_click import option as dataclass_option
 
+from gamdl.download.tags import Tags
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
 from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
+
+TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
 
 
 def option(*names, **kwargs):
@@ -18,13 +22,21 @@ def option(*names, **kwargs):
 @dataclass
 class RipOptions:
     urls: Annotated[tuple[str, ...], argument(nargs=-1)] = ()
+    select: Annotated[
+        bool,
+        option(
+            "--select",
+            is_flag=True,
+            help="Interactively select items in all collections",
+        ),
+    ] = False
     auto_select: Annotated[
         tuple[str, ...],
         option(
             "--auto-select",
             multiple=True,
             type=click.Choice(list(RIP_AUTO_SELECT_NAMES)),
-            help="Repeat to select album/playlist tracks or artist content automatically",
+            help="Repeat to automatically select artist categories",
             show_default=True,
         ),
     ] = DEFAULT_RIP_AUTO_SELECT
@@ -114,6 +126,18 @@ class RipOptions:
     save_cover: Annotated[
         bool, option("--save-cover/--no-save-cover", help="Save external artwork")
     ] = False
+    no_tag: Annotated[
+        bool, option("--no-tag", is_flag=True, help="Skip writing metadata tags")
+    ] = False
+    exclude_tags: Annotated[
+        tuple[str, ...],
+        option(
+            "--exclude-tags",
+            multiple=True,
+            type=str,
+            help="Comma-separated metadata fields to omit (or cover)",
+        ),
+    ] = ()
     save_lyrics: Annotated[
         bool, option("--save-lyrics/--no-save-lyrics", help="Save song LRC/text")
     ] = True
@@ -185,3 +209,15 @@ class RipOptions:
     truncate: Annotated[
         int | None, option("--truncate", type=click.IntRange(min=1))
     ] = None
+
+
+# Library has an implicit URL and always opens its browser. It shares download
+# options with rip but does not expose rip's selection-policy flags.
+LibraryOptions = make_dataclass(
+    "LibraryOptions",
+    [
+        (item.name, RipOptions.__annotations__[item.name], field(default=item.default))
+        for item in fields(RipOptions)
+        if item.name not in {"urls", "select", "auto_select"}
+    ],
+)

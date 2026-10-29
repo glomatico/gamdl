@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -49,7 +51,7 @@ def _merge(defaults: dict[str, Any], values: dict[str, Any], prefix: str = "") -
     for key, value in values.items():
         name = f"{prefix}.{key}" if prefix else key
         if key not in defaults:
-            raise ConfigError(f"Unknown configuration key: {name}")
+            continue
         if isinstance(defaults[key], dict):
             if not isinstance(value, dict):
                 raise ConfigError(f"{name} must be a mapping")
@@ -203,8 +205,46 @@ def _validate(config: dict[str, Any]) -> AppConfig:
     )
 
 
+def _normalize(values: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    """Drop unknown keys and populate missing keys without changing known values."""
+    result = {}
+    for key, default in defaults.items():
+        value = values.get(key, default)
+        if isinstance(default, dict) and isinstance(value, dict):
+            value = _normalize(value, default)
+        result[key] = value
+    return result
+
+
+def _prune(values: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    """Prune unknown profile overrides without filling inherited settings."""
+    return {
+        key: _prune(value, defaults[key])
+        if isinstance(defaults[key], dict) and isinstance(value, dict)
+        else value
+        for key, value in values.items()
+        if key in defaults
+    }
+
+
+def _persist(path: Path, normalized: dict[str, Any]) -> None:
+    """Back up the original and atomically write a validated normalized config."""
+    backup = path.with_name(path.name + ".bak")
+    if not backup.exists():
+        shutil.copy2(path, backup)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        import os
+
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(normalized, stream, sort_keys=False, allow_unicode=True)
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
 def load_config(path: Path | None, *, profile: str | None = None) -> AppConfig:
-    """Load config and optional profile; never create, edit or normalize the YAML file."""
+    """Load, validate and persist normalized YAML when the schema changes."""
     defaults = asdict(AppConfig())
     if path is None or not path.exists():
         if profile:
@@ -218,6 +258,15 @@ def load_config(path: Path | None, *, profile: str | None = None) -> AppConfig:
         loaded = {}
     if not isinstance(loaded, dict):
         raise ConfigError("YAML config must be a mapping")
+    schema = asdict(AppConfig())
+    normalized = _normalize(loaded, {**schema, "profiles": loaded.get("profiles", {})})
+    if "profiles" not in loaded:
+        normalized.pop("profiles", None)
+    if isinstance(normalized.get("profiles"), dict):
+        normalized["profiles"] = {
+            name: _prune(settings, schema) if isinstance(settings, dict) else settings
+            for name, settings in normalized["profiles"].items()
+        }
     base = {key: value for key, value in loaded.items() if key != "profiles"}
     profiles = loaded.get("profiles", {})
     if not isinstance(profiles, dict):
@@ -235,7 +284,13 @@ def load_config(path: Path | None, *, profile: str | None = None) -> AppConfig:
         if profile not in profiles:
             raise ConfigError(f"Unknown profile: {profile}")
         _merge(defaults, profiles[profile])
-    return _validate(defaults)
+    result = _validate(defaults)
+    if normalized != loaded:
+        try:
+            _persist(path, normalized)
+        except OSError as exc:
+            raise ConfigError(f"Cannot update config: {exc}") from exc
+    return result
 
 
 def click_default_map(config: AppConfig) -> dict[str, Any]:

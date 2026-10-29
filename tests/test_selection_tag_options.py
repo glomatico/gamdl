@@ -12,6 +12,49 @@ from tests.test_media import fake_api, make_tracks
 
 
 class SelectionOptionsTests(unittest.TestCase):
+    def test_config_normalization_preserves_valid_values_and_backs_up(self):
+        import tempfile
+        from pathlib import Path
+
+        import yaml
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yaml"
+            original = "download:\n  rip_auto_select: [artist-main-albums]\n  concurrency: 5\nprofiles:\n  custom:\n    download:\n      overwrite: replace\n      removed_setting: true\n"
+            path.write_text(original)
+            config = load_config(path, profile="custom")
+            self.assertEqual(config.download.concurrency, 5)
+            self.assertEqual(config.download.overwrite, "replace")
+            self.assertEqual((path.parent / "config.yaml.bak").read_text(), original)
+            updated = yaml.safe_load(path.read_text())
+            self.assertNotIn("rip_auto_select", updated["download"])
+            self.assertEqual(updated["download"]["artist_auto_select"], [])
+            self.assertEqual(updated["download"]["library_auto_select"], [])
+            self.assertNotIn(
+                "removed_setting", updated["profiles"]["custom"]["download"]
+            )
+            self.assertEqual(
+                updated["profiles"]["custom"]["download"], {"overwrite": "replace"}
+            )
+            self.assertEqual(
+                load_config(path, profile="custom").download.concurrency, 5
+            )
+
+    def test_invalid_known_config_is_not_rewritten(self):
+        import tempfile
+        from pathlib import Path
+
+        from gamdl.cli.config.loader import ConfigError
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yaml"
+            original = "download:\n  rip_auto_select: []\n  overwrite: invalid\n"
+            path.write_text(original)
+            with self.assertRaises(ConfigError):
+                load_config(path)
+            self.assertEqual(path.read_text(), original)
+            self.assertFalse((path.parent / "config.yaml.bak").exists())
+
     def test_auto_select_defaults_are_independent(self):
         config = load_config(None)
         self.assertEqual(config.download.artist_auto_select, [])

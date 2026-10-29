@@ -6,8 +6,8 @@ from pathlib import Path
 import click
 import yaml
 
-from .models import AppConfig
 from .loader import load_config
+from .models import AppConfig
 
 
 @click.group(name="config")
@@ -31,7 +31,7 @@ def initialize(ctx: click.Context, force: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     template = (
         "# GAMDL 4.0 configuration; CLI flags override these values.\n"
-        "# Normal commands never rewrite this file.\n"
+        "# Configuration schema changes are normalized automatically.\n"
         "# Optional profiles may override any section:\n"
         "# profiles:\n"
         "#   portable:\n"

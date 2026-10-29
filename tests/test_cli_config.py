@@ -106,11 +106,10 @@ class CliConfigTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(calls[-1].concurrency, 8)
 
-    def test_invalid_yaml_version_options_and_unknown_keys_are_not_deleted(self):
+    def test_invalid_yaml_version_options_are_not_deleted(self):
         for text in (
             "not: [valid",
             "config_version: 2\n",
-            "download:\n  mystery_flag: 1\n",
             "download:\n  concurrency: -1\n",
             "download:\n  concurrent_downloads: true\n",
             "output:\n  save_cover: yes\n",  # YAML 1.1 resolves to bool, valid

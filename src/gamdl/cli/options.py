@@ -8,7 +8,7 @@ from dataclass_click import argument
 from dataclass_click import option as dataclass_option
 
 from gamdl.download.tags import Tags
-from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
+from gamdl.media import CoverFormat, MusicVideoCodec, SongCodec, UploadedVideoQuality
 
 TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
 
@@ -129,6 +129,14 @@ class RipOptions:
     save_cover: Annotated[
         bool, option("--save-cover/--no-save-cover", help="Save external artwork")
     ] = False
+    cover_format: Annotated[
+        str,
+        option(
+            "--cover-format",
+            type=click.Choice([item.value for item in CoverFormat]),
+            help="Embedded and saved artwork format (jpg or png)",
+        ),
+    ] = CoverFormat.JPG.value
     no_tag: Annotated[
         bool, option("--no-tag", is_flag=True, help="Skip writing metadata tags")
     ] = False

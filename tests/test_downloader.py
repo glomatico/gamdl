@@ -675,6 +675,47 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(playlist.read_text(), "#EXTM3U\n\n../music/song.m4a\n")
 
+    async def test_png_cover_format_used_for_tags_and_sidecar_retry(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        cover = Mock(get_cover_bytes=AsyncMock(return_value=PNG))
+        song.get_cover.return_value = cover
+        output = self.directory / "png-cover.m4a"
+        result = await downloader.download(
+            song, output, cover_format="png", save_cover=True
+        )
+        self.assertEqual(result.status, "downloaded")
+        cover.get_cover_bytes.assert_awaited_once_with(format="png")
+        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+        self.assertFalse(output.with_suffix(".jpg").exists())
+        self.assertIn(b"covr", mp4_tag_atoms(output))
+
+        output.with_suffix(".png").unlink()
+        cover.get_cover_bytes.reset_mock()
+        song.get_stream.reset_mock()
+        result = await downloader.download(
+            song, output, cover_format="png", save_cover=True
+        )
+        self.assertEqual(result.status, "skipped")
+        cover.get_cover_bytes.assert_awaited_once_with(format="png")
+        song.get_stream.assert_not_awaited()
+        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+
+    async def test_get_bytes_cover_format_and_invalid_raw(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        cover = Mock(get_cover_bytes=AsyncMock(return_value=PNG))
+        song.get_cover.return_value = cover
+        data = await downloader.get_bytes(song, cover_format="png")
+        cover.get_cover_bytes.assert_awaited_once_with(format="png")
+        output = self.directory / "returned.m4a"
+        output.write_bytes(data)
+        self.assertIn(b"covr", mp4_tag_atoms(output))
+        with self.assertRaises(ValueError):
+            await downloader.get_bytes(song, cover_format="raw", tag=False)
+        with self.assertRaises(ValueError):
+            await downloader.download(song, output, cover_format="raw", tag=False)
+
     async def test_unsynced_song_lyrics_use_txt_and_png_cover(self):
         downloader, _ = self.downloader()
         song = self.song()

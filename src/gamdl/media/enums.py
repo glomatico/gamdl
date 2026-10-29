@@ -31,6 +31,13 @@ class HlsType(str, Enum):
     STANDARD = "standard"
 
 
+class CoverFormat(str, Enum):
+    """Artwork formats supported by Apple Music's resizing endpoint."""
+
+    JPG = "jpg"
+    PNG = "png"
+
+
 class SelectionKind(str, Enum):
     """Independent selection decisions made by the source resolver."""
 

@@ -5,7 +5,7 @@ from gamdl.pagination import MediaPage, PageCache
 from .base import Media, MediaSource
 from .cover import Cover
 from .cover_cache import CoverCache
-from .enums import HlsType, StreamOrigin, StreamSource
+from .enums import CoverFormat, HlsType, StreamOrigin, StreamSource
 from .exceptions import (
     GamdlMediaError,
     SelectionRequiredError,
@@ -81,6 +81,7 @@ __all__ = [
     "HlsStream",
     "Cover",
     "CoverCache",
+    "CoverFormat",
     "DEFAULT_AUTO_SELECT",
     "GamdlMediaError",
     "HlsSongStream",

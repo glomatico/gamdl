@@ -13,6 +13,61 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_cover_format_yaml_cli_and_raw_rejection(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        self.assertEqual(click_default_map(load_config(None))["cover_format"], "jpg")
+        self._write("output:\n  cover_format: png\n  save_cover: true\n")
+        configured = load_config(self.path)
+        self.assertEqual(configured.output.cover_format, "png")
+        self.assertEqual(click_default_map(configured)["cover_format"], "png")
+
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                [
+                    "--config",
+                    str(self.path),
+                    "rip",
+                    "https://music.apple.com/br/song/x/1",
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(captured[-1].cover_format, "png")
+            self.assertTrue(captured[-1].save_cover)
+            result = runner.invoke(
+                main,
+                [
+                    "--config",
+                    str(self.path),
+                    "rip",
+                    "https://music.apple.com/br/song/x/1",
+                    "--cover-format",
+                    "jpg",
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(captured[-1].cover_format, "jpg")
+            for command in ("rip", "library", "search"):
+                # Click must reject the removed raw artwork URL trick.
+                result = runner.invoke(
+                    main,
+                    ["--no-config", command, "--cover-format", "raw"],
+                )
+                self.assertNotEqual(result.exit_code, 0, result.output)
+                self.assertIn("Invalid value", result.output)
+
+        self._write("output:\n  cover_format: raw\n")
+        with self.assertRaisesRegex(ConfigError, "output.cover_format"):
+            load_config(self.path)
+
     def test_configured_temp_path_and_cli_override(self):
         from gamdl.cli.config.loader import click_default_map
 

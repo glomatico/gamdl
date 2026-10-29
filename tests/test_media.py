@@ -12,6 +12,7 @@ from gamdl.api.exceptions import (
 from gamdl.media import (
     DEFAULT_AUTO_SELECT,
     Cover,
+    CoverFormat,
     GamdlMediaError,
     Lyrics,
     Media,
@@ -196,14 +197,45 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cover_format_validation_and_missing_artwork(self):
         cover = Cover.from_metadata(SONG_DATA["attributes"]["artwork"])
+        self.assertEqual({value.value for value in CoverFormat}, {"jpg", "png"})
         with self.assertRaises(ValueError):
             cover.get_formatted_url(width=0, height=200)
         with self.assertRaises(ValueError):
             cover.get_formatted_url(width=100, height=100, format="gif")
+        with self.assertRaises(ValueError):
+            cover.get_formatted_url(width=100, height=100, format="raw")
         no_cover = Song.from_metadata(
             {"id": "1", "type": "songs", "attributes": {}}, api=fake_api()
         )
         self.assertIsNone(await no_cover.get_cover())
+
+    async def test_cover_format_supports_legacy_apple_fixed_jpg_template(self):
+        cover = Cover.from_metadata(
+            {
+                "url": "https://is1-ssl.mzstatic.com/image/thumb/example/"
+                "{w}x{h}bb.jpg?version=1"
+            }
+        )
+        self.assertEqual(
+            cover.get_formatted_url(width=1200, height=1200),
+            "https://is1-ssl.mzstatic.com/image/thumb/example/"
+            "1200x1200bb.jpg?version=1",
+        )
+        self.assertEqual(
+            cover.get_formatted_url(width=1200, height=1200, format="png"),
+            "https://is1-ssl.mzstatic.com/image/thumb/example/"
+            "1200x1200bb.png?version=1",
+        )
+        self.assertEqual(
+            cover.get_formatted_url(width=1200, height=1200, format=CoverFormat.PNG),
+            "https://is1-ssl.mzstatic.com/image/thumb/example/"
+            "1200x1200bb.png?version=1",
+        )
+        cover_ac = Cover.from_metadata({"url": "https://example.test/{w}x{h}ac.jpg"})
+        self.assertEqual(
+            cover_ac.get_formatted_url(width=640, height=640, format="png"),
+            "https://example.test/640x640ac.png",
+        )
 
     async def test_lyrics_cached_separately_by_kind_and_locale(self):
         api = fake_api()

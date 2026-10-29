@@ -6,7 +6,14 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from gamdl.media import Cover, CoverCache, GamdlMediaError, MediaResolver, Song
+from gamdl.media import (
+    Cover,
+    CoverCache,
+    CoverFormat,
+    GamdlMediaError,
+    MediaResolver,
+    Song,
+)
 from gamdl.media.cache import InstanceCache
 
 TEMPLATE = "https://artwork.example.test/{w}x{h}.{f}?image=album-one"
@@ -87,6 +94,33 @@ class InstanceCacheTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CoverCacheTests(unittest.IsolatedAsyncioTestCase):
+    async def test_apple_fixed_extension_url_respects_format_and_cache_key(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(str(request.url))
+            return httpx.Response(200, content=request.url.path.encode())
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            cache = CoverCache(client=client)
+            cover = Cover.from_metadata(
+                {"url": "https://artwork.example.test/{w}x{h}bb.jpg"},
+                cache=cache,
+            )
+            jpeg = await cover.get_cover_bytes()
+            png = await cover.get_cover_bytes(format=CoverFormat.PNG)
+            self.assertNotEqual(jpeg, png)
+            self.assertEqual(
+                requests,
+                [
+                    "https://artwork.example.test/1200x1200bb.jpg",
+                    "https://artwork.example.test/1200x1200bb.png",
+                ],
+            )
+            self.assertEqual(await cover.get_cover_bytes(format="png"), png)
+            self.assertEqual(len(requests), 2)
+            await cache.aclose()
+
     async def test_cover_without_cache_still_fetches_lazily(self):
         cover = Cover.from_metadata(ARTWORK)
         self.assertIsNone(cover.cache)

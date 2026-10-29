@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from gamdl.download import PathFormatter, PlaylistTags, Tags
-from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
+from gamdl.media import CoverFormat, MusicVideoCodec, SongCodec, UploadedVideoQuality
 from gamdl.media.constants import ARTIST_AUTO_SELECT_NAMES, LIBRARY_AUTO_SELECT_NAMES
 
 from .models import (
@@ -134,6 +134,8 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         raise ConfigError("auth.storefront must be a two-letter country code")
     if download.overwrite not in {"skip", "replace", "error"}:
         raise ConfigError("download.overwrite must be skip, replace, or error")
+    if output.cover_format not in {item.value for item in CoverFormat}:
+        raise ConfigError("output.cover_format must be jpg or png")
     for name, values, allowed in (
         ("artist_auto_select", download.artist_auto_select, ARTIST_AUTO_SELECT_NAMES),
         (
@@ -378,6 +380,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "max_height": d.max_height,
         "uploaded_video_quality": d.uploaded_video_quality,
         "save_cover": o.save_cover,
+        "cover_format": o.cover_format,
         "no_lyrics": not o.save_lyrics,
         "save_playlist": o.save_playlist,
         "fail_fast": not d.continue_on_error,

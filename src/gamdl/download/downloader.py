@@ -22,6 +22,7 @@ from gamdl.api.wrapper import WrapperApi
 from gamdl.drm import Drm
 from gamdl.media import (
     AudioStream,
+    CoverFormat,
     HttpStream,
     MusicVideo,
     MusicVideoCodec,
@@ -314,6 +315,7 @@ class Downloader:
         tag: bool,
         exclude_tags: Sequence[str],
         include_cover: bool,
+        cover_format: CoverFormat,
         include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
@@ -457,7 +459,7 @@ class Downloader:
             if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
-                    artwork = await cover.get_cover_bytes()
+                    artwork = await cover.get_cover_bytes(format=cover_format.value)
             # The current Rust tagger is file-based. This temporary output is
             # private; neither API publishes an untagged intermediate file.
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
@@ -486,6 +488,7 @@ class Downloader:
         tag: bool,
         exclude_tags: Sequence[str],
         include_cover: bool,
+        cover_format: CoverFormat,
         include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
@@ -620,7 +623,7 @@ class Downloader:
             if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
-                    artwork = await cover.get_cover_bytes()
+                    artwork = await cover.get_cover_bytes(format=cover_format.value)
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
                 await _complete_write(
                     self.muxer.tag, prepared_path, tags=tags, cover_bytes=artwork
@@ -634,6 +637,7 @@ class Downloader:
         *,
         overwrite: str,
         save_cover: bool,
+        cover_format: CoverFormat,
         save_lyrics: bool,
         prepared_cover: bytes | None,
         event_callback: DownloadEventCallback | None = None,
@@ -649,7 +653,9 @@ class Downloader:
                     if cover_bytes is None:
                         cover = await media.get_cover()
                         cover_bytes = (
-                            await cover.get_cover_bytes() if cover is not None else None
+                            await cover.get_cover_bytes(format=cover_format.value)
+                            if cover is not None
+                            else None
                         )
                     if cover_bytes:
                         if cover_bytes.startswith(b"\xff\xd8\xff"):
@@ -709,6 +715,7 @@ class Downloader:
         *,
         overwrite: str,
         save_cover: bool,
+        cover_format: CoverFormat,
         save_lyrics: bool,
         playlist_path: Path | None,
         playlist_index: int | None,
@@ -732,6 +739,7 @@ class Downloader:
                 result.path,
                 overwrite=overwrite,
                 save_cover=save_cover,
+                cover_format=cover_format,
                 save_lyrics=save_lyrics,
                 prepared_cover=prepared_cover,
                 event_callback=event_callback,
@@ -819,11 +827,13 @@ class Downloader:
         tag: bool = True,
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
+        cover_format: CoverFormat | str = CoverFormat.JPG,
         include_lyrics: bool = False,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
         """Return finished MP4-family bytes without publishing a media file."""
+        cover_format = CoverFormat(cover_format)
         prepared = await self._prepare(
             media,
             codec=codec,
@@ -838,6 +848,7 @@ class Downloader:
             tag=tag,
             exclude_tags=exclude_tags,
             include_cover=include_cover,
+            cover_format=cover_format,
             include_lyrics=include_lyrics,
             progress_callback=progress_callback,
             event_callback=event_callback,
@@ -869,6 +880,7 @@ class Downloader:
         tag: bool = True,
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
+        cover_format: CoverFormat | str = CoverFormat.JPG,
         include_lyrics: bool = False,
         save_cover: bool = False,
         save_lyrics: bool = False,
@@ -889,6 +901,7 @@ class Downloader:
         """
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
+        cover_format = CoverFormat(cover_format)
         if video_extension not in (".m4v", ".mp4"):
             raise ValueError("video_extension must be '.m4v' or '.mp4'")
         if overwrite not in OverwritePolicy._value2member_map_:
@@ -1002,6 +1015,7 @@ class Downloader:
                     DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None),
                     overwrite=overwrite,
                     save_cover=save_cover,
+                    cover_format=cover_format,
                     save_lyrics=save_lyrics,
                     playlist_path=Path(playlist_path)
                     if playlist_path is not None
@@ -1033,6 +1047,7 @@ class Downloader:
                 tag=tag,
                 exclude_tags=exclude_tags,
                 include_cover=include_cover,
+                cover_format=cover_format,
                 include_lyrics=include_lyrics,
                 progress_callback=progress_callback,
                 event_callback=event_callback,
@@ -1104,6 +1119,7 @@ class Downloader:
             result,
             overwrite=overwrite,
             save_cover=save_cover,
+            cover_format=cover_format,
             save_lyrics=save_lyrics,
             playlist_path=Path(playlist_path) if playlist_path is not None else None,
             playlist_index=playlist_index,

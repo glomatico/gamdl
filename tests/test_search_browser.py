@@ -11,6 +11,21 @@ from gamdl.pagination import MediaPage, PageCache
 
 
 class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
+    async def test_backspace_on_first_page_returns_to_media_type(self):
+        async def load(cursor):
+            return MediaPage(({"id": "1", "attributes": {"name": "First"}},))
+
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                select_search_results(
+                    PageCache(load), "test", input=pipe, output=DummyOutput()
+                )
+            )
+            await asyncio.sleep(0.08)
+            pipe.send_text("\x7f")
+            result = await asyncio.wait_for(task, 2)
+        self.assertEqual(result, "back")
+
     async def test_backspace_and_left_navigate_cached_pages(self):
         calls = []
 

@@ -471,58 +471,70 @@ async def run_rip(options: RipOptions) -> int:
                                         return await terminal.prompt(operation)
 
                                 async def search_source():
-                                    kind = options.search_type
-                                    if kind is None:
-                                        kind = (
-                                            "song",
-                                            "music-video",
-                                            "uploaded-video",
-                                        )[
-                                            await prompt_search(
-                                                select_one(
-                                                    "Search media type",
-                                                    [
-                                                        MenuChoice("Songs", 0),
-                                                        MenuChoice("Music videos", 1),
-                                                        MenuChoice(
-                                                            "Uploaded videos", 2
-                                                        ),
-                                                    ],
+                                    while True:
+                                        kind = options.search_type
+                                        if kind is None:
+                                            kind = (
+                                                "song",
+                                                "music-video",
+                                                "uploaded-video",
+                                            )[
+                                                await prompt_search(
+                                                    select_one(
+                                                        "Search media type",
+                                                        [
+                                                            MenuChoice("Songs", 0),
+                                                            MenuChoice(
+                                                                "Music videos", 1
+                                                            ),
+                                                            MenuChoice(
+                                                                "Uploaded videos", 2
+                                                            ),
+                                                        ],
+                                                    )
+                                                )
+                                            ]
+                                        resource_type = {
+                                            "song": "songs",
+                                            "music-video": "music-videos",
+                                            "uploaded-video": "uploaded-videos",
+                                        }[kind]
+
+                                        async def load(cursor):
+                                            response = (
+                                                await api.get_extended_api_data(cursor)
+                                                if cursor is not None
+                                                else await api.get_search_results(
+                                                    options.search_term,
+                                                    types=resource_type,
+                                                    limit=50,
                                                 )
                                             )
-                                        ]
-                                    resource_type = {
-                                        "song": "songs",
-                                        "music-video": "music-videos",
-                                        "uploaded-video": "uploaded-videos",
-                                    }[kind]
-
-                                    async def load(cursor):
-                                        response = (
-                                            await api.get_extended_api_data(cursor)
-                                            if cursor is not None
-                                            else await api.get_search_results(
-                                                options.search_term,
-                                                types=resource_type,
-                                                limit=50,
+                                            group = response.get("results", {}).get(
+                                                resource_type, {}
                                             )
-                                        )
-                                        group = response.get("results", {}).get(
-                                            resource_type, {}
-                                        )
-                                        data = group.get("data", [])
-                                        return MediaPage(tuple(data), group.get("next"))
-
-                                    cache = PageCache(load)
-                                    if options.feeling_lucky:
-                                        first = await cache.get(0)
-                                        indices = [0] if first and first.items else []
-                                    else:
-                                        indices = await prompt_search(
-                                            select_search_results(
-                                                cache, options.search_term
+                                            data = group.get("data", [])
+                                            return MediaPage(
+                                                tuple(data), group.get("next")
                                             )
-                                        )
+
+                                        cache = PageCache(load)
+                                        if options.feeling_lucky:
+                                            first = await cache.get(0)
+                                            indices = (
+                                                [0] if first and first.items else []
+                                            )
+                                        else:
+                                            indices = await prompt_search(
+                                                select_search_results(
+                                                    cache, options.search_term
+                                                )
+                                            )
+                                        if indices == "back":
+                                            if options.search_type is not None:
+                                                raise click.Abort()
+                                            continue
+                                        break
                                     wanted = set(indices)
                                     if not wanted:
                                         raise click.ClickException(

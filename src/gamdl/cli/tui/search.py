@@ -90,6 +90,8 @@ async def select_search_results(cache, term: str, *, input=None, output=None):
         if page:
             page -= 1
             cursor = 0
+        else:
+            app.exit(result="back")
 
     def start_task(coroutine):
         task = asyncio.create_task(coroutine)

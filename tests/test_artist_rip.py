@@ -319,21 +319,22 @@ class RipCliSettingsTests(unittest.TestCase):
                     "rip",
                     "https://music.apple.com/br/song/a/1",
                     "https://music.apple.com/br/song/b/2",
-                    "--auto-select",
-                    "artist-main-albums",
-                    "--auto-select",
-                    "artist-music-videos",
+                    "--artist-auto-select",
+                    "main-albums",
+                    "--artist-auto-select",
+                    "music-videos",
                 ],
             )
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertEqual(len(received[0].urls), 2)
         self.assertEqual(
-            received[0].auto_select, ("artist-main-albums", "artist-music-videos")
+            received[0].artist_auto_select, ("main-albums", "music-videos")
         )
 
     def test_default_auto_select_and_validated_yaml_override(self):
         self.assertEqual(
-            tuple(load_config(None).download.rip_auto_select), DEFAULT_RIP_AUTO_SELECT
+            tuple(load_config(None).download.artist_auto_select),
+            DEFAULT_RIP_AUTO_SELECT,
         )
         self.assertEqual(set(DEFAULT_RIP_AUTO_SELECT), set())
         with tempfile.TemporaryDirectory() as temp:
@@ -342,8 +343,8 @@ class RipCliSettingsTests(unittest.TestCase):
                 "download:\n  rip_auto_select: [albums-tracks, artist-main-albums]\n"
             )
             self.assertEqual(
-                load_config(path).download.rip_auto_select,
-                ["artist-main-albums"],
+                load_config(path).download.artist_auto_select,
+                ["main-albums"],
             )
             captured = []
 
@@ -362,10 +363,10 @@ class RipCliSettingsTests(unittest.TestCase):
                     ],
                 )
             self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(captured[0].auto_select, ("artist-main-albums",))
+            self.assertEqual(captured[0].artist_auto_select, ("main-albums",))
             for bad in ("unknown-category", "album-tracks"):
-                path.write_text(f"download:\n  rip_auto_select: [{bad}]\n")
-                with self.assertRaisesRegex(ConfigError, "rip_auto_select"):
+                path.write_text(f"download:\n  artist_auto_select: [{bad}]\n")
+                with self.assertRaisesRegex(ConfigError, "artist_auto_select"):
                     load_config(path)
 
     def test_no_urls_and_invalid_auto_select_are_usage_errors(self):
@@ -373,7 +374,7 @@ class RipCliSettingsTests(unittest.TestCase):
         self.assertNotEqual(missing.exit_code, 0)
         self.assertIn("Provide at least one Apple Music URL", missing.output)
         invalid = CliRunner().invoke(
-            main, ["--no-config", "rip", "URL", "--auto-select", "invalid"]
+            main, ["--no-config", "rip", "URL", "--artist-auto-select", "invalid"]
         )
         self.assertNotEqual(invalid.exit_code, 0)
-        self.assertIn("Invalid value for '--auto-select'", invalid.output)
+        self.assertIn("--artist-auto-select", invalid.output)

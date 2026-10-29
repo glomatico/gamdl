@@ -9,7 +9,11 @@ from dataclass_click import option as dataclass_option
 
 from gamdl.download.tags import Tags
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
-from gamdl.media.constants import DEFAULT_RIP_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
+from gamdl.media.constants import (
+    ARTIST_AUTO_SELECT_NAMES,
+    DEFAULT_RIP_AUTO_SELECT,
+    LIBRARY_AUTO_SELECT_NAMES,
+)
 
 TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
 
@@ -30,13 +34,13 @@ class RipOptions:
             help="Interactively select items in all collections",
         ),
     ] = False
-    auto_select: Annotated[
+    artist_auto_select: Annotated[
         tuple[str, ...],
         option(
-            "--auto-select",
+            "--artist-auto-select",
             multiple=True,
-            type=click.Choice(list(RIP_AUTO_SELECT_NAMES)),
-            help="Repeat to automatically select artist categories",
+            type=str,
+            help="Artist categories, comma-separated or repeated; all = all-albums,music-videos",
             show_default=True,
         ),
     ] = DEFAULT_RIP_AUTO_SELECT
@@ -218,6 +222,24 @@ LibraryOptions = make_dataclass(
     [
         (item.name, RipOptions.__annotations__[item.name], field(default=item.default))
         for item in fields(RipOptions)
-        if item.name not in {"urls", "select", "auto_select"}
+        if item.name
+        not in {"urls", "select", "artist_auto_select", "library_auto_select"}
+    ]
+    + [
+        ("select", RipOptions.__annotations__["select"], field(default=False)),
+        (
+            "library_auto_select",
+            Annotated[
+                tuple[str, ...],
+                option(
+                    "--library-auto-select",
+                    multiple=True,
+                    type=str,
+                    help="Library categories, comma-separated or repeated; all = every category",
+                ),
+            ],
+            field(default=()),
+        ),
     ],
+    namespace={"__module__": __name__},
 )

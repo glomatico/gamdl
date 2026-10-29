@@ -62,12 +62,14 @@ class MediaResolver:
         selector: Selector | None = None,
         auto_select: Iterable[SelectionKind | str] = DEFAULT_AUTO_SELECT,
         select: bool = False,
+        library_auto_select: bool = False,
         cover_cache: CoverCache | None = None,
     ) -> None:
         self.api = api
         self.selector = selector
         self.auto_select = frozenset(SelectionKind(item) for item in auto_select)
         self.select = select
+        self.library_auto_select = library_auto_select
         self.cover_cache = cover_cache if cover_cache is not None else CoverCache()
 
     async def from_song(
@@ -396,8 +398,12 @@ class MediaResolver:
                 page.next_cursor,
             )
 
-        if SelectionKind.LIBRARY in self.auto_select:
-            selected = {kind: (None, set()) for kind in LIBRARY_COLLECTIONS}
+        if self.library_auto_select and not self.select:
+            selected = {
+                kind: (None, set())
+                for kind in LIBRARY_COLLECTIONS
+                if kind in self.auto_select
+            }
         else:
             assert self.selector is not None
             request = LibraryBrowseRequest(

@@ -10,7 +10,7 @@ import yaml
 
 from gamdl.download import PathFormatter, PlaylistTags, Tags
 from gamdl.media import MusicVideoCodec, SongCodec, UploadedVideoQuality
-from gamdl.media.constants import RIP_AUTO_SELECT_NAMES
+from gamdl.media.constants import ARTIST_AUTO_SELECT_NAMES, LIBRARY_AUTO_SELECT_NAMES
 
 from .models import (
     AppConfig,
@@ -47,6 +47,17 @@ _UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _m
 
 def _merge(defaults: dict[str, Any], values: dict[str, Any], prefix: str = "") -> None:
     for key, value in values.items():
+        if prefix == "download" and key == "rip_auto_select":
+            key = "artist_auto_select"
+            value = (
+                [
+                    item.removeprefix("artist-")
+                    for item in value
+                    if item not in {"albums-tracks", "playlist-tracks"}
+                ]
+                if isinstance(value, list)
+                else value
+            )
         name = f"{prefix}.{key}" if prefix else key
         if key not in defaults:
             raise ConfigError(f"Unknown configuration key: {name}")
@@ -87,14 +98,25 @@ def _validate(config: dict[str, Any]) -> AppConfig:
             elif isinstance(hint, list):
                 if (
                     not isinstance(value, list)
-                    or (not value and path != "download.rip_auto_select")
+                    or (
+                        not value
+                        and path
+                        not in {
+                            "download.artist_auto_select",
+                            "download.library_auto_select",
+                        }
+                    )
                     or any(
                         not isinstance(item, str) or not item.strip() for item in value
                     )
                 ):
                     raise ConfigError(
                         f"{path} must be a list of strings"
-                        if path == "download.rip_auto_select"
+                        if path
+                        in {
+                            "download.artist_auto_select",
+                            "download.library_auto_select",
+                        }
                         else f"{path} must be a nonempty list of strings"
                     )
             elif not isinstance(value, str) or not value.strip():
@@ -102,15 +124,6 @@ def _validate(config: dict[str, Any]) -> AppConfig:
 
     auth = AuthConfig(**config["auth"])
     download = DownloadConfig(**config["download"])
-    # Ignore obsolete mandatory defaults in existing 4.x configuration files.
-    download = replace(
-        download,
-        rip_auto_select=[
-            name
-            for name in download.rip_auto_select
-            if name not in {"albums-tracks", "playlist-tracks"}
-        ],
-    )
     output = OutputConfig(**config["output"])
     database = DatabaseConfig(**config["database"])
     ui = UiConfig(**config["ui"])
@@ -128,10 +141,18 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         raise ConfigError("auth.storefront must be a two-letter country code")
     if download.overwrite not in {"skip", "replace", "error"}:
         raise ConfigError("download.overwrite must be skip, replace, or error")
-    if any(value not in RIP_AUTO_SELECT_NAMES for value in download.rip_auto_select):
-        raise ConfigError("Invalid download.rip_auto_select")
-    if len(download.rip_auto_select) != len(set(download.rip_auto_select)):
-        raise ConfigError("download.rip_auto_select must not contain duplicates")
+    for name, values, allowed in (
+        ("artist_auto_select", download.artist_auto_select, ARTIST_AUTO_SELECT_NAMES),
+        (
+            "library_auto_select",
+            download.library_auto_select,
+            LIBRARY_AUTO_SELECT_NAMES,
+        ),
+    ):
+        if any(value not in allowed and value != "all" for value in values):
+            raise ConfigError(f"Invalid download.{name}")
+        if len(values) != len(set(values)):
+            raise ConfigError(f"download.{name} must not contain duplicates")
     if download.song_codec is not None and download.song_codec not in {
         c.value for c in SongCodec
     }:
@@ -261,7 +282,8 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "save_lyrics": o.save_lyrics,
         "save_playlist": o.save_playlist,
         "continue_on_error": d.continue_on_error,
-        "auto_select": tuple(d.rip_auto_select),
+        "artist_auto_select": tuple(d.artist_auto_select),
+        "library_auto_select": tuple(d.library_auto_select),
         "album_folder_template": o.album_folder_template,
         "compilation_folder_template": o.compilation_folder_template,
         "no_album_folder_template": o.no_album_folder_template,

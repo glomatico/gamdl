@@ -32,9 +32,14 @@ ARTIST_COLLECTIONS: dict[SelectionKind, tuple[str, str, str]] = {
 }
 
 # CLI/YAML names are intentionally independent of the internal source kinds.
-RIP_AUTO_SELECT_NAMES: dict[str, SelectionKind] = {
-    "albums": SelectionKind.ARTIST_ALL_ALBUMS,
-    "music-videos": SelectionKind.ARTIST_MUSIC_VIDEOS,
-    **{kind.value: kind for kind in ARTIST_COLLECTIONS},
+ARTIST_AUTO_SELECT_NAMES: dict[str, SelectionKind] = {
+    kind.value.removeprefix("artist-"): kind for kind in ARTIST_COLLECTIONS
 }
+LIBRARY_AUTO_SELECT_NAMES: dict[str, SelectionKind] = {
+    "playlists": SelectionKind.LIBRARY_PLAYLISTS,
+    "albums": SelectionKind.LIBRARY_ALBUMS,
+    "songs": SelectionKind.LIBRARY_SONGS,
+    "music-videos": SelectionKind.LIBRARY_MUSIC_VIDEOS,
+}
+RIP_AUTO_SELECT_NAMES = ARTIST_AUTO_SELECT_NAMES  # Legacy internal import.
 DEFAULT_RIP_AUTO_SELECT: tuple[str, ...] = ()

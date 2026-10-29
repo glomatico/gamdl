@@ -31,7 +31,11 @@ from gamdl.media import (
     UploadedVideo,
     UploadedVideoQuality,
 )
-from gamdl.media.constants import DEFAULT_AUTO_SELECT, RIP_AUTO_SELECT_NAMES
+from gamdl.media.constants import (
+    ARTIST_AUTO_SELECT_NAMES,
+    DEFAULT_AUTO_SELECT,
+    LIBRARY_AUTO_SELECT_NAMES,
+)
 
 from ..errors import short_error as _short_error
 from ..options import TAG_NAMES
@@ -177,8 +181,18 @@ async def run_rip(options: RipOptions) -> int:
     _check_options(options)
     if not options.urls:
         raise click.UsageError("Provide at least one Apple Music URL")
-    if any(value not in RIP_AUTO_SELECT_NAMES for value in options.auto_select):
-        raise click.UsageError("Invalid --auto-select option")
+    artist_values = [
+        v.strip() for group in options.artist_auto_select for v in group.split(",")
+    ]
+    library_values = [
+        v.strip()
+        for group in getattr(options, "library_auto_select", ())
+        for v in group.split(",")
+    ]
+    if any(v not in ARTIST_AUTO_SELECT_NAMES and v != "all" for v in artist_values):
+        raise click.UsageError("Invalid --artist-auto-select option")
+    if any(v not in LIBRARY_AUTO_SELECT_NAMES and v != "all" for v in library_values):
+        raise click.UsageError("Invalid --library-auto-select option")
     excluded = tuple(
         name.strip() for group in options.exclude_tags for name in group.split(",")
     )
@@ -268,9 +282,29 @@ async def run_rip(options: RipOptions) -> int:
                     api,
                     auto_select=[
                         *DEFAULT_AUTO_SELECT,
-                        *(RIP_AUTO_SELECT_NAMES[name] for name in options.auto_select),
+                        *(
+                            ARTIST_AUTO_SELECT_NAMES[name]
+                            for name in artist_values
+                            if name != "all"
+                        ),
+                        *(
+                            ARTIST_AUTO_SELECT_NAMES[name]
+                            for name in ("all-albums", "music-videos")
+                            if "all" in artist_values
+                        ),
+                        *(
+                            LIBRARY_AUTO_SELECT_NAMES[name]
+                            for name in library_values
+                            if name != "all"
+                        ),
+                        *(
+                            LIBRARY_AUTO_SELECT_NAMES.values()
+                            if "all" in library_values
+                            else ()
+                        ),
                     ],
                     select=options.select,
+                    library_auto_select=bool(library_values),
                     selector=choose_media,
                 )
 

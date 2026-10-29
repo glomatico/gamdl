@@ -1,4 +1,7 @@
-//! Native MP4 metadata writing. Downloading and muxing will be added later.
+//! Native MP4 metadata writing, including bounded-memory file-backed tagging.
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom, Write};
+
 use mp4ameta::{Data, Fourcc, Img, Tag};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -162,9 +165,7 @@ impl TagFields {
         })
     }
 
-    fn write(self, path: &str) -> PyResult<()> {
-        let mut mp4 = Tag::read_from_path(path)
-            .map_err(|err| PyValueError::new_err(format!("Could not read MP4 metadata: {err}")))?;
+    fn apply(self, mp4: &mut Tag) {
         for (atom, value) in self.strings {
             mp4.set_data(Fourcc(atom), Data::Utf8(value));
         }
@@ -192,9 +193,165 @@ impl TagFields {
                 Artwork::Png(data) => mp4.set_artwork(Img::png(data)),
             }
         }
+    }
+
+    fn write(self, path: &str) -> PyResult<()> {
+        let mut mp4 = Tag::read_from_path(path)
+            .map_err(|err| PyValueError::new_err(format!("Could not read MP4 metadata: {err}")))?;
+        self.apply(&mut mp4);
         mp4.write_to_path(path)
             .map_err(|err| PyOSError::new_err(format!("Could not write MP4 metadata: {err}")))
     }
+
+    /// Tag the metadata-only portion of Gamdl's fast-start fMP4 output.
+    ///
+    /// mp4ameta shifts every byte after a growing front moov and normally
+    /// collects the whole mdat in a Vec. Instead, give it a tiny proxy with
+    /// the original moov (including real sample offsets) and an empty mdat.
+    /// It updates the offset tables correctly; we then copy the untouched
+    /// original mdat into a new file using an 8-KiB std::io::copy buffer.
+    ///
+    /// Returns false for layouts other than ftyp+moov+64bit-mdat, so callers
+    /// can retain legacy tagging for arbitrary imported MP4 files.
+    fn write_bounded(self, path: &str, proxy_path: &str, result_path: &str) -> PyResult<bool> {
+        const MAX_HEADER_BYTES: u64 = 64 * 1024 * 1024;
+        let mut source = File::open(path).map_err(PyOSError::new_err)?;
+        let source_len = source.metadata().map_err(PyOSError::new_err)?.len();
+
+        // Avoid reading media payloads just to decide whether the optimized
+        // representation is supported. All sizes are checked against EOF.
+        let Some((ftyp_size, ftyp_type)) = atom_header(&mut source, source_len)? else {
+            return Ok(false);
+        };
+        if &ftyp_type != b"ftyp" || !(8..=1024).contains(&ftyp_size) {
+            return Ok(false);
+        }
+        source
+            .seek(SeekFrom::Start(ftyp_size))
+            .map_err(PyOSError::new_err)?;
+        let Some((moov_size, moov_type)) = atom_header(&mut source, source_len - ftyp_size)? else {
+            return Ok(false);
+        };
+        if &moov_type != b"moov" || !(8..=MAX_HEADER_BYTES).contains(&moov_size) {
+            return Ok(false);
+        }
+        let mdat_at = ftyp_size
+            .checked_add(moov_size)
+            .ok_or_else(|| PyValueError::new_err("Invalid MP4 metadata length"))?;
+        if source_len < mdat_at + 16 {
+            return Ok(false);
+        }
+        source
+            .seek(SeekFrom::Start(mdat_at))
+            .map_err(PyOSError::new_err)?;
+        let mut header = [0u8; 16];
+        source.read_exact(&mut header).map_err(PyOSError::new_err)?;
+        if &header[..4] != 1u32.to_be_bytes().as_slice()
+            || &header[4..8] != b"mdat"
+            || u64::from_be_bytes(header[8..16].try_into().expect("16-byte header"))
+                != source_len - mdat_at
+        {
+            return Ok(false);
+        }
+        source
+            .seek(SeekFrom::Start(0))
+            .map_err(PyOSError::new_err)?;
+        let header_len =
+            usize::try_from(mdat_at).map_err(|_| PyValueError::new_err("MP4 header too large"))?;
+        let mut metadata = vec![0u8; header_len];
+        source
+            .read_exact(&mut metadata)
+            .map_err(PyOSError::new_err)?;
+
+        // Only a small header and an empty 16-byte mdat are visible to the
+        // existing mp4ameta writer, so metadata relocation cannot allocate
+        // the real payload length.
+        let mut proxy = File::create(proxy_path).map_err(PyOSError::new_err)?;
+        proxy.write_all(&metadata).map_err(PyOSError::new_err)?;
+        proxy
+            .write_all(&1u32.to_be_bytes())
+            .map_err(PyOSError::new_err)?;
+        proxy.write_all(b"mdat").map_err(PyOSError::new_err)?;
+        proxy
+            .write_all(&16u64.to_be_bytes())
+            .map_err(PyOSError::new_err)?;
+        proxy.flush().map_err(PyOSError::new_err)?;
+        drop(proxy);
+        drop(metadata);
+        self.write(proxy_path)?;
+
+        // Recheck the tagged proxy's shape. Its co64 offsets have already
+        // been adjusted by mp4ameta for moov growth/shrinkage.
+        let proxy_data = std::fs::read(proxy_path).map_err(PyOSError::new_err)?;
+        if proxy_data.len() > MAX_HEADER_BYTES as usize + 1040 {
+            return Err(PyValueError::new_err("Tagged MP4 metadata exceeds limit"));
+        }
+        let ftyp = u32::from_be_bytes(
+            proxy_data
+                .get(..4)
+                .ok_or_else(|| PyValueError::new_err("Invalid tagged proxy"))?
+                .try_into()
+                .map_err(|_| PyValueError::new_err("Invalid tagged proxy"))?,
+        ) as usize;
+        if ftyp != ftyp_size as usize || proxy_data.get(4..8) != Some(b"ftyp") {
+            return Err(PyValueError::new_err("Unexpected tagged MP4 file type"));
+        }
+        let moov_size = u32::from_be_bytes(
+            proxy_data
+                .get(ftyp..ftyp + 4)
+                .ok_or_else(|| PyValueError::new_err("Invalid tagged moov"))?
+                .try_into()
+                .map_err(|_| PyValueError::new_err("Invalid tagged moov"))?,
+        ) as usize;
+        let payload_at = ftyp
+            .checked_add(moov_size)
+            .ok_or_else(|| PyValueError::new_err("Invalid tagged moov size"))?;
+        if proxy_data.get(ftyp + 4..ftyp + 8) != Some(b"moov")
+            || proxy_data.len() != payload_at + 16
+            || proxy_data.get(payload_at + 4..payload_at + 8) != Some(b"mdat")
+        {
+            return Err(PyValueError::new_err("Unexpected tagged proxy layout"));
+        }
+
+        let mut result = File::create(result_path).map_err(PyOSError::new_err)?;
+        result
+            .write_all(&proxy_data[..payload_at])
+            .map_err(PyOSError::new_err)?;
+        source
+            .seek(SeekFrom::Start(mdat_at))
+            .map_err(PyOSError::new_err)?;
+        let copied = std::io::copy(&mut source, &mut result).map_err(PyOSError::new_err)?;
+        if copied != source_len - mdat_at {
+            return Err(PyOSError::new_err("Incomplete MP4 payload during tagging"));
+        }
+        result.flush().map_err(PyOSError::new_err)?;
+        Ok(true)
+    }
+}
+
+/// Read a conventional MP4 box header without interpreting the media payload.
+fn atom_header(file: &mut File, remaining: u64) -> PyResult<Option<(u64, [u8; 4])>> {
+    if remaining < 8 {
+        return Ok(None);
+    }
+    let mut header = [0u8; 8];
+    file.read_exact(&mut header).map_err(PyOSError::new_err)?;
+    let name = header[4..8].try_into().expect("fourcc length");
+    let length = u32::from_be_bytes(header[..4].try_into().expect("box length"));
+    let size = if length == 1 {
+        if remaining < 16 {
+            return Ok(None);
+        }
+        let mut extended = [0u8; 8];
+        file.read_exact(&mut extended).map_err(PyOSError::new_err)?;
+        u64::from_be_bytes(extended)
+    } else {
+        u64::from(length)
+    };
+    if size < if length == 1 { 16 } else { 8 } || size > remaining {
+        return Ok(None);
+    }
+    Ok(Some((size, name)))
 }
 
 #[pyfunction]
@@ -208,6 +365,23 @@ pub(crate) fn write_mp4_tags(
     let fields = TagFields::parse(tags, cover_bytes)?;
     // Large container writes must not hold the Python GIL.
     py.detach(move || fields.write(&path))
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, proxy_path, result_path, tags, cover_bytes=None))]
+pub(crate) fn write_mp4_tags_bounded(
+    py: Python<'_>,
+    path: String,
+    proxy_path: String,
+    result_path: String,
+    tags: &Bound<'_, PyDict>,
+    cover_bytes: Option<Vec<u8>>,
+) -> PyResult<bool> {
+    if path == proxy_path || path == result_path || proxy_path == result_path {
+        return Err(PyValueError::new_err("MP4 tagging paths must be different"));
+    }
+    let fields = TagFields::parse(tags, cover_bytes)?;
+    py.detach(move || fields.write_bounded(&path, &proxy_path, &result_path))
 }
 
 /// Read the iTunes catalog ID without loading the entire media file into Python.

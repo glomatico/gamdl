@@ -84,6 +84,35 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(target.read_bytes(), b"new content")
         self.assertTrue(source.exists())
         self.assertEqual(list(self.directory.glob(".*.part")), [])
+        self.assertFalse(list(self.directory.glob(".published.bin.*")))
+
+    def test_file_publication_replace_hardlinks_without_copying(self):
+        source = self.directory / "staged.bin"
+        source.write_bytes(b"new content")
+        target = self.directory / "published.bin"
+        target.write_bytes(b"previous media")
+        with patch(
+            "gamdl.download.publication.shutil.copyfileobj",
+            side_effect=AssertionError("Same-filesystem replace must not copy"),
+        ):
+            self.assertTrue(original_publish_file(source, target, overwrite="replace"))
+        self.assertEqual(target.read_bytes(), b"new content")
+        self.assertEqual(target.stat().st_ino, source.stat().st_ino)
+        self.assertFalse(list(self.directory.glob(".published.bin.*")))
+
+    def test_file_publication_replace_falls_back_for_other_filesystems(self):
+        source = self.directory / "staged.bin"
+        source.write_bytes(b"example-media" * 8000)
+        target = self.directory / "published.bin"
+        target.write_bytes(b"old")
+        with patch(
+            "gamdl.download.publication.os.link",
+            side_effect=OSError(errno.EXDEV, "Cross-device link"),
+        ):
+            self.assertTrue(original_publish_file(source, target, overwrite="replace"))
+        self.assertEqual(target.read_bytes(), source.read_bytes())
+        self.assertNotEqual(target.stat().st_ino, source.stat().st_ino)
+        self.assertFalse(list(self.directory.glob(".published.bin.*")))
 
     def test_downloader_accepts_explicit_temp_root(self):
         root = self.directory / "scratch"

@@ -5,7 +5,7 @@
 //! layouts rather than silently emitting a truncated/corrupt file.
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 
 use memmap2::Mmap;
 use pyo3::exceptions::{PyOSError, PyValueError};
@@ -111,6 +111,26 @@ pub(crate) fn file_type(major_brand: &[u8; 4]) -> Result<Vec<u8>> {
     body.extend_from_slice(&0u32.to_be_bytes());
     body.extend_from_slice(compatible);
     boxed(b"ftyp", &body)
+}
+
+/// Copy only the requested sample bytes using a fixed scratch buffer.
+/// Parsing can use a read-only mapping, but that mapping is dropped before
+/// calling this function to avoid accumulating file-backed RSS.
+pub(crate) fn copy_range(
+    input: &mut File,
+    output: &mut impl Write,
+    bytes: std::ops::Range<usize>,
+    scratch: &mut [u8],
+) -> std::io::Result<()> {
+    input.seek(SeekFrom::Start(bytes.start as u64))?;
+    let mut remaining = bytes.end - bytes.start;
+    while remaining != 0 {
+        let size = remaining.min(scratch.len());
+        input.read_exact(&mut scratch[..size])?;
+        output.write_all(&scratch[..size])?;
+        remaining -= size;
+    }
+    Ok(())
 }
 pub(crate) fn set_duration(data: &[u8], atom: Atom, field: usize, value: u64) -> Result<Vec<u8>> {
     let mut body = data[atom.data..atom.end].to_vec();
@@ -612,12 +632,17 @@ fn remux(input: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Write media payloads directly from a memory-mapped staged source.
-/// Only sample metadata and small MP4 boxes are allocated in memory.
-fn remux_to_file(input: &[u8], output: &str) -> PyResult<()> {
-    let (ftyp, moov, samples, cursor) = remux_plan(input).map_err(PyValueError::new_err)?;
+/// Write samples from a staged source through a bounded scratch buffer.
+fn remux_to_file(input: &mut File, output: &str) -> PyResult<()> {
+    let (ftyp, moov, samples, cursor) = {
+        // The mapping is used only to parse metadata and sample offsets.
+        // It is unmapped before reading the large encoded payload.
+        let mapped = unsafe { Mmap::map(&*input) }.map_err(PyOSError::new_err)?;
+        remux_plan(&mapped).map_err(PyValueError::new_err)?
+    };
     let file = File::create(output).map_err(PyOSError::new_err)?;
     let mut writer = BufWriter::with_capacity(256 * 1024, file);
+    let mut scratch = vec![0u8; 256 * 1024];
     let result = (|| -> std::io::Result<()> {
         writer.write_all(&ftyp)?;
         writer.write_all(&moov)?;
@@ -625,7 +650,7 @@ fn remux_to_file(input: &[u8], output: &str) -> PyResult<()> {
         writer.write_all(b"mdat")?;
         writer.write_all(&(cursor - (ftyp.len() + moov.len()) as u64).to_be_bytes())?;
         for sample in samples {
-            writer.write_all(&input[sample.bytes])?;
+            copy_range(input, &mut writer, sample.bytes, &mut scratch)?;
         }
         writer.flush()
     })();
@@ -642,10 +667,8 @@ pub(crate) fn remux_mp4_file(py: Python<'_>, input: String, output: String) -> P
         return Err(PyValueError::new_err("Input and output paths must differ"));
     }
     py.detach(|| {
-        let file = File::open(&input).map_err(PyOSError::new_err)?;
-        // Safe: the caller owns a completed, private staged input file.
-        let mapped = unsafe { Mmap::map(&file) }.map_err(PyOSError::new_err)?;
-        remux_to_file(&mapped, &output)
+        let mut file = File::open(&input).map_err(PyOSError::new_err)?;
+        remux_to_file(&mut file, &output)
     })
 }
 

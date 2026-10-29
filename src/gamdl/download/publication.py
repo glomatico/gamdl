@@ -6,7 +6,7 @@ import errno
 import os
 import shutil
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from .enums import FileStatus, OverwritePolicy
 
@@ -83,6 +83,28 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
         if overwrite == OverwritePolicy.ERROR:
             raise FileExistsError(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if overwrite == OverwritePolicy.REPLACE:
+        # A private directory gives os.link() a collision-free destination.
+        # Atomically rename the new hardlink over the old file; unlike a
+        # second full-file copy, this is O(1) on the same filesystem.
+        with TemporaryDirectory(
+            prefix=f".{destination.name}.", dir=destination.parent
+        ) as directory:
+            staged = Path(directory) / "media"
+            try:
+                os.link(source, staged)
+            except OSError as exc:
+                if exc.errno not in {
+                    errno.EXDEV,
+                    errno.EPERM,
+                    errno.EOPNOTSUPP,
+                    errno.ENOTSUP,
+                }:
+                    raise
+                with source.open("rb") as stream, staged.open("xb") as output:
+                    shutil.copyfileobj(stream, output, length=1024 * 1024)
+            staged.replace(destination)
+        return True
     if overwrite != OverwritePolicy.REPLACE:
         # Same-filesystem staging can publish the completed source without a
         # second media copy, while still handling a competing writer safely.

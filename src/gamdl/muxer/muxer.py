@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from os import PathLike, fspath
+from os import PathLike, fspath, replace
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 from gamdl import _native
@@ -89,4 +91,23 @@ class Muxer:
         if fspath(path).lower().endswith(".mp3"):
             _native.write_mp3_tags(fspath(path), asdict(tags), cover_bytes)
         else:
-            _native.write_mp4_tags(fspath(path), asdict(tags), cover_bytes)
+            source = Path(path)
+            # For Gamdl-produced fast-start files, tag a metadata-only proxy
+            # and copy the unchanged mdat in bounded chunks. The original
+            # stays untouched until the replacement is complete.
+            with TemporaryDirectory(prefix=".gamdl-tag-", dir=source.parent) as temp:
+                proxy = Path(temp) / "proxy.mp4"
+                output = Path(temp) / "tagged.mp4"
+                if _native.write_mp4_tags_bounded(
+                    fspath(source),
+                    fspath(proxy),
+                    fspath(output),
+                    asdict(tags),
+                    cover_bytes,
+                ):
+                    replace(output, source)
+                else:
+                    # Arbitrary input MP4 layouts still use mp4ameta's
+                    # existing writer; the downloader's canonical file
+                    # output always takes the optimized path.
+                    _native.write_mp4_tags(fspath(source), asdict(tags), cover_bytes)

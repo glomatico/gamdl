@@ -8,7 +8,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from gamdl import _native
 from gamdl.download import Tags
 from gamdl.muxer import Muxer
 
@@ -213,6 +215,56 @@ class NativeAvMuxTests(unittest.TestCase):
         )
         self.assertEqual(track_hashes(self.video, "v"), track_hashes(output, "v"))
         self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
+
+    def test_file_mux_tagging_uses_bounded_path_without_changing_samples(self):
+        output = self.directory / "bounded.m4v"
+        Muxer().mux_file(video=self.video, audio=self.audio, destination=output)
+        # Uppercase V excludes attached-picture artwork streams in FFprobe.
+        original_video = track_hashes(output, "V")
+        original_audio = track_hashes(output, "a")
+        original_bytes = output.stat().st_size
+        native = _native.write_mp4_tags_bounded
+        with (
+            patch.object(_native, "write_mp4_tags_bounded", wraps=native) as bounded,
+            patch.object(
+                _native,
+                "write_mp4_tags",
+                side_effect=AssertionError("Unexpected full-media tagger fallback"),
+            ),
+        ):
+            Muxer().tag(
+                output,
+                tags=Tags(
+                    title="Thriller", artist="Michael Jackson", title_id=287857650
+                ),
+                cover_bytes=PNG,
+            )
+            Muxer().tag(output, tags=Tags(title="Thriller (updated)"))
+        self.assertEqual(bounded.call_count, 2)
+        self.assertGreater(output.stat().st_size, original_bytes)
+        self.assertEqual(track_hashes(output, "V"), original_video)
+        self.assertEqual(track_hashes(output, "a"), original_audio)
+        self.assertEqual(
+            mp4_tag_atoms(output)[b"\xa9nam"], [(1, b"Thriller (updated)")]
+        )
+        self.assertIn(b"covr", mp4_tag_atoms(output))
+        self.assertEqual(
+            [kind for kind, _ in atoms(output.read_bytes())],
+            [b"ftyp", b"moov", b"mdat"],
+        )
+        self.assertFalse(list(output.parent.glob(".gamdl-tag-*")))
+
+    def test_bounded_tagger_failure_preserves_original_file(self):
+        output = self.directory / "original.m4v"
+        Muxer().mux_file(video=self.video, audio=self.audio, destination=output)
+        original = output.read_bytes()
+        with patch.object(
+            _native, "write_mp4_tags_bounded", side_effect=OSError("Disk full")
+        ):
+            with self.assertRaisesRegex(OSError, "Disk full"):
+                Muxer().tag(output, tags=Tags(title="Should fail"))
+        self.assertEqual(output.read_bytes(), original)
+        self.assertFalse(list(output.parent.glob(".gamdl-tag-*")))
 
     def test_disk_backed_mux_rejects_invalid_inputs(self):
         output = self.directory / "invalid.mp4"

@@ -15,7 +15,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 use crate::remux::{
-    Atom, atoms, boxed, children, file_type, find, fullbox, set_duration, u32_at, u64_at,
+    Atom, atoms, boxed, children, copy_range, file_type, find, fullbox, set_duration, u32_at,
+    u64_at,
 };
 
 type Result<T> = std::result::Result<T, &'static str>;
@@ -687,13 +688,19 @@ fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn mux_to_file(video: &[u8], audio: &[u8], output: &str, mp4_brand: bool) -> PyResult<()> {
-    let (ftyp, moov, tracks, at) =
-        mux_plan(video, audio, mp4_brand).map_err(PyValueError::new_err)?;
+fn mux_to_file(video: &mut File, audio: &mut File, output: &str, mp4_brand: bool) -> PyResult<()> {
+    let (ftyp, moov, tracks, at) = {
+        // Unmap before the sample payload is copied; no full-file mapping
+        // remains resident while we iterate over all frames.
+        let video_map = unsafe { Mmap::map(&*video) }.map_err(PyOSError::new_err)?;
+        let audio_map = unsafe { Mmap::map(&*audio) }.map_err(PyOSError::new_err)?;
+        mux_plan(&video_map, &audio_map, mp4_brand).map_err(PyValueError::new_err)?
+    };
     let mdat_length = at - (ftyp.len() + moov.len()) as u64;
-    let inputs = [video, audio];
+    let mut inputs = [video, audio];
     let file = File::create(output).map_err(PyOSError::new_err)?;
     let mut writer = BufWriter::with_capacity(256 * 1024, file);
+    let mut scratch = vec![0u8; 256 * 1024];
     let result = (|| -> std::io::Result<()> {
         writer.write_all(&ftyp)?;
         writer.write_all(&moov)?;
@@ -702,7 +709,12 @@ fn mux_to_file(video: &[u8], audio: &[u8], output: &str, mp4_brand: bool) -> PyR
         writer.write_all(&mdat_length.to_be_bytes())?;
         for track in tracks {
             for packet in track.packets {
-                writer.write_all(&inputs[track.src][packet.bytes])?;
+                copy_range(
+                    &mut inputs[track.src],
+                    &mut writer,
+                    packet.bytes,
+                    &mut scratch,
+                )?;
             }
         }
         writer.flush()
@@ -726,12 +738,9 @@ pub(crate) fn mux_av_mp4_file(
         return Err(PyValueError::new_err("Input and output paths must differ"));
     }
     py.detach(|| {
-        let video_file = File::open(&video).map_err(PyOSError::new_err)?;
-        let audio_file = File::open(&audio).map_err(PyOSError::new_err)?;
-        // Safe: staged files are completed before being memory-mapped read-only.
-        let video_mapped = unsafe { Mmap::map(&video_file) }.map_err(PyOSError::new_err)?;
-        let audio_mapped = unsafe { Mmap::map(&audio_file) }.map_err(PyOSError::new_err)?;
-        mux_to_file(&video_mapped, &audio_mapped, &output, mp4_brand)
+        let mut video_file = File::open(&video).map_err(PyOSError::new_err)?;
+        let mut audio_file = File::open(&audio).map_err(PyOSError::new_err)?;
+        mux_to_file(&mut video_file, &mut audio_file, &output, mp4_brand)
     })
 }
 fn movie_with_inputs(

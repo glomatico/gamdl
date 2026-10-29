@@ -70,6 +70,7 @@ async def select_search_results(cache, term: str):
         cursor = min(len(items()), cursor + 1)
 
     @keys.add("left")
+    @keys.add("backspace")
     def left(event):
         nonlocal page, cursor
         if page:

@@ -239,3 +239,40 @@ LibraryOptions = make_dataclass(
     ],
     namespace={"__module__": __name__},
 )
+
+
+SearchOptions = make_dataclass(
+    "SearchOptions",
+    [
+        (item.name, RipOptions.__annotations__[item.name], field(default=item.default))
+        for item in fields(RipOptions)
+        if item.name not in {"urls", "select", "artist_auto_select"}
+    ]
+    + [
+        ("term", Annotated[str, argument()], field(default="")),
+        (
+            "media_type",
+            Annotated[
+                str | None,
+                option(
+                    "--type",
+                    type=click.Choice(["song", "music-video", "uploaded-video"]),
+                ),
+            ],
+            field(default=None),
+        ),
+        (
+            "feeling_lucky",
+            Annotated[
+                bool,
+                option(
+                    "--feeling-lucky",
+                    is_flag=True,
+                    help="Download the first search result",
+                ),
+            ],
+            field(default=False),
+        ),
+    ],
+    namespace={"__module__": __name__},
+)

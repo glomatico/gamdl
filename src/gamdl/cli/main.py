@@ -6,9 +6,9 @@ import click
 
 from gamdl import __version__
 
-from .config.models import config_path as default_config_path
-from .config.loader import ConfigError, click_default_map, load_config
 from .config.commands import config_group
+from .config.loader import ConfigError, click_default_map, load_config
+from .config.models import config_path as default_config_path
 from .errors import CliCommand
 
 
@@ -43,14 +43,16 @@ def main(
         raise click.ClickException(str(exc)) from None
     ctx.obj["settings"] = config
     defaults = click_default_map(config)
-    ctx.default_map = {"rip": defaults, "library": defaults}
+    ctx.default_map = {"rip": defaults, "library": defaults, "search": defaults}
 
 
-from .commands.rip import rip
-from .commands.library import library
 from .commands.database import database_group
+from .commands.library import library
+from .commands.rip import rip
+from .commands.search import search
 
 main.add_command(rip)
 main.add_command(library)
+main.add_command(search)
 main.add_command(config_group)
 main.add_command(database_group)

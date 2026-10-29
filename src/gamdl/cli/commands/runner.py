@@ -14,6 +14,9 @@ import click
 from rich.text import Text
 
 from gamdl.api import ItunesApi
+from gamdl.cli.tui.components import MenuChoice
+from gamdl.cli.tui.search import select_search_results
+from gamdl.cli.tui.selector import select_one
 from gamdl.download import (
     Downloader,
     DownloadFinalizationError,
@@ -31,11 +34,13 @@ from gamdl.media import (
     UploadedVideo,
     UploadedVideoQuality,
 )
+from gamdl.media.base import Media
 from gamdl.media.constants import (
     ARTIST_AUTO_SELECT_NAMES,
     DEFAULT_AUTO_SELECT,
     LIBRARY_AUTO_SELECT_NAMES,
 )
+from gamdl.pagination import MediaPage, PageCache
 
 from ..errors import short_error as _short_error
 from ..options import TAG_NAMES
@@ -459,7 +464,87 @@ async def run_rip(options: RipOptions) -> int:
                     for url in options.urls:
                         check_stopped()
                         try:
-                            async with aclosing(resolver.from_url(url)) as source:
+                            if hasattr(options, "search_term"):
+
+                                async def prompt_search(operation):
+                                    async with terminal.session():
+                                        return await terminal.prompt(operation)
+
+                                async def search_source():
+                                    kind = options.search_type
+                                    if kind is None:
+                                        kind = (
+                                            "song",
+                                            "music-video",
+                                            "uploaded-video",
+                                        )[
+                                            await prompt_search(
+                                                select_one(
+                                                    "Search media type",
+                                                    [
+                                                        MenuChoice("Songs", 0),
+                                                        MenuChoice("Music videos", 1),
+                                                        MenuChoice(
+                                                            "Uploaded videos", 2
+                                                        ),
+                                                    ],
+                                                )
+                                            )
+                                        ]
+                                    resource_type = {
+                                        "song": "songs",
+                                        "music-video": "music-videos",
+                                        "uploaded-video": "uploaded-videos",
+                                    }[kind]
+
+                                    async def load(cursor):
+                                        offset = int(cursor) if cursor else 0
+                                        response = await api.get_search_results(
+                                            options.search_term,
+                                            types=resource_type,
+                                            limit=50,
+                                            offset=offset,
+                                        )
+                                        group = response.get("results", {}).get(
+                                            resource_type, {}
+                                        )
+                                        data = group.get("data", [])
+                                        return MediaPage(
+                                            tuple(data),
+                                            str(offset + len(data))
+                                            if group.get("next") and data
+                                            else None,
+                                        )
+
+                                    cache = PageCache(load)
+                                    if options.feeling_lucky:
+                                        first = await cache.get(0)
+                                        indices = [0] if first and first.items else []
+                                    else:
+                                        indices = await prompt_search(
+                                            select_search_results(
+                                                cache, options.search_term
+                                            )
+                                        )
+                                    wanted = set(indices)
+                                    if not wanted:
+                                        raise click.ClickException(
+                                            f"No {kind} search results for {options.search_term!r}"
+                                        )
+                                    async for index, metadata in cache.iter_items():
+                                        if index in wanted:
+                                            yield Media.from_metadata(
+                                                metadata,
+                                                api=api,
+                                                cover_cache=resolver.cover_cache,
+                                            )
+                                        if wanted and index >= max(wanted):
+                                            break
+
+                                source_iterator = search_source()
+                            else:
+                                source_iterator = resolver.from_url(url)
+                            async with aclosing(source_iterator) as source:
                                 async for media in source:
                                     check_stopped()
                                     found += 1

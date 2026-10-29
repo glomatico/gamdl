@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import click
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
@@ -10,7 +12,7 @@ from .app import make_app
 from .components import footer, heading
 
 
-async def select_search_results(cache, term: str):
+async def select_search_results(cache, term: str, *, input=None, output=None):
     """Select occurrence indices; pages load on demand and selections persist."""
     first = await cache.get(0)
     if not first or not first.items:
@@ -19,6 +21,8 @@ async def select_search_results(cache, term: str):
     cursor = 0
     selected = set()
     error = None
+    loading = False
+    tasks: set[asyncio.Task] = set()
     keys = KeyBindings()
 
     def items():
@@ -47,16 +51,22 @@ async def select_search_results(cache, term: str):
         )
         if error:
             fragments.append(("class:error", f" {error}\n"))
+        if loading:
+            fragments.append(
+                ("class:muted", " Loading results... Backspace to cancel\n")
+            )
         return FormattedText(fragments)
 
     app = make_app(
         body=body,
         footer=lambda: footer(
             f"{len(selected)} selected · Page {page + 1}",
-            "↑/↓ Navigate · ←/→ Pages · Space Toggle · Ctrl+A All · Enter Confirm · Esc Cancel",
+            "↑/↓ Navigate · ←/→ Pages · Backspace Previous · Space Toggle · Ctrl+A All · Enter Confirm · Esc Cancel",
         ),
         cursor_row=lambda: cursor + 2,
         keys=keys,
+        input=input,
+        output=output,
     )
 
     @keys.add("up")
@@ -73,20 +83,43 @@ async def select_search_results(cache, term: str):
     @keys.add("backspace")
     def left(event):
         nonlocal page, cursor
+        if loading:
+            for task in tuple(tasks):
+                task.cancel()
+            return
         if page:
             page -= 1
             cursor = 0
 
+    def start_task(coroutine):
+        task = asyncio.create_task(coroutine)
+        tasks.add(task)
+        task.add_done_callback(lambda done: (tasks.discard(done), app.invalidate()))
+
     @keys.add("right")
     def right(event):
-        async def advance():
-            nonlocal page, cursor
-            if await cache.get(page + 1) is not None:
-                page += 1
-                cursor = 0
-            app.invalidate()
+        if loading:
+            return
 
-        event.app.create_background_task(advance())
+        async def advance():
+            nonlocal page, cursor, error, loading
+            loading = True
+            error = None
+            app.invalidate()
+            try:
+                if await cache.get(page + 1) is not None:
+                    page += 1
+                    cursor = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                status = getattr(exc, "status_code", None)
+                error = f"Unable to load page ({'HTTP ' + str(status) if status else type(exc).__name__}). Press → to retry."
+            finally:
+                loading = False
+                app.invalidate()
+
+        start_task(advance())
 
     @keys.add("space")
     def toggle(event):
@@ -101,20 +134,33 @@ async def select_search_results(cache, term: str):
 
     @keys.add("c-a")
     def all_items(event):
+        if loading:
+            return
+
         async def load():
-            nonlocal error
+            nonlocal error, loading
+            loading = True
+            error = None
+            app.invalidate()
             try:
                 async for index, _ in cache.iter_items():
                     selected.add(index)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                error = str(exc)
-            app.invalidate()
+                status = getattr(exc, "status_code", None)
+                error = f"Unable to load results ({'HTTP ' + str(status) if status else type(exc).__name__})."
+            finally:
+                loading = False
+                app.invalidate()
 
-        event.app.create_background_task(load())
+        start_task(load())
 
     @keys.add("enter")
     def confirm(event):
         nonlocal error
+        if loading:
+            return
         if cursor < len(items()):
             toggle(event)
         elif selected:
@@ -125,9 +171,17 @@ async def select_search_results(cache, term: str):
     @keys.add("escape")
     @keys.add("c-c")
     def cancel(event):
+        for task in tuple(tasks):
+            task.cancel()
         app.exit(result=None)
 
-    answer = await app.run_async()
+    try:
+        answer = await app.run_async()
+    finally:
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
     if answer is None:
         raise click.Abort()
     return answer

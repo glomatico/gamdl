@@ -498,23 +498,20 @@ async def run_rip(options: RipOptions) -> int:
                                     }[kind]
 
                                     async def load(cursor):
-                                        offset = int(cursor) if cursor else 0
-                                        response = await api.get_search_results(
-                                            options.search_term,
-                                            types=resource_type,
-                                            limit=50,
-                                            offset=offset,
+                                        response = (
+                                            await api.get_extended_api_data(cursor)
+                                            if cursor is not None
+                                            else await api.get_search_results(
+                                                options.search_term,
+                                                types=resource_type,
+                                                limit=50,
+                                            )
                                         )
                                         group = response.get("results", {}).get(
                                             resource_type, {}
                                         )
                                         data = group.get("data", [])
-                                        return MediaPage(
-                                            tuple(data),
-                                            str(offset + len(data))
-                                            if group.get("next") and data
-                                            else None,
-                                        )
+                                        return MediaPage(tuple(data), group.get("next"))
 
                                     cache = PageCache(load)
                                     if options.feeling_lucky:

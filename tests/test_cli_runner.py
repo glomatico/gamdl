@@ -115,10 +115,10 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         fake_downloader.itunes_api = None
         opts = RipOptions(
             urls or ("https://music.apple.com/br/playlist/my-playlist/playlist-id",),
-            progress=False,
+            no_progress=False,
             save_playlist=True,
             concurrent_downloads=2,
-            continue_on_error=not fail_fast,
+            fail_fast=fail_fast,
             debug=debug,
         )
         with (
@@ -271,7 +271,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             result = await run_rip(
                 RipOptions(
                     ("https://music.apple.com/library",),
-                    progress=True,
+                    no_progress=False,
                     ask_song_codec=True,
                 )
             )
@@ -390,7 +390,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                 run_rip(
                     RipOptions(
                         ("https://music.apple.com/br/album/test/111",),
-                        progress=True,
+                        no_progress=False,
                         ask_song_codec=True,
                         concurrent_downloads=3,
                     )
@@ -463,10 +463,10 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             result = await run_rip(
                 RipOptions(
                     urls or ("https://music.apple.com/br/album/test/111",),
-                    progress=False,
+                    no_progress=False,
                     ask_song_codec=ask,
                     concurrent_downloads=concurrency,
-                    continue_on_error=not fail_fast,
+                    fail_fast=fail_fast,
                 )
             )
         return result, output.getvalue()
@@ -961,7 +961,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                     ),
                     auth_mode="wrapper",
                     song_codec="alac",
-                    progress=False,
+                    no_progress=False,
                 )
             )
         self.assertEqual(status, 0)
@@ -1017,7 +1017,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                         "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
                     ),
                     auth_mode="wrapper",
-                    progress=False,
+                    no_progress=False,
                 )
             )
         self.assertEqual(code, 0)

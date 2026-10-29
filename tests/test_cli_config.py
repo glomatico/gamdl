@@ -13,6 +13,44 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_negative_cli_flags_preserve_positive_yaml_defaults(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        defaults = click_default_map(load_config(None))
+        self.assertFalse(defaults["no_lyrics"])
+        self.assertFalse(defaults["fail_fast"])
+        self.assertFalse(defaults["no_progress"])
+        self._write(
+            "output:\n  save_lyrics: false\ndownload:\n  continue_on_error: false\nui:\n  progress: false\n"
+        )
+        overrides = click_default_map(load_config(self.path))
+        self.assertTrue(overrides["no_lyrics"])
+        self.assertTrue(overrides["fail_fast"])
+        self.assertTrue(overrides["no_progress"])
+
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            result = CliRunner().invoke(
+                main,
+                [
+                    "--no-config",
+                    "rip",
+                    "https://music.apple.com/br/song/test/1",
+                    "--no-lyrics",
+                    "--fail-fast",
+                    "--no-progress",
+                ],
+            )
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue(received[0].no_lyrics)
+        self.assertTrue(received[0].fail_fast)
+        self.assertTrue(received[0].no_progress)
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

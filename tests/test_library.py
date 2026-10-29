@@ -199,4 +199,4 @@ class LibraryCommandTests(unittest.TestCase):
         opts = run.await_args.args[0]
         self.assertEqual(opts.urls, ("https://music.apple.com/library",))
         self.assertEqual(opts.output_dir, "Test Library")
-        self.assertFalse(opts.progress)
+        self.assertTrue(opts.no_progress)

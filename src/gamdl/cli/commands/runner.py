@@ -241,7 +241,7 @@ async def run_rip(options: RipOptions) -> int:
                 concurrency=options.concurrency,
             )
             with RipProgress(
-                enabled=options.progress,
+                enabled=not options.no_progress,
                 max_visible=options.max_visible_tracks,
                 console=console,
             ) as progress:
@@ -335,7 +335,7 @@ async def run_rip(options: RipOptions) -> int:
                             "tag": not options.no_tag,
                             "exclude_tags": excluded,
                             "save_cover": options.save_cover,
-                            "save_lyrics": options.save_lyrics
+                            "save_lyrics": not options.no_lyrics
                             and isinstance(media, Song),
                             "save_playlist": options.save_playlist
                             and media.source is not None
@@ -425,7 +425,7 @@ async def run_rip(options: RipOptions) -> int:
                             progress.finish(
                                 occurrence, title, "failed", _short_error(error)[0]
                             )
-                        if not options.continue_on_error:
+                        if options.fail_fast:
                             stop = _StopRip()
                             request_stop(stop)
                             raise stop from error
@@ -434,7 +434,7 @@ async def run_rip(options: RipOptions) -> int:
                         message, _ = _short_error(error)
                         counts["failed"] += 1
                         progress.finish(occurrence, title, "failed", message)
-                        if not options.continue_on_error:
+                        if options.fail_fast:
                             stop = _StopRip()
                             request_stop(stop)
                             raise stop from error
@@ -517,7 +517,7 @@ async def run_rip(options: RipOptions) -> int:
                         except Exception as error:
                             record_failure("Source", error)
                             counts["failed"] += 1
-                            if not options.continue_on_error:
+                            if options.fail_fast:
                                 stop = _StopRip()
                                 request_stop(stop)
                                 raise stop from error

@@ -141,27 +141,24 @@ class RipOptions:
             help="Comma-separated metadata fields to omit (or cover)",
         ),
     ] = ()
-    save_lyrics: Annotated[
-        bool, option("--save-lyrics/--no-save-lyrics", help="Save song LRC/text")
-    ] = True
+    no_lyrics: Annotated[
+        bool, option("--no-lyrics", is_flag=True, help="Skip saving song LRC/text")
+    ] = False
     save_playlist: Annotated[
         bool,
         option("--save-playlist/--no-save-playlist", help="Generate M3U for playlists"),
     ] = False
-    continue_on_error: Annotated[
-        bool,
-        option(
-            "--continue-on-error/--fail-fast",
-            help="Keep downloading after a media error",
-        ),
-    ] = True
+    fail_fast: Annotated[
+        bool, option("--fail-fast", is_flag=True, help="Stop after a media error")
+    ] = False
     database: Annotated[
         bool, option("--database/--no-database", help="Use the SQLite media index")
     ] = False
     database_path: Annotated[str | None, option("--database-path", type=str)] = None
-    progress: Annotated[
-        bool, option("--progress/--no-progress", help="Rich dynamic progress bars")
-    ] = True
+    no_progress: Annotated[
+        bool,
+        option("--no-progress", is_flag=True, help="Disable dynamic progress bars"),
+    ] = False
     max_visible_tracks: Annotated[
         int, option("--max-visible-tracks", type=click.IntRange(min=1))
     ] = 5

@@ -1,7 +1,7 @@
 """3.x-compatible Apple Music URL patterns and 4.x resolver routing."""
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from gamdl.media import (
     AppleMusicUrlInfo,
@@ -214,6 +214,24 @@ class UrlResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(media), 1)
         self.assertEqual(media[0].id, "999")
         self.api.iter_album_tracks.assert_not_called()
+
+    async def test_from_url_accepts_parsed_info_without_parsing_again(self):
+        for url, expected_id, library in (
+            ("https://music.apple.com/br/song/name/123", "123", False),
+            ("https://music.apple.com/library/songs/i.456", "i.456", True),
+            ("https://music.apple.com/br/album/name/789?i=987", "987", False),
+        ):
+            with self.subTest(url=url):
+                parsed = AppleMusicUrlInfo.parse(url)
+                with patch.object(
+                    AppleMusicUrlInfo,
+                    "parse",
+                    side_effect=AssertionError("Already parsed URL was parsed again"),
+                ):
+                    media = [m async for m in self.resolver.from_url(parsed)]
+                self.assertEqual(len(media), 1)
+                self.assertEqual(media[0].id, expected_id)
+                self.assertEqual(media[0].is_library, library)
 
     async def test_invalid_url_is_rejected_before_any_api_call(self):
         with self.assertRaises(UnsupportedMediaError):

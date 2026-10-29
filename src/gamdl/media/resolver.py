@@ -490,9 +490,11 @@ class MediaResolver:
                     media.source = MediaSource(kind.value, "library", index)
                     yield media
 
-    async def from_url(self, url: str) -> AsyncIterator[Media]:
-        """Resolve known Apple Music URLs without fetching their landing pages."""
-        info = AppleMusicUrlInfo.parse(url)
+    async def from_url(self, url: str | AppleMusicUrlInfo) -> AsyncIterator[Media]:
+        """Resolve a URL or previously parsed URL info without fetching landing pages."""
+        info = (
+            url if isinstance(url, AppleMusicUrlInfo) else AppleMusicUrlInfo.parse(url)
+        )
         if info.kind == "library":
             async for media in self.from_library():
                 yield media

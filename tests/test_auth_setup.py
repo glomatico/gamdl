@@ -181,11 +181,9 @@ class AuthSetupTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("requires YAML configuration", result.output)
 
-    def test_profile_saves_only_to_active_profile(self):
-        self.path.write_text(
-            "auth:\n  mode: wrapper\nprofiles:\n  alternate:\n    auth:\n      mode: null\n"
-        )
-        wizard = _ScriptedWizard(method=2, inputs=["profile-token"])
+    def test_authentication_saves_to_base_config_preserving_other_sections(self):
+        self.path.write_text("auth:\n  mode: wrapper\ndownload:\n  concurrency: 3\n")
+        wizard = _ScriptedWizard(method=2, inputs=["base-token"])
         with (
             patch("gamdl.cli.session.require_terminal"),
             patch("gamdl.cli.session.FullScreenWizard", return_value=wizard),
@@ -195,15 +193,11 @@ class AuthSetupTests(unittest.TestCase):
                 return_value=_FakeClient(),
             ),
         ):
-            result = self.runner.invoke(
-                main, ["--config", str(self.path), "--profile", "alternate", "auth"]
-            )
+            result = self.invoke("auth")
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertEqual(load_config(self.path).auth.mode, "wrapper")
-        self.assertEqual(
-            load_config(self.path, profile="alternate").auth.mode, "media-user-token"
-        )
-        self.assertIsNone(load_config(self.path).auth.media_user_token)
+        self.assertEqual(load_config(self.path).auth.mode, "media-user-token")
+        self.assertEqual(load_config(self.path).auth.media_user_token, "base-token")
+        self.assertEqual(load_config(self.path).download.concurrency, 3)
 
 
 class FirstRunAuthTests(unittest.IsolatedAsyncioTestCase):
@@ -217,7 +211,7 @@ class FirstRunAuthTests(unittest.IsolatedAsyncioTestCase):
             wizard = _ScriptedWizard(method=1, inputs=[str(cookies_path)])
             root = click.Context(
                 click.Command("test"),
-                obj={"config_path": config_path, "profile": None, "no_config": False},
+                obj={"config_path": config_path, "no_config": False},
             )
             with (
                 root,
@@ -258,7 +252,7 @@ class FirstRunAuthTests(unittest.IsolatedAsyncioTestCase):
             wizard = _BackWizard()
             root = click.Context(
                 click.Command("test"),
-                obj={"config_path": path, "profile": None, "no_config": False},
+                obj={"config_path": path, "no_config": False},
             )
             with (
                 root,

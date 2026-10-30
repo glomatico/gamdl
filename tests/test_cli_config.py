@@ -1,4 +1,4 @@
-"""No-network tests of YAML config, profiles, Click defaults and CLI wiring."""
+"""No-network tests of YAML config, Click defaults and CLI wiring."""
 
 import tempfile
 import unittest
@@ -174,13 +174,11 @@ class CliConfigTests(unittest.TestCase):
         self.assertIn("song_codec_priority:", show.output)
         self.assertEqual(self.path.read_text(), content)
 
-    def test_profiles_and_click_cli_and_environment_precedence(self):
+    def test_click_cli_and_environment_precedence(self):
         self._write(
             "config_version: 1\n"
             "download:\n  concurrency: 3\n  song_codec_priority: [aac-web]\n"
             "output:\n  save_cover: true\n"
-            "profiles:\n  archive:\n    download:\n      concurrency: 5\n"
-            "      song_codec_priority: [alac, aac-web]\n"
         )
         calls = []
 
@@ -195,8 +193,6 @@ class CliConfigTests(unittest.TestCase):
                 [
                     "--config",
                     str(self.path),
-                    "--profile",
-                    "archive",
                     "rip",
                     "https://music.apple.com/br/song/title/123",
                     "--no-progress",
@@ -206,7 +202,7 @@ class CliConfigTests(unittest.TestCase):
             )
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(calls[-1].concurrency, 7)
-            self.assertEqual(calls[-1].song_codec_priority, ("alac", "aac-web"))
+            self.assertEqual(calls[-1].song_codec_priority, ("aac-web",))
             self.assertTrue(calls[-1].save_cover)
             result = runner.invoke(
                 main,
@@ -235,7 +231,7 @@ class CliConfigTests(unittest.TestCase):
             "download:\n  concurrency: -1\n",
             "download:\n  concurrent_downloads: true\n",
             "output:\n  save_cover: yes\n",  # YAML 1.1 resolves to bool, valid
-            "profiles:\n  broken:\n    output:\n      album_folder_template: '{__class__}'\n",
+            "output:\n  album_folder_template: '{__class__}'\n",
             "download:\n  concurrency: 3\ndownload:\n  concurrency: 4\n",
         ):
             if text.startswith("output:\n  save_cover: yes"):
@@ -246,16 +242,28 @@ class CliConfigTests(unittest.TestCase):
                     load_config(self.path)
                 self.assertEqual(self.path.read_text(), text)
 
-    def test_explicit_overrides_validation_and_profiles(self):
-        self._write(
-            "profiles:\n  fast:\n    download:\n      concurrent_downloads: 4\n"
+    def test_profiles_removed_without_silently_rewriting_user_config(self):
+        original = "download:\n  concurrency: 4\nprofiles:\n  fast:\n    download:\n      concurrent_downloads: 4\n"
+        self._write(original)
+        with self.assertRaisesRegex(ConfigError, "profiles are no longer supported"):
+            load_config(self.path)
+        self.assertEqual(self.path.read_text(), original)
+        self.assertFalse(self.path.with_name("config.yaml.bak").exists())
+        cli = CliRunner().invoke(
+            main, ["--config", str(self.path), "config", "validate"]
         )
-        self.assertEqual(
-            load_config(self.path, profile="fast").download.concurrent_downloads, 4
-        )
-        with self.assertRaisesRegex(ConfigError, "Unknown profile"):
-            load_config(self.path, profile="absent")
+        self.assertNotEqual(cli.exit_code, 0)
+        self.assertIn("profiles are no longer supported", cli.output)
+
+        self._write("download:\n  concurrency: 4\n")
+        self.assertEqual(load_config(self.path).download.concurrency, 4)
         self.assertEqual(load_config(None).download.concurrent_downloads, 2)
+
+        result = CliRunner().invoke(
+            main, ["--no-config", "--profile", "old", "config", "show"]
+        )
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("No such option", result.output)
 
     def test_validation_rejects_explicitly_missing_file(self):
         result = CliRunner().invoke(
@@ -273,7 +281,9 @@ class CliConfigTests(unittest.TestCase):
         self.assertEqual(load_config(self.path).auth.drm_backend, "playready")
 
     def test_invalid_click_option_uses_same_error_style(self):
-        result = CliRunner().invoke(main, ["rip", "URL", "--song-codec", "invalid"])
+        result = CliRunner().invoke(
+            main, ["--no-config", "rip", "URL", "--song-codec", "invalid"]
+        )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("✗", result.output)
         self.assertIn("--song-codec", result.output)

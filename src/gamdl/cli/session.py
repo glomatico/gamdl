@@ -147,7 +147,6 @@ async def _authentication_wizard(options, stack: AsyncExitStack, *, force_setup:
                             cookies_path=options.cookies_path,
                             wrapper_url=options.wrapper_url,
                             media_user_token=options.media_user_token,
-                            profile=root["profile"],
                         )
                     stack.push_async_callback(attempt.aclose)
                     promoted = True

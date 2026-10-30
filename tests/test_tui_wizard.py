@@ -45,7 +45,7 @@ class WizardTuiTests(unittest.IsolatedAsyncioTestCase):
             wizard = FullScreenWizard(input=pipe, output=output)
             root = click.Context(
                 click.Command("test"),
-                obj={"config_path": path, "profile": None, "no_config": False},
+                obj={"config_path": path, "no_config": False},
             )
             with (
                 root,

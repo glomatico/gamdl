@@ -20,9 +20,15 @@ class SelectionOptionsTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.yaml"
-            original = "download:\n  rip_auto_select: [artist-main-albums]\n  concurrency: 5\nprofiles:\n  custom:\n    download:\n      overwrite: replace\n      removed_setting: true\n"
+            original = (
+                "download:\n"
+                "  rip_auto_select: [artist-main-albums]\n"
+                "  concurrency: 5\n"
+                "  overwrite: replace\n"
+                "  removed_setting: true\n"
+            )
             path.write_text(original)
-            config = load_config(path, profile="custom")
+            config = load_config(path)
             self.assertEqual(config.download.concurrency, 5)
             self.assertEqual(config.download.overwrite, "replace")
             self.assertEqual((path.parent / "config.yaml.bak").read_text(), original)
@@ -30,15 +36,8 @@ class SelectionOptionsTests(unittest.TestCase):
             self.assertNotIn("rip_auto_select", updated["download"])
             self.assertEqual(updated["download"]["artist_auto_select"], [])
             self.assertEqual(updated["download"]["library_auto_select"], [])
-            self.assertNotIn(
-                "removed_setting", updated["profiles"]["custom"]["download"]
-            )
-            self.assertEqual(
-                updated["profiles"]["custom"]["download"], {"overwrite": "replace"}
-            )
-            self.assertEqual(
-                load_config(path, profile="custom").download.concurrency, 5
-            )
+            self.assertNotIn("removed_setting", updated["download"])
+            self.assertEqual(load_config(path).download.concurrency, 5)
 
     def test_invalid_known_config_is_not_rewritten(self):
         import tempfile

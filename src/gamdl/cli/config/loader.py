@@ -1,4 +1,4 @@
-"""Validated YAML configuration, profiles, and native Click default maps."""
+"""Validated YAML configuration and native Click default maps."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from .models import (
 
 
 class ConfigError(ValueError):
-    """Invalid YAML syntax, key, type, value, or configuration profile."""
+    """Invalid YAML syntax, key, type, or value."""
 
 
 class _UniqueLoader(yaml.SafeLoader):
@@ -220,17 +220,6 @@ def _normalize(values: dict[str, Any], defaults: dict[str, Any]) -> dict[str, An
     return result
 
 
-def _prune(values: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
-    """Prune unknown profile overrides without filling inherited settings."""
-    return {
-        key: _prune(value, defaults[key])
-        if isinstance(defaults[key], dict) and isinstance(value, dict)
-        else value
-        for key, value in values.items()
-        if key in defaults
-    }
-
-
 def _persist(path: Path, normalized: dict[str, Any]) -> None:
     """Back up the original and atomically write a validated normalized config."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,7 +247,6 @@ def save_auth_configuration(
     cookies_path: str,
     wrapper_url: str,
     media_user_token: str | None,
-    profile: str | None = None,
 ) -> None:
     """Persist a validated authentication choice without disturbing other settings."""
     if path.exists():
@@ -274,13 +262,9 @@ def save_auth_configuration(
             raise ConfigError("YAML config must be a mapping")
     else:
         loaded = asdict(AppConfig())
-    settings = loaded
-    if profile:
-        profiles = loaded.setdefault("profiles", {})
-        if profile not in profiles:
-            raise ConfigError(f"Unknown profile: {profile!r}")
-        settings = profiles[profile]
-    auth = settings.setdefault("auth", {})
+    if "profiles" in loaded:
+        raise ConfigError("YAML profiles are no longer supported; remove 'profiles'")
+    auth = loaded.setdefault("auth", {})
     auth.update(
         mode=mode,
         cookies_path=cookies_path,
@@ -288,9 +272,7 @@ def save_auth_configuration(
         media_user_token=media_user_token,
     )
     defaults = asdict(AppConfig())
-    _merge(defaults, {key: value for key, value in loaded.items() if key != "profiles"})
-    if profile:
-        _merge(defaults, loaded["profiles"][profile])
+    _merge(defaults, loaded)
     _validate(defaults)
     try:
         _persist(path, loaded)
@@ -298,12 +280,10 @@ def save_auth_configuration(
         raise ConfigError("Unable to save authentication configuration") from exc
 
 
-def load_config(path: Path | None, *, profile: str | None = None) -> AppConfig:
+def load_config(path: Path | None) -> AppConfig:
     """Load, validate and persist normalized YAML when the schema changes."""
     defaults = asdict(AppConfig())
     if path is None or not path.exists():
-        if profile:
-            raise ConfigError(f"Profile {profile!r} requires a config file")
         return _validate(defaults)
     try:
         loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueLoader)
@@ -313,32 +293,11 @@ def load_config(path: Path | None, *, profile: str | None = None) -> AppConfig:
         loaded = {}
     if not isinstance(loaded, dict):
         raise ConfigError("YAML config must be a mapping")
+    if "profiles" in loaded:
+        raise ConfigError("YAML profiles are no longer supported; remove 'profiles'")
     schema = asdict(AppConfig())
-    normalized = _normalize(loaded, {**schema, "profiles": loaded.get("profiles", {})})
-    if "profiles" not in loaded:
-        normalized.pop("profiles", None)
-    if isinstance(normalized.get("profiles"), dict):
-        normalized["profiles"] = {
-            name: _prune(settings, schema) if isinstance(settings, dict) else settings
-            for name, settings in normalized["profiles"].items()
-        }
-    base = {key: value for key, value in loaded.items() if key != "profiles"}
-    profiles = loaded.get("profiles", {})
-    if not isinstance(profiles, dict):
-        raise ConfigError("profiles must be a mapping")
-    _merge(defaults, base)
-    _validate(defaults)
-    for name, settings in profiles.items():
-        if not isinstance(name, str) or not name or not isinstance(settings, dict):
-            raise ConfigError("Each profile must have a name and mapping")
-        copy = asdict(AppConfig())
-        _merge(copy, base)
-        _merge(copy, settings)
-        _validate(copy)
-    if profile:
-        if profile not in profiles:
-            raise ConfigError(f"Unknown profile: {profile}")
-        _merge(defaults, profiles[profile])
+    normalized = _normalize(loaded, schema)
+    _merge(defaults, loaded)
     result = _validate(defaults)
     if normalized != loaded:
         try:

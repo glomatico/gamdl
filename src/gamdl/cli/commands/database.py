@@ -67,7 +67,7 @@ def info(ctx: click.Context) -> None:
     click.echo(f"Database size: {db.path.stat().st_size} bytes")
 
 
-@database_group.command("refresh")
+@database_group.command("scan")
 @click.option(
     "--directory",
     type=click.Path(path_type=Path, file_okay=False),
@@ -75,7 +75,7 @@ def info(ctx: click.Context) -> None:
 )
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing SQLite")
 @click.pass_context
-def refresh(ctx: click.Context, directory: Path | None, dry_run: bool) -> None:
+def scan(ctx: click.Context, directory: Path | None, dry_run: bool) -> None:
     """Scan existing files and reconcile cnID-based index entries."""
     settings = _settings(ctx)
     db = _database(settings)
@@ -122,7 +122,7 @@ def refresh(ctx: click.Context, directory: Path | None, dry_run: bool) -> None:
     ) as progress:
         task = progress.add_task("Scanning media", total=total)
         for path in candidates():
-            _refresh_file(path, existing, counts, db, dry_run)
+            _scan_file(path, existing, counts, db, dry_run)
             progress.advance(task)
     click.echo(
         ("Dry run: " if dry_run else "") + f"Scanned {counts['scanned']}; "
@@ -134,7 +134,7 @@ def refresh(ctx: click.Context, directory: Path | None, dry_run: bool) -> None:
         raise SystemExit(1)
 
 
-def _refresh_file(
+def _scan_file(
     path: Path, existing: dict, counts: Counter[str], db: MediaDatabase, dry_run: bool
 ) -> None:
     counts["scanned"] += 1

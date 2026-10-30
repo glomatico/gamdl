@@ -12,7 +12,7 @@ from gamdl.cli.main import main
 
 
 class DatabaseCommandTests(TestCase):
-    def test_refresh_and_prune_and_disabled_warning(self):
+    def test_scan_and_prune_and_disabled_warning(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             output = root / "output"
@@ -32,16 +32,16 @@ class DatabaseCommandTests(TestCase):
                 return_value="123456",
             ):
                 args = ["--config", str(config), "database"]
-                dry = runner.invoke(main, [*args, "refresh", "--dry-run"])
+                dry = runner.invoke(main, [*args, "scan", "--dry-run"])
                 self.assertEqual(dry.exit_code, 0, dry.output)
                 self.assertIn("added 1", dry.output)
                 self.assertIn("ambiguous 1", dry.output)
                 self.assertIn("disabled", dry.output)
                 self.assertFalse(db.exists())
-                first = runner.invoke(main, [*args, "refresh"])
+                first = runner.invoke(main, [*args, "scan"])
                 self.assertEqual(first.exit_code, 0, first.output)
                 self.assertIn("added 1", first.output)
-                again = runner.invoke(main, [*args, "refresh"])
+                again = runner.invoke(main, [*args, "scan"])
                 self.assertEqual(again.exit_code, 0, again.output)
                 self.assertIn("unchanged 1", again.output)
                 info = runner.invoke(main, [*args, "info"])

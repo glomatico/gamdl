@@ -35,7 +35,10 @@ def publish_bytes_result(
     try:
         with NamedTemporaryFile(
             mode="wb",
-            prefix=f".{destination.name}.",
+            # The published filename may already occupy all 255 UTF-8 bytes
+            # allowed by the filesystem. A short, independent staging name
+            # leaves room for tempfile's random suffix and avoids ENAMETOOLONG.
+            prefix=".gamdl-",
             suffix=".part",
             dir=destination.parent,
             delete=False,
@@ -87,9 +90,7 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
         # A private directory gives os.link() a collision-free destination.
         # Atomically rename the new hardlink over the old file; unlike a
         # second full-file copy, this is O(1) on the same filesystem.
-        with TemporaryDirectory(
-            prefix=f".{destination.name}.", dir=destination.parent
-        ) as directory:
+        with TemporaryDirectory(prefix=".gamdl-", dir=destination.parent) as directory:
             staged = Path(directory) / "media"
             try:
                 os.link(source, staged)
@@ -129,7 +130,7 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
     try:
         with NamedTemporaryFile(
             mode="wb",
-            prefix=f".{destination.name}.",
+            prefix=".gamdl-",
             suffix=".part",
             dir=destination.parent,
             delete=False,

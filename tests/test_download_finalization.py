@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import errno
+import os
 import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from gamdl.download import (
     DatabaseStatus,
@@ -18,7 +20,7 @@ from gamdl.download import (
     PlaylistTags,
     PlaylistWriter,
 )
-from gamdl.download.publication import publish_bytes, publish_bytes_result
+from gamdl.download.publication import publish_bytes, publish_bytes_result, publish_file
 from gamdl.media import MediaSource, Song, SongCodec
 
 
@@ -57,6 +59,59 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
             FileStatus.OVERWRITTEN,
         )
         self.assertEqual(dest.read_bytes(), b"three")
+
+    def test_maximum_length_sidecar_is_published_and_replaced_atomically(self):
+        """Do not derive temporary filenames from a 255-byte media basename."""
+        media = self.directory / ("A" * 251 + ".m4a")
+        media.write_bytes(b"already downloaded")
+        lyrics = media.with_suffix(".lrc")
+        self.assertEqual(len(lyrics.name.encode("utf-8")), 255)
+        self.assertEqual(
+            publish_bytes_result(b"[00:00.00] First", lyrics, overwrite="skip"),
+            FileStatus.CREATED,
+        )
+        self.assertEqual(
+            publish_bytes_result(b"ignored", lyrics, overwrite="skip"),
+            FileStatus.SKIPPED,
+        )
+        with self.assertRaises(FileExistsError):
+            publish_bytes_result(b"ignored", lyrics, overwrite="error")
+        self.assertEqual(
+            publish_bytes_result(b"[00:00.00] Updated", lyrics, overwrite="replace"),
+            FileStatus.OVERWRITTEN,
+        )
+        self.assertEqual(lyrics.read_bytes(), b"[00:00.00] Updated")
+        self.assertEqual(media.read_bytes(), b"already downloaded")
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
+
+    def test_maximum_length_media_publication_replace_and_cross_device(self):
+        """Both media publication branches must work with NAME_MAX filenames."""
+        source = self.directory / "staged.bin"
+        source.write_bytes(b"new media")
+        target = self.directory / ("W" * 251 + ".m4a")
+        target.write_bytes(b"old media")
+        self.assertTrue(publish_file(source, target, overwrite="replace"))
+        self.assertEqual(target.read_bytes(), b"new media")
+
+        target.unlink()
+        original_link = os.link
+        attempted = False
+
+        def cross_device_once(source_path, target_path):
+            nonlocal attempted
+            if not attempted:
+                attempted = True
+                raise OSError(errno.EXDEV, "different filesystem")
+            return original_link(source_path, target_path)
+
+        with patch(
+            "gamdl.download.publication.os.link",
+            side_effect=cross_device_once,
+        ):
+            self.assertTrue(publish_file(source, target, overwrite="skip"))
+        self.assertTrue(attempted)
+        self.assertEqual(target.read_bytes(), b"new media")
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 
     def test_playlist_relative_paths_order_and_duplicate_occurrences(self):
         playlist = PlaylistWriter(self.directory / "list" / "tracks.m3u8")

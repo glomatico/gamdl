@@ -178,6 +178,44 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         api.get_lyrics.assert_not_awaited()
         downloader._read_track.assert_not_awaited()
 
+    async def test_long_title_retry_writes_cover_and_lyrics_without_media_download(
+        self,
+    ):
+        """Repair finalization for a filename truncated to 255 UTF-8 bytes."""
+        downloader, _ = self.downloader()
+        formatter = PathFormatter(self.directory / "Apple Music")
+        song = self.song()
+        filename = formatter.get_media_path(
+            song,
+            downloader_fixtures.Tags(
+                title="We Are The World (feat. " + "artist, " * 80,
+                artist="U.S.A. for Africa",
+                album="We Are The World (Remastered)",
+                album_artist="U.S.A. for Africa",
+                track_number=1,
+            ),
+            extension=".m4a",
+        )
+        self.assertEqual(len(filename.name.encode("utf-8")), 255)
+        filename.parent.mkdir(parents=True)
+        filename.write_bytes(b"existing media bytes")
+        song.get_cover.return_value = Mock(get_cover_bytes=AsyncMock(return_value=JPEG))
+        song.get_lyrics = AsyncMock(
+            return_value=Lyrics(stanzas=[[LyricsLine("Hello world", start=1000)]])
+        )
+
+        outcome = await downloader.download(
+            song, filename, overwrite="skip", save_cover=True, save_lyrics=True
+        )
+        self.assertEqual(outcome.status, MediaStatus.SKIPPED)
+        self.assertEqual(outcome.cover.status, FileStatus.CREATED)
+        self.assertEqual(outcome.lyrics.status, FileStatus.CREATED)
+        self.assertTrue(filename.with_suffix(".jpg").is_file())
+        self.assertTrue(filename.with_suffix(".lrc").is_file())
+        self.assertEqual(filename.read_bytes(), b"existing media bytes")
+        self.assertFalse(list(filename.parent.glob(".gamdl-*")))
+        downloader._read_track.assert_not_awaited()
+
     async def test_sidecar_failure_includes_previous_partial_result(self):
         downloader, _ = self.downloader()
         song = self.song()

@@ -11,10 +11,10 @@ samples before yielding or saving, preserving the fragmented MP4 layout.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from typing import Literal
 from os import PathLike
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Literal, Self
 
 from gamdl import _native
 from gamdl.api.wrapper import WrapperApi
@@ -22,14 +22,15 @@ from gamdl.drm import Drm, DrmLicenseError
 from gamdl.drm.models import ContentKey
 from gamdl.media import (
     AudioStream,
-    HlsStream,
     HlsSongStream,
-    HttpStream,
+    HlsStream,
     HlsType,
+    HttpStream,
     StreamOrigin,
     VideoStream,
 )
 from gamdl.media.exceptions import StreamManifestError
+
 from .progress import StreamProgress
 
 
@@ -173,7 +174,7 @@ class Streamer(AsyncIterator[bytes]):
         self._decryption_method: str | None = None
         self._used = False
 
-    async def __aenter__(self) -> Streamer:
+    async def __aenter__(self) -> Self:
         if self._used:
             raise RuntimeError("A Streamer instance cannot be reopened")
         self._used = True
@@ -313,7 +314,9 @@ class Streamer(AsyncIterator[bytes]):
         try:
             with NamedTemporaryFile(
                 mode="wb",
-                prefix=f".{destination.name}.",
+                # A valid destination can already use the full NAME_MAX
+                # component length; do not append to its filename for staging.
+                prefix=".gamdl-",
                 suffix=".part",
                 dir=destination.parent,
                 delete=False,

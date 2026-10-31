@@ -1,5 +1,6 @@
 """Dataclass-Click option schema for the rip command."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, make_dataclass
 from typing import Annotated
 
@@ -16,6 +17,23 @@ TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
 def option(*names, **kwargs):
     """Defaults come from dataclasses/Click default_map, not required flags."""
     return dataclass_option(*names, required=False, **kwargs)
+
+
+def comma_separated_choices(choices: Sequence[str]):
+    """Accept one comma-separated value or repeated flags, preserving order."""
+    choice_type = click.Choice(choices)
+
+    def convert(ctx: click.Context, param: click.Parameter, values: tuple[str, ...]):
+        result = []
+        for value in values:
+            for item in value.split(","):
+                item = item.strip()
+                if not item:
+                    raise click.BadParameter("Empty entries are not allowed")
+                result.append(choice_type.convert(item, param, ctx))
+        return tuple(result)
+
+    return convert
 
 
 @dataclass
@@ -74,8 +92,9 @@ class RipOptions:
         option(
             "--song-codec-priority",
             multiple=True,
-            type=click.Choice([c.value for c in SongCodec]),
-            help="Repeat flag to set song codec priority",
+            type=str,
+            callback=comma_separated_choices([c.value for c in SongCodec]),
+            help="Comma-separated song codecs in priority order (or repeat flag)",
         ),
     ] = ()
     music_video_codec: Annotated[
@@ -89,7 +108,9 @@ class RipOptions:
         option(
             "--music-video-codec-priority",
             multiple=True,
-            type=click.Choice([c.value for c in MusicVideoCodec]),
+            type=str,
+            callback=comma_separated_choices([c.value for c in MusicVideoCodec]),
+            help="Comma-separated video codecs in priority order (or repeat flag)",
         ),
     ] = ()
     max_height: Annotated[int, option("--max-height", type=click.IntRange(min=1))] = (

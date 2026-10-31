@@ -228,6 +228,80 @@ class CliConfigTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(calls[-1].concurrency, 8)
 
+    def test_comma_separated_codec_priorities_and_yaml_lists(self):
+        self._write(
+            "download:\n"
+            "  song_codec_priority:\n"
+            "    - alac\n"
+            "    - aac-web\n"
+            "  music_video_codec_priority:\n"
+            "    - h265\n"
+            "    - h264\n"
+        )
+        settings = load_config(self.path)
+        self.assertEqual(settings.download.song_codec_priority, ["alac", "aac-web"])
+        self.assertEqual(settings.download.music_video_codec_priority, ["h265", "h264"])
+
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with (
+            patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run),
+            patch("gamdl.cli.commands.library.require_terminal"),
+            patch("gamdl.cli.commands.search.require_terminal"),
+        ):
+            runner = CliRunner()
+            for command in (
+                ["rip", "URL"],
+                ["library"],
+                ["search", "example"],
+            ):
+                with self.subTest(command=command):
+                    result = runner.invoke(
+                        main,
+                        [
+                            "--config",
+                            str(self.path),
+                            *command,
+                            "--song-codec-priority",
+                            "alac, atmos",
+                            "--song-codec-priority",
+                            "aac-web",
+                            "--music-video-codec-priority",
+                            "h265, h264",
+                        ],
+                    )
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(
+                        received[-1].song_codec_priority,
+                        ("alac", "atmos", "aac-web"),
+                    )
+                    self.assertEqual(
+                        received[-1].music_video_codec_priority,
+                        ("h265", "h264"),
+                    )
+
+            result = runner.invoke(main, ["--config", str(self.path), "rip", "URL"])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(received[-1].song_codec_priority, ("alac", "aac-web"))
+            self.assertEqual(received[-1].music_video_codec_priority, ("h265", "h264"))
+
+            for option, bad in (
+                ("--song-codec-priority", "alac,,aac-web"),
+                ("--song-codec-priority", "not-a-codec"),
+                ("--music-video-codec-priority", "h264,unknown"),
+            ):
+                with self.subTest(option=option, bad=bad):
+                    result = runner.invoke(
+                        main,
+                        ["--no-config", "rip", "URL", option, bad],
+                    )
+                    self.assertNotEqual(result.exit_code, 0)
+                    self.assertIn("Invalid value", result.output)
+
     def test_invalid_yaml_version_options_are_not_deleted(self):
         for text in (
             "not: [valid",

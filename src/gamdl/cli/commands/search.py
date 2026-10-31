@@ -13,7 +13,7 @@ from gamdl.cli.prompts import require_terminal
 @click.command("search")
 @dataclass_click(SearchOptions)
 def search(options: SearchOptions) -> None:
-    """Search one term and download catalog songs or videos."""
+    """Search one term and download catalog media or collection tracks."""
     if not options.term.strip():
         raise click.UsageError("Provide a nonempty search term")
     if options.feeling_lucky and not options.media_type:

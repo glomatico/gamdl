@@ -160,13 +160,18 @@ search:
   api: itunes
 ```
 
-Override it for a single command with `--search-api`. iTunes search supports songs and
-music videos, but not uploaded videos or playlists. Its public Search API
+Override it for a single command with `--search-api`. iTunes search supports songs,
+music videos and albums, but not uploaded videos or playlists. Its public Search API
 returns up to 200 results per category; Gamdl displays those in local pages
 without relying on undocumented iTunes pagination. Selected items are then
 resolved using authoritative Apple Music catalog metadata before download.
 Apple documents an approximate iTunes Search API limit of 20 requests/minute;
-changing backends doesn't remove throttling limits.
+changing backends doesn't remove throttling limits. Selecting an album expands
+its tracks through the existing Apple Music album resolver:
+
+```bash
+gamdl search "Thriller" --search-api itunes --type album
+```
 
 Apple Music search also offers **Playlists** (editorial and external curators)
 and **User playlists** (public, user-shared playlists). The latter are

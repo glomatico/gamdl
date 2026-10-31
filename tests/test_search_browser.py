@@ -32,12 +32,18 @@ class SearchBrowserStateTests(unittest.TestCase):
     def test_public_playlist_categories_replace_unsupported_uploaded_video_search(self):
         caches = {
             kind: PageCache(lambda _: None)
-            for kind in ("songs", "music-videos", "playlists", "user-playlists")
+            for kind in (
+                "songs",
+                "music-videos",
+                "albums",
+                "playlists",
+                "user-playlists",
+            )
         }
         state = SearchBrowserState(caches)
         self.assertEqual(
             [kind for kind, _ in state.categories],
-            ["songs", "music-videos", "playlists", "user-playlists"],
+            ["songs", "music-videos", "albums", "playlists", "user-playlists"],
         )
 
     def test_categories_are_navigation_not_bulk_selection(self):

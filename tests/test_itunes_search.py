@@ -40,10 +40,11 @@ class ItunesSearchApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(itunes.storefront_id)
             await itunes.get_search_results("Caravan Palace", entity="song")
             await itunes.get_search_results("Caravan Palace", entity="musicVideo")
+            await itunes.get_search_results("Caravan Palace", entity="album")
             with self.assertRaisesRegex(ValueError, "storefront ID"):
                 await itunes.get_itunes_page("song", "123")
 
-        self.assertEqual(len(visits), 2)
+        self.assertEqual(len(visits), 3)
         self.assertTrue(all(r.url.path == "/search" for r in visits))
         self.assertEqual(visits[0].url.params["country"], "br")
         self.assertEqual(visits[0].url.params["term"], "Caravan Palace")
@@ -51,6 +52,8 @@ class ItunesSearchApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(visits[0].url.params["media"], "music")
         self.assertEqual(visits[1].url.params["media"], "musicVideo")
         self.assertEqual(visits[1].url.params["entity"], "musicVideo")
+        self.assertEqual(visits[2].url.params["media"], "music")
+        self.assertEqual(visits[2].url.params["entity"], "album")
         self.assertEqual(visits[0].url.params["limit"], "200")
 
     async def test_rejects_unsupported_requests_and_malformed_responses(self):
@@ -81,6 +84,39 @@ class ItunesSearchApiTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ItunesSearchAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_album_uses_collection_id_and_name_not_song_fields(self):
+        results = normalize_itunes_results(
+            {
+                "results": [
+                    {
+                        "wrapperType": "collection",
+                        "collectionType": "Album",
+                        "collectionId": 1641780996,
+                        "collectionName": "Thriller 40",
+                        "artistName": "Michael Jackson",
+                    },
+                    {
+                        "wrapperType": "track",
+                        "kind": "song",
+                        "trackId": 123,
+                        "trackName": "Not an album",
+                    },
+                    {
+                        "wrapperType": "collection",
+                        "collectionType": "Album",
+                        "collectionId": None,
+                        "collectionName": "Missing ID",
+                    },
+                ]
+            },
+            "albums",
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], "1641780996")
+        self.assertEqual(results[0]["type"], "albums")
+        self.assertEqual(results[0]["attributes"]["name"], "Thriller 40")
+        self.assertEqual(results[0]["attributes"]["artistName"], "Michael Jackson")
+
     async def test_normalize_drops_invalid_and_wrong_media_type(self):
         data = {
             "results": [
@@ -167,6 +203,76 @@ class ItunesSearchAdapterTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ItunesRunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_album_selection_expands_authoritative_album_tracks(self):
+        api = Mock(active_subscription=True, storefront="br")
+        album_ids = []
+
+        async def album_tracks(album_id, *, is_library):
+            album_ids.append((album_id, is_library))
+            yield {
+                "id": "1228739609",
+                "type": "songs",
+                "attributes": {"name": "Apple Music album track"},
+            }
+
+        api.iter_album_tracks = album_tracks
+        itunes = MagicMock()
+        itunes.__aenter__.return_value = itunes
+        itunes.get_search_results = AsyncMock(
+            return_value={
+                "results": [
+                    {
+                        "wrapperType": "collection",
+                        "collectionType": "Album",
+                        "collectionId": 1641780996,
+                        "collectionName": "Thriller 40",
+                        "artistName": "Michael Jackson",
+                    }
+                ]
+            }
+        )
+        downloaded = []
+
+        async def download(media, **_kwargs):
+            downloaded.append((media.id, media.type))
+            return DownloadResult(
+                media.id, Path("test.m4a"), MediaStatus.DOWNLOADED, 1, SongCodec.AAC
+            )
+
+        downloader = Mock()
+        downloader.download = AsyncMock(side_effect=download)
+        options = RipOptions(urls=("search",), no_progress=True)
+        options.search_term = "Thriller"
+        options.search_type = "album"
+        options.search_api = "itunes"
+        options.feeling_lucky = True
+
+        with (
+            patch(
+                "gamdl.cli.commands.runner._authenticate",
+                new_callable=AsyncMock,
+                return_value=(api, None),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
+            patch("gamdl.cli.commands.runner.Downloader", return_value=downloader),
+            patch(
+                "gamdl.cli.commands.runner.ItunesApi.create",
+                new_callable=AsyncMock,
+                return_value=itunes,
+            ),
+        ):
+            result = await run_rip(options)
+        self.assertEqual(result, 0)
+        self.assertEqual(downloaded, [("1228739609", "songs")])
+        self.assertEqual(album_ids, [("1641780996", False)])
+        itunes.get_search_results.assert_awaited_once_with(
+            "Thriller", entity="album", limit=200
+        )
+
     async def test_lucky_search_downloads_itunes_selected_catalog_id(self):
         api = Mock(active_subscription=True, storefront="br")
         api.get_song = AsyncMock(

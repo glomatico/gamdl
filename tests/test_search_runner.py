@@ -32,6 +32,13 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
                         "attributes": {"name": "Video 1"},
                     },
                 ],
+                "albums": [
+                    {
+                        "id": "album01",
+                        "type": "albums",
+                        "attributes": {"name": "Test album"},
+                    }
+                ],
                 "playlists": [
                     {
                         "id": "pl.editorial",
@@ -66,11 +73,13 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
                 return {media_type: (1,) if media_type == "songs" else (0,)}
             await caches["songs"].get(0)
             await caches["music-videos"].get(0)
+            await caches["albums"].get(0)
             await caches["playlists"].get(0)
             await caches["user-playlists"].get(0)
             return {
                 "songs": (1,),
                 "music-videos": (0,),
+                "albums": (0,),
                 "playlists": (0,),
                 "user-playlists": (0,),
             }
@@ -83,6 +92,14 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
                 "attributes": {"name": f"Track in {playlist_id}"},
             }
 
+        async def album_tracks(album_id, *, is_library):
+            self.assertFalse(is_library)
+            yield {
+                "id": f"track.{album_id}",
+                "type": "songs",
+                "attributes": {"name": f"Track in {album_id}"},
+            }
+
         async def download(media, **kwargs):
             downloaded.append((media.id, media.type))
             return DownloadResult(
@@ -92,6 +109,7 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
         api.get_search_results = AsyncMock(side_effect=get_search)
         api.get_extended_api_data = AsyncMock(side_effect=get_next)
         api.iter_playlist_tracks = playlist_tracks
+        api.iter_album_tracks = album_tracks
         downloader = Mock(itunes_api=Mock())
         downloader.download = AsyncMock(side_effect=download)
         options = RipOptions(urls=("search",), no_progress=True)
@@ -129,13 +147,14 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
             [
                 ("s2", "songs"),
                 ("v1", "music-videos"),
+                ("track.album01", "songs"),
                 ("track.pl.editorial", "songs"),
                 ("track.pl.user", "songs"),
             ],
         )
         self.assertEqual(
             [types for _, types, _ in queries],
-            ["songs", "music-videos", "playlists"],
+            ["songs", "music-videos", "albums", "playlists"],
         )
         self.assertEqual(next_calls, [])
         self.assertEqual(len(seen_caches), 1)
@@ -152,6 +171,12 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(downloaded, [("track.pl.user", "songs")])
         self.assertEqual([kind for _, kind, _ in queries], ["playlists"])
+
+    async def test_album_type_expands_album_tracks(self):
+        code, queries, _, downloaded, _, _ = await self._run(media_type="album")
+        self.assertEqual(code, 0)
+        self.assertEqual(downloaded, [("track.album01", "songs")])
+        self.assertEqual([kind for _, kind, _ in queries], ["albums"])
 
     async def test_feeling_lucky_stays_noninteractive(self):
         code, queries, _, downloaded, _, picker = await self._run(

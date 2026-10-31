@@ -9,6 +9,33 @@ from gamdl.cli.main import main
 
 
 class SearchCliTests(unittest.TestCase):
+    def test_album_search_is_valid_for_both_backends(self):
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            for api in ("itunes", "apple-music"):
+                with self.subTest(api=api):
+                    result = CliRunner().invoke(
+                        main,
+                        [
+                            "--no-config",
+                            "search",
+                            "Thriller",
+                            "--search-api",
+                            api,
+                            "--type",
+                            "album",
+                            "--feeling-lucky",
+                        ],
+                    )
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(received[-1].search_type, "album")
+                    self.assertEqual(received[-1].search_api, api)
+
     def test_itunes_is_supported_but_playlist_search_is_not(self):
         captured = []
 

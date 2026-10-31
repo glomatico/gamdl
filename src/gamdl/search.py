@@ -12,7 +12,7 @@ from typing import Any
 from gamdl.api import AppleMusicApi, GamdlApiResponseError, ItunesApi
 from gamdl.pagination import MediaPage, PageCache
 
-ITUNES_SEARCH_TYPES = ("songs", "music-videos")
+ITUNES_SEARCH_TYPES = ("songs", "music-videos", "albums")
 ITUNES_MAX_RESULTS = 200
 SEARCH_PAGE_SIZE = 50
 PLAYLIST_SEARCH_TYPES = ("playlists", "user-playlists")
@@ -23,16 +23,28 @@ def normalize_itunes_results(
 ) -> tuple[dict[str, Any], ...]:
     """Provide UI-only names/IDs while retaining the original catalog type."""
     kinds = {"songs": "song", "music-videos": "music-video"}
-    kind = kinds[resource_type]
+    if resource_type not in (*kinds, "albums"):
+        raise ValueError("Unsupported iTunes search resource type")
     entries = payload.get("results", [])
     if not isinstance(entries, list):
         raise GamdlApiResponseError("Invalid iTunes search results")
     normalized = []
     for entry in entries:
-        if not isinstance(entry, dict) or entry.get("kind") != kind:
+        if not isinstance(entry, dict):
             continue
-        track_id = entry.get("trackId")
-        name = entry.get("trackName")
+        if resource_type == "albums":
+            if (
+                entry.get("wrapperType") != "collection"
+                or entry.get("collectionType") != "Album"
+            ):
+                continue
+            track_id = entry.get("collectionId")
+            name = entry.get("collectionName")
+        else:
+            if entry.get("kind") != kinds[resource_type]:
+                continue
+            track_id = entry.get("trackId")
+            name = entry.get("trackName")
         if (
             isinstance(track_id, bool)
             or not isinstance(track_id, (int, str))
@@ -70,7 +82,9 @@ def create_search_caches(
         if itunes_api is None:
             raise ValueError("iTunes search requires an ItunesApi client")
         if any(kind not in ITUNES_SEARCH_TYPES for kind in resource_types):
-            raise ValueError("iTunes search only supports songs and music videos")
+            raise ValueError(
+                "iTunes search only supports songs, music videos and albums"
+            )
 
     caches = {}
     itunes_results: dict[str, tuple[dict[str, Any], ...]] = {}
@@ -108,7 +122,11 @@ def create_search_caches(
 
     for resource_type in resource_types:
         if search_api == "itunes":
-            entity = "song" if resource_type == "songs" else "musicVideo"
+            entity = {
+                "songs": "song",
+                "music-videos": "musicVideo",
+                "albums": "album",
+            }[resource_type]
 
             async def load_itunes(
                 cursor: str | None,

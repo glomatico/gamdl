@@ -474,6 +474,7 @@ async def run_rip(options: RipOptions) -> int:
                                     type_map = {
                                         "song": "songs",
                                         "music-video": "music-videos",
+                                        "album": "albums",
                                         "playlist": "playlists",
                                         "user-playlist": "user-playlists",
                                     }
@@ -547,7 +548,14 @@ async def run_rip(options: RipOptions) -> int:
                                         last_index = max(wanted)
                                         async for index, metadata in cache.iter_items():
                                             if index in wanted:
-                                                if resource_type in {
+                                                if resource_type == "albums":
+                                                    async for (
+                                                        track
+                                                    ) in resolver.from_album(
+                                                        metadata["id"]
+                                                    ):
+                                                        yield track
+                                                elif resource_type in {
                                                     "playlists",
                                                     "user-playlists",
                                                 }:

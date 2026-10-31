@@ -302,7 +302,7 @@ SearchOptions = make_dataclass(
                 option(
                     "--type",
                     type=click.Choice(
-                        ["song", "music-video", "playlist", "user-playlist"]
+                        ["song", "music-video", "album", "playlist", "user-playlist"]
                     ),
                 ),
             ],

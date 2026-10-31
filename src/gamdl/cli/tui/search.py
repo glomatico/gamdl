@@ -22,6 +22,7 @@ from .components import footer, heading
 SEARCH_CATEGORIES = (
     ("songs", "Songs"),
     ("music-videos", "Music videos"),
+    ("albums", "Albums"),
     ("playlists", "Playlists"),
     ("user-playlists", "User playlists"),
 )

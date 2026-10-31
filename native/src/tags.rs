@@ -2,7 +2,7 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use mp4ameta::{Data, Fourcc, Img, Tag};
+use mp4ameta::{Data, Fourcc, Img, ReadConfig, Tag, WriteConfig};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -278,14 +278,37 @@ impl TagFields {
         proxy.flush().map_err(PyOSError::new_err)?;
         drop(proxy);
         drop(metadata);
-        self.write(proxy_path)?;
+        // Chapter tracks store their titles in mdat. Never read or regenerate
+        // them through the empty proxy. Preserve both chapter representations
+        // verbatim; mp4ameta still shifts every track's chunk offsets below.
+        let mut tag = Tag::read_with_path(
+            proxy_path,
+            &ReadConfig {
+                read_chapter_list: false,
+                read_chapter_track: false,
+                ..ReadConfig::DEFAULT
+            },
+        )
+        .map_err(|err| PyValueError::new_err(format!("Could not read MP4 metadata: {err}")))?;
+        self.apply(&mut tag);
+        tag.write_with_path(
+            proxy_path,
+            &WriteConfig {
+                write_chapter_list: false,
+                write_chapter_track: false,
+                ..WriteConfig::DEFAULT
+            },
+        )
+        .map_err(|err| PyOSError::new_err(format!("Could not write MP4 metadata: {err}")))?;
 
         // Recheck the tagged proxy's shape. Its co64 offsets have already
         // been adjusted by mp4ameta for moov growth/shrinkage.
-        let proxy_data = std::fs::read(proxy_path).map_err(PyOSError::new_err)?;
-        if proxy_data.len() > MAX_HEADER_BYTES as usize + 1040 {
+        if std::fs::metadata(proxy_path).map_err(PyOSError::new_err)?.len()
+            > MAX_HEADER_BYTES + 1040
+        {
             return Err(PyValueError::new_err("Tagged MP4 metadata exceeds limit"));
         }
+        let proxy_data = std::fs::read(proxy_path).map_err(PyOSError::new_err)?;
         let ftyp = u32::from_be_bytes(
             proxy_data
                 .get(..4)

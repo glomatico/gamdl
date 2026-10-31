@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from os import PathLike, fspath, replace
 from pathlib import Path
+from stat import S_IMODE
 from tempfile import TemporaryDirectory
 from typing import Literal
 
@@ -92,6 +93,7 @@ class Muxer:
             _native.write_mp3_tags(fspath(path), asdict(tags), cover_bytes)
         else:
             source = Path(path)
+            original_mode = S_IMODE(source.stat().st_mode)
             # For Gamdl-produced fast-start files, tag a metadata-only proxy
             # and copy the unchanged mdat in bounded chunks. The original
             # stays untouched until the replacement is complete.
@@ -105,6 +107,7 @@ class Muxer:
                     asdict(tags),
                     cover_bytes,
                 ):
+                    output.chmod(original_mode)
                     replace(output, source)
                 else:
                     # Arbitrary input MP4 layouts still use mp4ameta's

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import json
+import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -265,6 +268,65 @@ class NativeAvMuxTests(unittest.TestCase):
                 Muxer().tag(output, tags=Tags(title="Should fail"))
         self.assertEqual(output.read_bytes(), original)
         self.assertFalse(list(output.parent.glob(".gamdl-tag-*")))
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_bounded_tagging_preserves_file_permissions(self):
+        output = self.directory / "private.m4v"
+        Muxer().mux_file(video=self.video, audio=self.audio, destination=output)
+        for mode in (0o600, 0o640, 0o444):
+            with self.subTest(mode=oct(mode)):
+                output.chmod(mode)
+                Muxer().tag(output, tags=Tags(title="Permission regression"))
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode), mode)
+
+    def test_bounded_tagging_preserves_chapter_payload_and_offsets(self):
+        base = self.directory / "base.mp4"
+        Muxer().mux_file(video=self.video, audio=self.audio, destination=base)
+        imported = self.directory / "chapters.mp4"
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-v", "error", "-i", str(base),
+             "-f", "ffmetadata", "-i", "pipe:0", "-map_metadata", "1",
+             "-map_chapters", "1", "-c", "copy", "-movflags", "+faststart",
+             str(imported)],
+            input=(b";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\n"
+                   b"START=0\nEND=900\ntitle=Intro\n"),
+            capture_output=True, check=True,
+        )
+        # FFmpeg's 8-byte free box is replaced with the extra 8 bytes of an
+        # extended mdat header. Existing absolute sample offsets stay valid.
+        data = imported.read_bytes()
+        top = list(atoms(data))
+        self.assertEqual([name for name, _ in top], [b"ftyp", b"moov", b"free", b"mdat"])
+        self.assertEqual(top[2][1], b"")
+        canonical = b"".join(
+            (len(body) + 8).to_bytes(4, "big") + name + body
+            for name, body in top[:2]
+        )
+        canonical += (1).to_bytes(4, "big") + b"mdat"
+        canonical += (len(top[3][1]) + 16).to_bytes(8, "big") + top[3][1]
+        imported.write_bytes(canonical)
+
+        def chapters():
+            return json.loads(subprocess.run(
+                ["ffprobe", "-v", "error", "-show_chapters", "-of", "json", str(imported)],
+                capture_output=True, text=True, check=True,
+            ).stdout)["chapters"]
+
+        original_chapters = chapters()
+        self.assertEqual(original_chapters[0]["tags"]["title"], "Intro")
+        original_video = track_hashes(imported, "V")
+        original_audio = track_hashes(imported, "a")
+        original_payload = top[3][1]
+        with patch.object(_native, "write_mp4_tags", side_effect=AssertionError("Unexpected fallback")):
+            # Exercise both positive and negative offset adjustments.
+            for title in ("Long metadata " * 100, "Short"):
+                Muxer().tag(imported, tags=Tags(title=title), cover_bytes=PNG)
+                self.assertEqual(chapters(), original_chapters)
+                self.assertEqual(track_hashes(imported, "V"), original_video)
+                self.assertEqual(track_hashes(imported, "a"), original_audio)
+                self.assertEqual(next(body for name, body in atoms(imported.read_bytes())
+                                      if name == b"mdat"), original_payload)
+                self.assertEqual(mp4_tag_atoms(imported)[b"\xa9nam"], [(1, title.encode())])
 
     def test_disk_backed_mux_rejects_invalid_inputs(self):
         output = self.directory / "invalid.mp4"

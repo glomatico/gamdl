@@ -43,6 +43,7 @@ def main(ctx: click.Context, config_file: Path | None, no_config: bool) -> None:
 from .commands.auth import auth
 from .commands.database import database_group
 from .commands.library import library
+from .commands.organize import organize
 from .commands.rip import rip
 from .commands.search import search
 
@@ -52,3 +53,4 @@ main.add_command(library)
 main.add_command(search)
 main.add_command(config_group)
 main.add_command(database_group)
+main.add_command(organize)

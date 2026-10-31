@@ -90,3 +90,37 @@ pub(crate) fn write_mp3_tags(
     py.detach(move || tag.write_to_path(path, Version::Id3v24))
         .map_err(|err| PyOSError::new_err(format!("Could not write MP3 metadata: {err}")))
 }
+
+#[pyfunction]
+pub(crate) fn read_mp3_organize_tags<'py>(
+    py: Python<'py>,
+    path: String,
+) -> PyResult<Bound<'py, PyDict>> {
+    let tag = py
+        .detach(|| Tag::read_from_path(path))
+        .map_err(|err| PyValueError::new_err(format!("Could not read MP3 metadata: {err}")))?;
+    let result = PyDict::new(py);
+    for (name, value) in [
+        ("title", tag.title()),
+        ("artist", tag.artist()),
+        ("album", tag.album()),
+        ("album_artist", tag.album_artist()),
+        ("composer", tag.text_for_frame_id("TCOM")),
+        ("release_date", tag.text_for_frame_id("TDRC")),
+    ] {
+        if let Some(value) = value {
+            result.set_item(name, value)?;
+        }
+    }
+    for (name, value) in [
+        ("track_number", tag.track()),
+        ("track_total", tag.total_tracks()),
+        ("disc_number", tag.disc()),
+        ("disc_total", tag.total_discs()),
+    ] {
+        if let Some(value) = value {
+            result.set_item(name, value)?;
+        }
+    }
+    Ok(result)
+}

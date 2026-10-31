@@ -110,6 +110,34 @@ class MediaDatabase:
             ).fetchone()
         return dict(row) if row is not None else None
 
+    def relocate(self, source: Path, destination: Path) -> bool:
+        """Update an existing path without losing its codec or source metadata.
+
+        Do not create a database when organization is being run offline.
+        A different record at the destination is never overwritten.
+        """
+        if not self.path.is_file():
+            return False
+        with closing(sqlite3.connect(self.path, timeout=10)) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            old = db.execute(
+                "SELECT 1 FROM media_files WHERE path = ?", (str(source.absolute()),)
+            ).fetchone()
+            if old is None:
+                return False
+            if db.execute(
+                "SELECT 1 FROM media_files WHERE path = ?",
+                (str(destination.absolute()),),
+            ).fetchone():
+                raise FileExistsError(f"Media index already contains {destination}")
+            db.execute(
+                """UPDATE media_files
+                   SET path = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE path = ?""",
+                (str(destination.absolute()), str(source.absolute())),
+            )
+            return True
+
     def index_file(self, path: Path, media_type: str, media_id: str) -> DatabaseStatus:
         """Reconcile an existing file without requiring Apple Music API objects."""
         path = path.absolute()

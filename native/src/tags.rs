@@ -430,3 +430,66 @@ pub(crate) fn read_mp4_title_id(py: Python<'_>, path: String) -> Option<String> 
         Some(u64::from_be_bytes(padded).to_string())
     })
 }
+
+/// Read only filename-relevant tags, without artwork, chapters, or media samples.
+/// The organizer uses exactly the same atoms written by TagFields::apply.
+#[pyfunction]
+pub(crate) fn read_mp4_organize_tags<'py>(
+    py: Python<'py>,
+    path: String,
+) -> PyResult<Bound<'py, PyDict>> {
+    let tag = py
+        .detach(move || {
+            Tag::read_with_path(
+                path,
+                &ReadConfig {
+                    read_meta_items: true,
+                    ..ReadConfig::NONE
+                },
+            )
+        })
+        .map_err(|err| PyValueError::new_err(format!("Could not read MP4 metadata: {err}")))?;
+    let result = PyDict::new(py);
+    for (name, value) in [
+        ("title", tag.title()),
+        ("artist", tag.artist()),
+        ("album", tag.album()),
+        ("album_artist", tag.album_artist()),
+        ("composer", tag.composer()),
+        ("release_date", tag.year()),
+    ] {
+        if let Some(value) = value {
+            result.set_item(name, value)?;
+        }
+    }
+    for (name, value) in [
+        ("track_number", tag.track_number()),
+        ("track_total", tag.total_tracks()),
+        ("disc_number", tag.disc_number()),
+        ("disc_total", tag.total_discs()),
+    ] {
+        if let Some(value) = value {
+            result.set_item(name, value)?;
+        }
+    }
+    result.set_item("compilation", tag.compilation())?;
+
+    for (name, atom) in [
+        ("title_id", *b"cnID"),
+        ("artist_id", *b"atID"),
+        ("album_id", *b"plID"),
+        ("composer_id", *b"cmID"),
+        ("media_type", *b"stik"),
+    ] {
+        if let Some(Data::BeSigned(bytes) | Data::Reserved(bytes)) =
+            tag.data_of(&Fourcc(atom)).next()
+        {
+            if (1..=8).contains(&bytes.len()) && bytes[0] & 0x80 == 0 {
+                let mut padded = [0u8; 8];
+                padded[8 - bytes.len()..].copy_from_slice(bytes);
+                result.set_item(name, u64::from_be_bytes(padded))?;
+            }
+        }
+    }
+    Ok(result)
+}

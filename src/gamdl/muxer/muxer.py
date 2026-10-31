@@ -7,10 +7,12 @@ from os import PathLike, fspath, replace
 from pathlib import Path
 from stat import S_IMODE
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from gamdl import _native
-from gamdl.download.tags import Tags
+
+if TYPE_CHECKING:
+    from gamdl.download.tags import Tags
 
 
 class Muxer:
@@ -87,6 +89,10 @@ class Muxer:
         Fields set to None are preserved if the file already has those atoms.
         A non-MP4 file or invalid cover raises an exception; no transcoding.
         """
+        # Loading Tags at module import time would import gamdl.download,
+        # which in turn imports Muxer. Avoid that initialization cycle.
+        from gamdl.download.tags import Tags
+
         if not isinstance(tags, Tags):
             raise TypeError("tags must be a gamdl.download.Tags instance")
         if fspath(path).lower().endswith(".mp3"):

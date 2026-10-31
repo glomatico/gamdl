@@ -302,6 +302,80 @@ class CliConfigTests(unittest.TestCase):
                     self.assertNotEqual(result.exit_code, 0)
                     self.assertIn("Invalid value", result.output)
 
+    def test_tag_settings_defaults_yaml_and_cli_overrides(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        settings = load_config(None)
+        self.assertTrue(settings.output.tag)
+        self.assertEqual(settings.output.exclude_tags, [])
+        self.assertFalse(click_default_map(settings)["no_tag"])
+        self.assertEqual(click_default_map(settings)["exclude_tags"], ())
+
+        self._write(
+            "output:\n  tag: false\n  exclude_tags:\n    - comment\n    - cover\n"
+        )
+        configured = load_config(self.path)
+        self.assertFalse(configured.output.tag)
+        self.assertEqual(configured.output.exclude_tags, ["comment", "cover"])
+        self.assertTrue(click_default_map(configured)["no_tag"])
+        self.assertEqual(
+            click_default_map(configured)["exclude_tags"], ("comment", "cover")
+        )
+
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with (
+            patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run),
+            patch("gamdl.cli.commands.library.require_terminal"),
+            patch("gamdl.cli.commands.search.require_terminal"),
+        ):
+            runner = CliRunner()
+            for command in (["rip", "URL"], ["library"], ["search", "example"]):
+                with self.subTest(command=command):
+                    base = ["--config", str(self.path), *command]
+                    result = runner.invoke(main, base)
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertTrue(received[-1].no_tag)
+                    self.assertEqual(received[-1].exclude_tags, ("comment", "cover"))
+
+                    result = runner.invoke(
+                        main, [*base, "--tag", "--exclude-tags", "artist,genre"]
+                    )
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertFalse(received[-1].no_tag)
+                    self.assertEqual(received[-1].exclude_tags, ("artist,genre",))
+
+                    result = runner.invoke(main, ["--no-config", *command, "--no-tag"])
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertTrue(received[-1].no_tag)
+
+    def test_tag_settings_invalid_yaml_is_rejected_without_rewrite(self):
+        for text in (
+            "output:\n  tag: null\n",
+            "output:\n  tag: no\n",  # YAML boolean false is valid
+            "output:\n  tag: disabled\n",
+            "output:\n  exclude_tags: comment,cover\n",
+            "output:\n  exclude_tags: [comment, missing_tag]\n",
+            "output:\n  exclude_tags: [comment, comment]\n",
+            "output:\n  exclude_tags: [42]\n",
+        ):
+            if text == "output:\n  tag: no\n":
+                self._write(text)
+                self.assertFalse(load_config(self.path).output.tag)
+                continue
+            with self.subTest(text=text):
+                self._write(text)
+                with self.assertRaisesRegex(ConfigError, "output.(tag|exclude_tags)"):
+                    load_config(self.path)
+                self.assertEqual(self.path.read_text(), text)
+
+        self._write("output:\n  exclude_tags: []\n")
+        self.assertEqual(load_config(self.path).output.exclude_tags, [])
+
     def test_invalid_yaml_version_options_are_not_deleted(self):
         for text in (
             "not: [valid",

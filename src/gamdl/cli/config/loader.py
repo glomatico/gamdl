@@ -14,6 +14,7 @@ from gamdl.download import PathFormatter, PlaylistTags, Tags
 from gamdl.media import CoverFormat, MusicVideoCodec, SongCodec, UploadedVideoQuality
 from gamdl.media.constants import ARTIST_AUTO_SELECT_NAMES, LIBRARY_AUTO_SELECT_NAMES
 
+from ..options import TAG_NAMES
 from .models import (
     AppConfig,
     AuthConfig,
@@ -95,6 +96,7 @@ def _validate(config: dict[str, Any]) -> AppConfig:
                         not in {
                             "download.artist_auto_select",
                             "download.library_auto_select",
+                            "output.exclude_tags",
                         }
                     )
                     or any(
@@ -107,6 +109,7 @@ def _validate(config: dict[str, Any]) -> AppConfig:
                         in {
                             "download.artist_auto_select",
                             "download.library_auto_select",
+                            "output.exclude_tags",
                         }
                         else f"{path} must be a nonempty list of strings"
                     )
@@ -148,6 +151,10 @@ def _validate(config: dict[str, Any]) -> AppConfig:
             raise ConfigError(f"Invalid download.{name}")
         if len(values) != len(set(values)):
             raise ConfigError(f"download.{name} must not contain duplicates")
+    if any(name not in TAG_NAMES for name in output.exclude_tags):
+        raise ConfigError("Invalid output.exclude_tags")
+    if len(output.exclude_tags) != len(set(output.exclude_tags)):
+        raise ConfigError("output.exclude_tags must not contain duplicates")
     if download.song_codec is not None and download.song_codec not in {
         c.value for c in SongCodec
     }:
@@ -335,6 +342,8 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "max_height": d.max_height,
         "uploaded_video_quality": d.uploaded_video_quality,
         "save_cover": o.save_cover,
+        "no_tag": not o.tag,
+        "exclude_tags": tuple(o.exclude_tags),
         "cover_format": o.cover_format,
         "no_lyrics": not o.save_lyrics,
         "save_playlist": o.save_playlist,

@@ -159,7 +159,11 @@ class RipOptions:
         ),
     ] = CoverFormat.JPG.value
     no_tag: Annotated[
-        bool, option("--no-tag", is_flag=True, help="Skip writing metadata tags")
+        bool,
+        option(
+            "--no-tag/--tag",
+            help="Skip or enable writing metadata tags",
+        ),
     ] = False
     exclude_tags: Annotated[
         tuple[str, ...],

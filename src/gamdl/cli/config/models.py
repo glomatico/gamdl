@@ -50,6 +50,8 @@ class DownloadConfig:
 class OutputConfig:
     directory: str = "./Apple Music"
     temp_path: str | None = None
+    tag: bool = True
+    exclude_tags: list[str] = field(default_factory=list)
     save_cover: bool = False
     cover_format: str = "jpg"
     save_lyrics: bool = True

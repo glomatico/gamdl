@@ -254,6 +254,8 @@ class MusicVideoStreamResolver:
             if not priorities:
                 raise ValueError("codec_priority must not be empty")
 
+        await self.media.ensure_streamable()
+
         async def discover() -> MusicVideoStreams:
             master_url, origin = await self._master_url()
             manifest = await self.transport.get_manifest(master_url)

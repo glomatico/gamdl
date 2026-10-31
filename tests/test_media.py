@@ -33,13 +33,17 @@ SONG_DATA = {
         "artistName": "Rick Astley",
         "albumName": "Whenever You Need Somebody",
         "trackNumber": 1,
+        "playParams": {"id": "1559885421", "kind": "song"},
         "artwork": {"url": "https://example.test/{w}x{h}.{f}", "width": 2000},
     },
 }
 VIDEO_DATA = {
     "id": "299199411",
     "type": "music-videos",
-    "attributes": {"name": "Never Gonna Give You Up"},
+    "attributes": {
+        "name": "Never Gonna Give You Up",
+        "playParams": {"id": "299199411", "kind": "musicVideo"},
+    },
 }
 PLAYBACK_TAG_DATA = {
     "kind": "song",

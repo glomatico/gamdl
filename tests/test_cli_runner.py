@@ -30,7 +30,12 @@ from gamdl.media import (
     Song,
     SongCodec,
 )
-from gamdl.media.exceptions import StreamNotAvailableError, UnsupportedMediaError
+from gamdl.media.exceptions import (
+    MediaNotFoundError,
+    MediaNotStreamableError,
+    StreamNotAvailableError,
+    UnsupportedMediaError,
+)
 
 
 class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
@@ -53,6 +58,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         debug=False,
         urls=None,
         fail_source=None,
+        unavailable_error=None,
     ):
         songs = []
         playlist = Playlist("playlist-id", api=self.api)
@@ -98,6 +104,8 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                     ) from PermissionError("secret path")
                 if media.id == fail_on and unexpected_failure:
                     raise ValueError("Internal signed URL: sensitive value")
+                if media.id == fail_on and unavailable_error is not None:
+                    raise unavailable_error
                 if media.id == fail_on:
                     raise StreamNotAvailableError("Codec unavailable")
                 return DownloadResult(
@@ -158,6 +166,31 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             _short_error(StreamNotAvailableError("No stream"))[0],
             "Requested codec or stream unavailable",
         )
+
+    async def test_unstreamable_tracks_are_skipped_without_error_or_fail_fast(self):
+        for unavailable_error, expected in (
+            (MediaNotStreamableError("unavailable"), "Media is not streamable"),
+            (MediaNotFoundError("missing"), "Media is unavailable in this storefront"),
+        ):
+            with self.subTest(kind=type(unavailable_error).__name__):
+                buffer = StringIO()
+                with patch(
+                    "gamdl.cli.commands.runner.output_console",
+                    return_value=Console(file=buffer, force_terminal=False),
+                ):
+                    code, received, _ = await self._execute(
+                        fail_on="1001",
+                        fail_fast=True,
+                        unavailable_error=unavailable_error,
+                    )
+                self.assertEqual(code, 0)
+                self.assertEqual(len(received), 4)
+                output = buffer.getvalue()
+                self.assertIn(
+                    "3 downloaded, 0 overwritten, 1 skipped, 0 failed", output
+                )
+                self.assertIn(expected, output)
+                self.assertNotIn("Errors (", output)
 
     async def test_errors_report_after_summary_with_opt_in_tracebacks(self):
         for debug in (False, True):

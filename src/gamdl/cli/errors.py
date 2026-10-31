@@ -12,6 +12,8 @@ from gamdl.download import DownloadFinalizationError
 from gamdl.drm import DrmLicenseError
 from gamdl.exceptions import GamdlError
 from gamdl.media.exceptions import (
+    MediaNotFoundError,
+    MediaNotStreamableError,
     SelectionRequiredError,
     StreamNotAvailableError,
     UnsupportedMediaError,
@@ -24,6 +26,10 @@ def short_error(error: Exception) -> tuple[str, bool]:
             "Interactive selection required (use --auto-select or run in a terminal)",
             True,
         )
+    if isinstance(error, MediaNotStreamableError):
+        return "Media is not streamable", True
+    if isinstance(error, MediaNotFoundError):
+        return "Media is unavailable in this storefront", True
     if isinstance(error, StreamNotAvailableError):
         # These resolver messages are static and safe to expose. Keep codec
         # failures generic rather than leaking stream URLs or manifest data.

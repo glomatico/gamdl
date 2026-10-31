@@ -24,6 +24,8 @@ from gamdl.download import (
 from gamdl.download.events import DownloadStage, EventState
 from gamdl.exceptions import GamdlError
 from gamdl.media import (
+    MediaNotFoundError,
+    MediaNotStreamableError,
     MediaResolver,
     MusicVideo,
     MusicVideoCodec,
@@ -413,6 +415,13 @@ async def run_rip(options: RipOptions) -> int:
                     except click.Abort as error:
                         request_stop(error)
                         raise
+                    except (MediaNotStreamableError, MediaNotFoundError) as error:
+                        # Missing catalog playback rights are expected skips,
+                        # not codec failures or retryable download errors.
+                        counts["skipped"] += 1
+                        progress.finish(
+                            occurrence, title, "skipped", _short_error(error)[0]
+                        )
                     except DownloadFinalizationError as error:
                         record_failure(title, error)
                         if error.partial_result is not None:

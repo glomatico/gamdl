@@ -16,8 +16,8 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
 )
-from rich.text import Text
 from rich.table import Column, Table
+from rich.text import Text
 
 from gamdl.download import DownloadEvent, DownloadStage, EventState
 
@@ -345,6 +345,8 @@ class RipProgress:
                 else status
             )
             line = f"{symbol} {escape(_single_line(title))}: {escape(outcome)}"
+            if status == "skipped" and message:
+                line += f" ({escape(_single_line(message))})"
             if path is not None:
                 line += f" → {escape(_single_line(fspath(path)))}"
             if self._prompt_hidden:

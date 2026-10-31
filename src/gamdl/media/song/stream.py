@@ -26,9 +26,9 @@ from ..stream import (
 from .constants import SONG_CODEC_REGEX_MAP, WEB_FLAVORS
 from .enums import SongCodec
 from .models import (
-    StreamSelector,
     StreamSelectionOption,
     StreamSelectionRequest,
+    StreamSelector,
     StreamSourceOption,
     StreamSourceSelectionRequest,
 )
@@ -275,6 +275,7 @@ class SongStreamResolver:
 
     async def get_streams(self) -> tuple[AudioStream, ...]:
         """Explicit, full discovery of all eligible sources, including both profiles."""
+        await self.song.ensure_streamable()
         if self.song.is_library:
             return await (await self._catalog_resolver()).get_streams()
         candidates: list[AudioStream] = list(await self.get_web_streams())
@@ -355,6 +356,7 @@ class SongStreamResolver:
                 raise SelectionRequiredError("song_stream")
         elif selector is not None:
             raise ValueError("selector requires ask=True")
+        await self.song.ensure_streamable()
         if self.song.is_library:
             return await (await self._catalog_resolver()).get_stream(
                 codec=codec,

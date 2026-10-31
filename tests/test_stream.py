@@ -67,6 +67,11 @@ MEDIA_PLAYLIST = (
 
 def fake_api(*, web_master: str | None = None):
     api = Mock()
+    api.get_song = AsyncMock(
+        return_value={
+            "data": [{"id": "111", "attributes": {"playParams": {"id": "111"}}}]
+        }
+    )
     api.get_webplayback = AsyncMock(
         return_value={
             "songList": [

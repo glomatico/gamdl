@@ -8,6 +8,8 @@ from .cover_cache import CoverCache
 from .enums import CoverFormat, HlsType, StreamOrigin, StreamSource
 from .exceptions import (
     GamdlMediaError,
+    MediaNotFoundError,
+    MediaNotStreamableError,
     SelectionRequiredError,
     StreamManifestError,
     StreamNotAvailableError,
@@ -84,6 +86,8 @@ __all__ = [
     "CoverFormat",
     "DEFAULT_AUTO_SELECT",
     "GamdlMediaError",
+    "MediaNotFoundError",
+    "MediaNotStreamableError",
     "HlsSongStream",
     "HttpStream",
     "HlsType",

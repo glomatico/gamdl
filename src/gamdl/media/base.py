@@ -6,9 +6,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from .exceptions import GamdlMediaError, UnsupportedMediaError
-from .models import MediaSource
+from gamdl.api.exceptions import GamdlApiResponseError
+
 from .cache import InstanceCache
+from .exceptions import (
+    GamdlMediaError,
+    MediaNotFoundError,
+    MediaNotStreamableError,
+    UnsupportedMediaError,
+)
+from .models import MediaSource
 
 if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi
@@ -120,8 +127,8 @@ class Media:
 
     @staticmethod
     def _target_for_type(media_type: str | None) -> tuple[type[Media], bool]:
-        from .song import Song
         from .music_video import MusicVideo
+        from .song import Song
         from .uploaded_video import UploadedVideo
 
         targets: dict[str, tuple[type[Media], bool]] = {
@@ -153,6 +160,64 @@ class Media:
     async def get_metadata(self) -> dict[str, Any]:
         """Fetch resource metadata once, or use data supplied by from_metadata."""
         return await self._load("metadata", self._fetch_metadata)
+
+    async def ensure_streamable(self) -> None:
+        """Reject catalog media without ``playParams`` before playback requests.
+
+        Matches Gamdl 3.x's catalog availability contract. Library uploads
+        remain exempt, and mapped library items are checked using their
+        playable catalog counterpart when the library record lacks playParams.
+        Metadata and results are cached per media instance.
+        """
+        if self.resource_type not in {"songs", "music-videos"}:
+            return
+
+        async def check() -> None:
+            try:
+                metadata = await self.get_metadata()
+            except GamdlApiResponseError as error:
+                if error.status_code == 404:
+                    raise MediaNotFoundError(
+                        f"Media is unavailable in this storefront: {self.id}"
+                    ) from error
+                raise
+
+            attributes = metadata.get("attributes")
+            if isinstance(attributes, dict) and attributes.get("playParams"):
+                return
+
+            if self.is_library:
+                try:
+                    catalog_id = await self._catalog_id()
+                except GamdlMediaError:
+                    # Unmatched personal-library uploads use their own
+                    # playback endpoint and have no catalog playParams.
+                    return
+                try:
+                    payload = (
+                        await self.api.get_song(catalog_id)
+                        if self.resource_type == "songs"
+                        else await self.api.get_music_video(catalog_id)
+                    )
+                except GamdlApiResponseError as error:
+                    if error.status_code == 404:
+                        raise MediaNotFoundError(
+                            f"Media is unavailable in this storefront: {catalog_id}"
+                        ) from error
+                    raise
+                resources = payload.get("data") if isinstance(payload, dict) else None
+                if (
+                    isinstance(resources, list)
+                    and resources
+                    and isinstance(resources[0], dict)
+                    and isinstance(resources[0].get("attributes"), dict)
+                    and resources[0]["attributes"].get("playParams")
+                ):
+                    return
+
+            raise MediaNotStreamableError(f"Media is not streamable: {self.id}")
+
+        await self._load("streamable", check)
 
     async def _get_wrapper_playback(self, wrapper_api: WrapperApi) -> dict[str, Any]:
         """Cache raw wrapper playback for both stream and tag consumers."""

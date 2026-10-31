@@ -25,5 +25,13 @@ class StreamNotAvailableError(GamdlMediaError):
     """No available stream matches the requested codec or preferences."""
 
 
+class MediaNotStreamableError(StreamNotAvailableError):
+    """Apple Music catalog metadata explicitly lacks playback entitlement."""
+
+
+class MediaNotFoundError(StreamNotAvailableError):
+    """The requested catalog media is absent in the account's storefront."""
+
+
 class StreamManifestError(GamdlMediaError):
     """A media CDN returned an invalid or unsupported streaming playlist."""

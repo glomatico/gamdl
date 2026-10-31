@@ -149,6 +149,7 @@ class TagResolver:
             return None
 
     async def _song_tags(self, song: Song, *, source: str | None) -> Tags:
+        await song.ensure_streamable()
         if source == "wrapper":
             assert self.wrapper_api is not None
             playback = await song._get_wrapper_playback(self.wrapper_api)
@@ -175,6 +176,7 @@ class TagResolver:
         return _text(collection.get("releaseDate")) if collection else None
 
     async def _video_tags(self, video: MusicVideo) -> Tags:
+        await video.ensure_streamable()
         tags = await self._wrapper_tags(video)
         if tags is not None:
             return replace(tags, media_type=6)

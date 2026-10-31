@@ -208,7 +208,8 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                     "id": "299199411",
                     "type": "music-videos",
                     "attributes": {
-                        "url": "https://music.apple.com/us/music-video/alternate/7654321"
+                        "url": "https://music.apple.com/us/music-video/alternate/7654321",
+                        "playParams": {"id": "299199411", "kind": "musicVideo"},
                     },
                 }
             ]

@@ -128,7 +128,7 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(tags, await resolver.get_tags(song))
         self.assertEqual(tags.title, PLAYBACK_TAG_DATA["itemName"])
         api.get_webplayback.assert_awaited_once_with(song.id, is_library=False)
-        api.get_song.assert_not_awaited()
+        api.get_song.assert_awaited_once_with(song.id)
 
     async def test_concurrent_webplayback_and_tag_requests_share_fetch(self):
         api = fake_api()
@@ -411,7 +411,7 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
         tags = await TagResolver(wrapper_api=wrapper).get_tags(video)
         self.assertEqual(tags.title, "Wrapper Video")
         self.assertEqual(tags.media_type, 6)
-        api.get_music_video.assert_not_awaited()
+        api.get_music_video.assert_awaited_once_with(video.id)
         wrapper.get_playback.assert_awaited_once_with(video.id)
 
     async def test_video_itunes_page_lookup_and_album_enrichment(self):
@@ -484,6 +484,7 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
                     "attributes": {
                         "name": "Video",
                         "url": "https://music.apple.com/us/music-video/name/299199411?i=1",
+                        "playParams": {"id": "different-id", "kind": "musicVideo"},
                     },
                 }
             ]

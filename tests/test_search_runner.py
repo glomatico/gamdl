@@ -32,11 +32,22 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
                         "attributes": {"name": "Video 1"},
                     },
                 ],
-                "uploaded-videos": [
+                "playlists": [
                     {
-                        "id": "u1",
-                        "type": "uploaded-videos",
-                        "attributes": {"name": "Uploaded 1"},
+                        "id": "pl.editorial",
+                        "type": "playlists",
+                        "attributes": {
+                            "name": "Editorial playlist",
+                            "playlistType": "editorial",
+                        },
+                    },
+                    {
+                        "id": "pl.user",
+                        "type": "playlists",
+                        "attributes": {
+                            "name": "Community playlist",
+                            "playlistType": "user-shared",
+                        },
                     },
                 ],
             }
@@ -49,17 +60,27 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
         async def select(caches, term, *, media_type):
             seen_caches.append(caches)
             self.assertEqual(term, "example")
-            self.assertEqual(media_type, "songs" if media_type else None)
             # Simulate the user opening some categories, never all automatically.
-            await caches["songs"].get(0)
             if media_type:
-                return {"songs": (1,)}
+                await caches[media_type].get(0)
+                return {media_type: (1,) if media_type == "songs" else (0,)}
+            await caches["songs"].get(0)
             await caches["music-videos"].get(0)
-            await caches["uploaded-videos"].get(0)
+            await caches["playlists"].get(0)
+            await caches["user-playlists"].get(0)
             return {
                 "songs": (1,),
                 "music-videos": (0,),
-                "uploaded-videos": (0,),
+                "playlists": (0,),
+                "user-playlists": (0,),
+            }
+
+        async def playlist_tracks(playlist_id, *, is_library):
+            self.assertFalse(is_library)
+            yield {
+                "id": f"track.{playlist_id}",
+                "type": "songs",
+                "attributes": {"name": f"Track in {playlist_id}"},
             }
 
         async def download(media, **kwargs):
@@ -70,6 +91,7 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         api.get_search_results = AsyncMock(side_effect=get_search)
         api.get_extended_api_data = AsyncMock(side_effect=get_next)
+        api.iter_playlist_tracks = playlist_tracks
         downloader = Mock(itunes_api=Mock())
         downloader.download = AsyncMock(side_effect=download)
         options = RipOptions(urls=("search",), no_progress=True)
@@ -97,16 +119,23 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         return code, queries, next_calls, downloaded, seen_caches, picker
 
-    async def test_downloads_explicit_selections_across_all_three_types(self):
+    async def test_downloads_explicit_selections_across_songs_videos_and_playlists(
+        self,
+    ):
         code, queries, next_calls, downloaded, seen_caches, picker = await self._run()
         self.assertEqual(code, 0)
         self.assertEqual(
             downloaded,
-            [("s2", "songs"), ("v1", "music-videos"), ("u1", "uploaded-videos")],
+            [
+                ("s2", "songs"),
+                ("v1", "music-videos"),
+                ("track.pl.editorial", "songs"),
+                ("track.pl.user", "songs"),
+            ],
         )
         self.assertEqual(
             [types for _, types, _ in queries],
-            ["songs", "music-videos", "uploaded-videos"],
+            ["songs", "music-videos", "playlists"],
         )
         self.assertEqual(next_calls, [])
         self.assertEqual(len(seen_caches), 1)
@@ -117,6 +146,12 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(downloaded, [("s2", "songs")])
         self.assertEqual([types for _, types, _ in queries], ["songs"])
+
+    async def test_user_shared_playlist_type_uses_catalog_playlist_search(self):
+        code, queries, _, downloaded, _, _ = await self._run(media_type="user-playlist")
+        self.assertEqual(code, 0)
+        self.assertEqual(downloaded, [("track.pl.user", "songs")])
+        self.assertEqual([kind for _, kind, _ in queries], ["playlists"])
 
     async def test_feeling_lucky_stays_noninteractive(self):
         code, queries, _, downloaded, _, picker = await self._run(

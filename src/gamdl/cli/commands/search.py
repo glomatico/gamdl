@@ -18,8 +18,11 @@ def search(options: SearchOptions) -> None:
         raise click.UsageError("Provide a nonempty search term")
     if options.feeling_lucky and not options.media_type:
         raise click.UsageError("--feeling-lucky requires --type")
-    if options.search_api == "itunes" and options.media_type == "uploaded-video":
-        raise click.UsageError("iTunes search does not support uploaded videos")
+    if options.search_api == "itunes" and options.media_type in {
+        "playlist",
+        "user-playlist",
+    }:
+        raise click.UsageError("iTunes search does not support playlists")
     if not options.feeling_lucky:
         require_terminal("Search selection")
     from .runner import run_rip

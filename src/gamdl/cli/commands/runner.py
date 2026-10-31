@@ -474,7 +474,8 @@ async def run_rip(options: RipOptions) -> int:
                                     type_map = {
                                         "song": "songs",
                                         "music-video": "music-videos",
-                                        "uploaded-video": "uploaded-videos",
+                                        "playlist": "playlists",
+                                        "user-playlist": "user-playlists",
                                     }
                                     chosen_type = (
                                         type_map[options.search_type]
@@ -484,12 +485,12 @@ async def run_rip(options: RipOptions) -> int:
                                     search_api = getattr(
                                         options, "search_api", "apple-music"
                                     )
-                                    if (
-                                        search_api == "itunes"
-                                        and chosen_type == "uploaded-videos"
-                                    ):
+                                    if search_api == "itunes" and chosen_type in {
+                                        "playlists",
+                                        "user-playlists",
+                                    }:
                                         raise click.UsageError(
-                                            "iTunes search does not support uploaded videos"
+                                            "iTunes search does not support playlists"
                                         )
                                     resource_types = (
                                         (chosen_type,)
@@ -546,7 +547,17 @@ async def run_rip(options: RipOptions) -> int:
                                         last_index = max(wanted)
                                         async for index, metadata in cache.iter_items():
                                             if index in wanted:
-                                                if (
+                                                if resource_type in {
+                                                    "playlists",
+                                                    "user-playlists",
+                                                }:
+                                                    async for (
+                                                        track
+                                                    ) in resolver.from_playlist(
+                                                        metadata["id"]
+                                                    ):
+                                                        yield track
+                                                elif (
                                                     metadata.get("_search_api")
                                                     == "itunes"
                                                 ):

@@ -15,6 +15,7 @@ from gamdl.pagination import MediaPage, PageCache
 ITUNES_SEARCH_TYPES = ("songs", "music-videos")
 ITUNES_MAX_RESULTS = 200
 SEARCH_PAGE_SIZE = 50
+PLAYLIST_SEARCH_TYPES = ("playlists", "user-playlists")
 
 
 def normalize_itunes_results(
@@ -73,6 +74,38 @@ def create_search_caches(
 
     caches = {}
     itunes_results: dict[str, tuple[dict[str, Any], ...]] = {}
+    playlist_pages: dict[str | None, MediaPage[dict]] = {}
+
+    async def load_apple_music_page(
+        resource_type: str, cursor: str | None
+    ) -> MediaPage[dict]:
+        """Share the catalog playlist query across editorial/user categories."""
+        if resource_type == "playlists" and cursor in playlist_pages:
+            return playlist_pages[cursor]
+        response = (
+            await api.get_extended_api_data(cursor)
+            if cursor is not None
+            else await api.get_search_results(
+                term, types=resource_type, limit=SEARCH_PAGE_SIZE
+            )
+        )
+        groups = response.get("results")
+        if not isinstance(groups, dict):
+            raise GamdlApiResponseError("Invalid Apple Music search response")
+        group = groups.get(resource_type)
+        if group is None:
+            if cursor is not None:
+                raise GamdlApiResponseError(
+                    "Missing Apple Music search result type in pagination"
+                )
+            return MediaPage(())
+        if not isinstance(group, dict) or not isinstance(group.get("data"), list):
+            raise GamdlApiResponseError("Invalid Apple Music search results")
+        page = MediaPage(tuple(group["data"]), group.get("next"))
+        if resource_type == "playlists":
+            playlist_pages[cursor] = page
+        return page
+
     for resource_type in resource_types:
         if search_api == "itunes":
             entity = "song" if resource_type == "songs" else "musicVideo"
@@ -107,28 +140,32 @@ def create_search_caches(
                 *,
                 resource_type=resource_type,
             ) -> MediaPage[dict]:
-                response = (
-                    await api.get_extended_api_data(cursor)
-                    if cursor is not None
-                    else await api.get_search_results(
-                        term, types=resource_type, limit=SEARCH_PAGE_SIZE
-                    )
-                )
-                groups = response.get("results")
-                if not isinstance(groups, dict):
-                    raise GamdlApiResponseError("Invalid Apple Music search response")
-                group = groups.get(resource_type)
-                if group is None:
-                    if cursor is not None:
-                        raise GamdlApiResponseError(
-                            "Missing Apple Music search result type in pagination"
+                if resource_type not in PLAYLIST_SEARCH_TYPES:
+                    return await load_apple_music_page(resource_type, cursor)
+
+                # Both playlist categories use the *same* public catalog
+                # search; Apple's response distinguishes them by playlistType.
+                # The API does not guarantee any user-shared results are
+                # indexed for a term/storefront.
+                current_cursor = cursor
+                for _ in range(3):
+                    raw = await load_apple_music_page("playlists", current_cursor)
+                    items = tuple(
+                        item
+                        for item in raw.items
+                        if isinstance(item, dict)
+                        and isinstance(item.get("attributes"), dict)
+                        and (
+                            item["attributes"].get("playlistType") == "user-shared"
+                            if resource_type == "user-playlists"
+                            else item["attributes"].get("playlistType")
+                            in {"editorial", "external"}
                         )
-                    return MediaPage(())
-                if not isinstance(group, dict) or not isinstance(
-                    group.get("data"), list
-                ):
-                    raise GamdlApiResponseError("Invalid Apple Music search results")
-                return MediaPage(tuple(group["data"]), group.get("next"))
+                    )
+                    if items or raw.next_cursor is None:
+                        return MediaPage(items, raw.next_cursor)
+                    current_cursor = raw.next_cursor
+                return MediaPage((), current_cursor)
 
             caches[resource_type] = PageCache(load_apple_music)
 

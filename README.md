@@ -168,6 +168,21 @@ resolved using authoritative Apple Music catalog metadata before download.
 Apple documents an approximate iTunes Search API limit of 20 requests/minute;
 changing backends doesn't remove throttling limits.
 
+Apple Music search also offers **Playlists** (editorial and external curators)
+and **User playlists** (public, user-shared playlists). The latter are
+identified by the catalog's `playlistType: user-shared` field; Apple's search
+index may not return any for a particular term/storefront. Selecting a
+playlist expands its tracks for download, just like opening a playlist link:
+
+```bash
+gamdl search "Michael Jackson" --type playlist
+gamdl search "Michael Jackson" --type user-playlist
+```
+
+The Apple Music search endpoint does **not** accept `uploaded-videos` as a
+search type (HTTP 400). Downloading a supported uploaded-video URL directly
+with `gamdl rip` remains available.
+
 Use `--feeling-lucky` with `--type` to select the first result automatically:
 
 ```bash

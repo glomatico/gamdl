@@ -9,7 +9,7 @@ from gamdl.cli.main import main
 
 
 class SearchCliTests(unittest.TestCase):
-    def test_itunes_is_a_supported_backend_and_uploaded_videos_are_rejected(self):
+    def test_itunes_is_supported_but_playlist_search_is_not(self):
         captured = []
 
         async def fake_run(options):
@@ -42,13 +42,29 @@ class SearchCliTests(unittest.TestCase):
                     "--search-api",
                     "itunes",
                     "--type",
-                    "uploaded-video",
+                    "user-playlist",
                     "--feeling-lucky",
                 ],
             )
             self.assertNotEqual(result.exit_code, 0)
-            self.assertIn("does not support uploaded videos", result.output)
+            self.assertIn("does not support playlists", result.output)
             self.assertEqual(len(captured), 1)
+
+            for backend in ("apple-music", "itunes"):
+                removed = CliRunner().invoke(
+                    main,
+                    [
+                        "--no-config",
+                        "search",
+                        "Test",
+                        "--search-api",
+                        backend,
+                        "--type",
+                        "uploaded-video",
+                    ],
+                )
+                self.assertNotEqual(removed.exit_code, 0)
+                self.assertIn("Invalid value", removed.output)
 
             invalid = CliRunner().invoke(
                 main,

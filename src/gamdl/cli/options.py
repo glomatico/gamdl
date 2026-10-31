@@ -301,7 +301,9 @@ SearchOptions = make_dataclass(
                 str | None,
                 option(
                     "--type",
-                    type=click.Choice(["song", "music-video", "uploaded-video"]),
+                    type=click.Choice(
+                        ["song", "music-video", "playlist", "user-playlist"]
+                    ),
                 ),
             ],
             field(default=None),

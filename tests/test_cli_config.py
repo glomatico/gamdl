@@ -242,22 +242,31 @@ class CliConfigTests(unittest.TestCase):
                     load_config(self.path)
                 self.assertEqual(self.path.read_text(), text)
 
-    def test_profiles_removed_without_silently_rewriting_user_config(self):
-        original = "download:\n  concurrency: 4\nprofiles:\n  fast:\n    download:\n      concurrent_downloads: 4\n"
+    def test_obsolete_profiles_are_dropped_like_any_unknown_key(self):
+        original = (
+            "download:\n  concurrency: 4\n"
+            "profiles:\n  fast:\n    download:\n      concurrent_downloads: 4\n"
+        )
         self._write(original)
-        with self.assertRaisesRegex(ConfigError, "profiles are no longer supported"):
-            load_config(self.path)
-        self.assertEqual(self.path.read_text(), original)
-        self.assertFalse(self.path.with_name("config.yaml.bak").exists())
         cli = CliRunner().invoke(
             main, ["--config", str(self.path), "config", "validate"]
         )
-        self.assertNotEqual(cli.exit_code, 0)
-        self.assertIn("profiles are no longer supported", cli.output)
-
-        self._write("download:\n  concurrency: 4\n")
+        self.assertEqual(cli.exit_code, 0, cli.output)
+        rewritten = yaml.safe_load(self.path.read_text())
+        self.assertNotIn("profiles", rewritten)
+        self.assertEqual(rewritten["download"]["concurrency"], 4)
+        self.assertEqual(self.path.with_name("config.yaml.bak").read_text(), original)
         self.assertEqual(load_config(self.path).download.concurrency, 4)
         self.assertEqual(load_config(None).download.concurrent_downloads, 2)
+
+        # Valid settings remain valid even when the discarded section has
+        # settings that would be invalid under the current schema.
+        self._write(
+            "download:\n  concurrency: 6\n"
+            "profiles:\n  unused:\n    download:\n      concurrency: invalid\n"
+        )
+        self.assertEqual(load_config(self.path).download.concurrency, 6)
+        self.assertNotIn("profiles", yaml.safe_load(self.path.read_text()))
 
         result = CliRunner().invoke(
             main, ["--no-config", "--profile", "old", "config", "show"]

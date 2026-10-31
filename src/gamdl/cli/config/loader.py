@@ -262,8 +262,6 @@ def save_auth_configuration(
             raise ConfigError("YAML config must be a mapping")
     else:
         loaded = asdict(AppConfig())
-    if "profiles" in loaded:
-        raise ConfigError("YAML profiles are no longer supported; remove 'profiles'")
     auth = loaded.setdefault("auth", {})
     auth.update(
         mode=mode,
@@ -275,7 +273,7 @@ def save_auth_configuration(
     _merge(defaults, loaded)
     _validate(defaults)
     try:
-        _persist(path, loaded)
+        _persist(path, _normalize(loaded, asdict(AppConfig())))
     except OSError as exc:
         raise ConfigError("Unable to save authentication configuration") from exc
 
@@ -293,8 +291,6 @@ def load_config(path: Path | None) -> AppConfig:
         loaded = {}
     if not isinstance(loaded, dict):
         raise ConfigError("YAML config must be a mapping")
-    if "profiles" in loaded:
-        raise ConfigError("YAML profiles are no longer supported; remove 'profiles'")
     schema = asdict(AppConfig())
     normalized = _normalize(loaded, schema)
     _merge(defaults, loaded)

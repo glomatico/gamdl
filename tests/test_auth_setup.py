@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from rich.console import Console
 
 from gamdl.api import GamdlAuthenticationError
-from gamdl.cli.config.loader import load_config
+from gamdl.cli.config.loader import load_config, save_auth_configuration
 from gamdl.cli.main import main
 from gamdl.cli.session import authenticate
 from gamdl.cli.tui.wizard import WizardBack
@@ -70,6 +70,27 @@ class AuthSetupTests(unittest.TestCase):
 
     def invoke(self, *args):
         return self.runner.invoke(main, ["--config", str(self.path), *args])
+
+    def test_auth_save_normalizes_obsolete_keys(self):
+        original = (
+            "download:\n  concurrency: 3\n  unused: 100\n"
+            "profiles:\n  unused:\n    download:\n      concurrency: 11\n"
+        )
+        self.path.write_text(original)
+        save_auth_configuration(
+            self.path,
+            mode="wrapper",
+            cookies_path="cookies.txt",
+            wrapper_url="http://127.0.0.1:1234",
+            media_user_token=None,
+        )
+        saved = yaml.safe_load(self.path.read_text())
+        self.assertNotIn("profiles", saved)
+        self.assertNotIn("unused", saved["download"])
+        self.assertEqual(saved["download"]["concurrency"], 3)
+        self.assertEqual(saved["auth"]["mode"], "wrapper")
+        self.assertEqual(saved["auth"]["wrapper_url"], "http://127.0.0.1:1234")
+        self.assertEqual(self.path.with_name("config.yaml.bak").read_text(), original)
 
     def test_wrapper_url_prefilled_and_saved_only_after_validation(self):
         self.path.write_text("auth:\n  wrapper_url: http://custom-wrapper:8080\n")

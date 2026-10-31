@@ -1,9 +1,11 @@
 """UI-neutral lifecycle events for download clients (terminal, bots, etc.)."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from gamdl.stream import StreamProgress
 

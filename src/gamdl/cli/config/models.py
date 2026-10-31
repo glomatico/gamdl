@@ -81,6 +81,11 @@ class UiConfig:
 
 
 @dataclass(frozen=True)
+class SearchConfig:
+    api: str = "apple-music"
+
+
+@dataclass(frozen=True)
 class AppConfig:
     config_version: int = 1
     auth: AuthConfig = field(default_factory=AuthConfig)
@@ -88,3 +93,4 @@ class AppConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     ui: UiConfig = field(default_factory=UiConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)

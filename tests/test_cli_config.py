@@ -13,6 +13,44 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_search_api_defaults_yaml_and_cli_override(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        self.assertEqual(load_config(None).search.api, "apple-music")
+        self.assertEqual(
+            click_default_map(load_config(None))["search_api"], "apple-music"
+        )
+        self._write("search:\n  api: itunes\n")
+        self.assertEqual(load_config(self.path).search.api, "itunes")
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            cli = CliRunner()
+            base = [
+                "--config",
+                str(self.path),
+                "search",
+                "Test",
+                "--type",
+                "song",
+                "--feeling-lucky",
+            ]
+            default = cli.invoke(main, base)
+            self.assertEqual(default.exit_code, 0, default.output)
+            self.assertEqual(received[-1].search_api, "itunes")
+            overridden = cli.invoke(main, [*base, "--search-api", "apple-music"])
+            self.assertEqual(overridden.exit_code, 0, overridden.output)
+            self.assertEqual(received[-1].search_api, "apple-music")
+
+        self._write("search:\n  api: spotify\n")
+        with self.assertRaisesRegex(ConfigError, "search.api"):
+            load_config(self.path)
+        self.assertEqual(self.path.read_text(), "search:\n  api: spotify\n")
+
     def test_cover_format_yaml_cli_and_raw_rejection(self):
         from gamdl.cli.config.loader import click_default_map
 

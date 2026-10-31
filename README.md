@@ -145,6 +145,29 @@ Search the Apple Music catalog and interactively select results:
 gamdl search "Thriller" --type song
 ```
 
+Switch between the authenticated Apple Music catalog search (default) and
+Apple's public iTunes Search API:
+
+```bash
+gamdl search "Caravan Palace" --search-api itunes
+gamdl search "Caravan Palace" --search-api apple-music
+```
+
+Set the backend in YAML to make iTunes the default:
+
+```yaml
+search:
+  api: itunes
+```
+
+Override it for a single command with `--search-api`. iTunes search supports songs and
+music videos, but not uploaded videos or playlists. Its public Search API
+returns up to 200 results per category; Gamdl displays those in local pages
+without relying on undocumented iTunes pagination. Selected items are then
+resolved using authoritative Apple Music catalog metadata before download.
+Apple documents an approximate iTunes Search API limit of 20 requests/minute;
+changing backends doesn't remove throttling limits.
+
 Use `--feeling-lucky` with `--type` to select the first result automatically:
 
 ```bash

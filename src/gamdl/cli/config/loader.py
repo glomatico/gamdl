@@ -21,6 +21,7 @@ from .models import (
     DatabaseConfig,
     DownloadConfig,
     OutputConfig,
+    SearchConfig,
     UiConfig,
 )
 
@@ -70,6 +71,7 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         "output": OutputConfig,
         "database": DatabaseConfig,
         "ui": UiConfig,
+        "search": SearchConfig,
     }
     for section, cls in groups.items():
         defaults = asdict(cls())
@@ -121,6 +123,9 @@ def _validate(config: dict[str, Any]) -> AppConfig:
     output = OutputConfig(**config["output"])
     database = DatabaseConfig(**config["database"])
     ui = UiConfig(**config["ui"])
+    search = SearchConfig(**config["search"])
+    if search.api not in {"apple-music", "itunes"}:
+        raise ConfigError("search.api must be apple-music or itunes")
     if auth.mode not in {None, "cookies", "wrapper", "media-user-token"}:
         raise ConfigError(
             "auth.mode must be null, cookies, wrapper or media-user-token"
@@ -212,7 +217,12 @@ def _validate(config: dict[str, Any]) -> AppConfig:
     except ValueError as exc:
         raise ConfigError(f"Invalid output template: {exc}") from exc
     return AppConfig(
-        auth=auth, download=download, output=output, database=database, ui=ui
+        auth=auth,
+        download=download,
+        output=output,
+        database=database,
+        ui=ui,
+        search=search,
     )
 
 
@@ -364,4 +374,5 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "no_progress": not ui.progress,
         "max_visible_tracks": ui.max_visible_tracks,
         "debug": ui.debug,
+        "search_api": config.search.api,
     }

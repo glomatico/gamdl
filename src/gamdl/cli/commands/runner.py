@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import click
 from rich.text import Text
 
-from gamdl.api import GamdlApiResponseError, ItunesApi
+from gamdl.api import ItunesApi
 from gamdl.cli.tui.search import select_search_results
 from gamdl.download import (
     Downloader,
@@ -38,7 +38,7 @@ from gamdl.media.constants import (
     DEFAULT_AUTO_SELECT,
     LIBRARY_AUTO_SELECT_NAMES,
 )
-from gamdl.pagination import MediaPage, PageCache
+from gamdl.search import ITUNES_SEARCH_TYPES, create_search_caches
 
 from ..errors import short_error as _short_error
 from ..options import TAG_NAMES
@@ -481,51 +481,42 @@ async def run_rip(options: RipOptions) -> int:
                                         if options.search_type is not None
                                         else None
                                     )
+                                    search_api = getattr(
+                                        options, "search_api", "apple-music"
+                                    )
+                                    if (
+                                        search_api == "itunes"
+                                        and chosen_type == "uploaded-videos"
+                                    ):
+                                        raise click.UsageError(
+                                            "iTunes search does not support uploaded videos"
+                                        )
                                     resource_types = (
                                         (chosen_type,)
                                         if chosen_type is not None
-                                        else tuple(type_map.values())
+                                        else (
+                                            ITUNES_SEARCH_TYPES
+                                            if search_api == "itunes"
+                                            else tuple(type_map.values())
+                                        )
                                     )
-                                    caches = {}
-                                    for resource_type in resource_types:
-
-                                        async def load(
-                                            cursor, resource_type=resource_type
-                                        ):
-                                            response = (
-                                                await api.get_extended_api_data(cursor)
-                                                if cursor is not None
-                                                else await api.get_search_results(
-                                                    options.search_term,
-                                                    types=resource_type,
-                                                    limit=50,
-                                                )
+                                    itunes = (
+                                        await stack.enter_async_context(
+                                            await ItunesApi.create(
+                                                storefront=api.storefront,
+                                                search_only=True,
                                             )
-                                            results = response.get("results")
-                                            if not isinstance(results, dict):
-                                                raise GamdlApiResponseError(
-                                                    "Invalid Apple Music search response"
-                                                )
-                                            group = results.get(resource_type)
-                                            if group is None:
-                                                if cursor is not None:
-                                                    raise GamdlApiResponseError(
-                                                        "Missing Apple Music search result type in pagination"
-                                                    )
-                                                return MediaPage(())
-                                            if not isinstance(
-                                                group, dict
-                                            ) or not isinstance(
-                                                group.get("data"), list
-                                            ):
-                                                raise GamdlApiResponseError(
-                                                    "Invalid Apple Music search results"
-                                                )
-                                            return MediaPage(
-                                                tuple(group["data"]), group.get("next")
-                                            )
-
-                                        caches[resource_type] = PageCache(load)
+                                        )
+                                        if search_api == "itunes"
+                                        else None
+                                    )
+                                    caches = create_search_caches(
+                                        api,
+                                        options.search_term,
+                                        resource_types,
+                                        search_api=search_api,
+                                        itunes_api=itunes,
+                                    )
 
                                     if options.feeling_lucky:
                                         assert chosen_type is not None
@@ -555,11 +546,25 @@ async def run_rip(options: RipOptions) -> int:
                                         last_index = max(wanted)
                                         async for index, metadata in cache.iter_items():
                                             if index in wanted:
-                                                yield Media.from_metadata(
-                                                    metadata,
-                                                    api=api,
-                                                    cover_cache=resolver.cover_cache,
-                                                )
+                                                if (
+                                                    metadata.get("_search_api")
+                                                    == "itunes"
+                                                ):
+                                                    # iTunes records are not Apple
+                                                    # Music catalog metadata. Resolve
+                                                    # the selected ID from Apple Music.
+                                                    yield Media.from_id(
+                                                        metadata["id"],
+                                                        media_type=metadata["type"],
+                                                        api=api,
+                                                        cover_cache=resolver.cover_cache,
+                                                    )
+                                                else:
+                                                    yield Media.from_metadata(
+                                                        metadata,
+                                                        api=api,
+                                                        cover_cache=resolver.cover_cache,
+                                                    )
                                             if index >= last_index:
                                                 break
 

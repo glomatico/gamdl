@@ -11,3 +11,4 @@ APPLE_MUSIC_LICENSE_URL = (
 )
 MUSICKIT_URL = "https://music.apple.com/includes/js-cdn/musickit/v3/amp/musickit.js"
 ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
+ITUNES_SEARCH_URL = "https://itunes.apple.com/search"

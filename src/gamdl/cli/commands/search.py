@@ -18,6 +18,8 @@ def search(options: SearchOptions) -> None:
         raise click.UsageError("Provide a nonempty search term")
     if options.feeling_lucky and not options.media_type:
         raise click.UsageError("--feeling-lucky requires --type")
+    if options.search_api == "itunes" and options.media_type == "uploaded-video":
+        raise click.UsageError("iTunes search does not support uploaded videos")
     if not options.feeling_lucky:
         require_terminal("Search selection")
     from .runner import run_rip
@@ -26,11 +28,12 @@ def search(options: SearchOptions) -> None:
         **{
             k: v
             for k, v in asdict(options).items()
-            if k not in {"term", "media_type", "feeling_lucky"}
+            if k not in {"term", "media_type", "feeling_lucky", "search_api"}
         },
         urls=("search",),
     )
     rip_options.search_term = options.term
+    rip_options.search_api = options.search_api
     rip_options.search_type = options.media_type
     rip_options.feeling_lucky = options.feeling_lucky
     try:

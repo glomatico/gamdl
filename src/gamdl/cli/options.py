@@ -318,6 +318,18 @@ SearchOptions = make_dataclass(
             ],
             field(default=False),
         ),
+        (
+            "search_api",
+            Annotated[
+                str,
+                option(
+                    "--search-api",
+                    type=click.Choice(["apple-music", "itunes"]),
+                    help="Search Apple Music or the public iTunes catalog",
+                ),
+            ],
+            field(default="apple-music"),
+        ),
     ],
     namespace={"__module__": __name__},
 )

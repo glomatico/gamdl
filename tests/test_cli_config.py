@@ -161,7 +161,11 @@ class CliConfigTests(unittest.TestCase):
             main, ["--config", str(self.path), "config", "path"]
         )
         self.assertEqual(path_result.stdout.strip(), str(self.path))
-        self.assertIn("GAMDL 4.0", path_result.stderr)
+        self.assertIn("Gamdl 4.0", path_result.stderr)
+        self.assertIn("# Gamdl 4.0 configuration", content)
+        version = runner.invoke(main, ["--version"])
+        self.assertEqual(version.exit_code, 0, version.output)
+        self.assertIn("Gamdl, version 4.0", version.stdout)
         self.assertEqual(
             runner.invoke(
                 main, ["--config", str(self.path), "config", "init"]

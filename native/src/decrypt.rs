@@ -443,7 +443,7 @@ impl Mp4Decryptor {
                 && descriptions
                     .iter()
                     .all(|desc| desc.scheme == EncryptionScheme::Cbcs);
-            // Older GAMDL video decryption uses its separately licensed
+            // Older Gamdl video decryption uses its separately licensed
             // video and audio content keys without matching the KID against
             // tenc. On Apple Music video HLS, tenc may contain a zero KID
             // placeholder for either track. The Python caller limits this
@@ -688,7 +688,7 @@ impl Mp4Decryptor {
                 if subsamples.is_empty() {
                     subsamples.push((0, sample.len()));
                 }
-                // The old GAMDL CBCS path assembled the encrypted regions of
+                // The old Gamdl CBCS path assembled the encrypted regions of
                 // an entire sample before AES-CBC processing. Individual senc
                 // subsample ranges may split a 16-byte CBC block: decrypting
                 // them separately would leave such a block as ciphertext.

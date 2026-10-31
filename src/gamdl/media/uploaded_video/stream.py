@@ -14,7 +14,7 @@ from ..stream import HttpStream
 
 
 class UploadedVideoQuality(str, Enum):
-    """Apple Music asset-token variants in GAMDL 3.x preference order."""
+    """Apple Music asset-token variants in Gamdl 3.x preference order."""
 
     HD_1080P = "1080pHdVideo"
     HD_720P = "720pHdVideo"

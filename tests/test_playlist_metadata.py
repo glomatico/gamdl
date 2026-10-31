@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
-from gamdl.download import Downloader, FileStatus, PathFormatter, PlaylistTags
+from gamdl.download import Downloader, PathFormatter, PlaylistTags
 from gamdl.media import MediaResolver, MediaSource, Playlist, Song
 
 
@@ -83,7 +83,14 @@ class PlaylistMetadataTests(unittest.IsolatedAsyncioTestCase):
                 (root / "Playlists" / "DJ" / "Favorites.m3u8").read_text().splitlines()
             )
             self.assertEqual(
-                entries, ["#EXTM3U", *[f"../../song-{i}.m4a" for i in range(8)]]
+                entries,
+                [
+                    "#EXTM3U",
+                    "#PLAYLIST:Favorites",
+                    "#Gamdl-PLAYLIST-ARTIST:DJ",
+                    "#Gamdl-APPLE-MUSIC-ID:p.123",
+                    *[f"../../song-{i}.m4a" for i in range(8)],
+                ],
             )
 
     async def test_explicit_index_overrides_occurrence_and_does_not_refetch(self):
@@ -102,8 +109,8 @@ class PlaylistMetadataTests(unittest.IsolatedAsyncioTestCase):
             entries = (
                 (root / "Playlists" / "DJ" / "Favorites.m3u8").read_text().splitlines()
             )
-            self.assertEqual(entries[1:5], ["", "", "", ""])
-            self.assertEqual(entries[5], "../../track.m4a")
+            self.assertEqual(entries[4:8], ["", "", "", ""])
+            self.assertEqual(entries[8], "../../track.m4a")
 
     async def test_explicit_tags_remain_supported_without_playlist_reference(self):
         with tempfile.TemporaryDirectory() as directory:

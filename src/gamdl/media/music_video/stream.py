@@ -140,7 +140,7 @@ class MusicVideoStreamResolver:
         Wrapper supplies account credentials and sometimes tagging metadata,
         but its playback endpoint does not offer music-video HLS streams.
         Catalog videos with a different ID in their canonical URL should use
-        web playback first, matching GAMDL 3.x's behavior.
+        web playback first, matching Gamdl 3.x's behavior.
         """
         metadata = await self.media.get_metadata()
         attributes = metadata.get("attributes")
@@ -338,7 +338,7 @@ class MusicVideoStreamResolver:
             video_group = getattr(video_info, "audio", None)
             # Separate A/V tracks can be chosen independently. Audio groups
             # from other variants in the same master may offer different
-            # codecs (such as AAC versus Atmos), as in GAMDL 3.x.
+            # codecs (such as AAC versus Atmos), as in Gamdl 3.x.
             group_codecs = {
                 group: str(getattr(playlist.stream_info, "codecs", "") or "").lower()
                 for playlist in manifest.playlists

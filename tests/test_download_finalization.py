@@ -7,18 +7,19 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import Mock
 
 from gamdl.download import (
-    DownloadResult,
-    MediaDatabase,
-    PlaylistWriter,
     DatabaseStatus,
+    DownloadResult,
     FileStatus,
+    MediaDatabase,
     OverwritePolicy,
+    PlaylistTags,
+    PlaylistWriter,
 )
 from gamdl.download.publication import publish_bytes, publish_bytes_result
 from gamdl.media import MediaSource, Song, SongCodec
-from unittest.mock import Mock
 
 
 class PublicationAndFinalizationStorageTests(unittest.TestCase):
@@ -83,6 +84,84 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             playlist.add(self.directory / "song.m4a")
         self.assertEqual(playlist.path.read_text(), "not an m3u header\n")
+
+    def test_playlist_metadata_headers_preserved_and_updated(self):
+        playlist = PlaylistWriter(
+            self.directory / "list.m3u8",
+            tags=PlaylistTags(
+                title="Old\n#INJECTED", artist="A\rB", playlist_id="p.123"
+            ),
+        )
+        media = self.directory / "a.m4a"
+        self.assertTrue(playlist.add(media, position=1))
+        self.assertEqual(
+            playlist.path.read_text().splitlines(),
+            [
+                "#EXTM3U",
+                "#PLAYLIST:Old #INJECTED",
+                "#Gamdl-PLAYLIST-ARTIST:A B",
+                "#Gamdl-APPLE-MUSIC-ID:p.123",
+                "",
+                "a.m4a",
+            ],
+        )
+        self.assertFalse(playlist.add(media, position=1))
+        renamed = PlaylistWriter(playlist.path, tags=PlaylistTags(title="Updated"))
+        self.assertTrue(renamed.add(media, position=1))
+        self.assertEqual(playlist.path.read_text().splitlines()[1], "#PLAYLIST:Updated")
+        self.assertFalse(renamed.add(media, position=1))
+
+    def test_playlist_with_existing_comments_preserves_extinf_and_track_positions(self):
+        path = self.directory / "existing.m3u8"
+        path.write_text(
+            "#EXTM3U\n#PLAYLIST:Original\n#CUSTOM:Keep\n"
+            "#EXTINF:10,First song\nfirst.m4a\n\n",
+            encoding="utf-8",
+        )
+        writer = PlaylistWriter(path)
+        self.assertTrue(writer.add(self.directory / "second.m4a", position=1))
+        self.assertEqual(
+            path.read_text(),
+            "#EXTM3U\n#PLAYLIST:Original\n#CUSTOM:Keep\n"
+            "#EXTINF:10,First song\nfirst.m4a\nsecond.m4a\n",
+        )
+        self.assertFalse(writer.add(self.directory / "second.m4a", position=1))
+
+    def test_legacy_headerless_playlists_remain_headerless_without_metadata(self):
+        path = self.directory / "legacy.m3u8"
+        path.write_text("#EXTM3U\nold.m4a\n")
+        self.assertTrue(PlaylistWriter(path).add(self.directory / "new.m4a"))
+        self.assertEqual(path.read_text(), "#EXTM3U\nold.m4a\nnew.m4a\n")
+
+    def test_legacy_uppercase_metadata_is_read_and_rebranded_on_write(self):
+        from gamdl.download.playlist import playlist_tags_from_header, split_playlist
+
+        path = self.directory / "old-metadata.m3u8"
+        path.write_text(
+            "#EXTM3U\n#PLAYLIST:Favorites\n"
+            "#GAMDL-PLAYLIST-ARTIST:DJ\n"
+            "#GAMDL-APPLE-MUSIC-ID:p.123\n"
+            "a.m4a\n",
+            encoding="utf-8",
+        )
+        header, _ = split_playlist(path.read_text().splitlines())
+        self.assertEqual(
+            playlist_tags_from_header(header),
+            PlaylistTags(title="Favorites", artist="DJ", playlist_id="p.123"),
+        )
+        writer = PlaylistWriter(path)
+        self.assertTrue(writer.add(self.directory / "a.m4a", position=0))
+        self.assertEqual(
+            path.read_text().splitlines(),
+            [
+                "#EXTM3U",
+                "#PLAYLIST:Favorites",
+                "#Gamdl-PLAYLIST-ARTIST:DJ",
+                "#Gamdl-APPLE-MUSIC-ID:p.123",
+                "a.m4a",
+            ],
+        )
+        self.assertFalse(writer.add(self.directory / "a.m4a", position=0))
 
     def test_database_index_upsert_and_skip_preserves_codec(self):
         db = MediaDatabase(self.directory / "index" / "media.sqlite3")

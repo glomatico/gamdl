@@ -650,7 +650,7 @@ fn mux_plan<I: Input + ?Sized>(
 ) -> Result<(Vec<u8>, Vec<u8>, Vec<Track>, u64)> {
     let (_, video_moov) = locate(video)?;
     let (_, audio_moov) = locate(audio)?;
-    // M4V is the GAMDL default even for HEVC; mp42 is an explicit opt-in.
+    // M4V is the Gamdl default even for HEVC; mp42 is an explicit opt-in.
     let ftyp = file_type(if mp4_brand { b"mp42" } else { b"M4V " })?;
     let inputs = [video, audio];
     let mut tracks = Vec::new();

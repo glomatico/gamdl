@@ -36,7 +36,7 @@ class UploadedVideo(Media):
         ask: bool = False,
         selector: UploadedVideoStreamSelector | None = None,
     ) -> HttpStream:
-        """Select a DRM-free progressive asset using GAMDL 3.x quality ranking."""
+        """Select a DRM-free progressive asset using Gamdl 3.x quality ranking."""
         return await UploadedVideoStreamResolver(self).get_stream(
             quality=quality,
             quality_priority=quality_priority,

@@ -286,3 +286,156 @@ class OrganizeTests(unittest.TestCase):
         )
         self.assertEqual(moved.exit_code, 0, moved.output)
         self.assertTrue(expected.exists())
+
+    def test_multiple_videos_keep_numbering_sidecars_index_and_playlists(self):
+        tags = Tags(title="Video", artist="Artist", media_type=6)
+        first = self.media("raw/Video.m4v", Tags(**{**vars(tags), "title_id": 123}))
+        second = self.media("raw/Video 2.m4v", Tags(**{**vars(tags), "title_id": 456}))
+        second.with_suffix(".jpg").write_bytes(b"artwork")
+        self.db.index_file(first, "music-videos", "123")
+        self.db.index_file(second, "music-videos", "456")
+        first_data, second_data = first.read_bytes(), second.read_bytes()
+        playlist = self.library / "Playlists" / "Me" / "Videos.m3u8"
+        playlist.parent.mkdir(parents=True)
+        playlist.write_text(
+            "#EXTM3U\n" + os.path.relpath(second, playlist.parent) + "\n"
+        )
+        preview = self.invoke("--dry-run")
+        self.assertEqual(preview.exit_code, 0, preview.output)
+        self.assertIn("would move 2", preview.output)
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("moved 2", result.output)
+        expected_first = self.library / "Artist/Unknown Album/Video.m4v"
+        expected_second = self.library / "Artist/Unknown Album/Video 2.m4v"
+        self.assertEqual(expected_first.read_bytes(), first_data)
+        self.assertEqual(expected_second.read_bytes(), second_data)
+        self.assertEqual(expected_second.with_suffix(".jpg").read_bytes(), b"artwork")
+        self.assertEqual(self.db.get(expected_first)["media_id"], "123")
+        self.assertEqual(self.db.get(expected_second)["media_id"], "456")
+        self.assertEqual(
+            playlist.read_text(),
+            "#EXTM3U\n" + os.path.relpath(expected_second, playlist.parent) + "\n",
+        )
+        repeated = self.invoke()
+        self.assertEqual(repeated.exit_code, 0, repeated.output)
+        self.assertIn("moved 0", repeated.output)
+
+    def test_video_destination_skips_occupied_sidecars(self):
+        first = self.media("raw/Video.m4v", Tags(title="Video", artist="Artist"))
+        first.with_suffix(".jpg").write_bytes(b"new artwork")
+        occupied_art = self.library / "Artist/Unknown Album/Video.jpg"
+        occupied_art.parent.mkdir(parents=True)
+        occupied_art.write_bytes(b"existing artwork")
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(occupied_art.read_bytes(), b"existing artwork")
+        target = self.library / "Artist/Unknown Album/Video 2.m4v"
+        self.assertTrue(target.is_file())
+        self.assertEqual(target.with_suffix(".jpg").read_bytes(), b"new artwork")
+
+    def test_video_can_reuse_slot_released_earlier_in_same_plan(self):
+        leaving = self.media(
+            "Artist/Unknown Album/Title.m4v",
+            Tags(title="Other", artist="Artist", title_id=111),
+        )
+        arriving = self.media(
+            "raw/incoming.m4v", Tags(title="Title", artist="Artist", title_id=222)
+        )
+        leaving_data, arriving_data = leaving.read_bytes(), arriving.read_bytes()
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("moved 2", result.output)
+        self.assertEqual(
+            (self.library / "Artist/Unknown Album/Other.m4v").read_bytes(),
+            leaving_data,
+        )
+        self.assertEqual(leaving.read_bytes(), arriving_data)
+        self.assertFalse(arriving.exists())
+        self.assertFalse((self.library / "Artist/Unknown Album/Title 2.m4v").exists())
+
+    def test_video_cycle_fails_safely_without_overwriting(self):
+        first = self.media(
+            "Artist/Unknown Album/A.m4v", Tags(title="B", artist="Artist")
+        )
+        second = self.media(
+            "Artist/Unknown Album/B.m4v", Tags(title="A", artist="Artist")
+        )
+        originals = (first.read_bytes(), second.read_bytes())
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("collisions 2", result.output)
+        self.assertEqual((first.read_bytes(), second.read_bytes()), originals)
+
+    def test_playlist_header_renames_and_rebases_paths(self):
+        old_song = self.media(
+            "raw/song.m4a",
+            Tags(title="Song", artist="Band", title_id=555),
+        )
+        playlist = self.library / "misc" / "original.m3u8"
+        playlist.parent.mkdir()
+        playlist.write_text(
+            "#EXTM3U\n#PLAYLIST:Road/Trip\n"
+            "#Gamdl-PLAYLIST-ARTIST:DJ\n"
+            "#Gamdl-APPLE-MUSIC-ID:p.123\n"
+            "#EXTINF:10,Sample\n" + os.path.relpath(old_song, playlist.parent) + "\n",
+        )
+        expected_playlist = self.library / "Playlists/DJ/Road_Trip.m3u8"
+        expected_song = self.library / "Band/Unknown Album/Song.m4a"
+        preview = self.invoke("--dry-run")
+        self.assertEqual(preview.exit_code, 0, preview.output)
+        self.assertIn(
+            "misc/original.m3u8 -> Playlists/DJ/Road_Trip.m3u8", preview.output
+        )
+        self.assertTrue(playlist.exists())
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertFalse(playlist.exists())
+        self.assertTrue(expected_song.exists())
+        self.assertEqual(
+            expected_playlist.read_text(),
+            "#EXTM3U\n#PLAYLIST:Road/Trip\n"
+            "#Gamdl-PLAYLIST-ARTIST:DJ\n"
+            "#Gamdl-APPLE-MUSIC-ID:p.123\n"
+            "#EXTINF:10,Sample\n"
+            + os.path.relpath(expected_song, expected_playlist.parent)
+            + "\n",
+        )
+        again = self.invoke()
+        self.assertEqual(again.exit_code, 0, again.output)
+        self.assertIn("Playlists updated: 0", again.output)
+
+    def test_playlist_rename_preserves_relative_paths_without_media_moves(self):
+        playlist = self.library / "old" / "List.m3u8"
+        playlist.parent.mkdir()
+        path = self.media("Audio/file.m4a")
+        playlist.write_text(
+            "#EXTM3U\n#PLAYLIST:List\n#Gamdl-PLAYLIST-ARTIST:Me\n"
+            + os.path.relpath(path, playlist.parent)
+            + "\n",
+        )
+        result = self.invoke(
+            "--playlist-folder-template",
+            "Custom/{playlist_artist}",
+            "--playlist-file-template",
+            "{playlist_title} ({playlist_id})",
+        )
+        self.assertEqual(result.exit_code, 0, result.output)
+        target = self.library / "Custom/Me/List (Unknown Playlist ID).m3u8"
+        self.assertEqual(
+            target.read_text().splitlines()[-1],
+            os.path.relpath(path, target.parent),
+        )
+
+    def test_playlist_rename_collision_is_non_destructive(self):
+        playlist = self.library / "old" / "original.m3u8"
+        playlist.parent.mkdir()
+        playlist.write_text("#EXTM3U\n#PLAYLIST:List\n#GAMDL-PLAYLIST-ARTIST:Me\n")
+        target = self.library / "Playlists/Me/List.m3u8"
+        target.parent.mkdir(parents=True)
+        target.write_text("#EXTM3U\n#PLAYLIST:Other\n")
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("collisions 1", result.output)
+        self.assertTrue(playlist.exists())
+        self.assertEqual(target.read_text(), "#EXTM3U\n#PLAYLIST:Other\n")

@@ -30,7 +30,7 @@ def _settings(ctx: click.Context):
         click.echo(
             "Warning: database tracking is disabled (database.enabled: false). "
             "These commands still work, but downloads will not update the index.\n"
-            "Enable database.enabled in your GAMDL YAML configuration.",
+            "Enable database.enabled in your Gamdl YAML configuration.",
             err=True,
         )
     return settings

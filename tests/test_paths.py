@@ -124,5 +124,5 @@ class PathFormatterTests(unittest.TestCase):
             with self.subTest(extension=extension), self.assertRaises(ValueError):
                 self.f.get_media_path(self.song, media, extension=extension)
 
-    def test_formatter_is_pure_and_does_not_inherit_path(self):
+    def test_formatter_does_not_inherit_path(self):
         self.assertNotIsInstance(self.f, Path)

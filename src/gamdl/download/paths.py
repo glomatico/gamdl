@@ -1,15 +1,22 @@
-"""Pure filename/folder formatting with GAMDL 3.x template defaults."""
+"""Gamdl 3.x-compatible path formatting and filename collision policies."""
 
 from __future__ import annotations
 
+import os
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
+from itertools import chain, count
 from pathlib import Path
 from string import Formatter
 from typing import TYPE_CHECKING
 
+from gamdl import _native
+
 if TYPE_CHECKING:
     from gamdl.media import Media
+
+    from .database import MediaDatabase
     from .tags import Tags
 
 
@@ -41,12 +48,14 @@ class PlaylistTags:
 
 
 class PathFormatter:
-    """Generate safe ordinary ``Path`` values without touching the filesystem.
+    """Format paths and resolve existing-file collisions in one place.
 
-    Defaults preserve GAMDL 3.x's folder and filename templates. A *directory*
+    Defaults preserve Gamdl 3.x's folder and filename templates. A *directory*
     component that starts with '.' is prefixed with '_' instead, so a catalog
     title like '.Secret' cannot create hidden Unix directories. Output paths
     always stay beneath ``output_dir`` (template values never create folders).
+    ``get_*_path`` only formats names; ``resolve_*_path`` inspects occupancy
+    without changing the filesystem.
     """
 
     def __init__(
@@ -97,10 +106,9 @@ class PathFormatter:
         cleaned = _INVALID.sub("_", value).strip()
         if directory and cleaned.startswith("."):
             cleaned = "_" + cleaned[1:]
-        if not directory:
-            # Never allow a generated filename to be '.' or '..'.
-            if cleaned in {".", ".."}:
-                cleaned = cleaned.replace(".", "_")
+        # Never allow a generated filename to be '.' or '..'.
+        if not directory and cleaned in {".", ".."}:
+            cleaned = cleaned.replace(".", "_")
         if cleaned.endswith("."):
             cleaned = cleaned[:-1] + "_"
         if not cleaned:
@@ -207,8 +215,118 @@ class PathFormatter:
             file = self.no_album_file_template
         return self._path(folder, file, self._fields(tags, playlist), extension)
 
+    @staticmethod
+    def numbered_video_path(path: Path, index: int) -> Path:
+        """Gamdl 3.x's ``Title 2.m4v`` naming, with UTF-8 byte limits."""
+        if index < 1:
+            raise ValueError("Video path index must be positive")
+        if index == 1:
+            return path
+        suffix = f" {index}{path.suffix}"
+        available = 255 - len(suffix.encode("utf-8"))
+        if available < 1:
+            raise ValueError("Cannot add a collision suffix to this filename")
+        stem = path.stem
+        while len(stem.encode("utf-8")) > available:
+            stem = stem[:-1]
+        if not stem:
+            stem = "_"
+        return path.with_name(stem + suffix)
+
+    @classmethod
+    def video_index(cls, base: Path, candidate: Path) -> int | None:
+        """Recognize only canonical numbered variants of ``base``."""
+        if candidate.name == base.name:
+            return 1
+        if candidate.suffix != base.suffix:
+            return None
+        # Never treat "Title 1" or "Title 02" as automatically numbered.
+        match = re.search(r" ((?:[2-9]|[1-9][0-9]+))$", candidate.stem)
+        if match is None or len(match.group(1)) > 12:
+            return None
+        index = int(match.group(1))
+        return (
+            index
+            if cls.numbered_video_path(base, index).name == candidate.name
+            else None
+        )
+
+    @staticmethod
+    def _matches_media_id(
+        path: Path,
+        media: Media,
+        *,
+        database: MediaDatabase | None,
+        catalog_id: str | None,
+    ) -> bool:
+        """Use database identity first, then the native MP4 catalog ID."""
+        if path.is_symlink() or not path.is_file():
+            return False
+        record = database.get(path) if database is not None else None
+        if record is not None:
+            return record["media_id"] == media.id and record["media_type"] == media.type
+        return bool(catalog_id) and _native.read_mp4_title_id(str(path)) == catalog_id
+
+    def resolve_video_path(
+        self,
+        path: Path,
+        media: Media | None = None,
+        *,
+        database: MediaDatabase | None = None,
+        preferred: Path | None = None,
+        reserved: Collection[Path] = (),
+        releasing: Collection[Path] = (),
+        sidecar_extensions: Collection[str] = (),
+    ) -> Path:
+        """Reuse a matching video or choose the lowest free numbered slot.
+
+        The downloader supplies ``media`` to identify an already downloaded
+        video. The organizer supplies ``preferred`` (its current filename),
+        pending ``reserved`` targets and sidecar extensions instead. Paths
+        being relocated can be listed in ``releasing`` so they may be reused
+        *after* their owning moves succeed. The organizer must enforce that
+        ordering, safe directories and no-overwrite publication.
+        """
+        existing: dict[int, Path] = {}
+        if path.parent.exists():
+            for candidate in path.parent.iterdir():
+                index = self.video_index(path, candidate)
+                if index is not None:
+                    existing[index] = candidate
+
+        if media is not None:
+            for _, candidate in sorted(existing.items()):
+                if (
+                    candidate not in reserved
+                    and candidate not in releasing
+                    and self._matches_media_id(
+                        candidate, media, database=database, catalog_id=media.id
+                    )
+                ):
+                    return candidate
+
+        preferred_index = self.video_index(path, preferred) if preferred else None
+        indices = chain(
+            (preferred_index,) if preferred_index is not None else (), count(1)
+        )
+        for index in indices:
+            if index in existing and existing[index] not in releasing:
+                continue
+            destination = self.numbered_video_path(path, index)
+            targets = (
+                destination,
+                *(destination.with_suffix(ext) for ext in sidecar_extensions),
+            )
+            if any(
+                target in reserved
+                or (os.path.lexists(target) and target not in releasing)
+                for target in targets
+            ):
+                continue
+            return destination
+
     def get_playlist_path(self, playlist: PlaylistTags) -> Path:
-        """Format the same playlist folder and `.m3u8` filename as GAMDL 3.x."""
+        """Format the same playlist folder and `.m3u8` filename as Gamdl 3.x."""
         from .tags import Tags
 
         return self._path(

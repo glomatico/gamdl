@@ -937,7 +937,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(replaced.path, first.path)
         self.assertEqual(list(first.path.parent.glob("*.m4a")), [first.path])
 
-    async def test_auto_song_without_database_mismatched_id_uses_checked_fallback(self):
+    async def test_auto_song_does_not_generate_id_collision_suffix(self):
         downloader, tag_resolver = self.downloader()
         downloader.path_formatter = PathFormatter(self.directory / "Library")
         song = self.song()
@@ -951,17 +951,16 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         original_bytes = expected.read_bytes()
 
         other = await downloader.download(song)
-        self.assertEqual(other.status, "downloaded")
-        self.assertEqual(other.path.name, "Sample Track [111].m4a")
+        self.assertEqual(other.status, "skipped")
+        self.assertEqual(other.path, expected)
         self.assertEqual(expected.read_bytes(), original_bytes)
         downloader._read_track.reset_mock()
         self.assertEqual((await downloader.download(song)).status, "skipped")
         downloader._read_track.assert_not_awaited()
-
-        # Unknown ownership at the qualified location fails safely.
-        other.path.write_bytes(b"unrecognized file")
-        with self.assertRaises(FileExistsError):
-            await downloader.download(song, overwrite="skip")
+        self.assertEqual(list(expected.parent.glob("*.m4a")), [expected])
+        replaced = await downloader.download(song, overwrite="replace")
+        self.assertEqual(replaced.path, expected)
+        self.assertEqual(replaced.status, "overwritten")
 
     async def test_auto_library_song_matches_catalog_cnid(self):
         downloader, _ = self.downloader()
@@ -990,7 +989,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         video = self.uploaded_video()
         first = await downloader.download(video)
         self.assertEqual(first.status, "downloaded")
-        # As in GAMDL 3.x, re-read the native cnID tag when no index exists.
+        # As in Gamdl 3.x, re-read the native cnID tag when no index exists.
         downloader._save_track.reset_mock()
         second = await downloader.download(video)
         self.assertEqual(second.status, "skipped")

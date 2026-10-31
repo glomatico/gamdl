@@ -1,4 +1,4 @@
-"""GAMDL command group; YAML is loaded before subcommand option parsing."""
+"""Gamdl command group; YAML is loaded before subcommand option parsing."""
 
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from .errors import CliCommand
 
 
 @click.group(cls=CliCommand, context_settings={"auto_envvar_prefix": "GAMDL"})
-@click.version_option(__version__, "--version", "-v")
+@click.version_option(__version__, "--version", "-v", prog_name="Gamdl")
 @click.option(
     "--config",
     "config_file",
@@ -24,7 +24,7 @@ from .errors import CliCommand
 @click.option("--no-config", is_flag=True, help="Ignore YAML configuration")
 @click.pass_context
 def main(ctx: click.Context, config_file: Path | None, no_config: bool) -> None:
-    """GAMDL 4.0 — download Apple Music with configurable codecs and progress."""
+    """Gamdl 4.0 — download Apple Music with configurable codecs and progress."""
     path = (config_file or default_config_path()).expanduser()
     ctx.obj = {
         "config_path": path,

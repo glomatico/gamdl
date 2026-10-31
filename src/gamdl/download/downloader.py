@@ -50,7 +50,6 @@ from .enums import (
 from .events import DownloadEvent, DownloadEventCallback, DownloadStage, EventState
 from .exceptions import DownloadFinalizationError
 from .models import DatabaseResult, DownloadResult, FileResult, PlaylistResult
-from .path_resolver import resolve_numbered_video_path, resolve_song_path
 from .paths import PathFormatter, PlaylistTags
 from .playlist import PlaylistWriter
 from .publication import publish_bytes_result, publish_file
@@ -718,6 +717,7 @@ class Downloader:
         cover_format: CoverFormat,
         save_lyrics: bool,
         playlist_path: Path | None,
+        playlist_tags: PlaylistTags | None,
         playlist_index: int | None,
         prepared_cover: bytes | None = None,
         event_callback: DownloadEventCallback | None = None,
@@ -784,7 +784,7 @@ class Downloader:
                     event_callback, media.id, DownloadStage.UPDATING_PLAYLIST
                 ):
                     updated = await _complete_write(
-                        PlaylistWriter(playlist_path).add,
+                        PlaylistWriter(playlist_path, tags=playlist_tags).add,
                         result.path,
                         position=position,
                     )
@@ -893,7 +893,7 @@ class Downloader:
         """Atomically publish a song M4A or video M4V/MP4 at ``output``.
 
         An explicit .mp4 video path opts into mp42 branding. Automatically
-        generated video paths use GAMDL 3.x's numbered suffixes (Title 2.m4v)
+        generated video paths use Gamdl 3.x's numbered suffixes (Title 2.m4v)
         and reuse files whose catalog ID matches an index entry or MP4 cnID.
         ``skip`` avoids media transfer, but still performs requested
         sidecar/playlist/database finalization. Sidecars, playlist entries and
@@ -973,25 +973,9 @@ class Downloader:
             if isinstance(media, (MusicVideo, UploadedVideo)):
                 generated_video_path = destination
                 destination = await asyncio.to_thread(
-                    resolve_numbered_video_path,
+                    self.path_formatter.resolve_video_path,
                     destination,
                     media,
-                    database=self.database,
-                )
-            else:
-                # PathFormatter is pure. Filesystem identity checks belong to
-                # this resolver, using the same native cnID reader as videos.
-                destination = await asyncio.to_thread(
-                    resolve_song_path,
-                    destination,
-                    media,
-                    catalog_id=(
-                        str(tags.title_id)
-                        if tags.title_id is not None and tags.title_id > 0
-                        else media.id
-                        if media.id.isdecimal()
-                        else None
-                    ),
                     database=self.database,
                 )
         else:
@@ -1020,6 +1004,7 @@ class Downloader:
                     playlist_path=Path(playlist_path)
                     if playlist_path is not None
                     else None,
+                    playlist_tags=playlist_tags,
                     playlist_index=playlist_index,
                     event_callback=event_callback,
                 )
@@ -1078,7 +1063,7 @@ class Downloader:
                 # the same staged media without re-downloading or re-muxing.
                 for _ in range(20):
                     candidate = await asyncio.to_thread(
-                        resolve_numbered_video_path,
+                        self.path_formatter.resolve_video_path,
                         generated_video_path,
                         media,
                         database=self.database,
@@ -1122,6 +1107,7 @@ class Downloader:
             cover_format=cover_format,
             save_lyrics=save_lyrics,
             playlist_path=Path(playlist_path) if playlist_path is not None else None,
+            playlist_tags=playlist_tags,
             playlist_index=playlist_index,
             prepared_cover=prepared.cover_bytes,
             event_callback=event_callback,

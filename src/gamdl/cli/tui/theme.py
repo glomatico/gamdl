@@ -1,4 +1,4 @@
-"""Shared GAMDL full-screen terminal color palette."""
+"""Shared Gamdl full-screen terminal color palette."""
 
 from prompt_toolkit.styles import Style
 

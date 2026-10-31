@@ -34,6 +34,8 @@ from gamdl.download.paths import PathFormatter
 @click.option("--single-disc-file-template", default=None)
 @click.option("--multi-disc-file-template", default=None)
 @click.option("--no-album-file-template", default=None)
+@click.option("--playlist-folder-template", default=None)
+@click.option("--playlist-file-template", default=None)
 @click.option("--truncate", type=click.IntRange(min=1), default=None)
 @click.pass_context
 def organize(
@@ -46,6 +48,8 @@ def organize(
     single_disc_file_template: str | None,
     multi_disc_file_template: str | None,
     no_album_file_template: str | None,
+    playlist_folder_template: str | None,
+    playlist_file_template: str | None,
     truncate: int | None,
 ) -> None:
     """Organize local songs/videos by their embedded tags and path templates.
@@ -67,6 +71,8 @@ def organize(
             "single_disc_file_template": single_disc_file_template,
             "multi_disc_file_template": multi_disc_file_template,
             "no_album_file_template": no_album_file_template,
+            "playlist_folder_template": playlist_folder_template,
+            "playlist_file_template": playlist_file_template,
             "truncate": truncate,
         }.items()
     }
@@ -89,6 +95,8 @@ def organize(
             click.echo(
                 f"{move.source.relative_to(root)} -> {move.destination.relative_to(root)}"
             )
+        for source, target in plan.playlist_destinations.items():
+            click.echo(f"{source.relative_to(root)} -> {target.relative_to(root)}")
     for problem in plan.problems:
         click.echo(f"Warning: {problem}", err=True)
 

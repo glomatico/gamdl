@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import FrozenInstanceError
-from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 from gamdl.download import (
     DatabaseStatus,
@@ -19,12 +18,11 @@ from gamdl.download import (
     PathFormatter,
     PlaylistStatus,
     PlaylistTags,
-    Tags,
 )
-from gamdl.media.song.lyrics import Lyrics, LyricsLine
 from gamdl.media import Song
-from tests.test_media import SONG_DATA, fake_api
+from gamdl.media.song.lyrics import Lyrics, LyricsLine
 from tests import test_downloader as downloader_fixtures
+from tests.test_media import SONG_DATA, fake_api
 from tests.test_muxer import JPEG
 
 
@@ -79,9 +77,17 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         expected = output_dir / "Lists/_DJ/.My Playlist (p.12).m3u8"
         self.assertEqual(result.playlist_file.path, expected)
         lines = expected.read_text().splitlines()
-        self.assertEqual(lines[0], "#EXTM3U")
-        self.assertEqual(lines[1], "")
-        self.assertTrue(lines[2].endswith("/Sample Track.m4a"))
+        self.assertEqual(
+            lines[:4],
+            [
+                "#EXTM3U",
+                "#PLAYLIST:.My Playlist",
+                "#Gamdl-PLAYLIST-ARTIST:.DJ",
+                "#Gamdl-APPLE-MUSIC-ID:p.12",
+            ],
+        )
+        self.assertEqual(lines[4], "")
+        self.assertTrue(lines[5].endswith("/Sample Track.m4a"))
         self.assertEqual(events[-1].stage, DownloadStage.COMPLETED)
         self.assertIs(events[-1].result, result)
         self.assertEqual(events[-1].state, EventState.COMPLETED)

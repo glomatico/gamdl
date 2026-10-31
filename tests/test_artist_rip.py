@@ -1,4 +1,4 @@
-"""No-network coverage for GAMDL 4 artist selection and rip configuration."""
+"""No-network coverage for Gamdl 4 artist selection and rip configuration."""
 
 import asyncio
 import tempfile

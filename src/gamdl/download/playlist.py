@@ -3,17 +3,87 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import weakref
 from pathlib import Path
 
+from .paths import PlaylistTags
 from .publication import publish_bytes
-
 
 _registry_lock = threading.Lock()
 _playlist_locks: weakref.WeakValueDictionary[Path, threading.RLock] = (
     weakref.WeakValueDictionary()
 )
+_HEADER_FIELDS = (
+    ("#PLAYLIST:", "title"),
+    ("#Gamdl-PLAYLIST-ARTIST:", "artist"),
+    ("#Gamdl-APPLE-MUSIC-ID:", "playlist_id"),
+)
+
+
+def _header_value(value: str) -> str:
+    """Keep metadata on one M3U comment line, including unusual Unicode."""
+    return re.sub(r"[\x00-\x1f\x7f\x85\u2028\u2029]", " ", value).strip()
+
+
+def split_playlist(lines: list[str]) -> tuple[list[str], list[str]]:
+    """Split an extended M3U into leading comments and track entries.
+
+    The leading blank line is a valid empty track slot, not a header. EXTINF
+    belongs to the entry it describes, so it ends the header block as well.
+    """
+    if not lines or lines[0] != "#EXTM3U":
+        raise ValueError("Existing playlist is not an #EXTM3U playlist")
+    offset = 1
+    while (
+        offset < len(lines)
+        and lines[offset].startswith("#")
+        and not lines[offset].startswith("#EXTINF:")
+    ):
+        offset += 1
+    return lines[1:offset], lines[offset:]
+
+
+def playlist_tags_from_header(header: list[str]) -> PlaylistTags:
+    values: dict[str, str] = {}
+    for line in header:
+        for prefix, field in _HEADER_FIELDS:
+            # Older files used #GAMDL-...; read both spellings.
+            if (
+                line[: len(prefix)].casefold() == prefix.casefold()
+                and field not in values
+            ):
+                values[field] = line[len(prefix) :]
+    return PlaylistTags(**values)
+
+
+def _update_header(header: list[str], tags: PlaylistTags | None) -> list[str]:
+    # Normalize older branding when a playlist is written, even if only its
+    # entries changed. The parser remains compatible with historical headers.
+    updated = header.copy()
+    for i, line in enumerate(updated):
+        for prefix, _ in _HEADER_FIELDS:
+            if line[: len(prefix)].casefold() == prefix.casefold():
+                updated[i] = prefix + line[len(prefix) :]
+                break
+    if tags is None:
+        return updated
+    for prefix, field in _HEADER_FIELDS:
+        value = getattr(tags, field)
+        if value is None:
+            continue
+        rendered = _header_value(str(value))
+        if not rendered:
+            continue
+        line = prefix + rendered
+        for i, previous in enumerate(updated):
+            if previous[: len(prefix)].casefold() == prefix.casefold():
+                updated[i] = line
+                break
+        else:
+            updated.append(line)
+    return updated
 
 
 def _lock_for(path: Path) -> threading.RLock:
@@ -36,8 +106,9 @@ class PlaylistWriter:
     Cross-process writers must still coordinate externally.
     """
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, tags: PlaylistTags | None = None) -> None:
         self.path = Path(path)
+        self.tags = tags
 
     def add(self, media_file: str | Path, *, position: int | None = None) -> bool:
         with _lock_for(self.path):
@@ -54,23 +125,33 @@ class PlaylistWriter:
 
         if playlist.exists():
             lines = playlist.read_text(encoding="utf-8-sig").splitlines()
-            if not lines or lines[0] != "#EXTM3U":
-                raise ValueError("Existing playlist is not an #EXTM3U playlist")
-            entries = lines[1:]
+            header, entries = split_playlist(lines)
         else:
+            header = []
             entries = []
+        new_header = _update_header(header, self.tags)
+
+        # Track indices count actual paths (including empty placeholders), not
+        # EXTINF or other M3U comments that accompany the entries.
+        positions = [i for i, entry in enumerate(entries) if not entry.startswith("#")]
+        changed = new_header != header
 
         if position is None:
-            if value in entries:
-                return False
-            entries.append(value)
+            if value not in (entries[i] for i in positions):
+                entries.append(value)
+                changed = True
         else:
-            if len(entries) <= position:
-                entries.extend("" for _ in range(position + 1 - len(entries)))
-            if entries[position] == value:
-                return False
-            entries[position] = value
+            if position >= len(positions):
+                entries.extend("" for _ in range(position + 1 - len(positions)))
+                positions = [
+                    i for i, entry in enumerate(entries) if not entry.startswith("#")
+                ]
+            if entries[positions[position]] != value:
+                entries[positions[position]] = value
+                changed = True
 
-        data = ("#EXTM3U\n" + "\n".join(entries) + "\n").encode("utf-8")
+        if not changed:
+            return False
+        data = ("#EXTM3U\n" + "\n".join([*new_header, *entries]) + "\n").encode("utf-8")
         publish_bytes(data, playlist, overwrite="replace")
         return True

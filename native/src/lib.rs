@@ -3,6 +3,7 @@
 use pyo3::prelude::*;
 
 mod decrypt;
+mod input;
 mod mp3_tags;
 mod remux;
 mod stream;
@@ -12,6 +13,15 @@ mod wrapper;
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // I/O concurrency is independent of worker count. A small runtime avoids
+    // spreading variable-sized fragments across one allocator arena per CPU.
+    // Respect Tokio's existing environment override for CPU-heavy workloads.
+    let mut runtime = tokio::runtime::Builder::new_multi_thread();
+    runtime.enable_all();
+    if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
+        runtime.worker_threads(std::thread::available_parallelism().map_or(2, |n| n.get().min(2)));
+    }
+    pyo3_async_runtimes::tokio::init(runtime);
     m.add_function(wrap_pyfunction!(tags::write_mp4_tags, m)?)?;
     m.add_function(wrap_pyfunction!(tags::write_mp4_tags_bounded, m)?)?;
     m.add_function(wrap_pyfunction!(mp3_tags::write_mp3_tags, m)?)?;

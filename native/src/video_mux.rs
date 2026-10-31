@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::ops::Range;
 
-use memmap2::Mmap;
+use crate::input::{Input, read_metadata};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -57,9 +57,9 @@ struct Track {
     packets: Vec<Packet>,
 }
 
-fn original_id(input: &[u8], trak: Atom) -> Result<u32> {
+fn original_id(input: &(impl Input + ?Sized), trak: Atom) -> Result<u32> {
     let tkhd = find(input, trak, b"tkhd")?;
-    let at = match input.get(tkhd.data) {
+    let at = match input.byte(tkhd.data) {
         Some(0) => tkhd.data + 12,
         Some(1) => tkhd.data + 20,
         _ => return Err(UNSUPPORTED),
@@ -67,8 +67,8 @@ fn original_id(input: &[u8], trak: Atom) -> Result<u32> {
     u32_at(input, at)
 }
 
-fn scale(input: &[u8], mdhd: Atom) -> Result<u32> {
-    let at = match input.get(mdhd.data) {
+fn scale(input: &(impl Input + ?Sized), mdhd: Atom) -> Result<u32> {
+    let at = match input.byte(mdhd.data) {
         Some(0) => mdhd.data + 12,
         Some(1) => mdhd.data + 20,
         _ => return Err(UNSUPPORTED),
@@ -77,7 +77,7 @@ fn scale(input: &[u8], mdhd: Atom) -> Result<u32> {
     if value == 0 { Err(BAD) } else { Ok(value) }
 }
 
-fn locate(input: &[u8]) -> Result<(Atom, Atom)> {
+fn locate(input: &(impl Input + ?Sized)) -> Result<(Atom, Atom)> {
     let top = atoms(input, 0, input.len())?;
     let ftyp = *top.iter().find(|a| &a.name == b"ftyp").ok_or(UNSUPPORTED)?;
     let moov = *top.iter().find(|a| &a.name == b"moov").ok_or(UNSUPPORTED)?;
@@ -87,7 +87,12 @@ fn locate(input: &[u8]) -> Result<(Atom, Atom)> {
     Ok((ftyp, moov))
 }
 
-fn discover(input: &[u8], src: usize, moov: Atom, tracks: &mut Vec<Track>) -> Result<()> {
+fn discover(
+    input: &(impl Input + ?Sized),
+    src: usize,
+    moov: Atom,
+    tracks: &mut Vec<Track>,
+) -> Result<()> {
     let mvex = find(input, moov, b"mvex")?;
     for trak in children(input, moov)?
         .into_iter()
@@ -95,7 +100,7 @@ fn discover(input: &[u8], src: usize, moov: Atom, tracks: &mut Vec<Track>) -> Re
     {
         let mdia = find(input, trak, b"mdia")?;
         let hdlr = find(input, mdia, b"hdlr")?;
-        let kind = match input.get(hdlr.data + 8..hdlr.data + 12) {
+        let kind = match input.slice(hdlr.data + 8..hdlr.data + 12) {
             Some(b"vide") if src == 0 => Kind::Video,
             Some(b"soun") if src == 1 => Kind::Audio,
             Some(b"clcp" | b"text" | b"sbtl" | b"subt") if src == 0 => Kind::Captions,
@@ -170,7 +175,13 @@ fn discover(input: &[u8], src: usize, moov: Atom, tracks: &mut Vec<Track>) -> Re
     Ok(())
 }
 
-fn fragment(input: &[u8], moof: Atom, mdat: Atom, tracks: &mut [Track], src: usize) -> Result<()> {
+fn fragment(
+    input: &(impl Input + ?Sized),
+    moof: Atom,
+    mdat: Atom,
+    tracks: &mut [Track],
+    src: usize,
+) -> Result<()> {
     for traf in children(input, moof)?
         .into_iter()
         .filter(|a| &a.name == b"traf")
@@ -225,7 +236,7 @@ fn fragment(input: &[u8], moof: Atom, mdat: Atom, tracks: &mut [Track], src: usi
             return Err(UNSUPPORTED);
         }
         let start = if let Ok(tfdt) = find(input, traf, b"tfdt") {
-            match input.get(tfdt.data) {
+            match input.byte(tfdt.data) {
                 Some(0) => u32_at(input, tfdt.data + 4)? as u64,
                 Some(1) => u64_at(input, tfdt.data + 4)?,
                 _ => return Err(UNSUPPORTED),
@@ -350,7 +361,7 @@ fn fragment(input: &[u8], moof: Atom, mdat: Atom, tracks: &mut [Track], src: usi
     Ok(())
 }
 
-fn parse_parts(input: &[u8], tracks: &mut [Track], src: usize) -> Result<()> {
+fn parse_parts(input: &(impl Input + ?Sized), tracks: &mut [Track], src: usize) -> Result<()> {
     let mut pending = None;
     for atom in atoms(input, 0, input.len())? {
         match &atom.name {
@@ -534,18 +545,23 @@ fn edit_list(delay: u64, length: u64) -> Result<Vec<u8>> {
     }
     boxed(b"edts", &fullbox(b"elst", 1 << 24, &entries)?)
 }
-fn rebuild_stbl(input: &[u8], atom: Atom, track: &Track, offsets: &[u64]) -> Result<Vec<u8>> {
+fn rebuild_stbl(
+    input: &(impl Input + ?Sized),
+    atom: Atom,
+    track: &Track,
+    offsets: &[u64],
+) -> Result<Vec<u8>> {
     let mut body = Vec::new();
     let mut has_stsd = false;
     for child in children(input, atom)? {
         match &child.name {
             b"stsd" => {
                 has_stsd = true;
-                body.extend_from_slice(&input[child.start..child.end]);
+                body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?);
             }
             b"stts" | b"ctts" | b"stss" | b"stsc" | b"stsz" | b"stco" | b"co64" | b"sgpd"
             | b"sbgp" | b"senc" | b"saio" | b"saiz" => {}
-            _ => body.extend_from_slice(&input[child.start..child.end]),
+            _ => body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?),
         }
     }
     if !has_stsd {
@@ -556,29 +572,44 @@ fn rebuild_stbl(input: &[u8], atom: Atom, track: &Track, offsets: &[u64]) -> Res
     }
     boxed(b"stbl", &body)
 }
-fn rebuild_minf(input: &[u8], atom: Atom, track: &Track, offsets: &[u64]) -> Result<Vec<u8>> {
+fn rebuild_minf(
+    input: &(impl Input + ?Sized),
+    atom: Atom,
+    track: &Track,
+    offsets: &[u64],
+) -> Result<Vec<u8>> {
     let mut body = Vec::new();
     for child in children(input, atom)? {
         if &child.name == b"stbl" {
             body.extend(rebuild_stbl(input, child, track, offsets)?);
         } else {
-            body.extend_from_slice(&input[child.start..child.end]);
+            body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?);
         }
     }
     boxed(b"minf", &body)
 }
-fn rebuild_mdia(input: &[u8], atom: Atom, track: &Track, offsets: &[u64]) -> Result<Vec<u8>> {
+fn rebuild_mdia(
+    input: &(impl Input + ?Sized),
+    atom: Atom,
+    track: &Track,
+    offsets: &[u64],
+) -> Result<Vec<u8>> {
     let mut body = Vec::new();
     for child in children(input, atom)? {
         match &child.name {
             b"mdhd" => body.extend(set_duration(input, child, 16, track_duration(track)?)?),
             b"minf" => body.extend(rebuild_minf(input, child, track, offsets)?),
-            _ => body.extend_from_slice(&input[child.start..child.end]),
+            _ => body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?),
         }
     }
     boxed(b"mdia", &body)
 }
-fn rebuild_trak(input: &[u8], track: &Track, offsets: &[u64], start_ms: u64) -> Result<Vec<u8>> {
+fn rebuild_trak(
+    input: &(impl Input + ?Sized),
+    track: &Track,
+    offsets: &[u64],
+    start_ms: u64,
+) -> Result<Vec<u8>> {
     let movie_length = to_movie(track_duration(track)?, track.scale)?;
     let delay = track_start(track)?
         .checked_sub(start_ms)
@@ -604,7 +635,7 @@ fn rebuild_trak(input: &[u8], track: &Track, offsets: &[u64], start_ms: u64) -> 
             }
             b"mdia" => body.extend(rebuild_mdia(input, child, track, offsets)?),
             b"edts" => return Err("Existing MP4 edit lists are not supported for mux"),
-            _ => body.extend_from_slice(&input[child.start..child.end]),
+            _ => body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?),
         }
     }
     if !saw_tkhd {
@@ -612,9 +643,9 @@ fn rebuild_trak(input: &[u8], track: &Track, offsets: &[u64], start_ms: u64) -> 
     }
     boxed(b"trak", &body)
 }
-fn mux_plan(
-    video: &[u8],
-    audio: &[u8],
+fn mux_plan<I: Input + ?Sized>(
+    video: &I,
+    audio: &I,
     mp4_brand: bool,
 ) -> Result<(Vec<u8>, Vec<u8>, Vec<Track>, u64)> {
     let (_, video_moov) = locate(video)?;
@@ -690,11 +721,9 @@ fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
 
 fn mux_to_file(video: &mut File, audio: &mut File, output: &str, mp4_brand: bool) -> PyResult<()> {
     let (ftyp, moov, tracks, at) = {
-        // Unmap before the sample payload is copied; no full-file mapping
-        // remains resident while we iterate over all frames.
-        let video_map = unsafe { Mmap::map(&*video) }.map_err(PyOSError::new_err)?;
-        let audio_map = unsafe { Mmap::map(&*audio) }.map_err(PyOSError::new_err)?;
-        mux_plan(&video_map, &audio_map, mp4_brand).map_err(PyValueError::new_err)?
+        let video_metadata = read_metadata(video)?;
+        let audio_metadata = read_metadata(audio)?;
+        mux_plan(&video_metadata, &audio_metadata, mp4_brand).map_err(PyValueError::new_err)?
     };
     let mdat_length = at - (ftyp.len() + moov.len()) as u64;
     let mut inputs = [video, audio];
@@ -743,8 +772,8 @@ pub(crate) fn mux_av_mp4_file(
         mux_to_file(&mut video_file, &mut audio_file, &output, mp4_brand)
     })
 }
-fn movie_with_inputs(
-    inputs: [&[u8]; 2],
+fn movie_with_inputs<I: Input + ?Sized>(
+    inputs: [&I; 2],
     moov: Atom,
     tracks: &[Track],
     offsets: &[Vec<u64>],
@@ -787,7 +816,7 @@ fn movie_with_inputs(
                 body.extend(b);
             }
             b"trak" | b"mvex" | b"pssh" => {}
-            _ => body.extend_from_slice(&video[child.start..child.end]),
+            _ => body.extend_from_slice(video.slice(child.start..child.end).ok_or(BAD)?),
         }
     }
     if !saw_mvhd {

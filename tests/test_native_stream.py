@@ -4,26 +4,26 @@ import asyncio
 import hashlib
 import shutil
 import subprocess
+import threading
+import time
+import unittest
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import threading
-import time
-import unittest
 from unittest.mock import AsyncMock, Mock
 
 import m3u8
 
+from gamdl.drm import ContentKey, Drm, DRMInfo
 from gamdl.media import (
     AudioStream,
     HttpStream,
     SongCodec,
     StreamManifestError,
     StreamOrigin,
+    VideoStream,
 )
-from gamdl.media import VideoStream
-from gamdl.drm import ContentKey, Drm, DRMInfo
 from gamdl.stream import Streamer, StreamProgress
 
 
@@ -79,23 +79,17 @@ class HttpHandler(BaseHTTPRequestHandler):
             return
         if name == "slow":
             time.sleep(0.35)
-        if name in self.server.fixtures:
-            bodies = self.server.fixtures
-        else:
-            bodies = {}
         bodies = {
-            **{
-                "init": b"INIT",
-                "a": b"A" * 3000,
-                "b": b"B" * 4000,
-                "c": b"C" * 3000,
-                "retry": b"RETRIED",
-                "interrupt": b"COMPLETE",
-                "range": b"0123456789",
-                "ignore-range": b"0123456789",
-                "slow": b"S" * 5000,
-            },
-            **bodies,
+            "init": b"INIT",
+            "a": b"A" * 3000,
+            "b": b"B" * 4000,
+            "c": b"C" * 3000,
+            "retry": b"RETRIED",
+            "interrupt": b"COMPLETE",
+            "range": b"0123456789",
+            "ignore-range": b"0123456789",
+            "slow": b"S" * 5000,
+            **self.server.fixtures,
         }
         body = bodies.get(name)
         if body is None:
@@ -333,6 +327,54 @@ class NativeStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self.http.hits["init"], 1)
         audio._transport.get_manifest.assert_awaited_once()
+
+    async def test_ordered_fetches_progress_when_byte_budget_limits_admission(self):
+        from gamdl import _native
+
+        # Unknown-size requests reserve 64 MiB before admission. More than
+        # four at concurrency=8 must still make progress with a 256-MiB budget.
+        parts = [
+            (f"{self.url}/{name}", None, None)
+            for name in ["slow"] + ["a", "b", "c"] * 5
+        ]
+        stream = _native.NativeStream(parts, 8)
+
+        async def consume():
+            chunks = []
+            while (chunk := await stream.next_chunk()) is not None:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        try:
+            data = await asyncio.wait_for(consume(), 10)
+        finally:
+            stream.close()
+        self.assertEqual(
+            data, b"S" * 5000 + (b"A" * 3000 + b"B" * 4000 + b"C" * 3000) * 5
+        )
+
+    async def test_cancellation_releases_global_payload_reservations(self):
+        from gamdl import _native
+
+        streams = [
+            _native.NativeStream([(f"{self.url}/slow", None, None)] * 8, 8)
+            for _ in range(6)
+        ]
+        await asyncio.sleep(0.05)
+        for stream in streams:
+            stream.close()
+        streams.clear()
+        del stream
+        # A fresh stream shares the same process-wide budget. Leaked permits
+        # from cancelled workers (including admission waiters) would block it.
+        replacement = _native.NativeStream([(f"{self.url}/a", None, None)], 1)
+        try:
+            self.assertEqual(
+                await asyncio.wait_for(replacement.next_chunk(), 10), b"A" * 3000
+            )
+            self.assertIsNone(await asyncio.wait_for(replacement.next_chunk(), 10))
+        finally:
+            replacement.close()
 
     async def test_byte_ranges_and_implicit_offsets(self):
         playlist = fixture_playlist(

@@ -7,7 +7,7 @@
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 
-use memmap2::Mmap;
+use crate::input::{Input, read_metadata};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -24,19 +24,25 @@ pub(crate) struct Atom {
     pub(crate) name: [u8; 4],
 }
 
-pub(crate) fn u32_at(data: &[u8], at: usize) -> Result<u32> {
+pub(crate) fn u32_at(data: &(impl Input + ?Sized), at: usize) -> Result<u32> {
     let end = at.checked_add(4).ok_or(BAD)?;
     Ok(u32::from_be_bytes(
-        data.get(at..end).ok_or(BAD)?.try_into().map_err(|_| BAD)?,
+        data.slice(at..end)
+            .ok_or(BAD)?
+            .try_into()
+            .map_err(|_| BAD)?,
     ))
 }
-pub(crate) fn u64_at(data: &[u8], at: usize) -> Result<u64> {
+pub(crate) fn u64_at(data: &(impl Input + ?Sized), at: usize) -> Result<u64> {
     let end = at.checked_add(8).ok_or(BAD)?;
     Ok(u64::from_be_bytes(
-        data.get(at..end).ok_or(BAD)?.try_into().map_err(|_| BAD)?,
+        data.slice(at..end)
+            .ok_or(BAD)?
+            .try_into()
+            .map_err(|_| BAD)?,
     ))
 }
-pub(crate) fn atoms(data: &[u8], mut at: usize, end: usize) -> Result<Vec<Atom>> {
+pub(crate) fn atoms(data: &(impl Input + ?Sized), mut at: usize, end: usize) -> Result<Vec<Atom>> {
     if at > end || end > data.len() {
         return Err(BAD);
     }
@@ -45,7 +51,7 @@ pub(crate) fn atoms(data: &[u8], mut at: usize, end: usize) -> Result<Vec<Atom>>
         let n = u32_at(data, at)? as usize;
         let kind_end = at.checked_add(8).ok_or(BAD)?;
         let name = data
-            .get(at + 4..kind_end)
+            .slice(at + 4..kind_end)
             .ok_or(BAD)?
             .try_into()
             .map_err(|_| BAD)?;
@@ -73,10 +79,10 @@ pub(crate) fn atoms(data: &[u8], mut at: usize, end: usize) -> Result<Vec<Atom>>
     }
     Ok(out)
 }
-pub(crate) fn children(data: &[u8], parent: Atom) -> Result<Vec<Atom>> {
+pub(crate) fn children(data: &(impl Input + ?Sized), parent: Atom) -> Result<Vec<Atom>> {
     atoms(data, parent.data, parent.end)
 }
-pub(crate) fn find(data: &[u8], parent: Atom, name: &[u8; 4]) -> Result<Atom> {
+pub(crate) fn find(data: &(impl Input + ?Sized), parent: Atom, name: &[u8; 4]) -> Result<Atom> {
     children(data, parent)?
         .into_iter()
         .find(|a| &a.name == name)
@@ -114,8 +120,8 @@ pub(crate) fn file_type(major_brand: &[u8; 4]) -> Result<Vec<u8>> {
 }
 
 /// Copy only the requested sample bytes using a fixed scratch buffer.
-/// Parsing can use a read-only mapping, but that mapping is dropped before
-/// calling this function to avoid accumulating file-backed RSS.
+/// The caller parses sparse metadata and drops it before copying payloads.
+/// No file-sized mapping is needed in the file-backed path.
 pub(crate) fn copy_range(
     input: &mut File,
     output: &mut impl Write,
@@ -132,8 +138,13 @@ pub(crate) fn copy_range(
     }
     Ok(())
 }
-pub(crate) fn set_duration(data: &[u8], atom: Atom, field: usize, value: u64) -> Result<Vec<u8>> {
-    let mut body = data[atom.data..atom.end].to_vec();
+pub(crate) fn set_duration(
+    data: &(impl Input + ?Sized),
+    atom: Atom,
+    field: usize,
+    value: u64,
+) -> Result<Vec<u8>> {
+    let mut body = data.slice(atom.data..atom.end).ok_or(BAD)?.to_vec();
     let version = *body.first().ok_or(BAD)?;
     let (pos, width) = match version {
         0 => (field, 4),
@@ -171,7 +182,7 @@ struct Sample {
     description: u32,
 }
 
-fn info(bytes: &[u8], moov: Atom) -> Result<Info> {
+fn info(bytes: &(impl Input + ?Sized), moov: Atom) -> Result<Info> {
     let traks = children(bytes, moov)?
         .into_iter()
         .filter(|a| &a.name == b"trak")
@@ -181,21 +192,21 @@ fn info(bytes: &[u8], moov: Atom) -> Result<Info> {
     }
     let trak = traks[0];
     let tkhd = find(bytes, trak, b"tkhd")?;
-    let track_id = match *bytes.get(tkhd.data).ok_or(BAD)? {
+    let track_id = match *bytes.byte(tkhd.data).ok_or(BAD)? {
         0 => u32_at(bytes, tkhd.data + 12)?,
         1 => u32_at(bytes, tkhd.data + 20)?,
         _ => return Err(UNSUPPORTED),
     };
     let mdia = find(bytes, trak, b"mdia")?;
     let hdlr = find(bytes, mdia, b"hdlr")?;
-    if bytes.get(hdlr.data + 8..hdlr.data + 12) != Some(b"soun") {
+    if bytes.slice(hdlr.data + 8..hdlr.data + 12) != Some(b"soun") {
         return Err(UNSUPPORTED);
     }
     let mdhd = find(bytes, mdia, b"mdhd")?;
     let media_scale = u32_at(
         bytes,
         mdhd.data
-            + if *bytes.get(mdhd.data).ok_or(BAD)? == 1 {
+            + if *bytes.byte(mdhd.data).ok_or(BAD)? == 1 {
                 20
             } else {
                 12
@@ -205,7 +216,7 @@ fn info(bytes: &[u8], moov: Atom) -> Result<Info> {
     let movie_scale = u32_at(
         bytes,
         mvhd.data
-            + if *bytes.get(mvhd.data).ok_or(BAD)? == 1 {
+            + if *bytes.byte(mvhd.data).ok_or(BAD)? == 1 {
                 20
             } else {
                 12
@@ -249,7 +260,7 @@ fn info(bytes: &[u8], moov: Atom) -> Result<Info> {
 }
 
 fn parse_fragment(
-    input: &[u8],
+    input: &(impl Input + ?Sized),
     moof: Atom,
     mdat: Atom,
     info: &Info,
@@ -308,7 +319,7 @@ fn parse_fragment(
         return Err(BAD);
     }
     if let Ok(tfdt) = find(input, traf, b"tfdt") {
-        let decode = if *input.get(tfdt.data).ok_or(BAD)? == 1 {
+        let decode = if *input.byte(tfdt.data).ok_or(BAD)? == 1 {
             u64_at(input, tfdt.data + 4)?
         } else {
             u32_at(input, tfdt.data + 4)? as u64
@@ -481,7 +492,7 @@ fn movie_duration(info: &Info, samples: &[Sample]) -> Result<(u64, u64)> {
 }
 
 fn rebuild(
-    input: &[u8],
+    input: &(impl Input + ?Sized),
     atom: Atom,
     info: &Info,
     samples: &[Sample],
@@ -498,7 +509,7 @@ fn rebuild(
         return set_duration(input, atom, 16, media_duration);
     }
     if &atom.name == b"elst" {
-        let mut body = input[atom.data..atom.end].to_vec();
+        let mut body = input.slice(atom.data..atom.end).ok_or(BAD)?.to_vec();
         if u32_at(&body, 4)? != 1 {
             return Err(UNSUPPORTED);
         }
@@ -531,11 +542,11 @@ fn rebuild(
             match &child.name {
                 b"stsd" => {
                     has_stsd = true;
-                    body.extend_from_slice(&input[child.start..child.end]);
+                    body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?);
                 }
                 b"stts" | b"stsc" | b"stsz" | b"stco" | b"co64" | b"ctts" | b"stss" | b"sgpd"
                 | b"sbgp" => {}
-                _ => body.extend_from_slice(&input[child.start..child.end]),
+                _ => body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?),
             }
         }
         if !has_stsd {
@@ -556,10 +567,10 @@ fn rebuild(
         }
         return boxed(&atom.name, &body);
     }
-    Ok(input[atom.start..atom.end].to_vec())
+    Ok(input.slice(atom.start..atom.end).ok_or(BAD)?.to_vec())
 }
 
-fn remux_plan(input: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<Sample>, u64)> {
+fn remux_plan(input: &(impl Input + ?Sized)) -> Result<(Vec<u8>, Vec<u8>, Vec<Sample>, u64)> {
     let top = atoms(input, 0, input.len())?;
     let _ftyp = top
         .iter()
@@ -635,10 +646,8 @@ fn remux(input: &[u8]) -> Result<Vec<u8>> {
 /// Write samples from a staged source through a bounded scratch buffer.
 fn remux_to_file(input: &mut File, output: &str) -> PyResult<()> {
     let (ftyp, moov, samples, cursor) = {
-        // The mapping is used only to parse metadata and sample offsets.
-        // It is unmapped before reading the large encoded payload.
-        let mapped = unsafe { Mmap::map(&*input) }.map_err(PyOSError::new_err)?;
-        remux_plan(&mapped).map_err(PyValueError::new_err)?
+        let metadata = read_metadata(input)?;
+        remux_plan(&metadata).map_err(PyValueError::new_err)?
     };
     let file = File::create(output).map_err(PyOSError::new_err)?;
     let mut writer = BufWriter::with_capacity(256 * 1024, file);

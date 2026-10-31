@@ -2,8 +2,9 @@
 //! Partial/failed responses are never sent downstream: retries always restart
 //! an entire fragment, preventing duplicated bytes after an interrupted request.
 
-use std::sync::Arc;
+use std::ops::Range;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::time::Instant;
 
@@ -15,14 +16,65 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use reqwest::{Client, StatusCode, Url, redirect};
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio::task::AbortHandle;
 
 const MAX_PART_SIZE: usize = 64 * 1024 * 1024;
+// Process-wide payload capacity across concurrent HLS streams. Unknown-size
+// parts reserve their maximum before admission; completed parts release slack.
+const MAX_BUFFERED_BYTES: usize = 256 * 1024 * 1024;
+static PAYLOAD_BUDGET: OnceLock<Arc<Semaphore>> = OnceLock::new();
 const UNKNOWN_TOTAL: u64 = u64::MAX;
 
 type Part = (String, Option<u64>, Option<u64>);
-type DownloadResult = Result<Vec<u8>, &'static str>;
+type DownloadResult = Result<Chunk, &'static str>;
+
+struct Fragment {
+    bytes: Vec<u8>,
+    // Retain the reservation until Python has copied the final queued slice.
+    _reservation: Option<OwnedSemaphorePermit>,
+}
+
+struct Chunk {
+    fragment: Arc<Fragment>,
+    range: Range<usize>,
+}
+
+impl Chunk {
+    fn owned(bytes: Vec<u8>) -> Self {
+        let range = 0..bytes.len();
+        Self {
+            fragment: Arc::new(Fragment {
+                bytes,
+                _reservation: None,
+            }),
+            range,
+        }
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        &self.fragment.bytes[self.range.clone()]
+    }
+}
+
+fn reservation_size(part: &Part) -> usize {
+    match (part.1, part.2) {
+        (Some(start), Some(end)) => (end - start + 1) as usize,
+        _ => MAX_PART_SIZE,
+    }
+}
+
+fn reserve_body(body: &mut Vec<u8>, required: usize, limit: usize) -> Result<(), &'static str> {
+    if required > limit {
+        return Err("Streaming fragment exceeds size limit");
+    }
+    if required > body.capacity() {
+        let target = required.max(body.capacity().saturating_mul(2)).min(limit);
+        body.try_reserve_exact(target - body.len())
+            .map_err(|_| "Unable to allocate streaming fragment")?;
+    }
+    Ok(())
+}
 
 struct ProgressCounters {
     transferred: AtomicU64,
@@ -134,7 +186,11 @@ async fn fetch_progressive(
                         remaining = &remaining[take..];
                         if pending.len() == chunk_size {
                             emitted = true;
-                            if sender.send(Ok(std::mem::take(&mut pending))).await.is_err() {
+                            if sender
+                                .send(Ok(Chunk::owned(std::mem::take(&mut pending))))
+                                .await
+                                .is_err()
+                            {
                                 return;
                             }
                         }
@@ -160,7 +216,7 @@ async fn fetch_progressive(
                 .await;
             return;
         }
-        if !pending.is_empty() && sender.send(Ok(pending)).await.is_err() {
+        if !pending.is_empty() && sender.send(Ok(Chunk::owned(pending))).await.is_err() {
             return;
         }
         progress.completed.fetch_add(1, Ordering::Relaxed);
@@ -173,7 +229,7 @@ async fn fetch_part(
     part: Part,
     retries: u32,
     progress: Arc<ProgressCounters>,
-) -> DownloadResult {
+) -> Result<Vec<u8>, &'static str> {
     let (url, start, end) = part;
     let range = match (start, end) {
         (Some(a), Some(b)) => Some((a, b)),
@@ -235,7 +291,14 @@ async fn fetch_part(
         {
             return Err("Streaming fragment exceeds size limit");
         }
+        let limit = range.map_or(MAX_PART_SIZE, |(a, b)| (b - a + 1) as usize);
+        let expected = range.map(|(a, b)| b - a + 1).or(response.content_length());
         let mut body = Vec::new();
+        if let Some(size) = expected {
+            let size =
+                usize::try_from(size).map_err(|_| "Streaming fragment exceeds size limit")?;
+            reserve_body(&mut body, size, limit)?;
+        }
         let mut reply = response;
         let mut failed = false;
         loop {
@@ -244,9 +307,11 @@ async fn fetch_part(
                     progress
                         .transferred
                         .fetch_add(bytes.len() as u64, Ordering::Relaxed);
-                    if bytes.len() > MAX_PART_SIZE.saturating_sub(body.len()) {
+                    if bytes.len() > limit.saturating_sub(body.len()) {
                         return Err("Streaming fragment exceeds size limit");
                     }
+                    let required = body.len() + bytes.len();
+                    reserve_body(&mut body, required, limit)?;
                     body.extend_from_slice(&bytes);
                 }
                 Ok(None) => break,
@@ -257,6 +322,8 @@ async fn fetch_part(
             }
         }
         if failed {
+            // Do not hold a partially received allocation during backoff.
+            drop(body);
             if attempt < retries {
                 tokio::time::sleep(Duration::from_millis(150 * (1 << attempt))).await;
                 attempt += 1;
@@ -266,6 +333,7 @@ async fn fetch_part(
         }
         if let Some((a, b)) = range {
             if body.len() as u64 != b - a + 1 {
+                drop(body);
                 if attempt < retries {
                     tokio::time::sleep(Duration::from_millis(150 * (1 << attempt))).await;
                     attempt += 1;
@@ -395,15 +463,40 @@ impl NativeStream {
             } else {
                 None
             };
-            let tasks = stream::iter(parts).map(|part| {
+            let budget = PAYLOAD_BUDGET
+                .get_or_init(|| Arc::new(Semaphore::new(MAX_BUFFERED_BYTES)))
+                .clone();
+            // Reserve in manifest order, *before* placing a fetch into the
+            // ordered buffer. Acquiring inside fetches could let later parts
+            // exhaust the budget and deadlock an earlier part awaiting space.
+            let admitted = stream::iter(parts).then(move |part| {
+                let budget = budget.clone();
+                async move {
+                    let permit = budget
+                        .acquire_many_owned(reservation_size(&part) as u32)
+                        .await
+                        .expect("payload budget is never closed");
+                    (part, permit)
+                }
+            });
+            let tasks = admitted.map(|(part, mut permit)| {
                 let client = client.clone();
                 let progress = Arc::clone(&worker_progress);
-                async move { fetch_part(client, part, retries, progress).await }
+                async move {
+                    let bytes = fetch_part(client, part, retries, progress).await?;
+                    let spare = permit
+                        .num_permits()
+                        .checked_sub(bytes.capacity())
+                        .ok_or("Streaming allocation exceeds reservation")?;
+                    drop(permit.split(spare));
+                    Ok::<_, &'static str>((bytes, permit))
+                }
             });
-            let mut ready = tasks.buffered(concurrency);
+            let ready = tasks.buffered(concurrency);
+            futures_util::pin_mut!(ready);
             while let Some(result) = ready.next().await {
                 match result {
-                    Ok(mut bytes) => {
+                    Ok((mut bytes, permit)) => {
                         if let Some(ref mut handler) = decryptor {
                             let media_id = wrapper.as_ref().map(|w| w.2.as_str()).unwrap_or("");
                             let fairplay_key = wrapper.as_ref().map(|w| w.3.as_str()).unwrap_or("");
@@ -420,8 +513,16 @@ impl NativeStream {
                                 return;
                             }
                         }
-                        for chunk in bytes.chunks(chunk_size) {
-                            if sender.send(Ok(chunk.to_vec())).await.is_err() {
+                        let fragment = Arc::new(Fragment {
+                            bytes,
+                            _reservation: Some(permit),
+                        });
+                        for start in (0..fragment.bytes.len()).step_by(chunk_size) {
+                            let chunk = Chunk {
+                                fragment: Arc::clone(&fragment),
+                                range: start..(start + chunk_size).min(fragment.bytes.len()),
+                            };
+                            if sender.send(Ok(chunk)).await.is_err() {
                                 return;
                             }
                         }
@@ -496,8 +597,8 @@ impl NativeStream {
                 Some(Ok(bytes)) => {
                     progress
                         .emitted
-                        .fetch_add(bytes.len() as u64, Ordering::Relaxed);
-                    Python::attach(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+                        .fetch_add(bytes.as_slice().len() as u64, Ordering::Relaxed);
+                    Python::attach(|py| Ok(PyBytes::new(py, bytes.as_slice()).into_any().unbind()))
                 }
                 Some(Err(msg)) => Err(PyOSError::new_err(msg)),
                 None => Python::attach(|py| Ok(py.None())),
@@ -527,5 +628,47 @@ impl NativeStream {
 impl Drop for NativeStream {
     fn drop(&mut self) {
         self.abort_handle.abort();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn growth_never_exceeds_the_reserved_fragment_limit() {
+        let mut body = Vec::new();
+        for size in [100, 1000, 1900, 4000, 4096] {
+            reserve_body(&mut body, size, 4096).unwrap();
+            body.resize(size, 7);
+            assert!(body.capacity() <= 4096);
+        }
+        assert!(reserve_body(&mut body, 4097, 4096).is_err());
+        assert_eq!(body, vec![7; 4096]);
+    }
+
+    #[test]
+    fn queued_slices_hold_the_payload_budget_until_the_last_copy() {
+        let budget = Arc::new(Semaphore::new(8));
+        let reservation = budget.clone().try_acquire_many_owned(8).unwrap();
+        let fragment = Arc::new(Fragment {
+            bytes: b"abcdefgh".to_vec(),
+            _reservation: Some(reservation),
+        });
+        let first = Chunk {
+            fragment: fragment.clone(),
+            range: 0..4,
+        };
+        let last = Chunk {
+            fragment: fragment.clone(),
+            range: 4..8,
+        };
+        drop(fragment);
+        assert_eq!(first.as_slice(), b"abcd");
+        drop(first);
+        assert_eq!(budget.available_permits(), 0);
+        assert_eq!(last.as_slice(), b"efgh");
+        drop(last);
+        assert_eq!(budget.available_permits(), 8);
     }
 }

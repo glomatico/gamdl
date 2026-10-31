@@ -303,7 +303,9 @@ impl TagFields {
 
         // Recheck the tagged proxy's shape. Its co64 offsets have already
         // been adjusted by mp4ameta for moov growth/shrinkage.
-        if std::fs::metadata(proxy_path).map_err(PyOSError::new_err)?.len()
+        if std::fs::metadata(proxy_path)
+            .map_err(PyOSError::new_err)?
+            .len()
             > MAX_HEADER_BYTES + 1040
         {
             return Err(PyValueError::new_err("Tagged MP4 metadata exceeds limit"));

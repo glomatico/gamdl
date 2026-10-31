@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from async_lru import alru_cache
 
 from gamdl.api.exceptions import GamdlApiError
-from gamdl.media import Media, MusicVideo, Song, UploadedVideo
+from gamdl.media import Media, MusicVideo, Song, SongCodec, UploadedVideo
 
 from .exceptions import TagResolutionError
 from .tags import Tags
@@ -81,11 +81,12 @@ def _lookup_parts(
 class TagResolver:
     """Construct output-oriented Tags using lazy shared playback responses.
 
-    Wrapper playback is preferred when configured for catalog songs/videos.
-    A failed or incomplete wrapper response falls back to webplayback (songs)
-    or iTunes page + lookup metadata (music videos). For songs, iTunes is
-    consulted only when use_album_date=True, and only for an album's release
-    date. Neither file tags nor media bytes are written here.
+    For catalog songs, web codecs use web playback for both tags and streams;
+    non-web codecs use wrapper playback for tags when available, without a
+    web fallback. Without a codec hint, wrapper tags remain preferred for
+    callers that resolve metadata separately from stream selection. Music
+    videos retain their iTunes metadata fallback. Song iTunes lookups are
+    limited to optional album-date overrides.
     """
 
     def __init__(
@@ -107,21 +108,36 @@ class TagResolver:
             self._fetch_album_release_date
         )
 
-    async def get_tags(self, media: Media) -> Tags:
-        """Resolve tags once per media instance and resolver configuration."""
+    async def get_tags(self, media: Media, *, codec: SongCodec | None = None) -> Tags:
+        """Resolve tags by actual song codec, sharing cached playback responses.
+
+        ``codec=None`` retains wrapper-first metadata behavior for callers
+        that do not select a stream themselves. Downloaders pass the selected
+        codec so Web AAC always obtains tags from its own web playback.
+        """
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TagResolutionError(
                 "Tag resolution is not supported for this media type"
             )
+        song_source = None
+        if isinstance(media, Song):
+            codec = SongCodec(codec) if codec is not None else None
+            song_source = (
+                "web"
+                if media.is_library
+                or self.wrapper_api is None
+                or (codec is not None and codec.is_web)
+                else "wrapper"
+            )
 
         async def load() -> Tags:
             if isinstance(media, Song):
-                return await self._song_tags(media)
+                return await self._song_tags(media, source=song_source)
             if isinstance(media, UploadedVideo):
                 return await self._uploaded_video_tags(media)
             return await self._video_tags(media)
 
-        return await media._load(("download_tags", self._cache_key), load)
+        return await media._load(("download_tags", self._cache_key, song_source), load)
 
     async def _wrapper_tags(self, media: Media) -> Tags | None:
         if self.wrapper_api is None or media.is_library:
@@ -132,12 +148,13 @@ class TagResolver:
         except (GamdlApiError, TagResolutionError, KeyError, TypeError, ValueError):
             return None
 
-    async def _song_tags(self, song: Song) -> Tags:
-        tags = await self._wrapper_tags(song)
-        if tags is None:
-            tags = Tags.from_asset_metadata(
-                _playback_asset(await song._get_webplayback())
-            )
+    async def _song_tags(self, song: Song, *, source: str | None) -> Tags:
+        if source == "wrapper":
+            assert self.wrapper_api is not None
+            playback = await song._get_wrapper_playback(self.wrapper_api)
+        else:
+            playback = await song._get_webplayback()
+        tags = Tags.from_asset_metadata(_playback_asset(playback))
         # Song tags come only from playback metadata. The optional album-date
         # override is the *sole* reason to query iTunes for a song.
         if not self.use_album_date or tags.album_id is None:

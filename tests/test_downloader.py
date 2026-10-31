@@ -237,7 +237,46 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             song.get_stream.call_args.kwargs["codec_priority"],
             [SongCodec.ALAC, SongCodec.AAC],
         )
-        tags.get_tags.assert_awaited_once_with(song)
+        tags.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC)
+
+    async def test_web_codec_tags_use_actual_selected_codec(self):
+        downloader, resolver = self.downloader()
+        song = self.song()
+        song.get_stream.return_value.codec = SongCodec.AAC_WEB
+        await downloader.get_bytes(song, codec=SongCodec.AAC_WEB)
+        resolver.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC_WEB)
+
+    async def test_auto_path_for_web_codec_uses_web_tags_before_stream_selection(self):
+        downloader, resolver = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Music")
+        song = self.song()
+        song.get_stream.return_value.codec = SongCodec.AAC_WEB
+        await downloader.download(song, codec=SongCodec.AAC_WEB)
+        resolver.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC_WEB)
+        song.get_stream.assert_awaited_once()
+
+    async def test_auto_path_mixed_codec_priorities_preselects_once(self):
+        downloader, resolver = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Music")
+        song = self.song()
+        song.get_stream.return_value.codec = SongCodec.AAC_WEB
+        outcome = await downloader.download(
+            song, codec_priority=(SongCodec.ALAC, SongCodec.AAC_WEB)
+        )
+        self.assertTrue(outcome.path.exists())
+        self.assertEqual(outcome.codec, SongCodec.AAC_WEB)
+        resolver.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC_WEB)
+        song.get_stream.assert_awaited_once()
+
+    async def test_auto_path_interactive_selection_uses_selected_codec(self):
+        downloader, resolver = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Music")
+        song = self.song()
+        song.get_stream.return_value.codec = SongCodec.AAC_HE_WEB
+        selector = Mock(return_value=0)
+        await downloader.download(song, ask=True, selector=selector)
+        resolver.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC_HE_WEB)
+        song.get_stream.assert_awaited_once()
 
     async def test_mux_and_tagger_run_off_event_loop(self):
         downloader, _ = self.downloader()

@@ -440,7 +440,11 @@ class Downloader:
         if tag:
             if resolved_tags is None:
                 with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
-                    tags = await self.tag_resolver.get_tags(media)
+                    tags = (
+                        await self.tag_resolver.get_tags(media, codec=selected_codec)
+                        if isinstance(media, Song) and selected_codec is not None
+                        else await self.tag_resolver.get_tags(media)
+                    )
             else:
                 tags = resolved_tags
             tags = replace(
@@ -492,6 +496,7 @@ class Downloader:
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
+        selected_song_stream: AudioStream | None = None,
     ) -> _PreparedFile:
         """Prepare one media file on disk without accumulating its samples."""
 
@@ -524,17 +529,19 @@ class Downloader:
                 selected_codec = None
                 methods = (method,)
             else:
-                with self._stage(
-                    event_callback, media.id, DownloadStage.FETCHING_STREAMS
-                ):
-                    source = await media.get_stream(
-                        codec=codec,
-                        codec_priority=codec_priority,
-                        ask=ask,
-                        selector=selector,
-                        wrapper_api=self.wrapper_api,
-                        client=self.client,
-                    )
+                source = selected_song_stream
+                if source is None:
+                    with self._stage(
+                        event_callback, media.id, DownloadStage.FETCHING_STREAMS
+                    ):
+                        source = await media.get_stream(
+                            codec=codec,
+                            codec_priority=codec_priority,
+                            ask=ask,
+                            selector=selector,
+                            wrapper_api=self.wrapper_api,
+                            client=self.client,
+                        )
                 raw = directory / "audio.fmp4"
                 method = await save(source, "audio", raw)
                 prepared_path = directory / "media.m4a"
@@ -604,7 +611,11 @@ class Downloader:
         if tag:
             if resolved_tags is None:
                 with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
-                    tags = await self.tag_resolver.get_tags(media)
+                    tags = (
+                        await self.tag_resolver.get_tags(media, codec=selected_codec)
+                        if isinstance(media, Song) and selected_codec is not None
+                        else await self.tag_resolver.get_tags(media)
+                    )
             else:
                 tags = resolved_tags
             tags = replace(
@@ -950,6 +961,7 @@ class Downloader:
             playlist_index = playlist_tags.track - 1
         generated_video_path: Path | None = None
         resolved_tags: Tags | None = None
+        selected_song_stream: AudioStream | None = None
         uploaded_song = isinstance(media, Song) and await media.is_uploaded()
         uploaded_extension = None
         if uploaded_song:
@@ -959,8 +971,44 @@ class Downloader:
         if output is None:
             if self.path_formatter is None:
                 raise ValueError("output is required without a PathFormatter")
+            song_tag_codec = None
+            if isinstance(media, Song) and not uploaded_song:
+                # In mixed-priority or interactive mode, the actual selected
+                # codec determines whether tags come from wrapper or web.
+                # Reuse this selected stream during download; do not prompt or
+                # fetch a second stream once the output path is determined.
+                priority_codecs = (
+                    tuple(SongCodec(item) for item in codec_priority)
+                    if codec_priority is not None
+                    else ()
+                )
+                if ask or len({item.is_web for item in priority_codecs}) > 1:
+                    with self._stage(
+                        event_callback, media.id, DownloadStage.FETCHING_STREAMS
+                    ):
+                        selected_song_stream = await media.get_stream(
+                            codec=codec,
+                            codec_priority=codec_priority,
+                            ask=ask,
+                            selector=selector,
+                            wrapper_api=self.wrapper_api,
+                            client=self.client,
+                        )
+                    song_tag_codec = selected_song_stream.codec
+                else:
+                    song_tag_codec = (
+                        SongCodec(codec)
+                        if codec is not None
+                        else priority_codecs[0]
+                        if priority_codecs
+                        else SongCodec.AAC_WEB
+                    )
             with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
-                tags = await self.tag_resolver.get_tags(media)
+                tags = (
+                    await self.tag_resolver.get_tags(media, codec=song_tag_codec)
+                    if song_tag_codec is not None
+                    else await self.tag_resolver.get_tags(media)
+                )
                 resolved_tags = tags
             extension = (
                 (uploaded_extension or ".m4a")
@@ -1037,6 +1085,7 @@ class Downloader:
                 progress_callback=progress_callback,
                 event_callback=event_callback,
                 resolved_tags=resolved_tags,
+                selected_song_stream=selected_song_stream,
             )
             # A newly created generated video slot must never be replaced
             # even when the user requested overwrite='replace'.

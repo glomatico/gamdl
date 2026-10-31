@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 from gamdl.api.exceptions import GamdlApiResponseError
 from gamdl.download import TagResolutionError, TagResolver, Tags
-from gamdl.media import MusicVideo, Song, UploadedVideo
+from gamdl.media import MusicVideo, Song, SongCodec, UploadedVideo
 from gamdl.media.song.stream import SongStreamResolver
 from tests.test_media import PLAYBACK_TAG_DATA, SONG_DATA, VIDEO_DATA, fake_api
 
@@ -160,20 +160,75 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
         wrapper.get_playback.assert_awaited_once_with(song.id)
         api.get_webplayback.assert_not_awaited()
 
-    async def test_wrapper_missing_metadata_falls_back_to_webplayback(self):
+    async def test_wrapper_missing_metadata_does_not_fall_back_to_webplayback(self):
         api = fake_api()
         wrapper = fake_wrapper(payload={"songList": [{"assets": [{}]}]})
         song = Song.from_id("1559885421", api=api)
-        tags = await TagResolver(wrapper_api=wrapper).get_tags(song)
-        self.assertEqual(tags.title, PLAYBACK_TAG_DATA["itemName"])
-        api.get_webplayback.assert_awaited_once()
+        with self.assertRaisesRegex(TagResolutionError, "no usable tag metadata"):
+            await TagResolver(wrapper_api=wrapper).get_tags(song, codec=SongCodec.AAC)
+        api.get_webplayback.assert_not_awaited()
 
-    async def test_wrapper_api_failure_falls_back(self):
+    async def test_wrapper_api_failure_does_not_fall_back(self):
         api = fake_api()
         wrapper = fake_wrapper()
         wrapper.get_playback.side_effect = GamdlApiResponseError("unavailable")
         song = Song.from_id("1559885421", api=api)
-        tags = await TagResolver(wrapper_api=wrapper).get_tags(song)
+        with self.assertRaisesRegex(GamdlApiResponseError, "unavailable"):
+            await TagResolver(wrapper_api=wrapper).get_tags(song, codec=SongCodec.ALAC)
+        api.get_webplayback.assert_not_awaited()
+
+    async def test_web_codecs_use_webplayback_even_with_wrapper(self):
+        api = fake_api()
+        wrapper = fake_wrapper(
+            payload=wrapper_payload(
+                {**PLAYBACK_TAG_DATA, "itemName": "Only in Wrapper"}
+            )
+        )
+        song = Song.from_id("1559885421", api=api)
+        resolver = TagResolver(wrapper_api=wrapper)
+        web = await resolver.get_tags(song, codec=SongCodec.AAC_WEB)
+        he_web = await resolver.get_tags(song, codec=SongCodec.AAC_HE_WEB)
+        self.assertIs(web, he_web)
+        self.assertEqual(web.title, PLAYBACK_TAG_DATA["itemName"])
+        api.get_webplayback.assert_awaited_once()
+        wrapper.get_playback.assert_not_awaited()
+
+    async def test_web_audio_and_tags_share_one_webplayback_request(self):
+        api = fake_api()
+        api.get_webplayback.return_value["songList"][0]["assets"].append(
+            {"flavor": "28:ctrp256", "URL": "https://cdn.example.test/aac.m4a"}
+        )
+        wrapper = fake_wrapper()
+        song = Song.from_id("1559885421", api=api)
+        stream = await song.get_stream(codec=SongCodec.AAC_WEB, wrapper_api=wrapper)
+        tags = await TagResolver(wrapper_api=wrapper).get_tags(song, codec=stream.codec)
+        self.assertEqual(tags.title, PLAYBACK_TAG_DATA["itemName"])
+        self.assertEqual(stream.codec, SongCodec.AAC_WEB)
+        api.get_webplayback.assert_awaited_once()
+        api.get_assets.assert_not_awaited()
+        wrapper.get_playback.assert_not_awaited()
+
+    async def test_same_song_web_and_wrapper_tags_are_cached_separately(self):
+        api = fake_api()
+        wrapper = fake_wrapper(
+            payload=wrapper_payload(
+                {**PLAYBACK_TAG_DATA, "itemName": "Only in Wrapper"}
+            )
+        )
+        song = Song.from_id("1559885421", api=api)
+        resolver = TagResolver(wrapper_api=wrapper)
+        web = await resolver.get_tags(song, codec=SongCodec.AAC_WEB)
+        wrapper_tags = await resolver.get_tags(song, codec=SongCodec.AAC)
+        self.assertEqual(web.title, PLAYBACK_TAG_DATA["itemName"])
+        self.assertEqual(wrapper_tags.title, "Only in Wrapper")
+        self.assertIs(wrapper_tags, await resolver.get_tags(song, codec=SongCodec.ALAC))
+        wrapper.get_playback.assert_awaited_once_with(song.id)
+        api.get_webplayback.assert_awaited_once()
+
+    async def test_nonweb_codec_without_wrapper_uses_webplayback_tags(self):
+        api = fake_api()
+        song = Song.from_id("1559885421", api=api)
+        tags = await TagResolver().get_tags(song, codec=SongCodec.AAC)
         self.assertEqual(tags.title, PLAYBACK_TAG_DATA["itemName"])
         api.get_webplayback.assert_awaited_once()
 

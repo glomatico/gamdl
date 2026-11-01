@@ -68,6 +68,25 @@ def brands(path: Path) -> tuple[bytes, list[bytes]]:
     return body[:4], [body[offset : offset + 4] for offset in range(8, len(body), 4)]
 
 
+def track_flags(data: bytes) -> list[int]:
+    moov = next(body for key, body in atoms(data) if key == b"moov")
+    return [
+        int.from_bytes(header[1:4], "big")
+        for key, track in atoms(moov)
+        if key == b"trak"
+        for kind, header in atoms(track)
+        if kind == b"tkhd"
+    ]
+
+
+def streaming_track_flags(data: bytes, flags: int = 1) -> bytes:
+    # These generated fixtures contain exactly one track.
+    result = bytearray(data)
+    at = result.index(b"tkhd") + 5
+    result[at : at + 3] = flags.to_bytes(3, "big")
+    return bytes(result)
+
+
 def mp4_tag_atoms(path: Path):
     data = path.read_bytes()
     moov = next(body for key, body in atoms(data) if key == b"moov")
@@ -82,6 +101,68 @@ def mp4_tag_atoms(path: Path):
         ]
         for key, payload in atoms(ilst)
     }
+
+
+def sample_tables(data: bytes) -> list[dict[bytes, bytes]]:
+    moov = dict(atoms(data))[b"moov"]
+    tables = []
+    for kind, track in atoms(moov):
+        if kind == b"trak":
+            mdia = dict(atoms(track))[b"mdia"]
+            minf = dict(atoms(mdia))[b"minf"]
+            tables.append(dict(atoms(dict(atoms(minf))[b"stbl"])))
+    return tables
+
+
+def description_fixture(data: bytes, distinct: bool = False) -> bytes:
+    """Model HLS key rotation: three entries, trex default and tfhd switches."""
+    def word(value):
+        return value.to_bytes(4, "big")
+
+    def box(kind, body):
+        return word(len(body) + 8) + kind + body
+
+    def rewrite(kind, body, description=None):
+        if kind == b"stsd":
+            [(codec, entry)] = list(atoms(body[8:]))
+            # Distinct non-padding codec metadata must not be discarded.
+            extra = box(b"btrt", word(0) + word(256000) + word(128000))
+            entries = [
+                box(
+                    codec,
+                    entry + (extra if distinct and i == 1 else b"")
+                    + box(b"free", b"retired-key-" + bytes([i])),
+                )
+                for i in range(3)
+            ]
+            body = body[:4] + word(3) + b"".join(entries)
+        elif kind == b"trex":
+            body = body[:8] + word(3) + body[12:]
+        elif kind == b"tfhd" and description is not None:
+            flags = int.from_bytes(body[:4], "big")
+            assert flags & 0x020000 and not flags & 3
+            body = word(flags | 2) + body[4:8] + word(description) + body[8:]
+        elif kind == b"trun" and description is not None:
+            assert int.from_bytes(body[:4], "big") & 1
+            offset = int.from_bytes(body[8:12], "big", signed=True)
+            body = body[:8] + (offset + 4).to_bytes(4, "big", signed=True) + body[12:]
+        elif kind in (
+            b"moov", b"trak", b"mdia", b"minf", b"stbl", b"mvex", b"moof", b"traf"
+        ):
+            body = b"".join(rewrite(k, b, description) for k, b in atoms(body))
+        return box(kind, body)
+
+    output = []
+    fragment = 0
+    for kind, body in atoms(data):
+        description = None
+        if kind == b"moof":
+            # First fragment uses trex's third entry; later fragments switch.
+            description = None if fragment == 0 else (fragment % 3) + 1
+            fragment += 1
+        output.append(rewrite(kind, body, description))
+    assert fragment >= 3
+    return b"".join(output)
 
 
 def decoded_pcm_md5(path: Path):
@@ -221,6 +302,34 @@ class NativeAvMuxTests(unittest.TestCase):
         Muxer().remux_file(self.audio, output)
         self.assertEqual(output.read_bytes(), Muxer().remux(self.audio.read_bytes()))
         self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
+
+    def test_mux_enables_streaming_tracks_for_movie_playback(self):
+        self.video.write_bytes(streaming_track_flags(self.video.read_bytes()))
+        self.audio.write_bytes(streaming_track_flags(self.audio.read_bytes()))
+        output = self.mux()
+        self.assertEqual(track_flags(output.read_bytes()), [7, 7])
+        disk_output = self.directory / "movie-flags.m4v"
+        Muxer().mux_file(
+            video=self.video, audio=self.audio, destination=disk_output
+        )
+        self.assertEqual(disk_output.read_bytes(), output.read_bytes())
+        for kind, source in (("v", self.video), ("a", self.audio)):
+            self.assertEqual(track_hashes(source, kind), track_hashes(output, kind))
+
+    def test_mux_consolidates_equivalent_sample_descriptions(self):
+        self.video.write_bytes(description_fixture(self.video.read_bytes()))
+        self.audio.write_bytes(description_fixture(self.audio.read_bytes()))
+        output = self.mux()
+        for table in sample_tables(output.read_bytes()):
+            self.assertEqual(int.from_bytes(table[b"stsd"][4:8], "big"), 1)
+            self.assertNotIn(b"retired-key-", table[b"stsd"])
+            self.assertEqual(int.from_bytes(table[b"stsc"][4:8], "big"), 1)
+            self.assertEqual(int.from_bytes(table[b"stsc"][16:20], "big"), 1)
+        disk = self.directory / "descriptions.m4v"
+        Muxer().mux_file(video=self.video, audio=self.audio, destination=disk)
+        self.assertEqual(disk.read_bytes(), output.read_bytes())
+        for kind, source in (("v", self.video), ("a", self.audio)):
+            self.assertEqual(track_hashes(source, kind), track_hashes(output, kind))
 
     def test_disk_backed_video_mux_matches_bytes_api(self):
         output = self.directory / "file_muxed.mp4"
@@ -624,6 +733,50 @@ class NativeMp4RemuxTests(unittest.TestCase):
         self.muxer.tag(dest, tags=Tags(title="Remuxed AAC", artist="Gamdl"))
         self.assertEqual(mp4_tag_atoms(dest)[b"\xa9nam"], [(1, b"Remuxed AAC")])
         self.assertEqual(packet_hashes(original), packet_hashes(dest))
+
+    def test_remux_enables_streaming_tracks_for_movie_playback(self):
+        for codec in ("aac", "alac"):
+            for flags in (1, 9):
+                with self.subTest(codec=codec, flags=flags):
+                    original = self.fixture(codec)
+                    data = streaming_track_flags(original.read_bytes(), flags)
+                    original.write_bytes(data)
+                    dest = self.directory / "movie-flags.m4a"
+                    self.muxer.remux_file(original, dest)
+                    self.assertEqual(dest.read_bytes(), self.muxer.remux(data))
+                    self.assertEqual(track_flags(dest.read_bytes()), [flags | 7])
+                    self.muxer.tag(dest, tags=Tags(title="Movie track"))
+                    self.assertEqual(track_flags(dest.read_bytes()), [flags | 7])
+                    self.assertEqual(packet_hashes(original), packet_hashes(dest))
+
+    def test_remux_consolidates_only_equivalent_sample_descriptions(self):
+        for codec in ("aac", "alac"):
+            for distinct in (False, True):
+                with self.subTest(codec=codec, distinct=distinct):
+                    original = self.fixture(codec)
+                    baseline = self.directory / "baseline.m4a"
+                    baseline.write_bytes(self.muxer.remux(original.read_bytes()))
+                    data = description_fixture(original.read_bytes(), distinct)
+                    original.write_bytes(data)
+                    dest = self.directory / "descriptions.m4a"
+                    self.muxer.remux_file(original, dest)
+                    self.assertEqual(dest.read_bytes(), self.muxer.remux(data))
+                    self.muxer.tag(dest, tags=Tags(title="Description cleanup"))
+                    [table] = sample_tables(dest.read_bytes())
+                    self.assertEqual(
+                        int.from_bytes(table[b"stsd"][4:8], "big"),
+                        2 if distinct else 1,
+                    )
+                    self.assertNotIn(b"retired-key-", table[b"stsd"])
+                    references = [
+                        int.from_bytes(table[b"stsc"][at:at + 4], "big")
+                        for at in range(16, len(table[b"stsc"]), 12)
+                    ]
+                    self.assertEqual(references, [1, 2, 1] if distinct else [1])
+                    self.assertEqual(packet_hashes(original), packet_hashes(dest))
+                    # Compare the same flat-container timing: FFmpeg decodes
+                    # final AAC padding differently in the fragmented fixture.
+                    self.assertEqual(decoded_pcm_md5(baseline), decoded_pcm_md5(dest))
 
     def test_nonzero_fragment_decode_timestamps_and_discontinuity_rejection(self):
         original = self.fixture("aac")

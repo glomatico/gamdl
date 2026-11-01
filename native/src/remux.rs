@@ -1,7 +1,7 @@
 //! Lossless conversion of a single-track audio fMP4 to a seekable MP4.
 //!
-//! Rebuild sample tables from trun/tfhd/trex; copy sample payloads and stsd
-//! untouched. This module does not decrypt or transcode. Reject unsupported
+//! Rebuild sample tables from trun/tfhd/trex; copy sample payloads untouched
+//! and consolidate equivalent clear sample descriptions. Reject unsupported
 //! layouts rather than silently emitting a truncated/corrupt file.
 
 use std::fs::File;
@@ -104,7 +104,7 @@ pub(crate) fn fullbox(name: &[u8; 4], version_flags: u32, payload: &[u8]) -> Res
 }
 
 /// Final-file brands, independent of Apple's HLS fragment/transport brands.
-/// Keep the codec sample descriptions (avc1/hvc1/mp4a/ec-3) unchanged.
+/// Keep codec identifiers (avc1/hvc1/mp4a/ec-3) unchanged.
 pub(crate) fn file_type(major_brand: &[u8; 4]) -> Result<Vec<u8>> {
     let compatible: &[u8] = match major_brand {
         b"M4A " => b"M4A mp42isom",
@@ -162,7 +162,74 @@ pub(crate) fn set_duration(
     body.get_mut(pos..pos + width)
         .ok_or(BAD)?
         .copy_from_slice(&bytes);
+    if &atom.name == b"tkhd" {
+        // HLS tracks can be enabled without being marked for movie playback.
+        // Restore the standalone-file flags used by the 3.x muxer: enabled,
+        // in movie, and in preview. Preserve any other flags and the version.
+        *body.get_mut(3).ok_or(BAD)? |= 0x07;
+    }
     boxed(&atom.name, &body)
+}
+
+/// Decryption replaces sinf with free to retain fragment offsets. Those free
+/// boxes can contain different key metadata for otherwise identical codecs.
+/// Drop padding and deduplicate the resulting entries for standalone playback;
+/// never select one arbitrary configuration when the codecs actually differ.
+pub(crate) fn normalize_stsd(
+    input: &(impl Input + ?Sized),
+    stsd: Atom,
+) -> Result<(Vec<u8>, Vec<u32>)> {
+    let entries = atoms(input, stsd.data + 8, stsd.end)?;
+    if entries.len() != u32_at(input, stsd.data + 4)? as usize
+        || entries.is_empty()
+        || entries.len() > 16
+    {
+        return Err(BAD);
+    }
+    let mut unique = Vec::<Vec<u8>>::new();
+    let mut mapping = Vec::new();
+    for entry in entries {
+        let body = input.slice(entry.data..entry.end).ok_or(BAD)?;
+        let header = match &entry.name {
+            b"mp4a" | b"alac" | b"ac-3" | b"ec-3" => {
+                // Apple HLS uses version-0 audio sample entries. Leave other
+                // layouts opaque rather than guessing where their boxes start.
+                if body.get(8..10).ok_or(BAD)? == [0, 0] {
+                    Some(28)
+                } else {
+                    None
+                }
+            }
+            b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"dvh1" | b"dvhe" | b"av01" | b"mp4v" => {
+                Some(78)
+            }
+            _ => None, // Caption sample entry layouts are kept intact.
+        };
+        let cleaned = if let Some(header) = header {
+            let mut cleaned = body.get(..header).ok_or(BAD)?.to_vec();
+            for child in atoms(input, entry.data + header, entry.end)? {
+                if &child.name != b"free" {
+                    cleaned.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?);
+                }
+            }
+            boxed(&entry.name, &cleaned)?
+        } else {
+            input.slice(entry.start..entry.end).ok_or(BAD)?.to_vec()
+        };
+        let index = if let Some(index) = unique.iter().position(|item| item == &cleaned) {
+            index
+        } else {
+            unique.push(cleaned);
+            unique.len() - 1
+        };
+        mapping.push(index as u32 + 1);
+    }
+    let mut body = input.slice(stsd.data..stsd.data + 4).ok_or(BAD)?.to_vec();
+    body.extend((unique.len() as u32).to_be_bytes());
+    for entry in unique {
+        body.extend(entry);
+    }
+    Ok((boxed(b"stsd", &body)?, mapping))
 }
 
 struct Info {
@@ -173,6 +240,8 @@ struct Info {
     default_duration: u32,
     default_size: u32,
     entries: u32,
+    stsd: Vec<u8>,
+    description_map: Vec<u32>,
 }
 
 #[derive(Clone)]
@@ -248,6 +317,7 @@ fn info(bytes: &(impl Input + ?Sized), moov: Atom) -> Result<Info> {
     if default_desc == 0 || default_desc > entries {
         return Err(UNSUPPORTED);
     }
+    let (stsd, description_map) = normalize_stsd(bytes, stsd)?;
     Ok(Info {
         track_id,
         media_scale,
@@ -256,6 +326,8 @@ fn info(bytes: &(impl Input + ?Sized), moov: Atom) -> Result<Info> {
         default_duration: u32_at(bytes, trex.data + 12)?,
         default_size: u32_at(bytes, trex.data + 16)?,
         entries,
+        stsd,
+        description_map,
     })
 }
 
@@ -403,7 +475,7 @@ fn parse_fragment(
             collected.push(Sample {
                 bytes: cursor..end,
                 duration: sample_duration,
-                description,
+                description: info.description_map[description as usize - 1],
             });
             cursor = end;
         }
@@ -542,7 +614,7 @@ fn rebuild(
             match &child.name {
                 b"stsd" => {
                     has_stsd = true;
-                    body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?);
+                    body.extend_from_slice(&info.stsd);
                 }
                 b"stts" | b"stsc" | b"stsz" | b"stco" | b"co64" | b"ctts" | b"stss" | b"sgpd"
                 | b"sbgp" => {}

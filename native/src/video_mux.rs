@@ -15,8 +15,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 use crate::remux::{
-    Atom, atoms, boxed, children, copy_range, file_type, find, fullbox, set_duration, u32_at,
-    u64_at,
+    Atom, atoms, boxed, children, copy_range, file_type, find, fullbox, normalize_stsd,
+    set_duration, u32_at, u64_at,
 };
 
 type Result<T> = std::result::Result<T, &'static str>;
@@ -48,6 +48,8 @@ struct Track {
     kind: Kind,
     scale: u32,
     descriptions: u32,
+    stsd: Vec<u8>,
+    description_map: Vec<u32>,
     default_desc: u32,
     default_duration: u32,
     default_size: u32,
@@ -155,6 +157,7 @@ fn discover(
             return Err(UNSUPPORTED);
         }
         let mdhd = find(input, mdia, b"mdhd")?;
+        let (stsd, description_map) = normalize_stsd(input, stsd)?;
         tracks.push(Track {
             src,
             trak,
@@ -163,6 +166,8 @@ fn discover(
             kind,
             scale: scale(input, mdhd)?,
             descriptions,
+            stsd,
+            description_map,
             default_desc,
             default_duration: u32_at(input, trex.data + 12)?,
             default_size: u32_at(input, trex.data + 16)?,
@@ -346,7 +351,7 @@ fn fragment(
                     duration: dur,
                     composition,
                     sync,
-                    description: desc,
+                    description: track.description_map[desc as usize - 1],
                 });
                 pos = end;
                 current_decode = current_decode.checked_add(dur as u64).ok_or(UNSUPPORTED)?;
@@ -557,7 +562,7 @@ fn rebuild_stbl(
         match &child.name {
             b"stsd" => {
                 has_stsd = true;
-                body.extend_from_slice(input.slice(child.start..child.end).ok_or(BAD)?);
+                body.extend_from_slice(&track.stsd);
             }
             b"stts" | b"ctts" | b"stss" | b"stsc" | b"stsz" | b"stco" | b"co64" | b"sgpd"
             | b"sbgp" | b"senc" | b"saio" | b"saiz" => {}

@@ -365,6 +365,7 @@ async def run_rip(options: RipOptions) -> int:
                             )
                         elif isinstance(media, MusicVideo):
                             kwargs.update(
+                                video_extension=f".{options.music_video_container}",
                                 video_codec=MusicVideoCodec(options.music_video_codec)
                                 if options.music_video_codec
                                 and not options.ask_music_video_streams

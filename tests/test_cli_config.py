@@ -13,6 +13,57 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_music_video_container_defaults_yaml_cli_and_validation(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        defaults = load_config(None)
+        self.assertEqual(defaults.output.music_video_container, "m4v")
+        self.assertEqual(click_default_map(defaults)["music_video_container"], "m4v")
+        self._write("output:\n  music_video_container: mp4\n")
+        configured = load_config(self.path)
+        self.assertEqual(configured.output.music_video_container, "mp4")
+        self.assertEqual(click_default_map(configured)["music_video_container"], "mp4")
+
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with (
+            patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run),
+            patch("gamdl.cli.commands.library.require_terminal"),
+            patch("gamdl.cli.commands.search.require_terminal"),
+        ):
+            runner = CliRunner()
+            for subcommand in (["rip", "URL"], ["library"], ["search", "video"]):
+                with self.subTest(subcommand=subcommand):
+                    base = ["--config", str(self.path), *subcommand]
+                    result = runner.invoke(main, base)
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(received[-1].music_video_container, "mp4")
+                    result = runner.invoke(
+                        main, [*base, "--music-video-container", "m4v"]
+                    )
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(received[-1].music_video_container, "m4v")
+                    result = runner.invoke(
+                        main,
+                        ["--no-config", *subcommand, "--music-video-container", "avi"],
+                    )
+                    self.assertNotEqual(result.exit_code, 0)
+                    self.assertIn("Invalid value", result.output)
+
+        for value in ("avi", "MP4", "", 3, None):
+            with self.subTest(invalid_yaml=value):
+                self._write(
+                    yaml.safe_dump({"output": {"music_video_container": value}})
+                )
+                with self.assertRaisesRegex(
+                    ConfigError, "output.music_video_container"
+                ):
+                    load_config(self.path)
+
     def test_search_api_defaults_yaml_and_cli_override(self):
         from gamdl.cli.config.loader import click_default_map
 

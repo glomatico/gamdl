@@ -313,6 +313,19 @@ gamdl rip "<music video URL>" --music-video-codec-priority h265,h264
 
 Select an exact video codec, or keep `null` to use the priority list. The maximum requested height defaults to `1080` pixels; higher resolutions depend on stream availability and your DRM capabilities. Use `--ask-music-video-streams` (CLI-only) to select audio and video streams interactively.
 
+#### Music Video Container (`output.music_video_container` / `--music-video-container`)
+
+Music videos are saved as `.m4v` files by default, with M4V branding. Select `mp4` to save `.mp4` files with `mp42` branding instead; audio and video are still muxed losslessly. This setting does not affect songs or uploaded videos.
+
+```yaml
+output:
+  music_video_container: mp4
+```
+
+```bash
+gamdl rip "<music video URL>" --music-video-container mp4
+```
+
 #### Uploaded Video Quality (`download.uploaded_video_quality` / `--uploaded-video-quality`)
 
 Choose an uploaded video's asset variant when you need to override automatic quality selection. Use `--ask-uploaded-video-quality` (CLI-only) for an interactive choice.

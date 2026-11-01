@@ -144,6 +144,8 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         raise ConfigError("download.overwrite must be skip, replace, or error")
     if output.cover_format not in {item.value for item in CoverFormat}:
         raise ConfigError("output.cover_format must be jpg or png")
+    if output.music_video_container not in {"m4v", "mp4"}:
+        raise ConfigError("output.music_video_container must be m4v or mp4")
     for name, values, allowed in (
         ("artist_auto_select", download.artist_auto_select, ARTIST_AUTO_SELECT_NAMES),
         (
@@ -342,6 +344,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "device_path": a.device_path,
         "output_dir": o.directory,
         "temp_path": o.temp_path,
+        "music_video_container": o.music_video_container,
         "overwrite": d.overwrite,
         "concurrency": d.concurrency,
         "concurrent_downloads": d.concurrent_downloads,

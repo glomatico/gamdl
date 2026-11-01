@@ -1002,9 +1002,55 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(downloader.itunes_api, itunes)
         kwargs = downloader.download.await_args.kwargs
         self.assertNotIn("codec", kwargs)
+        self.assertEqual(kwargs["video_extension"], ".m4v")
         # Direct dataclass construction has no Click default_map; the resolver
         # uses its own H.264/H.265 defaults when priority is None.
         self.assertIsNone(kwargs["codec_priority"])
+
+    async def test_music_video_container_mp4_reaches_downloader(self):
+        video = MusicVideo.from_id("1445836237", api=self.api)
+        video.get_metadata = AsyncMock(
+            return_value={"attributes": {"name": "Rhythm Nation"}}
+        )
+
+        class Resolver:
+            def __init__(self, api, **kwargs):
+                pass
+
+            async def from_url(self, url):
+                yield video
+
+        downloader = Mock(itunes_api=Mock())
+        downloader.download = AsyncMock(
+            return_value=DownloadResult(
+                video.id, Path("Rhythm Nation.mp4"), MediaStatus.DOWNLOADED, 1024, None
+            )
+        )
+        with (
+            patch(
+                "gamdl.cli.commands.runner._authenticate",
+                new_callable=AsyncMock,
+                return_value=(self.api, None),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
+            patch("gamdl.cli.commands.runner.Downloader", return_value=downloader),
+            patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
+        ):
+            status = await run_rip(
+                RipOptions(
+                    ("https://music.apple.com/br/music-video/example/1445836237",),
+                    music_video_container="mp4",
+                    no_progress=True,
+                )
+            )
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            downloader.download.await_args.kwargs["video_extension"], ".mp4"
+        )
 
     async def test_video_falls_back_when_itunes_client_cannot_initialize(self):
         video = MusicVideo.from_id("1445836237", api=self.api)

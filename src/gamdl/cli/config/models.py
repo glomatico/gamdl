@@ -50,6 +50,7 @@ class DownloadConfig:
 class OutputConfig:
     directory: str = "./Apple Music"
     temp_path: str | None = None
+    music_video_container: str = "m4v"
     tag: bool = True
     exclude_tags: list[str] = field(default_factory=list)
     save_cover: bool = False

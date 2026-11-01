@@ -113,6 +113,14 @@ class RipOptions:
             help="Comma-separated video codecs in priority order (or repeat flag)",
         ),
     ] = ()
+    music_video_container: Annotated[
+        str,
+        option(
+            "--music-video-container",
+            type=click.Choice(["m4v", "mp4"]),
+            help="Music-video file extension and MP4 brand (default: m4v)",
+        ),
+    ] = "m4v"
     max_height: Annotated[int, option("--max-height", type=click.IntRange(min=1))] = (
         1080
     )

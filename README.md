@@ -218,6 +218,8 @@ gamdl organize
 
 The organizer can update database paths and relative M3U playlist references. It avoids overwriting occupied destinations. **Review the dry run first**, especially when changing templates.
 
+When media paths change, `organize` repairs their references inside existing `.m3u8` playlists without changing playlist names or metadata headers. For an already-organized library, use `gamdl organize --playlists-only` (or add `--dry-run` to preview path repairs). Restoring metadata headers in legacy playlists is a separate, manual maintenance task—not an `organize` feature.
+
 ### Interactive Controls
 
 | Key | Action |

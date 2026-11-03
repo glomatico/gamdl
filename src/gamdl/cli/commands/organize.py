@@ -15,7 +15,11 @@ from rich.progress import (
 
 from gamdl.cli.output import console
 from gamdl.download.database import MediaDatabase
-from gamdl.download.organizer import execute_organization, plan_organization
+from gamdl.download.organizer import (
+    execute_organization,
+    plan_organization,
+    preview_playlist_repairs,
+)
 from gamdl.download.paths import PathFormatter
 
 
@@ -28,28 +32,30 @@ from gamdl.download.paths import PathFormatter
 @click.option(
     "--dry-run", is_flag=True, help="Preview moves without changing files or SQLite"
 )
+@click.option(
+    "--playlists-only",
+    is_flag=True,
+    help="Repair/rebase playlists without moving any media files",
+)
 @click.option("--album-folder-template", default=None)
 @click.option("--compilation-folder-template", default=None)
 @click.option("--no-album-folder-template", default=None)
 @click.option("--single-disc-file-template", default=None)
 @click.option("--multi-disc-file-template", default=None)
 @click.option("--no-album-file-template", default=None)
-@click.option("--playlist-folder-template", default=None)
-@click.option("--playlist-file-template", default=None)
 @click.option("--truncate", type=click.IntRange(min=1), default=None)
 @click.pass_context
 def organize(
     ctx: click.Context,
     directory: Path | None,
     dry_run: bool,
+    playlists_only: bool,
     album_folder_template: str | None,
     compilation_folder_template: str | None,
     no_album_folder_template: str | None,
     single_disc_file_template: str | None,
     multi_disc_file_template: str | None,
     no_album_file_template: str | None,
-    playlist_folder_template: str | None,
-    playlist_file_template: str | None,
     truncate: int | None,
 ) -> None:
     """Organize local songs/videos by their embedded tags and path templates.
@@ -71,8 +77,6 @@ def organize(
             "single_disc_file_template": single_disc_file_template,
             "multi_disc_file_template": multi_disc_file_template,
             "no_album_file_template": no_album_file_template,
-            "playlist_folder_template": playlist_folder_template,
-            "playlist_file_template": playlist_file_template,
             "truncate": truncate,
         }.items()
     }
@@ -86,23 +90,29 @@ def organize(
             transient=True,
         ) as progress:
             progress.add_task("Inspecting", total=None)
-            plan = plan_organization(root, formatter, db if db.path.is_file() else None)
+            plan = plan_organization(
+                root,
+                formatter,
+                db if db.path.is_file() else None,
+                playlists_only=playlists_only,
+            )
     except (OSError, ValueError) as error:
         raise click.ClickException(f"Unable to plan organization: {error}") from None
 
-    if dry_run:
+    if dry_run and not playlists_only:
         for move in plan.moves:
             click.echo(
                 f"{move.source.relative_to(root)} -> {move.destination.relative_to(root)}"
             )
-        for source, target in plan.playlist_destinations.items():
-            click.echo(f"{source.relative_to(root)} -> {target.relative_to(root)}")
-    for problem in plan.problems:
-        click.echo(f"Warning: {problem}", err=True)
-
     if dry_run:
-        counts = plan.counts
+        counts = plan.counts.copy()
+        if playlists_only:
+            counts = preview_playlist_repairs(plan)
+        for problem in plan.problems:
+            click.echo(f"Warning: {problem}", err=True)
     else:
+        for problem in plan.problems:
+            click.echo(f"Warning: {problem}", err=True)
         with Progress(
             SpinnerColumn(),
             TextColumn("Moving library files"),
@@ -111,13 +121,16 @@ def organize(
             console=console(stderr=True),
             transient=True,
         ) as progress:
-            task = progress.add_task("Moving", total=len(plan.moves))
+            task = progress.add_task(
+                "Moving", total=0 if playlists_only else len(plan.moves)
+            )
             # Progress corresponds to moves attempted. Execution also updates
             # relative playlists and recorded SQLite paths before returning.
             counts = execute_organization(
                 plan,
                 db,
                 update_index=settings.database.enabled,
+                playlists_only=playlists_only,
                 on_move=lambda: progress.advance(task),
             )
         for problem in plan.problems:
@@ -133,5 +146,15 @@ def organize(
     )
     if not dry_run:
         click.echo(f"Playlists updated: {counts['playlists_updated']}.")
+        click.echo(
+            f"Playlist references repaired: {counts['playlist_references_repaired']}; "
+            f"unresolved: {counts['playlist_references_unresolved']}."
+        )
+    elif playlists_only:
+        click.echo(
+            f"Playlists needing path updates: {counts['playlists_updated']}; "
+            f"references repairable: {counts['playlist_references_repaired']}; "
+            f"unresolved: {counts['playlist_references_unresolved']}."
+        )
     if counts["errors"] or counts["collisions"]:
         raise SystemExit(1)

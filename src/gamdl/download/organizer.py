@@ -7,6 +7,7 @@ collisions deliberately remain untouched instead of guessing which copy wins.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from collections import Counter
 from collections.abc import Callable
@@ -18,12 +19,12 @@ from gamdl import _native
 
 from .database import MediaDatabase
 from .paths import PathFormatter
-from .playlist import playlist_tags_from_header, split_playlist
 from .publication import publish_bytes
 from .tags import Tags
 
 MEDIA_EXTENSIONS = frozenset({".m4a", ".m4v", ".mp4", ".mp3"})
 SIDECAR_EXTENSIONS = (".lrc", ".txt", ".jpg", ".jpeg", ".png")
+_TRACK_NUMBER = re.compile(r"^(?:\d{1,3}-)?\d{1,3}\s+")
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,6 @@ class OrganizePlan:
     moves: list[OrganizeMove]
     counts: Counter[str]
     playlists: tuple[Path, ...]
-    playlist_destinations: dict[Path, Path]
     problems: list[str]
 
 
@@ -107,14 +107,20 @@ def _media_type(path: Path, fields: dict, record: dict | None) -> str | None:
 
 
 def plan_organization(
-    root: Path, formatter: PathFormatter, database: MediaDatabase | None = None
+    root: Path,
+    formatter: PathFormatter,
+    database: MediaDatabase | None = None,
+    *,
+    playlists_only: bool = False,
 ) -> OrganizePlan:
     """Inspect metadata and destinations before any files are moved."""
     root = root.absolute()
     counts: Counter[str] = Counter()
     moves: list[OrganizeMove] = []
     problems: list[str] = []
-    candidates = sorted(_candidates(root))
+    # Playlist-only repairs need filenames, not expensive native media tag
+    # parsing. The execution phase builds a lightweight path index instead.
+    candidates = [] if playlists_only else sorted(_candidates(root))
     playlists = tuple(
         sorted(
             path
@@ -122,37 +128,6 @@ def plan_organization(
             if path.is_file() and not path.is_symlink()
         )
     )
-    playlist_destinations: dict[Path, Path] = {}
-    proposed_playlists: dict[Path, Path] = {}
-    for playlist in playlists:
-        try:
-            header, _ = split_playlist(
-                playlist.read_text(encoding="utf-8-sig").splitlines()
-            )
-            metadata = playlist_tags_from_header(header)
-            # Without both fields, a playlist's name and curator cannot be
-            # recovered reliably. Such playlists can still have paths fixed.
-            if not metadata.title or not metadata.artist:
-                continue
-            destination = formatter.get_playlist_path(metadata).absolute()
-            if destination == playlist:
-                continue
-            if not destination.is_relative_to(root):
-                raise ValueError("Generated playlist path escapes the library root")
-            proposed_playlists[playlist] = destination
-        except (OSError, UnicodeError, ValueError, TypeError) as error:
-            counts["errors"] += 1
-            problems.append(f"Cannot inspect playlist {playlist}: {error}")
-
-    requested = Counter(proposed_playlists.values())
-    for source, target in proposed_playlists.items():
-        if _exists(target) or requested[target] > 1 or not _safe_parents(root, target):
-            counts["collisions"] += 1
-            problems.append(
-                f"Skipping occupied or unsafe playlist destination for {source}"
-            )
-        else:
-            playlist_destinations[source] = target
     for path in candidates:
         counts["scanned"] += 1
         try:
@@ -283,9 +258,7 @@ def plan_organization(
         reserved.update(_targets(candidate))
 
     counts["planned"] = len(accepted)
-    return OrganizePlan(
-        root, accepted, counts, playlists, playlist_destinations, problems
-    )
+    return OrganizePlan(root, accepted, counts, playlists, problems)
 
 
 def _link_move(root: Path, files: list[tuple[Path, Path]]) -> None:
@@ -306,22 +279,60 @@ def _link_move(root: Path, files: list[tuple[Path, Path]]) -> None:
         raise
 
 
+def _reference_key(root: Path, path: Path) -> tuple[str, str, str, str] | None:
+    """Conservative album/artist/title match across filename renumbering.
+
+    Never guess across albums or artists; ambiguous versions are left alone.
+    """
+    if not path.is_relative_to(root) or path.suffix.lower() not in MEDIA_EXTENSIONS:
+        return None
+    components = path.relative_to(root).parts
+    if len(components) < 3:
+        return None
+    name = _TRACK_NUMBER.sub("", path.stem).casefold()
+    return (
+        components[-3].casefold(),
+        components[-2].casefold(),
+        name,
+        path.suffix.lower(),
+    )
+
+
+def _playlist_reference_index(
+    root: Path,
+) -> dict[tuple[str, str, str, str], Path | None]:
+    """Index present files once for efficient, unambiguous reference repair."""
+    index: dict[tuple[str, str, str, str], Path | None] = {}
+    for path in _candidates(root):
+        key = _reference_key(root, path)
+        if key is not None:
+            index[key] = None if key in index else path
+    return index
+
+
 def _update_playlists(
     playlists: tuple[Path, ...],
-    destinations: dict[Path, Path],
     root: Path,
     replacements: dict[Path, Path],
     problems: list[str],
-) -> tuple[int, int]:
-    updated = errors = 0
+    *,
+    dry_run: bool = False,
+) -> tuple[int, int, int, int]:
+    """Rewrite *only* changed local-media path lines in existing playlists.
+
+    Never create/rename playlist files or modify title, curator, catalog ID,
+    EXTINF, other comments, or the ordering of entries.
+    """
+    updated = errors = repaired = unresolved = 0
+    reference_index = _playlist_reference_index(root)
     for playlist in playlists:
         try:
-            destination = destinations.get(playlist, playlist)
-            original = playlist.read_text(encoding="utf-8-sig")
+            original_bytes = playlist.read_bytes()
+            original = original_bytes.decode("utf-8-sig")
             lines = original.splitlines(keepends=True)
             if not lines or lines[0].rstrip("\r\n") != "#EXTM3U":
                 raise ValueError("Invalid M3U playlist header")
-            changes = destination != playlist
+            changes = False
             for i, line in enumerate(lines):
                 value = line.rstrip("\r\n")
                 if not value or value.startswith("#") or "://" in value:
@@ -331,34 +342,52 @@ def _update_playlists(
                     old = playlist.parent / old
                 # M3U entries normally contain ../ components. Path.absolute()
                 # does not collapse those, so normalize without following links.
-                replacement = replacements.get(Path(os.path.abspath(old)), old)
-                if destination == playlist and replacement == old:
+                normalized = Path(os.path.abspath(old))
+                replacement = replacements.get(normalized, normalized)
+                if not replacement.is_file() and not replacement.is_symlink():
+                    key = _reference_key(root, normalized)
+                    candidate = reference_index.get(key) if key is not None else None
+                    if candidate is not None and candidate.is_file():
+                        replacement = candidate
+                        repaired += 1
+                    elif normalized.is_relative_to(root):
+                        unresolved += 1
+                if replacement == normalized:
                     continue
                 ending = line[len(value) :]
                 lines[i] = (
-                    Path(os.path.relpath(replacement, destination.parent)).as_posix()
+                    Path(os.path.relpath(replacement, playlist.parent)).as_posix()
                     + ending
                 )
                 changes = True
             if changes:
-                if not _safe_parents(root, destination):
-                    raise OSError(f"Unsafe playlist destination: {destination}")
-                written = publish_bytes(
-                    "".join(lines).encode("utf-8"),
-                    destination,
-                    overwrite="skip" if destination != playlist else "replace",
-                )
-                if not written:
-                    raise FileExistsError(
-                        f"Playlist destination occupied: {destination}"
-                    )
-                if destination != playlist:
-                    playlist.unlink()
+                if not dry_run:
+                    if not _safe_parents(root, playlist):
+                        raise OSError(f"Unsafe playlist destination: {playlist}")
+                    new_bytes = "".join(lines).encode("utf-8")
+                    if original_bytes.startswith(b"\xef\xbb\xbf"):
+                        new_bytes = b"\xef\xbb\xbf" + new_bytes
+                    publish_bytes(new_bytes, playlist, overwrite="replace")
                 updated += 1
         except (OSError, UnicodeError, ValueError) as error:
             errors += 1
             problems.append(f"Cannot update playlist {playlist}: {error}")
-    return updated, errors
+    return updated, errors, repaired, unresolved
+
+
+def preview_playlist_repairs(plan: OrganizePlan) -> Counter[str]:
+    """Report playlist-only edits without touching the library."""
+    problems: list[str] = []
+    updated, errors, repaired, unresolved = _update_playlists(
+        plan.playlists, plan.root, {}, problems, dry_run=True
+    )
+    plan.problems.extend(problems)
+    counts = plan.counts.copy()
+    counts["playlists_updated"] = updated
+    counts["playlist_references_repaired"] = repaired
+    counts["playlist_references_unresolved"] = unresolved
+    counts["errors"] += errors
+    return counts
 
 
 def execute_organization(
@@ -366,12 +395,29 @@ def execute_organization(
     database: MediaDatabase | None = None,
     *,
     update_index: bool = False,
+    playlists_only: bool = False,
     on_move: Callable[[], None] | None = None,
 ) -> Counter[str]:
     """Apply collision-safe moves and repair relative playlist references."""
     counts = plan.counts.copy()
     replacements: dict[Path, Path] = {}
     parents: set[Path] = set()
+
+    # Repair playlists on an already-organized library without touching media
+    # files or the SQLite index. Headers and playlist filenames are untouched.
+    if playlists_only:
+        updated, errors, repaired, unresolved = _update_playlists(
+            plan.playlists, plan.root, {}, plan.problems
+        )
+        counts.update(
+            moved=0,
+            planned=0,
+            playlists_updated=updated,
+            playlist_references_repaired=repaired,
+            playlist_references_unresolved=unresolved,
+        )
+        counts["errors"] += errors
+        return counts
 
     # A destination may be another planned move's source. Free that source
     # before trying to publish its replacement, so the normal exclusive-link
@@ -456,14 +502,15 @@ def execute_organization(
             if on_move is not None:
                 on_move()
 
-    playlist_updates, playlist_errors = _update_playlists(
+    playlist_updates, playlist_errors, repaired, unresolved = _update_playlists(
         plan.playlists,
-        plan.playlist_destinations,
         plan.root,
         replacements,
         plan.problems,
     )
     counts["playlists_updated"] = playlist_updates
+    counts["playlist_references_repaired"] = repaired
+    counts["playlist_references_unresolved"] = unresolved
     counts["errors"] += playlist_errors
     # Remove only parent directories vacated by moved files, not unrelated
     # empty directories or the configured root itself.

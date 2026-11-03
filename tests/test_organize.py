@@ -130,6 +130,99 @@ class OrganizeTests(unittest.TestCase):
         self.assertEqual(second.exit_code, 0, second.output)
         self.assertIn("moved 0", second.output)
 
+    def test_playlists_only_recovers_old_album_case_and_track_number(self):
+        actual = self.media(
+            "Janet Jackson/All for You/18 Doesn't Really Matter.m4a",
+            Tags(
+                title="Doesn't Really Matter",
+                artist="Janet Jackson",
+                album="All for You",
+            ),
+        )
+        # Organize would normally move this malformed filename to its album
+        # template, but --playlists-only must leave every media file alone.
+        expected_bytes = actual.read_bytes()
+        playlist = self.library / "Playlists/DJ/Dance.m3u8"
+        playlist.parent.mkdir(parents=True)
+        playlist.write_text(
+            "#EXTM3U\n#PLAYLIST:Dance\n#Gamdl-PLAYLIST-ARTIST:DJ\n"
+            "#EXTINF:30,Janet\n../../Janet Jackson/All For You/17 Doesn't Really Matter.m4a\n"
+            "../../Cyndi Lauper/True Colors/01 Change of Heart.m4a\n"
+        )
+        before = playlist.read_bytes()
+        dry = self.invoke("--playlists-only", "--dry-run")
+        self.assertEqual(dry.exit_code, 0, dry.output)
+        self.assertEqual(playlist.read_bytes(), before)
+        result = self.invoke("--playlists-only")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Playlist references repaired: 1; unresolved: 1", result.output)
+        self.assertIn(
+            "../../Janet Jackson/All for You/18 Doesn't Really Matter.m4a",
+            playlist.read_text(),
+        )
+        self.assertIn(
+            "../../Cyndi Lauper/True Colors/01 Change of Heart.m4a",
+            playlist.read_text(),
+        )
+        self.assertEqual(actual.read_bytes(), expected_bytes)
+        self.assertTrue(actual.exists())
+        again = self.invoke("--playlists-only")
+        self.assertEqual(again.exit_code, 0, again.output)
+        self.assertIn("Playlist references repaired: 0; unresolved: 1", again.output)
+
+    def test_playlist_repair_ignores_ambiguous_alternatives(self):
+        self.media("A/Album/01 Track.m4a")
+        self.media("A/Album/02 Track.m4a")
+        playlist = self.library / "Playlists/Me/List.m3u8"
+        playlist.parent.mkdir(parents=True)
+        playlist.write_text("#EXTM3U\n../../A/Album/03 Track.m4a\n")
+        result = self.invoke("--playlists-only")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Playlist references repaired: 0; unresolved: 1", result.output)
+        self.assertEqual(playlist.read_text(), "#EXTM3U\n../../A/Album/03 Track.m4a\n")
+
+    def test_hidden_leading_dots_in_video_filename_are_renamed(self):
+        source = self.media(
+            "Britney Spears/Unknown Album/...Baby One More Time.m4v",
+            Tags(
+                title="...Baby One More Time",
+                artist="Britney Spears",
+                media_type=6,
+                title_id=307560076,
+            ),
+        )
+        source.with_suffix(".jpg").write_bytes(b"cover")
+        self.db.index_file(source, "music-videos", "307560076")
+        playlist = self.library / "Playlists/Me/Videos.m3u8"
+        playlist.parent.mkdir(parents=True)
+        playlist.write_text(
+            "#EXTM3U\n" + os.path.relpath(source, playlist.parent) + "\n"
+        )
+        expected = source.with_name("_..Baby One More Time.m4v")
+        before = source.read_bytes()
+
+        preview = self.invoke("--dry-run")
+        self.assertEqual(preview.exit_code, 0, preview.output)
+        self.assertIn("...Baby One More Time.m4v ->", preview.output)
+        self.assertIn("_..Baby One More Time.m4v", preview.output)
+        self.assertTrue(source.is_file())
+        self.assertFalse(expected.exists())
+
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertFalse(source.exists())
+        self.assertEqual(expected.read_bytes(), before)
+        self.assertEqual(expected.with_suffix(".jpg").read_bytes(), b"cover")
+        self.assertEqual(self.db.get(expected)["media_id"], "307560076")
+        self.assertIsNone(self.db.get(source))
+        self.assertEqual(
+            playlist.read_text(),
+            "#EXTM3U\n" + os.path.relpath(expected, playlist.parent) + "\n",
+        )
+        repeat = self.invoke()
+        self.assertEqual(repeat.exit_code, 0, repeat.output)
+        self.assertIn("moved 0", repeat.output)
+
     def test_collision_preserves_both_files_and_occupied_name(self):
         tags = Tags(
             title="Same",
@@ -367,7 +460,7 @@ class OrganizeTests(unittest.TestCase):
         self.assertIn("collisions 2", result.output)
         self.assertEqual((first.read_bytes(), second.read_bytes()), originals)
 
-    def test_playlist_header_renames_and_rebases_paths(self):
+    def test_organize_changes_only_media_references_not_playlist_headers_or_names(self):
         old_song = self.media(
             "raw/song.m4a",
             Tags(title="Song", artist="Band", title_id=555),
@@ -380,32 +473,29 @@ class OrganizeTests(unittest.TestCase):
             "#Gamdl-APPLE-MUSIC-ID:p.123\n"
             "#EXTINF:10,Sample\n" + os.path.relpath(old_song, playlist.parent) + "\n",
         )
-        expected_playlist = self.library / "Playlists/DJ/Road_Trip.m3u8"
         expected_song = self.library / "Band/Unknown Album/Song.m4a"
         preview = self.invoke("--dry-run")
         self.assertEqual(preview.exit_code, 0, preview.output)
-        self.assertIn(
-            "misc/original.m3u8 -> Playlists/DJ/Road_Trip.m3u8", preview.output
-        )
+        self.assertNotIn("misc/original.m3u8 ->", preview.output)
         self.assertTrue(playlist.exists())
         result = self.invoke()
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertFalse(playlist.exists())
+        self.assertTrue(playlist.exists())
         self.assertTrue(expected_song.exists())
         self.assertEqual(
-            expected_playlist.read_text(),
+            playlist.read_text(),
             "#EXTM3U\n#PLAYLIST:Road/Trip\n"
             "#Gamdl-PLAYLIST-ARTIST:DJ\n"
             "#Gamdl-APPLE-MUSIC-ID:p.123\n"
             "#EXTINF:10,Sample\n"
-            + os.path.relpath(expected_song, expected_playlist.parent)
+            + os.path.relpath(expected_song, playlist.parent)
             + "\n",
         )
         again = self.invoke()
         self.assertEqual(again.exit_code, 0, again.output)
         self.assertIn("Playlists updated: 0", again.output)
 
-    def test_playlist_rename_preserves_relative_paths_without_media_moves(self):
+    def test_playlist_path_and_header_are_not_derived_from_existing_metadata(self):
         playlist = self.library / "old" / "List.m3u8"
         playlist.parent.mkdir()
         path = self.media("Audio/file.m4a")
@@ -414,20 +504,42 @@ class OrganizeTests(unittest.TestCase):
             + os.path.relpath(path, playlist.parent)
             + "\n",
         )
-        result = self.invoke(
-            "--playlist-folder-template",
-            "Custom/{playlist_artist}",
-            "--playlist-file-template",
-            "{playlist_title} ({playlist_id})",
-        )
+        original = playlist.read_bytes()
+        result = self.invoke("--playlists-only")
         self.assertEqual(result.exit_code, 0, result.output)
-        target = self.library / "Custom/Me/List (Unknown Playlist ID).m3u8"
-        self.assertEqual(
-            target.read_text().splitlines()[-1],
-            os.path.relpath(path, target.parent),
-        )
+        self.assertTrue(playlist.exists())
+        self.assertEqual(playlist.read_bytes(), original)
+        self.assertFalse((self.library / "Playlists/Me/List.m3u8").exists())
 
-    def test_playlist_rename_collision_is_non_destructive(self):
+    def test_reference_repair_preserves_bom_crlf_and_header_bytes(self):
+        media = self.media("Singer/Album/02 Great Song.m4a")
+        playlist = self.library / "Playlists/Example/Old.m3u8"
+        playlist.parent.mkdir(parents=True)
+        header = (
+            b"\xef\xbb\xbf#EXTM3U\r\n#PLAYLIST:Still the same name\r\n"
+            b"#Gamdl-PLAYLIST-ARTIST:Still the same curator\r\n"
+            b"#Gamdl-APPLE-MUSIC-ID:pl.example\r\n"
+            b"#EXTINF:180,Still the same song\r\n"
+        )
+        missing = b"../../Singer/Album/01 Great Song.m4a\r\n"
+        playlist.write_bytes(header + missing)
+
+        preview = self.invoke("--playlists-only", "--dry-run")
+        self.assertEqual(preview.exit_code, 0, preview.output)
+        self.assertIn("references repairable: 1", preview.output)
+        self.assertEqual(playlist.read_bytes(), header + missing)
+
+        result = self.invoke("--playlists-only")
+        self.assertEqual(result.exit_code, 0, result.output)
+        expected = os.path.relpath(media, playlist.parent).encode("utf-8")
+        self.assertEqual(playlist.read_bytes(), header + expected + b"\r\n")
+        self.assertEqual(media.name, "02 Great Song.m4a")
+
+        repeat = self.invoke("--playlists-only")
+        self.assertEqual(repeat.exit_code, 0, repeat.output)
+        self.assertIn("Playlists updated: 0", repeat.output)
+
+    def test_playlist_metadata_collisions_do_not_affect_organize(self):
         playlist = self.library / "old" / "original.m3u8"
         playlist.parent.mkdir()
         playlist.write_text("#EXTM3U\n#PLAYLIST:List\n#GAMDL-PLAYLIST-ARTIST:Me\n")
@@ -435,7 +547,10 @@ class OrganizeTests(unittest.TestCase):
         target.parent.mkdir(parents=True)
         target.write_text("#EXTM3U\n#PLAYLIST:Other\n")
         result = self.invoke()
-        self.assertEqual(result.exit_code, 1, result.output)
-        self.assertIn("collisions 1", result.output)
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("collisions 0", result.output)
         self.assertTrue(playlist.exists())
+        self.assertEqual(
+            playlist.read_text(), "#EXTM3U\n#PLAYLIST:List\n#GAMDL-PLAYLIST-ARTIST:Me\n"
+        )
         self.assertEqual(target.read_text(), "#EXTM3U\n#PLAYLIST:Other\n")

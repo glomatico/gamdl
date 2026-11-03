@@ -64,7 +64,7 @@ class PathFormatterTests(unittest.TestCase):
             self.root / "Playlists/Me/Favorites.m3u8",
         )
 
-    def test_dot_leading_folder_replaced_with_underscore_only_for_folders(self):
+    def test_dot_leading_folder_and_file_replaced_with_underscore(self):
         path = self.f.get_media_path(
             self.song,
             Tags(
@@ -72,7 +72,16 @@ class PathFormatterTests(unittest.TestCase):
             ),
             extension=".m4a",
         )
-        self.assertEqual(path, self.root / "_dot/_secret/.visible.m4a")
+        self.assertEqual(path, self.root / "_dot/_secret/_visible.m4a")
+        video = self.f.get_media_path(
+            None,
+            Tags(artist="Britney Spears", title="...Baby One More Time"),
+            extension=".m4v",
+        )
+        self.assertEqual(
+            video,
+            self.root / "Britney Spears/Unknown Album/_..Baby One More Time.m4v",
+        )
         path = self.f.get_media_path(
             self.song, Tags(artist="..", title="Film"), extension=".m4v"
         )

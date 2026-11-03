@@ -51,8 +51,9 @@ class PathFormatter:
     """Format paths and resolve existing-file collisions in one place.
 
     Defaults preserve Gamdl 3.x's folder and filename templates. A *directory*
-    component that starts with '.' is prefixed with '_' instead, so a catalog
-    title like '.Secret' cannot create hidden Unix directories. Output paths
+    component that starts with '.' has its first dot replaced with '_', so a
+    catalog title like '...Baby One More Time' cannot create hidden Unix files
+    or directories. Output paths
     always stay beneath ``output_dir`` (template values never create folders).
     ``get_*_path`` only formats names; ``resolve_*_path`` inspects occupancy
     without changing the filesystem.
@@ -104,7 +105,7 @@ class PathFormatter:
 
     def _component(self, value: str, *, directory: bool, extension: str = "") -> str:
         cleaned = _INVALID.sub("_", value).strip()
-        if directory and cleaned.startswith("."):
+        if cleaned.startswith("."):
             cleaned = "_" + cleaned[1:]
         # Never allow a generated filename to be '.' or '..'.
         if not directory and cleaned in {".", ".."}:
@@ -122,7 +123,7 @@ class PathFormatter:
             cleaned = cleaned[:-1]
         if not cleaned or cleaned in {".", ".."}:
             cleaned = "_"
-        if directory and cleaned.startswith("."):
+        if cleaned.startswith("."):
             cleaned = "_" + cleaned[1:]
         return cleaned + extension
 

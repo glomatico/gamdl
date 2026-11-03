@@ -74,7 +74,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.playlist_file.status, PlaylistStatus.UPDATED)
         self.assertEqual(result.cover.path, result.path.with_suffix(".jpg"))
         self.assertEqual(result.lyrics.path, result.path.with_suffix(".lrc"))
-        expected = output_dir / "Lists/_DJ/.My Playlist (p.12).m3u8"
+        expected = output_dir / "Lists/_DJ/_My Playlist (p.12).m3u8"
         self.assertEqual(result.playlist_file.path, expected)
         lines = expected.read_text().splitlines()
         self.assertEqual(

@@ -31,7 +31,7 @@ class AuthConfig:
 @dataclass(frozen=True)
 class DownloadConfig:
     overwrite: str = "skip"
-    concurrency: int = 8
+    segment_concurrency: int = 8
     concurrent_downloads: int = 2
     song_codec: str | None = None
     song_codec_priority: list[str] = field(default_factory=lambda: ["aac-web"])

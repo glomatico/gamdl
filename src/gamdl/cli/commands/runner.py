@@ -244,7 +244,7 @@ async def run_rip(options: RipOptions) -> int:
                 database=MediaDatabase(Path(options.database_path).expanduser())
                 if options.database and options.database_path
                 else None,
-                concurrency=options.concurrency,
+                concurrency=options.segment_concurrency,
             )
             with RipProgress(
                 enabled=not options.no_progress,

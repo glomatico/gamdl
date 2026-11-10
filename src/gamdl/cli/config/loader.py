@@ -239,6 +239,20 @@ def _normalize(values: dict[str, Any], defaults: dict[str, Any]) -> dict[str, An
     return result
 
 
+def _migrate_legacy_concurrency(values: dict[str, Any]) -> dict[str, Any]:
+    """Preserve the old download.concurrency setting during normalization."""
+    old = values.get("download")
+    if not isinstance(old, dict) or "concurrency" not in old:
+        return values
+    updated = values.copy()
+    section = old.copy()
+    if "segment_concurrency" not in section:
+        section["segment_concurrency"] = section["concurrency"]
+    del section["concurrency"]
+    updated["download"] = section
+    return updated
+
+
 def _persist(path: Path, normalized: dict[str, Any]) -> None:
     """Back up the original and atomically write a validated normalized config."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -281,6 +295,7 @@ def save_auth_configuration(
             raise ConfigError("YAML config must be a mapping")
     else:
         loaded = asdict(AppConfig())
+    loaded = _migrate_legacy_concurrency(loaded)
     auth = loaded.setdefault("auth", {})
     auth.update(
         mode=mode,
@@ -310,11 +325,13 @@ def load_config(path: Path | None) -> AppConfig:
         loaded = {}
     if not isinstance(loaded, dict):
         raise ConfigError("YAML config must be a mapping")
+    original = loaded
+    loaded = _migrate_legacy_concurrency(loaded)
     schema = asdict(AppConfig())
     normalized = _normalize(loaded, schema)
     _merge(defaults, loaded)
     result = _validate(defaults)
-    if normalized != loaded:
+    if normalized != original:
         try:
             _persist(path, normalized)
         except OSError as exc:
@@ -346,7 +363,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "temp_path": o.temp_path,
         "music_video_container": o.music_video_container,
         "overwrite": d.overwrite,
-        "concurrency": d.concurrency,
+        "segment_concurrency": d.segment_concurrency,
         "concurrent_downloads": d.concurrent_downloads,
         "song_codec": d.song_codec,
         "song_codec_priority": tuple(d.song_codec_priority),

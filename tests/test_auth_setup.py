@@ -73,7 +73,7 @@ class AuthSetupTests(unittest.TestCase):
 
     def test_auth_save_normalizes_obsolete_keys(self):
         original = (
-            "download:\n  concurrency: 3\n  unused: 100\n"
+            "download:\n  segment_concurrency: 3\n  unused: 100\n"
             "profiles:\n  unused:\n    download:\n      concurrency: 11\n"
         )
         self.path.write_text(original)
@@ -87,7 +87,7 @@ class AuthSetupTests(unittest.TestCase):
         saved = yaml.safe_load(self.path.read_text())
         self.assertNotIn("profiles", saved)
         self.assertNotIn("unused", saved["download"])
-        self.assertEqual(saved["download"]["concurrency"], 3)
+        self.assertEqual(saved["download"]["segment_concurrency"], 3)
         self.assertEqual(saved["auth"]["mode"], "wrapper")
         self.assertEqual(saved["auth"]["wrapper_url"], "http://127.0.0.1:1234")
         self.assertEqual(self.path.with_name("config.yaml.bak").read_text(), original)
@@ -203,7 +203,9 @@ class AuthSetupTests(unittest.TestCase):
         self.assertIn("requires YAML configuration", result.output)
 
     def test_authentication_saves_to_base_config_preserving_other_sections(self):
-        self.path.write_text("auth:\n  mode: wrapper\ndownload:\n  concurrency: 3\n")
+        self.path.write_text(
+            "auth:\n  mode: wrapper\ndownload:\n  segment_concurrency: 3\n"
+        )
         wizard = _ScriptedWizard(method=2, inputs=["base-token"])
         with (
             patch("gamdl.cli.session.require_terminal"),
@@ -218,7 +220,7 @@ class AuthSetupTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertEqual(load_config(self.path).auth.mode, "media-user-token")
         self.assertEqual(load_config(self.path).auth.media_user_token, "base-token")
-        self.assertEqual(load_config(self.path).download.concurrency, 3)
+        self.assertEqual(load_config(self.path).download.segment_concurrency, 3)
 
 
 class FirstRunAuthTests(unittest.IsolatedAsyncioTestCase):

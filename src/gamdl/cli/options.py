@@ -67,12 +67,13 @@ class RipOptions:
     overwrite: Annotated[
         str, option("--overwrite", type=click.Choice(["skip", "replace", "error"]))
     ] = "skip"
-    concurrency: Annotated[
+    segment_concurrency: Annotated[
         int,
         option(
+            "--segment-concurrency",
             "--concurrency",
             type=click.IntRange(min=1),
-            help="Parallel requests per media",
+            help="Parallel media segment requests per track (--concurrency is a deprecated alias)",
         ),
     ] = 8
     concurrent_downloads: Annotated[

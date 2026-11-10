@@ -270,7 +270,7 @@ class CliConfigTests(unittest.TestCase):
     def test_click_cli_and_environment_precedence(self):
         self._write(
             "config_version: 1\n"
-            "download:\n  concurrency: 3\n  song_codec_priority: [aac-web]\n"
+            "download:\n  segment_concurrency: 3\n  song_codec_priority: [aac-web]\n"
             "output:\n  save_cover: true\n"
         )
         calls = []
@@ -289,12 +289,12 @@ class CliConfigTests(unittest.TestCase):
                     "rip",
                     "https://music.apple.com/br/song/title/123",
                     "--no-progress",
-                    "--concurrency",
+                    "--segment-concurrency",
                     "7",
                 ],
             )
             self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(calls[-1].concurrency, 7)
+            self.assertEqual(calls[-1].segment_concurrency, 7)
             self.assertEqual(calls[-1].song_codec_priority, ("aac-web",))
             self.assertTrue(calls[-1].save_cover)
             result = runner.invoke(
@@ -305,17 +305,63 @@ class CliConfigTests(unittest.TestCase):
                     "rip",
                     "https://music.apple.com/br/song/title/123",
                 ],
-                env={"GAMDL_RIP_CONCURRENCY": "9"},
+                env={"GAMDL_RIP_SEGMENT_CONCURRENCY": "9"},
             )
             self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(calls[-1].concurrency, 9)
+            self.assertEqual(calls[-1].segment_concurrency, 9)
             self.assertEqual(calls[-1].song_codec_priority, ("aac-web",))
             result = runner.invoke(
                 main,
                 ["--no-config", "rip", "https://music.apple.com/br/song/title/123"],
             )
             self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(calls[-1].concurrency, 8)
+            self.assertEqual(calls[-1].segment_concurrency, 8)
+
+    def test_segment_concurrency_cli_name_and_legacy_alias(self):
+        self._write("download:\n  segment_concurrency: 4\n")
+        received = []
+
+        async def fake_run(options):
+            received.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            runner = CliRunner()
+            prefix = [
+                "--config",
+                str(self.path),
+                "rip",
+                "https://music.apple.com/br/song/123",
+            ]
+            result = runner.invoke(main, [*prefix, "--segment-concurrency", "11"])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(received[-1].segment_concurrency, 11)
+            legacy = runner.invoke(main, [*prefix, "--concurrency", "7"])
+            self.assertEqual(legacy.exit_code, 0, legacy.output)
+            self.assertEqual(received[-1].segment_concurrency, 7)
+            result = runner.invoke(main, prefix)
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(received[-1].segment_concurrency, 4)
+            self.assertIn(
+                "--segment-concurrency",
+                runner.invoke(main, ["--no-config", "rip", "--help"]).output,
+            )
+
+    def test_legacy_concurrency_yaml_key_is_migrated(self):
+        original = "download:\n  concurrency: 13\n"
+        self._write(original)
+        self.assertEqual(load_config(self.path).download.segment_concurrency, 13)
+        rewritten = yaml.safe_load(self.path.read_text())
+        self.assertEqual(rewritten["download"]["segment_concurrency"], 13)
+        self.assertNotIn("concurrency", rewritten["download"])
+        self.assertEqual(self.path.with_name("config.yaml.bak").read_text(), original)
+
+        # When both spellings are supplied, the canonical one wins.
+        self._write("download:\n  concurrency: 3\n  segment_concurrency: 15\n")
+        self.assertEqual(load_config(self.path).download.segment_concurrency, 15)
+        self.assertNotIn(
+            "concurrency", yaml.safe_load(self.path.read_text())["download"]
+        )
 
     def test_comma_separated_codec_priorities_and_yaml_lists(self):
         self._write(
@@ -473,11 +519,11 @@ class CliConfigTests(unittest.TestCase):
         for text in (
             "not: [valid",
             "config_version: 2\n",
-            "download:\n  concurrency: -1\n",
+            "download:\n  segment_concurrency: -1\n",
             "download:\n  concurrent_downloads: true\n",
             "output:\n  save_cover: yes\n",  # YAML 1.1 resolves to bool, valid
             "output:\n  album_folder_template: '{__class__}'\n",
-            "download:\n  concurrency: 3\ndownload:\n  concurrency: 4\n",
+            "download:\n  segment_concurrency: 3\ndownload:\n  segment_concurrency: 4\n",
         ):
             if text.startswith("output:\n  save_cover: yes"):
                 continue
@@ -489,7 +535,7 @@ class CliConfigTests(unittest.TestCase):
 
     def test_obsolete_profiles_are_dropped_like_any_unknown_key(self):
         original = (
-            "download:\n  concurrency: 4\n"
+            "download:\n  segment_concurrency: 4\n"
             "profiles:\n  fast:\n    download:\n      concurrent_downloads: 4\n"
         )
         self._write(original)
@@ -499,18 +545,18 @@ class CliConfigTests(unittest.TestCase):
         self.assertEqual(cli.exit_code, 0, cli.output)
         rewritten = yaml.safe_load(self.path.read_text())
         self.assertNotIn("profiles", rewritten)
-        self.assertEqual(rewritten["download"]["concurrency"], 4)
+        self.assertEqual(rewritten["download"]["segment_concurrency"], 4)
         self.assertEqual(self.path.with_name("config.yaml.bak").read_text(), original)
-        self.assertEqual(load_config(self.path).download.concurrency, 4)
+        self.assertEqual(load_config(self.path).download.segment_concurrency, 4)
         self.assertEqual(load_config(None).download.concurrent_downloads, 2)
 
         # Valid settings remain valid even when the discarded section has
         # settings that would be invalid under the current schema.
         self._write(
-            "download:\n  concurrency: 6\n"
+            "download:\n  segment_concurrency: 6\n"
             "profiles:\n  unused:\n    download:\n      concurrency: invalid\n"
         )
-        self.assertEqual(load_config(self.path).download.concurrency, 6)
+        self.assertEqual(load_config(self.path).download.segment_concurrency, 6)
         self.assertNotIn("profiles", yaml.safe_load(self.path.read_text()))
 
         result = CliRunner().invoke(

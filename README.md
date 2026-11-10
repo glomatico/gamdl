@@ -220,6 +220,20 @@ The organizer can update database paths and relative M3U playlist references. It
 
 When media paths change, `organize` repairs their references inside existing `.m3u8` playlists without changing playlist names or metadata headers. For an already-organized library, use `gamdl organize --playlists-only` (or add `--dry-run` to preview path repairs). Restoring metadata headers in legacy playlists is a separate, manual maintenance task—not an `organize` feature.
 
+### Sync Apple Music Playlists (`sync playlists`)
+
+Reconcile existing local `.m3u8` playlists with their Apple Music catalog IDs, including new, removed, and reordered tracks:
+
+```bash
+gamdl sync playlists --dry-run
+gamdl sync playlists --dry-run --verbose
+gamdl sync playlists
+gamdl sync playlists --no-download
+gamdl sync playlists --playlist 'Playlists/Apple Music/Oliver Tree_ essenciais.m3u8'
+```
+
+Gamdl matches tracks by catalog ID using the local SQLite index and embedded media tags. The default output shows a concise table of only playlists that need attention; use `--verbose` to show all playlists and individual added/removed tracks. After fetching complete playlist listings, synchronization reports the number of **unique missing tracks**, then downloads them with the same per-track progress bars as `rip` and an overall completed/total bar. It respects `download.concurrent_downloads` (parallel tracks) and `download.segment_concurrency` (media segment requests per track), reusing shared tracks across playlists. Missing tracks are downloaded with your configured codec settings unless `--no-download` is used. Removed playlist entries **never delete local media**. Duplicate occurrences and ordered entries are preserved. Failed downloads or incomplete Apple Music responses leave each affected playlist unchanged; other playlists may still succeed. The command does not rename playlist files or alter existing metadata headers. Large removals require `--yes` after inspecting `--dry-run`.
+
 ### Interactive Controls
 
 | Key | Action |
@@ -335,9 +349,9 @@ Choose an uploaded video's asset variant when you need to override automatic qua
 
 ### Download Behavior
 
-#### Concurrency (`download.concurrency` / `--concurrency`, `download.concurrent_downloads` / `--concurrent-downloads`)
+#### Download Concurrency (`download.segment_concurrency` / `--segment-concurrency`, `download.concurrent_downloads` / `--concurrent-downloads`)
 
-`concurrency` controls parallel requests for an individual media item (**default:** `8`). `concurrent_downloads` controls how many media items download simultaneously (**default:** `2`). Increase these carefully to avoid rate limiting.
+`segment_concurrency` controls parallel media-segment HTTP requests for an individual track (**default:** `8`); it does not directly limit Apple Music metadata or playback API requests. `concurrent_downloads` controls how many media items download simultaneously (**default:** `2`). Higher parallelism can indirectly result in overlapping API calls. Gamdl 4.0 uses only `segment_concurrency` and `--segment-concurrency`; the previous names are not supported.
 
 #### Existing Files (`download.overwrite` / `--overwrite`)
 
@@ -411,6 +425,8 @@ Enable generation of relative-path `.m3u8` files for Apple Music playlists. It i
 #### Media Index (`database.enabled` / `--database`, `database.path` / `--database-path`)
 
 The SQLite index is optional and disabled for new downloads by default. Enable it to track published files and help recognize existing downloads. Use the `database` commands described in [Usage](#-usage) to manage the index independently.
+
+With the index enabled, `rip` checks existing catalog IDs **before** fetching per-track tags, playback streams, lyrics, or decryption information. For the default `--overwrite skip` policy, an indexed file that still exists within the output library can be reused directly. Existing cover/lyrics sidecars are also reused without network requests; missing sidecars can still be fetched, and playlist entries are finalized normally. Explicit codec selections, single-codec priorities without a verified matching codec, and `--overwrite replace` bypass the early skip so codec changes are not silently mistaken for existing matches. The same indexed ID information is used for local track resolution in `sync playlists`.
 
 ```yaml
 database:

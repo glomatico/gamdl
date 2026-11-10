@@ -152,6 +152,9 @@ class RipProgress:
         self._transfer: dict[int, dict[str, float]] = {}
         self._last_percent: dict[int, float] = {}
         self._discovery: int | None = None
+        self._batch_task: int | None = None
+        self._batch_total = 0
+        self._batch_finished = 0
         self._pending_messages: list[str] = []
         self._completed: set[int] = set()
         self._closed = False
@@ -233,6 +236,21 @@ class RipProgress:
             self._discovery = None
         self._fit_rows()
 
+    def start_batch(self, total: int) -> None:
+        """Show an overall completed/total counter for a known download batch.
+
+        Used by sync after playlist discovery; rip still supports streaming
+        discovery where the eventual count is not known upfront.
+        """
+        self.discovery_finished()
+        self._batch_total = total
+        self._batch_finished = 0
+        if self.enabled:
+            self._batch_task = self.progress.add_task(
+                f"Downloading 0/{total} tracks", total=total, discovery=True
+            )
+            self._fit_rows()
+
     def add(self, occurrence: int, title: str, *, tracks: tuple[str, ...] = ("audio",)):
         if self.enabled:
             self._transfer[occurrence] = dict.fromkeys(tracks, 0.0)
@@ -294,6 +312,13 @@ class RipProgress:
         if occurrence in self._completed:
             return
         self._completed.add(occurrence)
+        if self._batch_task is not None:
+            self._batch_finished += 1
+            self.progress.update(
+                self._batch_task,
+                description=f"Downloading {self._batch_finished}/{self._batch_total} tracks",
+                advance=1,
+            )
         if self.enabled and occurrence in self._rows:
             task = self._rows[occurrence]
             if status in {"failed", "partial"}:

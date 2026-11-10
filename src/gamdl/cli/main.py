@@ -46,6 +46,7 @@ from .commands.library import library
 from .commands.organize import organize
 from .commands.rip import rip
 from .commands.search import search
+from .commands.sync import sync
 
 main.add_command(rip)
 main.add_command(auth)
@@ -54,3 +55,4 @@ main.add_command(search)
 main.add_command(config_group)
 main.add_command(database_group)
 main.add_command(organize)
+main.add_command(sync)

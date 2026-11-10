@@ -667,33 +667,41 @@ class Downloader:
         if save_cover:
             try:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_COVER):
-                    cover_bytes = prepared_cover
-                    if cover_bytes is None:
-                        cover = await media.get_cover()
-                        cover_bytes = (
-                            await cover.get_cover_bytes(format=cover_format.value)
-                            if cover is not None
-                            else None
-                        )
-                    if cover_bytes:
-                        if cover_bytes.startswith(b"\xff\xd8\xff"):
-                            extension = ".jpg"
-                        elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-                            extension = ".png"
-                        else:
-                            raise ValueError(
-                                "Cover sidecar must contain JPEG or PNG bytes"
-                            )
-                        cover_path = destination.with_suffix(extension)
-                        status = await _complete_write(
-                            publish_bytes_result,
-                            cover_bytes,
-                            cover_path,
-                            overwrite=overwrite,
-                        )
-                        cover_result = FileResult(cover_path, status)
+                    existing_cover = destination.with_suffix(
+                        ".jpg" if cover_format == CoverFormat.JPG else ".png"
+                    )
+                    if overwrite == OverwritePolicy.SKIP and existing_cover.is_file():
+                        # A known media file needs no Apple artwork request
+                        # merely to confirm an existing sidecar.
+                        cover_result = FileResult(existing_cover, FileStatus.SKIPPED)
                     else:
-                        cover_result = FileResult(None, FileStatus.UNAVAILABLE)
+                        cover_bytes = prepared_cover
+                        if cover_bytes is None:
+                            cover = await media.get_cover()
+                            cover_bytes = (
+                                await cover.get_cover_bytes(format=cover_format.value)
+                                if cover is not None
+                                else None
+                            )
+                        if cover_bytes:
+                            if cover_bytes.startswith(b"\xff\xd8\xff"):
+                                extension = ".jpg"
+                            elif cover_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                                extension = ".png"
+                            else:
+                                raise ValueError(
+                                    "Cover sidecar must contain JPEG or PNG bytes"
+                                )
+                            cover_path = destination.with_suffix(extension)
+                            status = await _complete_write(
+                                publish_bytes_result,
+                                cover_bytes,
+                                cover_path,
+                                overwrite=overwrite,
+                            )
+                            cover_result = FileResult(cover_path, status)
+                        else:
+                            cover_result = FileResult(None, FileStatus.UNAVAILABLE)
                     if on_result is not None:
                         on_result("cover", cover_result)
             except Exception as exc:
@@ -703,23 +711,37 @@ class Downloader:
             assert isinstance(media, Song)
             try:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
-                    lyrics = await media.get_lyrics()
-                    if lyrics is not None:
-                        if lyrics.is_synced:
-                            sidecar = destination.with_suffix(".lrc")
-                            contents = lyrics.to_lrc()
-                        else:
-                            sidecar = destination.with_suffix(".txt")
-                            contents = lyrics.to_plain_text()
-                        status = await _complete_write(
-                            publish_bytes_result,
-                            contents.encode("utf-8"),
-                            sidecar,
-                            overwrite=overwrite,
-                        )
-                        lyrics_result = FileResult(sidecar, status)
+                    existing_lyrics = next(
+                        (
+                            sidecar
+                            for suffix in (".lrc", ".txt")
+                            if (sidecar := destination.with_suffix(suffix)).is_file()
+                        ),
+                        None,
+                    )
+                    if (
+                        overwrite == OverwritePolicy.SKIP
+                        and existing_lyrics is not None
+                    ):
+                        lyrics_result = FileResult(existing_lyrics, FileStatus.SKIPPED)
                     else:
-                        lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
+                        lyrics = await media.get_lyrics()
+                        if lyrics is not None:
+                            if lyrics.is_synced:
+                                sidecar = destination.with_suffix(".lrc")
+                                contents = lyrics.to_lrc()
+                            else:
+                                sidecar = destination.with_suffix(".txt")
+                                contents = lyrics.to_plain_text()
+                            status = await _complete_write(
+                                publish_bytes_result,
+                                contents.encode("utf-8"),
+                                sidecar,
+                                overwrite=overwrite,
+                            )
+                            lyrics_result = FileResult(sidecar, status)
+                        else:
+                            lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
                     if on_result is not None:
                         on_result("lyrics", lyrics_result)
             except Exception as exc:
@@ -971,6 +993,64 @@ class Downloader:
                     "playlist_tags.track must be a positive one-based integer"
                 )
             playlist_index = playlist_tags.track - 1
+        # Recover 3.x's database early exit: catalog/playlist metadata already
+        # contains the media ID, so a confirmed local file needs no tag,
+        # playback, stream or decryption requests.  Keep explicit codec and
+        # quality-selection requests on the normal path, and never reuse a
+        # different output directory or video container by accident.
+        if (
+            output is None
+            and self.path_formatter is not None
+            and self.database is not None
+            and overwrite == OverwritePolicy.SKIP
+            and not ask
+            and codec is None
+            and video_codec is None
+        ):
+            if isinstance(media, MusicVideo):
+                suffixes = (video_extension,)
+            elif isinstance(media, Song):
+                suffixes = (".mp3", ".m4a") if media.is_library else (".m4a",)
+            else:
+                suffixes = ()
+            if suffixes:
+                # A single-codec priority expresses an exact preference. For
+                # multiple priorities, skip existing media like 3.x; explicit
+                # replacement handles changing an older encode.
+                required_codec = (
+                    getattr(codec_priority[0], "value", str(codec_priority[0]))
+                    if codec_priority is not None and len(codec_priority) == 1
+                    else None
+                )
+                existing = await asyncio.to_thread(
+                    self.database.find_by_media_id,
+                    media.type,
+                    media.id,
+                    root=self.path_formatter.output_dir,
+                    extensions=suffixes,
+                    codec=required_codec,
+                )
+                if existing is not None:
+                    return await self._finalize(
+                        media,
+                        DownloadResult(
+                            media.id,
+                            Path(existing["path"]),
+                            MediaStatus.SKIPPED,
+                            0,
+                            None,
+                        ),
+                        overwrite=overwrite,
+                        save_cover=save_cover,
+                        cover_format=cover_format,
+                        save_lyrics=save_lyrics,
+                        playlist_path=Path(playlist_path)
+                        if playlist_path is not None
+                        else None,
+                        playlist_tags=playlist_tags,
+                        playlist_index=playlist_index,
+                        event_callback=event_callback,
+                    )
         generated_video_path: Path | None = None
         resolved_tags: Tags | None = None
         selected_song_stream: AudioStream | None = None

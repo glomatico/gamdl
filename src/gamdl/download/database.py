@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from contextlib import closing
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,6 +26,26 @@ class MediaDatabase:
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self._lookup_index_checked = False
+        self._lookup_index_lock = threading.Lock()
+
+    def _ensure_lookup_index(self) -> None:
+        """Add the ID lookup index to existing 4.x databases once per session."""
+        if self._lookup_index_checked or not self.path.is_file():
+            return
+        with self._lookup_index_lock:
+            if self._lookup_index_checked:
+                return
+            try:
+                with closing(sqlite3.connect(self.path, timeout=10)) as db, db:
+                    db.execute(
+                        "CREATE INDEX IF NOT EXISTS media_id_lookup_idx "
+                        "ON media_files(media_type, media_id)"
+                    )
+            except sqlite3.OperationalError:
+                # Older/incomplete or read-only indexes still permit lookup.
+                pass
+            self._lookup_index_checked = True
 
     def record(self, media: Media, result: DownloadResult) -> DatabaseStatus:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +130,79 @@ class MediaDatabase:
                 (str(Path(path).absolute()),),
             ).fetchone()
         return dict(row) if row is not None else None
+
+    def find_by_media_id(
+        self,
+        media_type: str,
+        media_id: str,
+        *,
+        root: Path | None = None,
+        extensions: tuple[str, ...] | None = None,
+        codec: str | None = None,
+    ) -> dict[str, object] | None:
+        """Find a usable local copy before any network-dependent media work.
+
+        A catalog ID can have several paths (including different codecs).
+        Ignore stale records and files outside the requested output root.  An
+        explicit codec constraint requires recorded codec provenance; records
+        created by an offline database scan normally have a null codec.
+        """
+        if not self.path.is_file():
+            return None
+        self._ensure_lookup_index()
+        root = root.absolute() if root is not None else None
+        with closing(sqlite3.connect(self.path, timeout=10)) as db:
+            db.row_factory = sqlite3.Row
+            try:
+                rows = db.execute(
+                    "SELECT * FROM media_files WHERE media_type = ? AND media_id = ? "
+                    "ORDER BY updated_at DESC, path",
+                    (media_type, str(media_id)),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                return None
+        for row in rows:
+            record = dict(row)
+            path = Path(record["path"])
+            if root is not None and not path.resolve().is_relative_to(root.resolve()):
+                continue
+            if extensions is not None and path.suffix.lower() not in extensions:
+                continue
+            if codec is not None and record["codec"] != codec:
+                continue
+            try:
+                if path.is_symlink():
+                    continue
+                stat = path.stat()
+            except OSError:
+                continue
+            if (
+                not path.is_file()
+                or stat.st_size <= 0
+                or stat.st_size != record["file_size"]
+            ):
+                continue
+            # The DB media ID is the identity authority for this fast path.
+            # Reading MP4 tags for every hit can be expensive for large videos.
+            # Reject missing or changed-size files instead of repeatedly
+            # parsing their containers (database scan can rebuild stale IDs).
+            return record
+        return None
+
+    def local_records(self, root: Path) -> list[dict[str, object]]:
+        """Read local index entries in bulk for commands such as playlist sync."""
+        if not self.path.is_file():
+            return []
+        root = root.absolute()
+        with closing(sqlite3.connect(self.path, timeout=10)) as db:
+            db.row_factory = sqlite3.Row
+            try:
+                rows = db.execute(
+                    "SELECT path, media_type, media_id, file_size FROM media_files"
+                ).fetchall()
+            except sqlite3.OperationalError:
+                return []
+        return [dict(row) for row in rows if Path(row["path"]).is_relative_to(root)]
 
     def relocate(self, source: Path, destination: Path) -> bool:
         """Update an existing path without losing its codec or source metadata.

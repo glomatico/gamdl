@@ -420,6 +420,76 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(brands(output)[0], b"M4A ")
         self.assertEqual(list(output.parent.glob(".*.part")), [])
 
+    async def test_database_early_skip_avoids_all_media_and_existing_sidecar_requests(self):
+        downloader, tag_resolver = self.downloader()
+        output_root = self.directory / "library"
+        media_path = output_root / "Sample Artist/Unknown Album/Sample Track.m4a"
+        media_path.parent.mkdir(parents=True)
+        media_path.write_bytes(self.audio.read_bytes())
+        media_path.with_suffix(".lrc").write_text("[00:01.00]Existing lyrics")
+        media_path.with_suffix(".jpg").write_bytes(JPEG)
+        db = MediaDatabase(self.directory / "fast.sqlite3")
+        db.index_file(media_path, "songs", "111")
+        downloader.database = db
+        downloader.path_formatter = PathFormatter(output_root)
+        song = self.song()
+        song.is_uploaded = AsyncMock(side_effect=AssertionError("Unnecessary API lookup"))
+        song.get_lyrics = AsyncMock(side_effect=AssertionError("Unnecessary lyrics API"))
+        song.get_cover = AsyncMock(side_effect=AssertionError("Unnecessary cover API"))
+        playlist = output_root / "Playlists/example.m3u8"
+        result = await downloader.download(
+            song,
+            codec_priority=(SongCodec.ATMOS, SongCodec.AAC),
+            save_cover=True,
+            save_lyrics=True,
+            playlist_path=playlist,
+            playlist_index=0,
+        )
+        self.assertEqual(result.status.value, "skipped")
+        self.assertEqual(result.path, media_path)
+        self.assertEqual(result.lyrics.status.value, "skipped")
+        self.assertEqual(result.cover.status.value, "skipped")
+        self.assertTrue(playlist.is_file())
+        self.assertIn("Sample Track.m4a", playlist.read_text())
+        tag_resolver.get_tags.assert_not_awaited()
+        downloader._save_track.assert_not_awaited()
+        song.is_uploaded.assert_not_awaited()
+        song.get_lyrics.assert_not_awaited()
+        song.get_cover.assert_not_awaited()
+
+    async def test_single_codec_priority_does_not_reuse_unverified_database_codec(self):
+        downloader, tag_resolver = self.downloader()
+        output_root = self.directory / "library"
+        media_path = output_root / "Sample Artist/Unknown Album/Sample Track.m4a"
+        media_path.parent.mkdir(parents=True)
+        media_path.write_bytes(self.audio.read_bytes())
+        db = MediaDatabase(self.directory / "fast.sqlite3")
+        db.index_file(media_path, "songs", "111")
+        downloader.database = db
+        downloader.path_formatter = PathFormatter(output_root)
+        song = self.song()
+        result = await downloader.download(song, codec_priority=(SongCodec.ALAC_HIRES,))
+        self.assertEqual(result.status.value, "skipped")
+        tag_resolver.get_tags.assert_awaited_once()
+
+    async def test_explicit_codec_and_replace_bypass_database_early_skip(self):
+        downloader, tag_resolver = self.downloader()
+        root = self.directory / "library"
+        destination = root / "Sample Artist/Unknown Album/Sample Track.m4a"
+        destination.parent.mkdir(parents=True)
+        destination.write_bytes(self.audio.read_bytes())
+        db = MediaDatabase(self.directory / "fast.sqlite3")
+        db.index_file(destination, "songs", "111")
+        downloader.database = db
+        downloader.path_formatter = PathFormatter(root)
+        song = self.song()
+        await downloader.download(song, codec=SongCodec.ALAC_HIRES)
+        tag_resolver.get_tags.assert_awaited_once()
+        tag_resolver.get_tags.reset_mock()
+        result = await downloader.download(song, overwrite="replace", codec=SongCodec.AAC)
+        self.assertEqual(result.status.value, "overwritten")
+        tag_resolver.get_tags.assert_awaited()
+
     async def test_custom_temp_path_stages_on_disk_and_cleans_on_success(self):
         root = self.directory / "custom-staging"
         downloader, _ = self.downloader()

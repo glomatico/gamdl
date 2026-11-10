@@ -71,9 +71,8 @@ class RipOptions:
         int,
         option(
             "--segment-concurrency",
-            "--concurrency",
             type=click.IntRange(min=1),
-            help="Parallel media segment requests per track (--concurrency is a deprecated alias)",
+            help="Parallel media segment requests per track",
         ),
     ] = 8
     concurrent_downloads: Annotated[
@@ -205,7 +204,11 @@ class RipOptions:
         int, option("--max-visible-tracks", type=click.IntRange(min=1))
     ] = 5
     debug: Annotated[
-        bool, option("--debug/--no-debug", help="Display unexpected tracebacks")
+        bool,
+        option(
+            "--debug/--no-debug",
+            help="Show full traceback details and expected-error tracebacks (may include sensitive data)",
+        ),
     ] = False
     auth_mode: Annotated[
         str | None,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import traceback
 from collections import Counter
 from contextlib import AsyncExitStack, aclosing
 from dataclasses import dataclass
@@ -42,7 +41,14 @@ from gamdl.media.constants import (
 )
 from gamdl.search import ITUNES_SEARCH_TYPES, create_search_caches
 
-from ..errors import short_error as _short_error
+from ..errors import (
+    FailureTraceback,
+    capture_failure_traceback,
+    print_failure_tracebacks,
+)
+from ..errors import (
+    short_error as _short_error,
+)
 from ..options import TAG_NAMES
 from ..output import console as output_console
 from ..progress import RipProgress
@@ -68,7 +74,7 @@ class _Failure:
     traceback: str | None
 
 
-def _print_failures(console, failures: list[_Failure], *, debug: bool) -> None:
+def _print_failures(console, failures: list[_Failure]) -> None:
     """Render errors after the live progress display has been stopped."""
     if not failures:
         return
@@ -76,16 +82,14 @@ def _print_failures(console, failures: list[_Failure], *, debug: bool) -> None:
     for failure in failures:
         suffix = "" if failure.expected else f" ({failure.exception_type})"
         console.print(Text(f"  ✗ {failure.label}: {failure.message}{suffix}"))
-        if debug and failure.traceback is not None:
-            console.print(Text(failure.traceback))
-    has_unexpected = any(not failure.expected for failure in failures)
-    if has_unexpected and not debug:
-        console.print("[dim]Run with --debug for tracebacks.[/dim]")
-    elif any(failure.traceback is not None for failure in failures):
-        console.print(
-            "[yellow]Debug tracebacks may contain signed URLs or account details; "
-            "review before sharing.[/yellow]"
-        )
+    print_failure_tracebacks(
+        console,
+        [
+            FailureTraceback(failure.label, failure.traceback)
+            for failure in failures
+            if failure.traceback is not None
+        ],
+    )
 
 
 def _check_options(options: RipOptions) -> None:
@@ -220,8 +224,8 @@ async def run_rip(options: RipOptions) -> int:
                 message,
                 type(error).__name__,
                 expected,
-                "".join(traceback.format_exception(error))
-                if options.debug and not expected
+                capture_failure_traceback(label, error, debug=options.debug).traceback
+                if not expected or options.debug
                 else None,
             )
         )
@@ -699,7 +703,7 @@ async def run_rip(options: RipOptions) -> int:
         raise
     except Exception as error:  # noqa: BLE001 - report session failures
         record_failure("Session", error)
-        _print_failures(console, failures, debug=options.debug)
+        _print_failures(console, failures)
         return 1
 
     if found == 0 and not counts["failed"]:
@@ -711,5 +715,5 @@ async def run_rip(options: RipOptions) -> int:
         f"{counts['failed']} failed, {counts['finalization_failed']} "
         f"finalization failures ({found} discovered)"
     )
-    _print_failures(console, failures, debug=options.debug)
+    _print_failures(console, failures)
     return 1 if counts["failed"] or counts["finalization_failed"] else 0

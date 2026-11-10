@@ -317,7 +317,7 @@ class CliConfigTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(calls[-1].segment_concurrency, 8)
 
-    def test_segment_concurrency_cli_name_and_legacy_alias(self):
+    def test_segment_concurrency_cli_name_without_legacy_alias(self):
         self._write("download:\n  segment_concurrency: 4\n")
         received = []
 
@@ -337,15 +337,14 @@ class CliConfigTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(received[-1].segment_concurrency, 11)
             legacy = runner.invoke(main, [*prefix, "--concurrency", "7"])
-            self.assertEqual(legacy.exit_code, 0, legacy.output)
-            self.assertEqual(received[-1].segment_concurrency, 7)
+            self.assertNotEqual(legacy.exit_code, 0)
+            self.assertIn("No such option '--concurrency'", legacy.output)
             result = runner.invoke(main, prefix)
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(received[-1].segment_concurrency, 4)
-            self.assertIn(
-                "--segment-concurrency",
-                runner.invoke(main, ["--no-config", "rip", "--help"]).output,
-            )
+            help_text = runner.invoke(main, ["--no-config", "rip", "--help"]).output
+            self.assertIn("--segment-concurrency", help_text)
+            self.assertNotIn("--concurrency", help_text)
 
     def test_legacy_concurrency_yaml_key_is_migrated(self):
         original = "download:\n  concurrency: 13\n"

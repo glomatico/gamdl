@@ -15,10 +15,15 @@ from unittest.mock import AsyncMock, patch
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 
-from gamdl.cli.commands.sync.playlists import _run
+from gamdl.cli.commands.sync.playlists import (
+    _describe_error,
+    _include_traceback,
+    _run,
+)
 from gamdl.cli.config.models import AppConfig
 from gamdl.cli.progress import RipProgress
 from gamdl.download import DownloadResult, MediaStatus
+from gamdl.media.exceptions import StreamNotAvailableError
 from gamdl.sync.playlists import (
     LocalMediaIndex,
     PlaylistSnapshot,
@@ -65,6 +70,20 @@ class FakeItunes:
 
 
 class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
+    def test_expected_and_unexpected_failure_classification(self):
+        for error in (
+            PlaylistSyncError("Incomplete playlist"),
+            StreamNotAvailableError("No matching codec"),
+        ):
+            with self.subTest(error=type(error).__name__):
+                self.assertFalse(_include_traceback(error, debug=False))
+                self.assertTrue(_include_traceback(error, debug=True))
+
+        error = RuntimeError("private signed URL=secret")
+        self.assertTrue(_include_traceback(error, debug=False))
+        self.assertNotIn("private", _describe_error(error, debug=False))
+        self.assertIn("private", _describe_error(error, debug=True))
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -417,8 +436,15 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             original, database=replace(original.database, path=str(self.db))
         )
         before = self.playlist.read_bytes()
-        with patch(
-            "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
+        stream = StringIO()
+        with (
+            patch(
+                "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
+            ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.console",
+                return_value=Console(file=stream, width=110, color_system=None),
+            ),
         ):
             code = await _run(
                 settings,
@@ -431,6 +457,8 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(code, 1)
         self.assertEqual(before, self.playlist.read_bytes())
+        self.assertIn("PlaylistSyncError", stream.getvalue())
+        self.assertNotIn("Exception tracebacks", stream.getvalue())
 
     async def test_pagination_failure_does_not_publish_partial_playlist(self):
         self.add_media("101", "01 First.m4a")
@@ -445,8 +473,15 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             original, database=replace(original.database, path=str(self.db))
         )
         before = self.playlist.read_bytes()
-        with patch(
-            "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
+        stream = StringIO()
+        with (
+            patch(
+                "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
+            ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.console",
+                return_value=Console(file=stream, width=110, color_system=None),
+            ),
         ):
             code = await _run(
                 settings,
@@ -459,6 +494,14 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(code, 1)
         self.assertEqual(before, self.playlist.read_bytes())
+        output = stream.getvalue()
+        self.assertLess(
+            output.index("playlists checked"), output.index("Exception tracebacks")
+        )
+        self.assertIn(
+            "RuntimeError: unexpected error (use --debug for details)", output
+        )
+        self.assertNotIn("Second API page failed", output)
 
     async def test_downloads_only_missing_track_and_publishes_after_completion(self):
         self.add_media("101", "01 First.m4a")
@@ -531,6 +574,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             original, database=replace(original.database, path=str(self.db))
         )
         before = self.playlist.read_bytes()
+        stream = StringIO()
         with (
             patch(
                 "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
@@ -547,6 +591,10 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "gamdl.cli.commands.sync.playlists.Downloader", return_value=downloader
             ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.console",
+                return_value=Console(file=stream, width=110, color_system=None),
+            ),
         ):
             code = await _run(
                 settings,
@@ -559,6 +607,15 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(code, 1)
         self.assertEqual(before, self.playlist.read_bytes())
+        output = stream.getvalue()
+        self.assertLess(
+            output.index("playlists checked"), output.index("Exception tracebacks")
+        )
+        self.assertIn("Track 999 (999)", output)
+        self.assertIn(
+            "RuntimeError: unexpected error (use --debug for details)", output
+        )
+        self.assertNotIn("Stream unavailable", output)
 
     async def test_downloads_are_concurrent_and_shared_ids_only_download_once(self):
         self.add_media("101", "01 First.m4a")

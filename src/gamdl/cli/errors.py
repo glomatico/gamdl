@@ -1,6 +1,12 @@
-"""Human-friendly errors without printing tokens, signed URLs or tracebacks."""
+"""Human-friendly expected errors and end-of-run exception diagnostics."""
+
+from __future__ import annotations
+
+import traceback
+from dataclasses import dataclass
 
 import click
+from rich.text import Text
 
 from gamdl.api import (
     GamdlApiResponseError,
@@ -18,6 +24,67 @@ from gamdl.media.exceptions import (
     StreamNotAvailableError,
     UnsupportedMediaError,
 )
+
+
+@dataclass(frozen=True)
+class FailureTraceback:
+    """An exception traceback captured before its worker exits."""
+
+    label: str
+    traceback: str
+
+
+def capture_failure_traceback(
+    label: str, error: Exception, *, debug: bool = False
+) -> FailureTraceback:
+    """Capture stack locations without leaking exception text by default.
+
+    Raw exception messages may contain request URLs, tokens, or remote payloads.
+    Source-code lines are omitted for the same reason. --debug opts into the
+    original, complete Python traceback when deeper diagnostics are needed.
+    """
+    if debug:
+        return FailureTraceback(label, "".join(traceback.format_exception(error)))
+    lines: list[str] = []
+    seen: set[int] = set()
+
+    def add_exception(current: BaseException) -> None:
+        if id(current) in seen:
+            return
+        seen.add(id(current))
+        cause = current.__cause__
+        context = current.__context__ if not current.__suppress_context__ else None
+        chained = cause or context
+        if chained is not None:
+            add_exception(chained)
+            lines.append(
+                "\nThe above exception was the direct cause of the following exception:\n\n"
+                if cause is not None
+                else "\nDuring handling of the above exception, another exception occurred:\n\n"
+            )
+        lines.append("Traceback (most recent call last):\n")
+        for frame in traceback.extract_tb(current.__traceback__):
+            lines.append(
+                f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n'
+            )
+        lines.append(f"{type(current).__name__}: [details hidden; use --debug]\n")
+
+    add_exception(error)
+    return FailureTraceback(label, "".join(lines))
+
+
+def print_failure_tracebacks(output, failures: list[FailureTraceback]) -> None:
+    """Show diagnostics after all Rich progress displays have closed."""
+    if not failures:
+        return
+    output.print(f"[bold red]Exception tracebacks ({len(failures)}):[/bold red]")
+    for failure in failures:
+        output.print(Text(f"  ✗ {failure.label}"))
+        output.print(Text(failure.traceback))
+    output.print(
+        "[dim]Tracebacks contain file paths. --debug includes raw exception "
+        "details, which may contain signed URLs or account information.[/dim]"
+    )
 
 
 def short_error(error: Exception) -> tuple[str, bool]:
@@ -75,8 +142,7 @@ def short_error(error: Exception) -> tuple[str, bool]:
             "database": "update database",
         }
         return (
-            "Media saved, but couldn't "
-            f"{actions.get(error.stage, 'finish media')}: {reason}",
+            f"Media saved, but couldn't {actions.get(error.stage, 'finish media')}: {reason}",
             reason != "unexpected error",
         )
     if isinstance(error, FileExistsError):

@@ -37,6 +37,12 @@ from gamdl.sync.playlists import (
     render_playlist,
 )
 
+from ...errors import (
+    FailureTraceback,
+    capture_failure_traceback,
+    print_failure_tracebacks,
+    short_error,
+)
 from ...output import console
 from ...progress import RipProgress
 from ...session import authenticate, create_drm
@@ -62,6 +68,21 @@ def _playlist_name(snapshot: PlaylistSnapshot) -> str:
             if line.startswith("#PLAYLIST:") and line.partition(":")[2]
         ),
         snapshot.path.stem,
+    )
+
+
+def _describe_error(error: Exception, *, debug: bool) -> str:
+    """Keep expected playlist messages, but hide unexpected raw API details."""
+    name = type(error).__name__
+    if isinstance(error, PlaylistSyncError) or debug:
+        return f"{name}: {error}"
+    message, expected = short_error(error)
+    return f"{name}: {message if expected else 'unexpected error (use --debug for details)'}"
+
+
+def _include_traceback(error: Exception, *, debug: bool) -> bool:
+    return debug or (
+        not isinstance(error, PlaylistSyncError) and not short_error(error)[1]
     )
 
 
@@ -247,6 +268,8 @@ async def _download_missing(
     missing: dict[tuple[str, str], Track],
     stats: Counter[str],
     output,
+    diagnostics: list[FailureTraceback],
+    debug: bool,
 ) -> dict[tuple[str, str], str]:
     """Download unique missing IDs concurrently, keeping per-track failures isolated."""
     total = len(missing)
@@ -312,8 +335,14 @@ async def _download_missing(
                         occurrence, title, result.status.value, path=result.path
                     )
                 except Exception as error:  # noqa: BLE001 - one failed track cannot stop others
-                    failures[track.key] = f"{type(error).__name__}: {error}"
-                    progress.finish(occurrence, title, "failed", str(error))
+                    failures[track.key] = _describe_error(error, debug=debug)
+                    progress.finish(occurrence, title, "failed", failures[track.key])
+                    if _include_traceback(error, debug=debug):
+                        diagnostics.append(
+                            capture_failure_traceback(
+                                f"Track {title} ({track.media_id})", error, debug=debug
+                            )
+                        )
                 finally:
                     queue.task_done()
 
@@ -337,8 +366,10 @@ async def _run(
     no_download: bool,
     yes: bool,
     verbose: bool = False,
+    debug: bool | None = None,
 ) -> int:
     output = console()
+    show_debug = settings.ui.debug if debug is None else debug
     paths = _select_playlists(root, selected, limit)
     if not paths:
         output.print("No local .m3u8 playlists found.")
@@ -353,6 +384,7 @@ async def _run(
         output.print(f"Checking {len(paths)} playlists against Apple Music...")
     stats: Counter[str] = Counter()
     reports: list[_PlaylistReport] = []
+    diagnostics: list[FailureTraceback] = []
     ready: list[tuple[PlaylistPlan, _PlaylistReport]] = []
     missing: dict[tuple[str, str], Track] = {}
     auth_options = _auth_options(settings)
@@ -447,7 +479,13 @@ async def _run(
                     report = _PlaylistReport(name=path.stem)
                     reports.append(report)
                 report.status = "[red]Failed[/red]"
-                report.error = f"{type(error).__name__}: {error}"
+                report.error = _describe_error(error, debug=show_debug)
+                if _include_traceback(error, debug=show_debug):
+                    diagnostics.append(
+                        capture_failure_traceback(
+                            f"Playlist {path.name}", error, debug=show_debug
+                        )
+                    )
             finally:
                 checking.advance(check_task)
             if number < len(paths):
@@ -488,6 +526,8 @@ async def _run(
                     missing=missing,
                     stats=stats,
                     output=output,
+                    diagnostics=diagnostics,
+                    debug=show_debug,
                 )
             for plan, report in ready:
                 try:
@@ -514,12 +554,21 @@ async def _run(
                 except Exception as error:  # noqa: BLE001 - per-playlist atomicity
                     stats["failed"] += 1
                     report.status = "[red]Failed[/red]"
-                    report.error = f"{type(error).__name__}: {error}"
+                    report.error = _describe_error(error, debug=show_debug)
+                    if _include_traceback(error, debug=show_debug):
+                        diagnostics.append(
+                            capture_failure_traceback(
+                                f"Playlist {plan.snapshot.path.name}",
+                                error,
+                                debug=show_debug,
+                            )
+                        )
     _print_report(output, reports, stats, dry_run=dry_run)
     if not dry_run and stats["downloaded"]:
         output.print(
             f"[green]{stats['downloaded']} new media files downloaded.[/green]"
         )
+    print_failure_tracebacks(output, diagnostics)
     return int(stats["failed"] > 0)
 
 
@@ -569,9 +618,14 @@ def _read_downloaded_id(path: Path) -> tuple[str, str] | None:
 @click.option(
     "--verbose", is_flag=True, help="Show every playlist and individual track changes"
 )
+@click.option(
+    "--debug/--no-debug",
+    default=None,
+    help="Show raw exception details and expected-error tracebacks",
+)
 @click.pass_context
 def playlists(
-    ctx, directory, selected, dry_run, no_download, yes, limit, verbose
+    ctx, directory, selected, dry_run, no_download, yes, limit, verbose, debug
 ) -> None:
     """Match existing M3U playlists to Apple Music without deleting local media.
 
@@ -593,6 +647,7 @@ def playlists(
                 no_download=no_download,
                 yes=yes,
                 verbose=verbose,
+                debug=debug,
             )
         )
     except KeyboardInterrupt:

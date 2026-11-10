@@ -14,6 +14,7 @@ from rich.console import Console
 from gamdl.api.exceptions import GamdlApiResponseError
 from gamdl.cli.commands.rip import RipOptions
 from gamdl.cli.commands.runner import _short_error, run_rip
+from gamdl.cli.errors import capture_failure_traceback
 from gamdl.cli.progress import RipProgress
 from gamdl.download import (
     DownloadEvent,
@@ -39,6 +40,21 @@ from gamdl.media.exceptions import (
 
 
 class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
+    def test_chained_unexpected_error_keeps_causes_without_sensitive_messages(self):
+        try:
+            try:
+                raise ValueError("https://private.example/?token=secret")
+            except ValueError as cause:
+                raise DownloadFinalizationError(Path("test.m4a"), "lyrics") from cause
+        except DownloadFinalizationError as error:
+            safe = capture_failure_traceback("Song", error).traceback
+            self.assertIn("ValueError: [details hidden; use --debug]", safe)
+            self.assertIn("DownloadFinalizationError: [details hidden", safe)
+            self.assertIn("direct cause", safe)
+            self.assertNotIn("private.example", safe)
+            raw = capture_failure_traceback("Song", error, debug=True).traceback
+            self.assertIn("private.example", raw)
+
     def setUp(self):
         self.api = Mock(active_subscription=True, storefront="br")
         self.api.get_playlist = AsyncMock(
@@ -192,7 +208,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(expected, output)
                 self.assertNotIn("Errors (", output)
 
-    async def test_errors_report_after_summary_with_opt_in_tracebacks(self):
+    async def test_unexpected_errors_always_report_tracebacks_after_summary(self):
         for debug in (False, True):
             with self.subTest(debug=debug):
                 buffer = StringIO()
@@ -207,18 +223,26 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                 output = buffer.getvalue()
                 self.assertLess(output.index("Finished:"), output.index("Errors (1):"))
                 self.assertIn("Song 1: Unexpected download error (ValueError)", output)
-                self.assertEqual("Traceback (most recent call last)" in output, debug)
+                self.assertLess(
+                    output.index("Errors (1):"),
+                    output.index("Exception tracebacks (1):"),
+                )
+                self.assertIn("Traceback (most recent call last)", output)
                 self.assertEqual(
                     "Internal signed URL: sensitive value" in output, debug
                 )
+                self.assertIn("ValueError", output)
+                if not debug:
+                    self.assertIn("details hidden; use --debug", output)
+                self.assertIn("contain signed URLs", output)
 
-    async def test_expected_codec_failures_print_once_without_debug_tracebacks(self):
+    async def test_expected_codec_failures_do_not_print_tracebacks_by_default(self):
         buffer = StringIO()
         with patch(
             "gamdl.cli.commands.runner.output_console",
             return_value=Console(file=buffer, force_terminal=False),
         ):
-            code, _, _ = await self._execute(fail_on="1001", debug=True)
+            code, _, _ = await self._execute(fail_on="1001", debug=False)
         self.assertEqual(code, 1)
         output = buffer.getvalue()
         self.assertIn("Finished:", output)
@@ -228,6 +252,18 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("Traceback", output)
         self.assertNotIn("review before sharing", output)
+
+    async def test_debug_can_show_expected_failure_tracebacks(self):
+        buffer = StringIO()
+        with patch(
+            "gamdl.cli.commands.runner.output_console",
+            return_value=Console(file=buffer, force_terminal=False),
+        ):
+            code, _, _ = await self._execute(fail_on="1001", debug=True)
+        self.assertEqual(code, 1)
+        output = buffer.getvalue()
+        self.assertLess(output.index("Finished:"), output.index("Exception tracebacks"))
+        self.assertIn("StreamNotAvailableError: Codec unavailable", output)
 
     async def test_library_to_two_codec_menus_keeps_progress_paused_until_transfer(
         self,

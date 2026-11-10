@@ -361,6 +361,8 @@ Choose `skip` (default), `replace`, or `error`. Songs use their configured filen
 
 The default is to continue processing remaining items after individual failures. Set `continue_on_error: false` in YAML or use `--fail-fast` to stop after an error.
 
+For `rip`, `library`, `search`, and `sync playlists`, expected Gamdl errors are reported as short messages without tracebacks. Unexpected exceptions are collected and printed **after** the final results, once progress bars have closed. Normal output shows the exception type and stack locations but omits raw exception messages and source lines, which could contain signed URLs or authentication details. Use `--debug` to include full tracebacks (including expected errors); inspect debug output before sharing it. `sync playlists` also supports `--debug` and `--no-debug` overrides.
+
 #### Automatic Selection (`download.artist_auto_select` / `--artist-auto-select`, `download.library_auto_select` / `--library-auto-select`)
 
 Choose artist categories such as `main-albums`, `singles-eps`, `top-songs`, and `music-videos`, or library categories such as `albums`, `playlists`, `songs`, and `music-videos`. CLI values are comma-separated; YAML values are lists. Both options default to empty lists, meaning their respective browsers are used.

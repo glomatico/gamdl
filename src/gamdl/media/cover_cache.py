@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
-
 import httpx
 from async_lru import alru_cache
+
+from gamdl.transport import PublicTransport, PublicTransportError
 
 from .exceptions import GamdlMediaError
 
@@ -23,28 +23,11 @@ async def fetch_cover_bytes(
     remains caller-owned. Errors never include artwork URLs or response bodies.
     """
     try:
-        parsed = urlsplit(url)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username:
-            raise GamdlMediaError("Expected a valid HTTPS artwork URL")
-    except ValueError:
-        raise GamdlMediaError("Expected a valid HTTPS artwork URL") from None
-
-    try:
-        if client is None:
-            async with httpx.AsyncClient(timeout=30.0) as owned:
-                response = await owned.get(url, follow_redirects=True)
-        else:
-            # Build an isolated request to avoid inheriting cookies, headers,
-            # or default authentication from a caller-provided client.
-            response = await client.send(
-                httpx.Request("GET", url), auth=None, follow_redirects=True
-            )
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-    except (httpx.HTTPError, httpx.InvalidURL, ValueError):
+        return await PublicTransport(client).fetch(url, allow_not_found=True)
+    except PublicTransportError as error:
+        if error.reason == "invalid_url":
+            raise GamdlMediaError("Expected a valid HTTPS artwork URL") from None
         raise GamdlMediaError("Unable to retrieve artwork") from None
-    return response.content
 
 
 class CoverCache:

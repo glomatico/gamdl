@@ -7,9 +7,10 @@ from typing import Any
 
 import httpx
 
+from gamdl.transport import ApiHttpClient, RequestPacer
+
 from .auth import invoke_prompt
 from .exceptions import GamdlApiResponseError, GamdlAuthenticationError
-from .http import ApiHttpClient, RequestPacer
 
 TARGET_WRAPPER_API_VERSION = "0.0.2"
 CredentialsPrompt = Callable[[], tuple[str, str] | Awaitable[tuple[str, str]]]

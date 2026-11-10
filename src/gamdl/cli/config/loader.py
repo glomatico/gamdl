@@ -393,6 +393,6 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "database_path": b.path,
         "no_progress": not ui.progress,
         "max_visible_tracks": ui.max_visible_tracks,
-        "debug": ui.debug,
+        "no_tracebacks": ui.no_tracebacks,
         "search_api": config.search.api,
     }

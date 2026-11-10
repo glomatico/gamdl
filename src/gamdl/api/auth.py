@@ -10,9 +10,10 @@ from http.cookiejar import MozillaCookieJar
 from typing import TypeVar
 from urllib.parse import urljoin
 
+from gamdl.transport import ApiHttpClient
+
 from .constants import APPLE_MUSIC_URL
 from .exceptions import GamdlApiResponseError, GamdlAuthenticationError
-from .http import ApiHttpClient
 
 _JS_URI = re.compile(r'/((?:assets/)?index[~-][^/"\s]+\.js)')
 _TOKEN = re.compile(r'"(eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)"')

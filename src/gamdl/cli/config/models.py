@@ -78,7 +78,7 @@ class DatabaseConfig:
 class UiConfig:
     progress: bool = True
     max_visible_tracks: int = 5
-    debug: bool = False
+    no_tracebacks: bool = False
 
 
 @dataclass(frozen=True)

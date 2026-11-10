@@ -203,11 +203,12 @@ class RipOptions:
     max_visible_tracks: Annotated[
         int, option("--max-visible-tracks", type=click.IntRange(min=1))
     ] = 5
-    debug: Annotated[
+    no_tracebacks: Annotated[
         bool,
         option(
-            "--debug/--no-debug",
-            help="Show full traceback details and expected-error tracebacks (may include sensitive data)",
+            "--no-tracebacks",
+            is_flag=True,
+            help="Suppress tracebacks for unexpected errors",
         ),
     ] = False
     auth_mode: Annotated[

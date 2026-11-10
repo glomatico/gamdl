@@ -9,85 +9,38 @@ from __future__ import annotations
 import base64
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
 
-import httpx
 import m3u8
 
 from gamdl.drm.models import DRMInfo
+from gamdl.transport import PublicTransport, PublicTransportError
 
-from .exceptions import StreamManifestError
-from .enums import HlsType, StreamOrigin, StreamSource
-from .models import StreamSegment
 from .cache import InstanceCache
+from .enums import HlsType, StreamOrigin, StreamSource
+from .exceptions import StreamManifestError
+from .models import StreamSegment
 
 if TYPE_CHECKING:
     from m3u8.model import M3U8
+
     from .song.enums import SongCodec
 
 
-class StreamTransport:
-    """Request only public CDN playlists/bytes, never forward AMP auth headers.
-
-    A caller-provided HTTP client is reused, but not owned by the stream.
-    Otherwise each lazy request owns and closes a short-lived CDN client.
-    """
-
-    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
-        self.client = client
-
-    @staticmethod
-    def _validate_url(url: str) -> None:
-        try:
-            parts = urlsplit(url)
-            if (
-                parts.scheme != "https"
-                or not parts.hostname
-                or parts.username is not None
-                or parts.password is not None
-            ):
-                raise ValueError
-        except ValueError:
-            raise StreamManifestError("Expected a valid HTTPS streaming URL") from None
-
-    @classmethod
-    async def _fetch(
-        cls, client: httpx.AsyncClient, url: str, headers: dict[str, str]
-    ) -> bytes:
-        # A client's .get() merges its Authorization and Cookie headers. Even
-        # client.send(httpx.Request(...), auth=None, follow_redirects=True)
-        # can insert cookies from the client's jar on redirected requests.
-        # Every hop therefore uses an isolated Request with NO auto redirects.
-        for _ in range(11):
-            cls._validate_url(url)
-            response = await client.send(
-                httpx.Request("GET", url, headers=headers),
-                auth=None,
-                follow_redirects=False,
-            )
-            if response.status_code in {301, 302, 303, 307, 308}:
-                location = response.headers.get("location")
-                if not location:
-                    response.raise_for_status()
-                    raise StreamManifestError("CDN redirect had no destination")
-                url = str(response.url.join(location))
-                continue
-            response.raise_for_status()
-            return response.content
-        raise StreamManifestError("Too many CDN redirects")
+class StreamTransport(PublicTransport):
+    """HLS resource parsing on top of the shared public HTTP transport."""
 
     async def get(self, url: str, *, byte_range: str | None = None) -> bytes:
-        self._validate_url(url)
-        headers = {"Range": f"bytes={byte_range}"} if byte_range else {}
         try:
-            if self.client is not None:
-                return await self._fetch(self.client, url, headers)
-            else:
-                async with httpx.AsyncClient(timeout=30) as client:
-                    return await self._fetch(client, url, headers)
-        except (httpx.HTTPError, httpx.InvalidURL, ValueError):
-            # CDN URLs and query strings may contain sensitive signed tokens.
-            raise StreamManifestError("Unable to retrieve streaming resource") from None
+            result = await self.fetch(url, byte_range=byte_range)
+            assert result is not None
+            return result
+        except PublicTransportError as error:
+            message = {
+                "invalid_url": "Expected a valid HTTPS streaming URL",
+                "missing_redirect": "CDN redirect had no destination",
+                "too_many_redirects": "Too many CDN redirects",
+            }.get(error.reason, "Unable to retrieve streaming resource")
+            raise StreamManifestError(message) from None
 
     async def get_manifest(self, url: str) -> M3U8:
         data = await self.get(url)

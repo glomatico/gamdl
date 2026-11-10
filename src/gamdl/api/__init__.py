@@ -1,5 +1,7 @@
 """Asynchronous Apple Music, iTunes and wrapper clients."""
 
+from gamdl.transport import ApiHttpClient, RequestPacer
+
 from .apple_music import AppleMusicApi
 from .exceptions import (
     GamdlApiError,
@@ -8,7 +10,6 @@ from .exceptions import (
     GamdlRateLimitError,
     GamdlTransportError,
 )
-from .http import ApiHttpClient, RequestPacer
 from .itunes import ItunesApi
 from .wrapper import WrapperApi
 

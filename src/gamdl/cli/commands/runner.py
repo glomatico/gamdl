@@ -224,8 +224,8 @@ async def run_rip(options: RipOptions) -> int:
                 message,
                 type(error).__name__,
                 expected,
-                capture_failure_traceback(label, error, debug=options.debug).traceback
-                if not expected or options.debug
+                capture_failure_traceback(label, error).traceback
+                if not expected and not options.no_tracebacks
                 else None,
             )
         )

@@ -76,13 +76,13 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             StreamNotAvailableError("No matching codec"),
         ):
             with self.subTest(error=type(error).__name__):
-                self.assertFalse(_include_traceback(error, debug=False))
-                self.assertTrue(_include_traceback(error, debug=True))
+                self.assertFalse(_include_traceback(error, no_tracebacks=False))
+                self.assertFalse(_include_traceback(error, no_tracebacks=True))
 
         error = RuntimeError("private signed URL=secret")
-        self.assertTrue(_include_traceback(error, debug=False))
-        self.assertNotIn("private", _describe_error(error, debug=False))
-        self.assertIn("private", _describe_error(error, debug=True))
+        self.assertTrue(_include_traceback(error, no_tracebacks=False))
+        self.assertFalse(_include_traceback(error, no_tracebacks=True))
+        self.assertNotIn("private", _describe_error(error))
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -498,10 +498,51 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(
             output.index("playlists checked"), output.index("Exception tracebacks")
         )
-        self.assertIn(
-            "RuntimeError: unexpected error (use --debug for details)", output
+        self.assertIn("RuntimeError: Unexpected download error", output)
+        self.assertIn("Second API page failed", output)
+
+    async def test_no_tracebacks_setting_suppresses_sync_diagnostics(self):
+        self.add_media("101", "01 First.m4a")
+        self.set_playlist("101")
+        api = FakeAPI([resource("101"), resource("999")], fail_after=1)
+
+        async def fake_auth(*args, **kwargs):
+            return api, None
+
+        original = AppConfig()
+        settings = replace(
+            original,
+            database=replace(original.database, path=str(self.db)),
+            ui=replace(original.ui, no_tracebacks=True),
         )
-        self.assertNotIn("Second API page failed", output)
+        for override, should_trace in ((None, False), (False, True), (True, False)):
+            with self.subTest(override=override):
+                stream = StringIO()
+                with (
+                    patch(
+                        "gamdl.cli.commands.sync.playlists.authenticate",
+                        side_effect=fake_auth,
+                    ),
+                    patch(
+                        "gamdl.cli.commands.sync.playlists.console",
+                        return_value=Console(file=stream, width=110, color_system=None),
+                    ),
+                ):
+                    result = await _run(
+                        settings,
+                        root=self.root,
+                        selected=(self.playlist,),
+                        limit=None,
+                        dry_run=True,
+                        no_download=False,
+                        yes=False,
+                        no_tracebacks=override,
+                    )
+                self.assertEqual(result, 1)
+                self.assertEqual(
+                    "Exception tracebacks" in stream.getvalue(), should_trace
+                )
+                self.assertIn("1 failed", stream.getvalue())
 
     async def test_downloads_only_missing_track_and_publishes_after_completion(self):
         self.add_media("101", "01 First.m4a")
@@ -612,10 +653,8 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             output.index("playlists checked"), output.index("Exception tracebacks")
         )
         self.assertIn("Track 999 (999)", output)
-        self.assertIn(
-            "RuntimeError: unexpected error (use --debug for details)", output
-        )
-        self.assertNotIn("Stream unavailable", output)
+        self.assertIn("RuntimeError: Unexpected download error", output)
+        self.assertIn("Stream unavailable", output)
 
     async def test_downloads_are_concurrent_and_shared_ids_only_download_once(self):
         self.add_media("101", "01 First.m4a")

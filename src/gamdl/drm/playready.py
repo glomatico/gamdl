@@ -14,10 +14,10 @@ def _playready_header(data: bytes) -> Any:
     try:
         from pyplayready.system.pssh import PSSH
         from pyplayready.system.wrmheader import WRMHeader
-    except ImportError:
+    except ImportError as error:
         raise DrmConfigurationError(
             "PlayReady backend not installed; install gamdl[playready]"
-        ) from None
+        ) from error
 
     try:
         if len(data) == 16:
@@ -29,5 +29,5 @@ def _playready_header(data: bytes) -> Any:
                 "</KIDS></PROTECTINFO></DATA></WRMHEADER>"
             )
         return PSSH(data).wrm_headers[0]
-    except Exception:
-        raise DrmMetadataError("Invalid PlayReady DRM initialization data") from None
+    except Exception as error:
+        raise DrmMetadataError("Invalid PlayReady DRM initialization data") from error

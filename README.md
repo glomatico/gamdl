@@ -361,7 +361,7 @@ Choose `skip` (default), `replace`, or `error`. Songs use their configured filen
 
 The default is to continue processing remaining items after individual failures. Set `continue_on_error: false` in YAML or use `--fail-fast` to stop after an error.
 
-For `rip`, `library`, `search`, and `sync playlists`, expected Gamdl errors are reported as short messages without tracebacks. Unexpected exceptions are collected and printed **after** the final results, once progress bars have closed. Normal output shows the exception type and stack locations but omits raw exception messages and source lines, which could contain signed URLs or authentication details. Use `--debug` to include full tracebacks (including expected errors); inspect debug output before sharing it. `sync playlists` also supports `--debug` and `--no-debug` overrides.
+For `rip`, `library`, `search`, and `sync playlists`, expected Gamdl errors are reported as short messages without tracebacks. Unexpected exceptions (including DRM license failures and malformed API responses) are collected and printed with **full Python tracebacks after** the final results, once progress bars have closed. Use `--no-tracebacks` (or `ui.no_tracebacks: true` in YAML) to suppress tracebacks while keeping concise failure messages. Tracebacks may contain signed URLs, tokens, or account details; inspect them before sharing logs.
 
 #### Automatic Selection (`download.artist_auto_select` / `--artist-auto-select`, `download.library_auto_select` / `--library-auto-select`)
 
@@ -441,9 +441,9 @@ database:
 
 Live progress is enabled by default. Use `--no-progress` to disable it. `ui.max_visible_tracks` / `--max-visible-tracks` controls the number of track rows shown at once (**default:** `5`).
 
-#### Debugging (`ui.debug` / `--debug`)
+#### Error Tracebacks (`ui.no_tracebacks` / `--no-tracebacks`)
 
-Enable tracebacks for unexpected errors. Debug output may contain sensitive URLs or account information; review it before sharing.
+Unexpected errors print full tracebacks at the end by default. Set `ui.no_tracebacks: true` or pass `--no-tracebacks` to hide them. Known, expected conditions remain concise. Review tracebacks before sharing, as exception messages may contain sensitive URLs or account information.
 
 <a name="migration"></a>
 
@@ -487,6 +487,10 @@ asyncio.run(main())
 
 The API is asynchronous; use context managers to close connections. More advanced applications can use `Downloader`, `Drm`, `Streamer`, `Muxer`, and `PathFormatter` directly.
 
+### HTTP Transports
+
+`gamdl.transport` provides `ApiHttpClient` and `RequestPacer` for private/API requests (authentication, pacing, and retries), alongside `PublicTransport` for public HTTPS resources such as streaming manifests, initialization segments, and artwork. The public transport uses isolated requests at every redirect hop, so credentials and cookies from a caller-supplied HTTPX client are not forwarded. It rejects insecure redirects and preserves the lifetime of borrowed clients. HLS parsing stays in `media.stream.StreamTransport`, which uses `PublicTransport` for network requests. Existing `gamdl.api` and `gamdl.api.http` imports of `ApiHttpClient` / `RequestPacer` remain supported.
+
 <a name="troubleshooting"></a>
 
 ## 🛠️ Troubleshooting
@@ -501,7 +505,7 @@ The API is asynchronous; use context managers to close connections. More advance
 
 **The library has unexpected paths:** Check your filename templates and use `gamdl organize --dry-run` before applying changes.
 
-For additional support, use [GitHub Issues](https://github.com/glomatico/gamdl/issues) or the [Discord server](https://discord.gg/aBjMEZ9tnq). When sharing debug output, remove cookies, tokens, and signed URLs.
+For additional support, use [GitHub Issues](https://github.com/glomatico/gamdl/issues) or the [Discord server](https://discord.gg/aBjMEZ9tnq). When sharing error tracebacks, remove cookies, tokens, and signed URLs.
 
 <a name="contributing"></a>
 

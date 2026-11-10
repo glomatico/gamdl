@@ -7,6 +7,8 @@ from typing import Any, Self
 
 import httpx
 
+from gamdl.transport import ApiHttpClient, RequestPacer
+
 from .constants import (
     APPLE_MUSIC_URL,
     ITUNES_LOOKUP_URL,
@@ -14,7 +16,6 @@ from .constants import (
     MUSICKIT_URL,
 )
 from .exceptions import GamdlApiResponseError
-from .http import ApiHttpClient, RequestPacer
 
 
 class ItunesApi:

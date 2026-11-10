@@ -143,7 +143,7 @@ class HttpTests(unittest.IsolatedAsyncioTestCase):
         pacer = RequestPacer()
         async with mock_client(handler) as client:
             api = ApiHttpClient("apple", client=client, pacer=pacer)
-            with patch("gamdl.api.http.Retry.asleep", new=controlled_backoff):
+            with patch("gamdl.transport.private.Retry.asleep", new=controlled_backoff):
                 slow = asyncio.create_task(
                     api.request_json(
                         "GET", "https://example.test/slow", operation="slow"

@@ -1,8 +1,8 @@
 """DRM backend factory and license exchange contracts; no real licenses."""
 
+import asyncio
 import base64
 import importlib.util
-import asyncio
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -12,10 +12,10 @@ import httpx
 
 from gamdl.drm import (
     ContentKey,
-    DRMInfo,
     Drm,
     DrmBackend,
     DrmConfigurationError,
+    DRMInfo,
     DrmLicenseError,
     DrmMetadataError,
 )
@@ -23,7 +23,6 @@ from gamdl.drm.playready import _playready_header
 from gamdl.drm.widevine import _widevine_pssh
 from gamdl.media import SongCodec, StreamOrigin, WebPlaybackStream
 from gamdl.media.stream import StreamTransport
-
 
 KID = bytes.fromhex("00112233445566778899aabbccddeeff")
 SECRET = bytes.fromhex("11223344556677889900aabbccddeeff")
@@ -348,6 +347,8 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cdm.events[-1], "close")
         self.assertNotIn("credential", str(error.exception))
         self.assertNotIn("secret", str(error.exception))
+        self.assertIsInstance(error.exception.__cause__, RuntimeError)
+        self.assertIn("credential ABC", str(error.exception.__cause__))
 
     async def test_cdm_errors_and_no_keys_close_sessions(self):
         for cdm in (

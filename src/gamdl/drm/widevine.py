@@ -12,15 +12,15 @@ def _widevine_pssh(data: bytes) -> Any:
     try:
         from pywidevine import PSSH
         from pywidevine.license_protocol_pb2 import WidevinePsshData
-    except ImportError:
+    except ImportError as error:
         raise DrmConfigurationError(
             "Widevine backend not installed; install gamdl[widevine]"
-        ) from None
+        ) from error
 
     try:
         if len(data) == 16:
             payload = WidevinePsshData(algorithm=1, key_ids=[data]).SerializeToString()
             return PSSH(payload, strict=True)
         return PSSH(data, strict=True)
-    except Exception:
-        raise DrmMetadataError("Invalid Widevine DRM initialization data") from None
+    except Exception as error:
+        raise DrmMetadataError("Invalid Widevine DRM initialization data") from error

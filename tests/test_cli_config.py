@@ -193,13 +193,15 @@ class CliConfigTests(unittest.TestCase):
         self.assertFalse(defaults["no_lyrics"])
         self.assertFalse(defaults["fail_fast"])
         self.assertFalse(defaults["no_progress"])
+        self.assertFalse(defaults["no_tracebacks"])
         self._write(
-            "output:\n  save_lyrics: false\ndownload:\n  continue_on_error: false\nui:\n  progress: false\n"
+            "output:\n  save_lyrics: false\ndownload:\n  continue_on_error: false\nui:\n  progress: false\n  no_tracebacks: true\n"
         )
         overrides = click_default_map(load_config(self.path))
         self.assertTrue(overrides["no_lyrics"])
         self.assertTrue(overrides["fail_fast"])
         self.assertTrue(overrides["no_progress"])
+        self.assertTrue(overrides["no_tracebacks"])
 
         received = []
 
@@ -217,12 +219,30 @@ class CliConfigTests(unittest.TestCase):
                     "--no-lyrics",
                     "--fail-fast",
                     "--no-progress",
+                    "--no-tracebacks",
                 ],
             )
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertTrue(received[0].no_lyrics)
         self.assertTrue(received[0].fail_fast)
         self.assertTrue(received[0].no_progress)
+        self.assertTrue(received[0].no_tracebacks)
+
+    def test_no_tracebacks_replaces_debug_flag(self):
+        runner = CliRunner()
+        rip_help = runner.invoke(main, ["--no-config", "rip", "--help"]).output
+        self.assertIn("--no-tracebacks", rip_help)
+        self.assertNotIn("--debug", rip_help)
+        sync_help = runner.invoke(
+            main, ["--no-config", "sync", "playlists", "--help"]
+        ).output
+        self.assertIn("--no-tracebacks", sync_help)
+        self.assertNotIn("--debug", sync_help)
+        legacy = runner.invoke(
+            main, ["--no-config", "rip", "https://music.apple.com/br/song/1", "--debug"]
+        )
+        self.assertNotEqual(legacy.exit_code, 0)
+        self.assertIn("No such option '--debug'", legacy.output)
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()

@@ -8,6 +8,8 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+from gamdl.transport import ApiHttpClient, RequestPacer
+
 from ..auth import (
     AppleMusicCredentials,
     credentials_from_wrapper,
@@ -16,7 +18,6 @@ from ..auth import (
 )
 from ..constants import APPLE_MUSIC_ACCOUNT_URL, APPLE_MUSIC_API_URL, APPLE_MUSIC_URL
 from ..exceptions import GamdlApiResponseError, GamdlAuthenticationError
-from ..http import ApiHttpClient, RequestPacer
 from ..wrapper import WrapperApi
 from .catalog import CatalogEndpoints
 from .drm import DrmEndpoints

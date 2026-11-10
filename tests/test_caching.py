@@ -163,6 +163,37 @@ class CoverCacheTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("cookie", observed[0])
             await cache.aclose()
 
+    async def test_artwork_redirect_does_not_inherit_client_cookie_jar(self):
+        observed = []
+
+        def handler(request):
+            observed.append(request)
+            if request.url.path == "/art":
+                return httpx.Response(
+                    302, headers={"Location": "https://other.example.test/final.jpg"}
+                )
+            return httpx.Response(200, content=b"safe artwork")
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            headers={"Authorization": "Bearer secret"},
+            auth=httpx.BasicAuth("user", "secret"),
+        ) as client:
+            client.cookies.set(
+                "session", "redirect-secret", domain="other.example.test"
+            )
+            cache = CoverCache(client=client)
+            self.assertEqual(
+                await cache.get_bytes("https://artwork.example.test/art"),
+                b"safe artwork",
+            )
+            await cache.aclose()
+            self.assertFalse(client.is_closed)
+        self.assertEqual(len(observed), 2)
+        for request in observed:
+            self.assertNotIn("authorization", request.headers)
+            self.assertNotIn("cookie", request.headers)
+
     async def test_shared_cover_download_one_request_per_url_and_variant(self):
         requests = []
 
@@ -277,9 +308,8 @@ class CoverCacheTests(unittest.IsolatedAsyncioTestCase):
             CoverCache(maxsize=0)
         cache = CoverCache()
         for url in ("http://example.com/image.jpg", "https://user:pass@example.com/a"):
-            with self.subTest(url=url):
-                with self.assertRaises(GamdlMediaError):
-                    await cache.get_bytes(url)
+            with self.subTest(url=url), self.assertRaises(GamdlMediaError):
+                await cache.get_bytes(url)
         await cache.aclose()
 
 

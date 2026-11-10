@@ -62,10 +62,10 @@ async def _make_cdm(backend: DrmBackend, device_path: str | Path | None) -> Any:
         else:
             from pyplayready.cdm import Cdm
             from pyplayready.device import Device
-    except ImportError:
+    except ImportError as error:
         raise DrmConfigurationError(
             "Required DRM backend or default device is not available"
-        ) from None
+        ) from error
 
     def create() -> Any:
         if device_path is None:
@@ -74,10 +74,10 @@ async def _make_cdm(backend: DrmBackend, device_path: str | Path | None) -> Any:
 
     try:
         return await asyncio.to_thread(create)
-    except Exception:
+    except Exception as error:
         raise DrmConfigurationError(
             "Unable to load the provisioned DRM device"
-        ) from None
+        ) from error
 
 
 def _normalize_key(backend: DrmBackend, keys: Any) -> ContentKey:
@@ -218,8 +218,8 @@ class Drm:
         module = await self._get_cdm()
         try:
             session = await asyncio.to_thread(module.open)
-        except Exception:
-            raise DrmLicenseError("Unable to open DRM session") from None
+        except Exception as error:
+            raise DrmLicenseError("Unable to open DRM session") from error
 
         try:
             try:
@@ -253,12 +253,12 @@ class Drm:
                 return _normalize_key(self.backend, keys)
             except DrmLicenseError:
                 raise
-            except Exception:
+            except Exception as error:
                 raise DrmLicenseError(
                     "Unable to obtain or process DRM license"
-                ) from None
+                ) from error
         finally:
             try:
                 await asyncio.to_thread(module.close, session)
-            except Exception:
-                raise DrmLicenseError("Unable to close DRM session") from None
+            except Exception as error:
+                raise DrmLicenseError("Unable to close DRM session") from error

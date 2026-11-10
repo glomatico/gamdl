@@ -14,13 +14,18 @@ from gamdl.api import (
     GamdlRateLimitError,
     GamdlTransportError,
 )
-from gamdl.download import DownloadFinalizationError
-from gamdl.drm import DrmLicenseError
+from gamdl.download import DownloadFinalizationError, TagResolutionError
+from gamdl.drm import (
+    DrmConfigurationError,
+    DrmLicenseError,
+    DrmMetadataError,
+)
 from gamdl.exceptions import GamdlError
 from gamdl.media.exceptions import (
     MediaNotFoundError,
     MediaNotStreamableError,
     SelectionRequiredError,
+    StreamManifestError,
     StreamNotAvailableError,
     UnsupportedMediaError,
 )
@@ -34,43 +39,9 @@ class FailureTraceback:
     traceback: str
 
 
-def capture_failure_traceback(
-    label: str, error: Exception, *, debug: bool = False
-) -> FailureTraceback:
-    """Capture stack locations without leaking exception text by default.
-
-    Raw exception messages may contain request URLs, tokens, or remote payloads.
-    Source-code lines are omitted for the same reason. --debug opts into the
-    original, complete Python traceback when deeper diagnostics are needed.
-    """
-    if debug:
-        return FailureTraceback(label, "".join(traceback.format_exception(error)))
-    lines: list[str] = []
-    seen: set[int] = set()
-
-    def add_exception(current: BaseException) -> None:
-        if id(current) in seen:
-            return
-        seen.add(id(current))
-        cause = current.__cause__
-        context = current.__context__ if not current.__suppress_context__ else None
-        chained = cause or context
-        if chained is not None:
-            add_exception(chained)
-            lines.append(
-                "\nThe above exception was the direct cause of the following exception:\n\n"
-                if cause is not None
-                else "\nDuring handling of the above exception, another exception occurred:\n\n"
-            )
-        lines.append("Traceback (most recent call last):\n")
-        for frame in traceback.extract_tb(current.__traceback__):
-            lines.append(
-                f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n'
-            )
-        lines.append(f"{type(current).__name__}: [details hidden; use --debug]\n")
-
-    add_exception(error)
-    return FailureTraceback(label, "".join(lines))
+def capture_failure_traceback(label: str, error: Exception) -> FailureTraceback:
+    """Capture the full Python traceback while the exception is available."""
+    return FailureTraceback(label, "".join(traceback.format_exception(error)))
 
 
 def print_failure_tracebacks(output, failures: list[FailureTraceback]) -> None:
@@ -82,8 +53,8 @@ def print_failure_tracebacks(output, failures: list[FailureTraceback]) -> None:
         output.print(Text(f"  ✗ {failure.label}"))
         output.print(Text(failure.traceback))
     output.print(
-        "[dim]Tracebacks contain file paths. --debug includes raw exception "
-        "details, which may contain signed URLs or account information.[/dim]"
+        "[yellow]Tracebacks may contain signed URLs, account details, or "
+        "credentials. Review before sharing.[/yellow]"
     )
 
 
@@ -116,12 +87,49 @@ def short_error(error: Exception) -> tuple[str, bool]:
     if isinstance(error, GamdlRateLimitError):
         return "Apple Music rate limit reached", True
     if isinstance(error, DrmLicenseError):
-        return "Unable to acquire decryption key", True
+        return "Unable to acquire or process decryption key", False
+    if isinstance(error, DrmConfigurationError):
+        known_configuration_errors = (
+            "Supply either a CDM or a device path",
+            "PlayReady requires a device path or CDM",
+            "Required DRM backend or default device is not available",
+            "PlayReady backend not installed",
+            "Widevine backend not installed",
+        )
+        known = str(error).startswith(known_configuration_errors)
+        return str(error) if known else "DRM backend configuration failed", known
+    if isinstance(error, DrmMetadataError):
+        known = str(error) == "No usable DRM initialization data for selected backend"
+        return str(error) if known else "DRM initialization metadata invalid", known
+    if isinstance(error, GamdlApiResponseError):
+        # HTTP errors have a clear cause; malformed success payloads and
+        # unexpected response shapes are diagnostics, not expected skips.
+        status = error.status_code
+        if status is not None and status >= 400:
+            return f"Apple Music or wrapper request failed (HTTP {status})", True
+        return "Unexpected Apple Music or wrapper API response", False
     if isinstance(error, GamdlTransportError):
         return "Network request failed", True
+    if isinstance(error, StreamManifestError):
+        supported_limits = (
+            "Only completed HLS media playlists are supported",
+            "Selected HLS playlist contains no media segments",
+            "AES-128 HLS transport decryption is not supported",
+            "HLS discontinuities are not supported",
+            "HLS gap segments are not supported",
+        )
+        known = str(error) in supported_limits
+        return str(error) if known else "Invalid HLS manifest", known
+    if isinstance(error, TagResolutionError):
+        known = error.__cause__ is None
+        return str(error) if known else "Media metadata could not be resolved", known
     if isinstance(error, DownloadFinalizationError):
         cause = error.__cause__
-        if isinstance(cause, GamdlApiResponseError) and cause.status_code is not None:
+        if (
+            isinstance(cause, GamdlApiResponseError)
+            and cause.status_code is not None
+            and cause.status_code >= 400
+        ):
             reason = f"Apple Music request failed (HTTP {cause.status_code})"
         elif isinstance(cause, GamdlAuthenticationError):
             reason = "authentication failed"
@@ -150,7 +158,7 @@ def short_error(error: Exception) -> tuple[str, bool]:
     if isinstance(error, GamdlError):
         return type(error).__name__.removeprefix("Gamdl").replace(
             "Error", " failed"
-        ), True
+        ), False
     if isinstance(error, click.ClickException):
         return error.format_message(), True
     return "Unexpected download error", False

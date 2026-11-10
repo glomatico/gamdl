@@ -455,7 +455,11 @@ class Downloader:
                     if name != "cover" and name in Tags.__dataclass_fields__
                 },
             )
-            if include_lyrics and isinstance(media, Song):
+            if (
+                include_lyrics
+                and "lyrics" not in exclude_tags
+                and isinstance(media, Song)
+            ):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
                     tags = replace(tags, lyrics=lyrics.to_plain_text())
@@ -626,7 +630,11 @@ class Downloader:
                     if name != "cover" and name in Tags.__dataclass_fields__
                 },
             )
-            if include_lyrics and isinstance(media, Song):
+            if (
+                include_lyrics
+                and "lyrics" not in exclude_tags
+                and isinstance(media, Song)
+            ):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
                     tags = replace(tags, lyrics=lyrics.to_plain_text())
@@ -892,7 +900,7 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
-        include_lyrics: bool = False,
+        include_lyrics: bool | None = None,
         save_cover: bool = False,
         save_lyrics: bool = False,
         playlist_path: str | os.PathLike[str] | None = None,
@@ -909,6 +917,8 @@ class Downloader:
         ``skip`` avoids media transfer, but still performs requested
         sidecar/playlist/database finalization. Sidecars, playlist entries and
         index updates are opt-in and idempotent; ``get_bytes`` never performs them.
+        Saving lyrics also embeds the plain-text MP4 tag by default; set
+        ``include_lyrics=False`` explicitly to keep only the lyrics sidecar.
         """
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
@@ -920,6 +930,8 @@ class Downloader:
         overwrite = OverwritePolicy(overwrite)
         if save_lyrics and not isinstance(media, Song):
             raise ValueError("save_lyrics is supported for songs only")
+        if include_lyrics is None:
+            include_lyrics = save_lyrics
         if playlist_index is not None and (
             (playlist_path is None and not save_playlist)
             or type(playlist_index) is not int

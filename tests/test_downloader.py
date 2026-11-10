@@ -175,6 +175,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         media = Song.from_id("111", api=Mock())
         media.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
         media.get_cover = AsyncMock(return_value=None)
+        media.get_lyrics = AsyncMock(return_value=None)
         return media
 
     def music_video(self):
@@ -214,7 +215,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         downloader._save_track = AsyncMock(side_effect=save)
         return downloader, tag_resolver
 
-    async def test_song_bytes_remux_tags_and_optional_lyrics(self):
+    async def test_song_bytes_remux_tags_and_default_lyrics(self):
         downloader, tags = self.downloader()
         song = self.song()
         song.get_lyrics = AsyncMock(
@@ -223,7 +224,6 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         value = await downloader.get_bytes(
             song,
             codec_priority=[SongCodec.ALAC_HIRES, SongCodec.AAC],
-            include_lyrics=True,
         )
         finished = self.directory / "tagged.m4a"
         finished.write_bytes(value)
@@ -238,6 +238,18 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             [SongCodec.ALAC_HIRES, SongCodec.AAC],
         )
         tags.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC)
+
+    async def test_song_bytes_excluded_lyrics_are_not_fetched(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        song.get_lyrics = AsyncMock(
+            side_effect=AssertionError("Excluded lyrics must not be fetched")
+        )
+        result = await downloader.get_bytes(song, exclude_tags=("lyrics",))
+        output = self.directory / "no-embedded-lyrics.m4a"
+        output.write_bytes(result)
+        self.assertNotIn(b"\xa9lyr", mp4_tag_atoms(output))
+        song.get_lyrics.assert_not_awaited()
 
     async def test_web_codec_tags_use_actual_selected_codec(self):
         downloader, resolver = self.downloader()
@@ -1085,6 +1097,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
         song.get_cover = AsyncMock(return_value=None)
+        song.get_lyrics = AsyncMock(return_value=None)
         first = await downloader.download(song)
         self.assertEqual(first.status, "downloaded")
         downloader._read_track.reset_mock()

@@ -1,4 +1,4 @@
-"""Regression: saving song lyrics also embeds a plain-text MP4 ©lyr tag."""
+"""Regression: song lyrics are embedded by default unless excluded as a tag."""
 
 from __future__ import annotations
 
@@ -88,17 +88,24 @@ class EmbeddedLyricsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.embedded_lyrics(output))
         self.assertTrue(output.with_suffix(".lrc").is_file())
 
-    async def test_explicit_embedded_lyrics_opt_out_keeps_sidecar(self):
+    async def test_tag_disabled_keeps_sidecar(self):
         output = self.root / "sidecar-only.m4a"
-        await self.downloader.download(
-            self.song, output, save_lyrics=True, include_lyrics=False
-        )
+        await self.downloader.download(self.song, output, save_lyrics=True, tag=False)
         self.assertIsNone(self.embedded_lyrics(output))
         self.assertTrue(output.with_suffix(".lrc").is_file())
 
-    async def test_disabled_lyrics_does_not_fetch_or_tag(self):
-        output = self.root / "no-lyrics.m4a"
+    async def test_sidecars_disabled_still_embeds_lyrics(self):
+        output = self.root / "embedded-only.m4a"
         await self.downloader.download(self.song, output, save_lyrics=False)
+        self.assertEqual(self.embedded_lyrics(output), "First line\nSecond line")
+        self.assertFalse(output.with_suffix(".lrc").exists())
+        self.song.get_lyrics.assert_awaited()
+
+    async def test_tag_exclusion_without_sidecar_does_not_fetch_lyrics(self):
+        output = self.root / "no-lyrics.m4a"
+        await self.downloader.download(
+            self.song, output, save_lyrics=False, exclude_tags=("lyrics",)
+        )
         self.assertIsNone(self.embedded_lyrics(output))
         self.assertFalse(output.with_suffix(".lrc").exists())
         self.song.get_lyrics.assert_not_awaited()

@@ -315,7 +315,6 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
-        include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
@@ -456,9 +455,9 @@ class Downloader:
                 },
             )
             if (
-                include_lyrics
-                and "lyrics" not in exclude_tags
+                "lyrics" not in exclude_tags
                 and isinstance(media, Song)
+                and selected_codec is not None
             ):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
@@ -496,7 +495,6 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
-        include_lyrics: bool,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
@@ -631,9 +629,9 @@ class Downloader:
                 },
             )
             if (
-                include_lyrics
-                and "lyrics" not in exclude_tags
+                "lyrics" not in exclude_tags
                 and isinstance(media, Song)
+                and selected_codec is not None
             ):
                 lyrics = await media.get_lyrics()
                 if lyrics is not None:
@@ -869,7 +867,6 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
-        include_lyrics: bool = False,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
@@ -890,7 +887,6 @@ class Downloader:
             exclude_tags=exclude_tags,
             include_cover=include_cover,
             cover_format=cover_format,
-            include_lyrics=include_lyrics,
             progress_callback=progress_callback,
             event_callback=event_callback,
         )
@@ -922,7 +918,6 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
-        include_lyrics: bool | None = None,
         save_cover: bool = False,
         save_lyrics: bool = False,
         playlist_path: str | os.PathLike[str] | None = None,
@@ -939,8 +934,9 @@ class Downloader:
         ``skip`` avoids media transfer, but still performs requested
         sidecar/playlist/database finalization. Sidecars, playlist entries and
         index updates are opt-in and idempotent; ``get_bytes`` never performs them.
-        Saving lyrics also embeds the plain-text MP4 tag by default; set
-        ``include_lyrics=False`` explicitly to keep only the lyrics sidecar.
+        Tagged catalog songs embed plain-text lyrics by default. Exclude the
+        ``lyrics`` tag through ``exclude_tags`` to omit it; ``save_lyrics``
+        separately controls whether a synchronized/plain-text sidecar is saved.
         """
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
@@ -952,8 +948,6 @@ class Downloader:
         overwrite = OverwritePolicy(overwrite)
         if save_lyrics and not isinstance(media, Song):
             raise ValueError("save_lyrics is supported for songs only")
-        if include_lyrics is None:
-            include_lyrics = save_lyrics
         if playlist_index is not None and (
             (playlist_path is None and not save_playlist)
             or type(playlist_index) is not int
@@ -1058,7 +1052,6 @@ class Downloader:
         uploaded_extension = None
         if uploaded_song:
             _, uploaded_extension = await media.get_uploaded_stream()
-            include_lyrics = False
             save_lyrics = False
         if output is None:
             if self.path_formatter is None:
@@ -1173,7 +1166,6 @@ class Downloader:
                 exclude_tags=exclude_tags,
                 include_cover=include_cover,
                 cover_format=cover_format,
-                include_lyrics=include_lyrics,
                 progress_callback=progress_callback,
                 event_callback=event_callback,
                 resolved_tags=resolved_tags,

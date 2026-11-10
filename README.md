@@ -307,7 +307,7 @@ Request one specific codec instead of a fallback list. The default is `null`. Us
 
 #### Lyrics (`output.save_lyrics` / `--no-lyrics`)
 
-Song lyrics are enabled by default when available. Gamdl saves synchronized LRC or plain-text lyrics as appropriate. Use `--no-lyrics` to disable external lyric files for a command.
+When metadata tagging is enabled, available song lyrics are embedded in the audio file by default as plain text (`©lyr`), independently of sidecar settings. Gamdl also saves synchronized LRC or plain-text lyric sidecars by default. Use `--no-lyrics` to disable external lyric files for a command; to omit the embedded tag, add `lyrics` to `output.exclude_tags` or use `--exclude-tags lyrics`. Disabling tagging with `--no-tag` also disables embedded lyrics.
 
 ### Music Videos and Uploaded Videos
 

@@ -106,8 +106,29 @@ class MediaPackageTests(unittest.TestCase):
         )
         self.assertEqual(
             song_stream.match_hls_codec("audio-alac-96-24", "alac"),
-            media.SongCodec.ALAC,
+            media.SongCodec.ALAC_HIRES,
         )
+        self.assertEqual(
+            song_stream.match_hls_codec("audio-alac-48-24", "alac"),
+            media.SongCodec.ALAC_LOSSLESS,
+        )
+        self.assertEqual(
+            song_stream.match_hls_codec("audio-alac-44100-16", "alac"),
+            media.SongCodec.ALAC_LOSSLESS,
+        )
+        self.assertEqual(
+            song_stream.match_hls_codec("audio-alac-88.2-24", "alac"),
+            media.SongCodec.ALAC_HIRES,
+        )
+        self.assertIsNone(song_stream.match_hls_codec("audio-alac-invalid", "alac"))
+        self.assertNotIn(
+            media.SongCodec.ALAC_LOSSLESS, song_constants.SONG_CODEC_REGEX_MAP
+        )
+        self.assertNotIn(
+            media.SongCodec.ALAC_HIRES, song_constants.SONG_CODEC_REGEX_MAP
+        )
+        with self.assertRaises(ValueError):
+            media.SongCodec("alac")
         self.assertEqual(
             song_stream.match_hls_codec(None, "mp4a.40.5"),
             media.SongCodec.AAC_HE,

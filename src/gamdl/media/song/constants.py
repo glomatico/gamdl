@@ -13,7 +13,6 @@ SONG_CODEC_REGEX_MAP: dict[SongCodec, str] = {
     SongCodec.AAC_HE_DOWNMIX: r"audio-HE-stereo-\d+-downmix",
     SongCodec.ATMOS: r"audio-atmos-.*",
     SongCodec.AC3: r"audio-ac3-.*",
-    SongCodec.ALAC: r"audio-alac-.*",
 }
 WEB_FLAVORS: dict[SongCodec, str] = {
     SongCodec.AAC_WEB: "28:ctrp256",

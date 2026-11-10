@@ -993,7 +993,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                         "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
                     ),
                     auth_mode="wrapper",
-                    song_codec="alac",
+                    song_codec="alac-hires",
                     no_progress=False,
                 )
             )

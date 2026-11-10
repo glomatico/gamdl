@@ -18,7 +18,8 @@ class SongCodec(str, Enum):
     AAC_HE_DOWNMIX = "aac-he-downmix"
     ATMOS = "atmos"
     AC3 = "ac3"
-    ALAC = "alac"
+    ALAC_LOSSLESS = "alac-lossless"
+    ALAC_HIRES = "alac-hires"
 
     @property
     def is_web(self) -> bool:

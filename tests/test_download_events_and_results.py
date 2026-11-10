@@ -229,6 +229,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
                 target,
                 save_cover=True,
                 save_lyrics=True,
+                include_lyrics=False,
                 event_callback=events.append,
             )
         error = failure.exception

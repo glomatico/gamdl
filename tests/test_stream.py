@@ -143,12 +143,12 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             api.get_webplayback.assert_awaited_once_with("111", is_library=False)
             api.get_assets.assert_not_awaited()
 
-    async def test_hls_selects_highest_average_bandwidth_and_preserves_regex(self):
+    async def test_hls_selects_hires_alac_and_other_codecs(self):
         api = fake_api()
         song = Song.from_id("111", api=api)
         client, calls = stream_client()
         async with client:
-            alac = await song.get_stream(codec=SongCodec.ALAC, client=client)
+            alac = await song.get_stream(codec=SongCodec.ALAC_HIRES, client=client)
             aac = await song.get_stream(codec=SongCodec.AAC, client=client)
             atmos = await song.get_stream(codec=SongCodec.ATMOS, client=client)
             self.assertIsInstance(alac, HlsSongStream)
@@ -165,6 +165,38 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             api.get_webplayback.assert_not_awaited()
             api.get_assets.assert_awaited_once()
 
+    async def test_alac_tiers_can_be_selected_independently(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client()
+        async with client:
+            lossless = await song.get_stream(
+                codec=SongCodec.ALAC_LOSSLESS, client=client
+            )
+            hires = await song.get_stream(codec=SongCodec.ALAC_HIRES, client=client)
+            self.assertEqual(lossless.codec, SongCodec.ALAC_LOSSLESS)
+            self.assertEqual(lossless.audio_group, "audio-alac-48-24")
+            self.assertEqual(lossless.bitrate, 1200000)
+            self.assertEqual(hires.codec, SongCodec.ALAC_HIRES)
+            self.assertEqual(hires.audio_group, "audio-alac-96-24")
+            self.assertEqual(hires.bitrate, 2100000)
+            self.assertEqual(
+                [path for _, path, _ in calls], ["/media/P93_default.m3u8"]
+            )
+
+    async def test_codec_priorities_can_fall_back_from_hires_to_lossless(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        master = ENHANCED.replace("audio-alac-96-24", "audio-alac-unrecognized")
+        client, _ = stream_client(master=master)
+        async with client:
+            selected = await song.get_stream(
+                codec_priority=(SongCodec.ALAC_HIRES, SongCodec.ALAC_LOSSLESS),
+                client=client,
+            )
+            self.assertEqual(selected.codec, SongCodec.ALAC_LOSSLESS)
+            self.assertEqual(selected.audio_group, "audio-alac-48-24")
+
     async def test_wrapper_hls_preferred_without_assets_request(self):
         api = fake_api()
         wrapper = Mock()
@@ -175,7 +207,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client()
         async with client:
             selected = await song.get_stream(
-                codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
+                codec=SongCodec.ALAC_HIRES, client=client, wrapper_api=wrapper
             )
             self.assertEqual(selected.origin, StreamOrigin.WRAPPER_HLS)
             self.assertEqual(selected.url, BASE + "alac-hi.m3u8")
@@ -193,10 +225,10 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client(master=STANDARD, asset_master=ENHANCED)
         async with client:
             selected = await song.get_stream(
-                codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
+                codec=SongCodec.ALAC_HIRES, client=client, wrapper_api=wrapper
             )
             self.assertEqual(selected.origin, StreamOrigin.ASSET_ENHANCED_HLS)
-            self.assertEqual(selected.codec, SongCodec.ALAC)
+            self.assertEqual(selected.codec, SongCodec.ALAC_HIRES)
             self.assertIn("/media/P42_default.m3u8", [p for _, p, _ in calls])
             self.assertIn("/media/P93_default.m3u8", [p for _, p, _ in calls])
 
@@ -208,10 +240,10 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, calls = stream_client()
         async with client:
             selected = await song.get_stream(
-                codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
+                codec=SongCodec.ALAC_HIRES, client=client, wrapper_api=wrapper
             )
             self.assertEqual(selected.origin, StreamOrigin.ASSET_ENHANCED_HLS)
-            self.assertEqual(selected.codec, SongCodec.ALAC)
+            self.assertEqual(selected.codec, SongCodec.ALAC_HIRES)
             api.get_webplayback.assert_not_awaited()
             api.get_assets.assert_awaited_once()
             self.assertEqual([p for _, p, _ in calls], ["/media/P93_default.m3u8"])
@@ -263,7 +295,7 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(he.hls_type, HlsType.STANDARD)
             self.assertEqual(he.origin, StreamOrigin.ASSET_ENHANCED_HLS)
             with self.assertRaises(StreamNotAvailableError):
-                await song.get_stream(codec=SongCodec.ALAC, client=client)
+                await song.get_stream(codec=SongCodec.ALAC_HIRES, client=client)
             api.get_assets.assert_awaited_once_with(
                 "111",
                 kind="song",
@@ -278,12 +310,12 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         client, _ = stream_client()
         async with client:
             chosen = await song.get_stream(
-                codec_priority=[SongCodec.AC3, SongCodec.ALAC, SongCodec.AAC_WEB],
+                codec_priority=[SongCodec.AC3, SongCodec.ALAC_HIRES, SongCodec.AAC_WEB],
                 client=client,
             )
-            self.assertEqual(chosen.codec, SongCodec.ALAC)
+            self.assertEqual(chosen.codec, SongCodec.ALAC_HIRES)
             web = await song.get_stream(
-                codec_priority=[SongCodec.AAC_WEB, SongCodec.ALAC], client=client
+                codec_priority=[SongCodec.AAC_WEB, SongCodec.ALAC_HIRES], client=client
             )
             self.assertEqual(web.codec, SongCodec.AAC_WEB)
 
@@ -303,14 +335,16 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                     if o.origin == StreamOrigin.ASSET_ENHANCED_HLS
                 )
             self.assertIsInstance(request, StreamSelectionRequest)
-            return next(o.index for o in request.options if o.codec == SongCodec.ALAC)
+            return next(
+                o.index for o in request.options if o.codec == SongCodec.ALAC_HIRES
+            )
 
         client, calls = stream_client()
         async with client:
             chosen = await song.get_stream(
                 ask=True, selector=choose_assets_enhanced, client=client
             )
-            self.assertEqual(chosen.codec, SongCodec.ALAC)
+            self.assertEqual(chosen.codec, SongCodec.ALAC_HIRES)
             self.assertEqual(seen[0].media_id, "111")
             self.assertEqual(len(seen), 2)
             self.assertEqual(
@@ -414,7 +448,9 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                     for o in request.options
                     if o.origin == StreamOrigin.WRAPPER_HLS
                 )
-            return next(o.index for o in request.options if o.codec == SongCodec.ALAC)
+            return next(
+                o.index for o in request.options if o.codec == SongCodec.ALAC_HIRES
+            )
 
         client, calls = stream_client()
         async with client:
@@ -508,7 +544,9 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         api = fake_api()
         song = Song.from_id("111", api=api)
         with self.assertRaises(ValueError):
-            await song.get_stream(codec=SongCodec.ALAC, codec_priority=[SongCodec.AAC])
+            await song.get_stream(
+                codec=SongCodec.ALAC_HIRES, codec_priority=[SongCodec.AAC]
+            )
         with self.assertRaises(ValueError):
             await song.get_stream(codec_priority=[])
         client, _ = stream_client()
@@ -767,7 +805,7 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
             transport=httpx.MockTransport(lambda _: httpx.Response(200, text=playlist))
         ) as client:
             stream = HlsSongStream(
-                codec=SongCodec.ALAC,
+                codec=SongCodec.ALAC_HIRES,
                 origin=StreamOrigin.ASSET_ENHANCED_HLS,
                 url=BASE + "file.m3u8",
                 transport=StreamTransport(client),
@@ -793,7 +831,7 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             stream = HlsSongStream(
-                codec=SongCodec.ALAC,
+                codec=SongCodec.ALAC_HIRES,
                 origin=StreamOrigin.ASSET_ENHANCED_HLS,
                 url=ASSET_MASTER,
                 transport=StreamTransport(client),

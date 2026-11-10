@@ -275,16 +275,17 @@ Select codecs in preference order. Gamdl tries the preferred formats based on th
 ```yaml
 download:
   song_codec_priority:
-    - alac
+    - alac-hires
+    - alac-lossless
     - atmos
     - aac-web
 ```
 
 ```bash
-gamdl rip "<song URL>" --song-codec-priority alac,atmos,aac-web
+gamdl rip "<song URL>" --song-codec-priority alac-hires,alac-lossless,atmos,aac-web
 ```
 
-Supported song codec identifiers are `aac-web`, `aac-he-web`, `aac`, `aac-he`, `aac-binaural`, `aac-downmix`, `aac-he-binaural`, `aac-he-downmix`, `atmos`, `ac3`, and `alac`.
+Supported song codec identifiers are `aac-web`, `aac-he-web`, `aac`, `aac-he`, `aac-binaural`, `aac-downmix`, `aac-he-binaural`, `aac-he-downmix`, `atmos`, `ac3`, `alac-lossless` (up to 48 kHz), and `alac-hires` (above 48 kHz). ALAC tiers are determined from enhanced-HLS audio-group metadata, rather than the generic codec regex map. To prefer Hi-Res with standard Lossless fallback, list both codecs in that order. The legacy `alac` option is no longer accepted; update existing YAML and CLI preferences.
 
 #### Exact Codec (`download.song_codec` / `--song-codec`)
 

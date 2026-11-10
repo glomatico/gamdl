@@ -174,7 +174,7 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
         wrapper.get_playback.side_effect = GamdlApiResponseError("unavailable")
         song = Song.from_id("1559885421", api=api)
         with self.assertRaisesRegex(GamdlApiResponseError, "unavailable"):
-            await TagResolver(wrapper_api=wrapper).get_tags(song, codec=SongCodec.ALAC)
+            await TagResolver(wrapper_api=wrapper).get_tags(song, codec=SongCodec.ALAC_HIRES)
         api.get_webplayback.assert_not_awaited()
 
     async def test_web_codecs_use_webplayback_even_with_wrapper(self):
@@ -221,7 +221,7 @@ class TagResolverTests(unittest.IsolatedAsyncioTestCase):
         wrapper_tags = await resolver.get_tags(song, codec=SongCodec.AAC)
         self.assertEqual(web.title, PLAYBACK_TAG_DATA["itemName"])
         self.assertEqual(wrapper_tags.title, "Only in Wrapper")
-        self.assertIs(wrapper_tags, await resolver.get_tags(song, codec=SongCodec.ALAC))
+        self.assertIs(wrapper_tags, await resolver.get_tags(song, codec=SongCodec.ALAC_HIRES))
         wrapper.get_playback.assert_awaited_once_with(song.id)
         api.get_webplayback.assert_awaited_once()
 

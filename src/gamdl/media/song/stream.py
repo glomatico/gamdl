@@ -38,11 +38,46 @@ if TYPE_CHECKING:
     from .media import Song
 
 
+def parse_alac_audio_group(audio_group: str | None) -> tuple[int, int] | None:
+    """Read ALAC sample rate (Hz) and depth from an enhanced-HLS audio group.
+
+    Apple uses kHz tokens such as 44, 48 and 96, but may spell out 44100.
+    Reject unfamiliar/malformed groups instead of misclassifying their tier.
+    """
+    if not isinstance(audio_group, str):
+        return None
+    match = re.fullmatch(
+        r"audio-alac-(?:stereo-)?(\d+(?:\.\d+)?)-(16|20|24|32)",
+        audio_group,
+        re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    token = match.group(1)
+    number = float(token)
+    if number == 44:
+        number = 44.1
+    sample_rate = round(number * 1000) if number < 1000 else int(number)
+    if not 8000 <= sample_rate <= 384000:
+        return None
+    return sample_rate, int(match.group(2))
+
+
 def match_hls_codec(
     audio_group: str | None, codec_string: str | None
 ) -> SongCodec | None:
     """Map a master playlist variant to a song codec."""
     if audio_group:
+        if audio_group.lower().startswith("audio-alac-"):
+            alac = parse_alac_audio_group(audio_group)
+            if alac is None:
+                return None
+            sample_rate, _bit_depth = alac
+            return (
+                SongCodec.ALAC_HIRES
+                if sample_rate > 48_000
+                else SongCodec.ALAC_LOSSLESS
+            )
         for codec, pattern in SONG_CODEC_REGEX_MAP.items():
             if re.fullmatch(pattern, audio_group):
                 return codec
@@ -226,6 +261,7 @@ class SongStreamResolver:
                     codec=codec,
                     origin=origin,
                     hls_type=hls_type,
+                    audio_group=group,
                     url=playlist.absolute_uri,
                     transport=self.transport,
                     codec_string=codecs,

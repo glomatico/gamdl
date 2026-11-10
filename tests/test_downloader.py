@@ -222,7 +222,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         value = await downloader.get_bytes(
             song,
-            codec_priority=[SongCodec.ALAC, SongCodec.AAC],
+            codec_priority=[SongCodec.ALAC_HIRES, SongCodec.AAC],
             include_lyrics=True,
         )
         finished = self.directory / "tagged.m4a"
@@ -235,7 +235,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         song.get_stream.assert_awaited_once()
         self.assertEqual(
             song.get_stream.call_args.kwargs["codec_priority"],
-            [SongCodec.ALAC, SongCodec.AAC],
+            [SongCodec.ALAC_HIRES, SongCodec.AAC],
         )
         tags.get_tags.assert_awaited_once_with(song, codec=SongCodec.AAC)
 
@@ -261,7 +261,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         song = self.song()
         song.get_stream.return_value.codec = SongCodec.AAC_WEB
         outcome = await downloader.download(
-            song, codec_priority=(SongCodec.ALAC, SongCodec.AAC_WEB)
+            song, codec_priority=(SongCodec.ALAC_HIRES, SongCodec.AAC_WEB)
         )
         self.assertTrue(outcome.path.exists())
         self.assertEqual(outcome.codec, SongCodec.AAC_WEB)

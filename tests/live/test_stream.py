@@ -49,7 +49,7 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(drm.untyped_key_data or drm.untyped_key_uri)
 
     async def test_asset_hls_without_wrapper(self):
-        stream = await self.song.get_stream(codec=SongCodec.ALAC)
+        stream = await self.song.get_stream(codec=SongCodec.ALAC_HIRES)
         self.assertIsInstance(stream, HlsSongStream)
         self.assertEqual(stream.origin, StreamOrigin.ASSET_ENHANCED_HLS)
         self.assertGreater(stream.bitrate, 0)
@@ -79,7 +79,7 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
         wrapper = self.session.wrapper
         if wrapper is not None:
             selected = await self.song.get_stream(
-                codec=SongCodec.ALAC, wrapper_api=wrapper
+                codec=SongCodec.ALAC_HIRES, wrapper_api=wrapper
             )
             self.assertEqual(selected.origin, StreamOrigin.WRAPPER_HLS)
             self.assertGreater(len(await selected.get_segments()), 0)
@@ -96,14 +96,14 @@ class StreamLiveTests(unittest.IsolatedAsyncioTestCase):
                     option.index
                     for option in request.options
                     if option.origin == StreamOrigin.WRAPPER_HLS
-                    and option.codec == SongCodec.ALAC
+                    and option.codec == SongCodec.ALAC_HIRES
                 )
 
             asked = await self.song.get_stream(
                 ask=True, selector=choose, wrapper_api=wrapper
             )
             self.assertIsInstance(asked, HlsSongStream)
-            self.assertEqual(asked.codec, SongCodec.ALAC)
+            self.assertEqual(asked.codec, SongCodec.ALAC_HIRES)
 
     async def test_codec_inventory_for_future_muxer_coverage(self):
         from gamdl.media import SongStreamResolver

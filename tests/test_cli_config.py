@@ -321,14 +321,16 @@ class CliConfigTests(unittest.TestCase):
         self._write(
             "download:\n"
             "  song_codec_priority:\n"
-            "    - alac\n"
+            "    - alac-hires\n"
             "    - aac-web\n"
             "  music_video_codec_priority:\n"
             "    - h265\n"
             "    - h264\n"
         )
         settings = load_config(self.path)
-        self.assertEqual(settings.download.song_codec_priority, ["alac", "aac-web"])
+        self.assertEqual(
+            settings.download.song_codec_priority, ["alac-hires", "aac-web"]
+        )
         self.assertEqual(settings.download.music_video_codec_priority, ["h265", "h264"])
 
         received = []
@@ -356,7 +358,7 @@ class CliConfigTests(unittest.TestCase):
                             str(self.path),
                             *command,
                             "--song-codec-priority",
-                            "alac, atmos",
+                            "alac-hires, atmos",
                             "--song-codec-priority",
                             "aac-web",
                             "--music-video-codec-priority",
@@ -366,7 +368,7 @@ class CliConfigTests(unittest.TestCase):
                     self.assertEqual(result.exit_code, 0, result.output)
                     self.assertEqual(
                         received[-1].song_codec_priority,
-                        ("alac", "atmos", "aac-web"),
+                        ("alac-hires", "atmos", "aac-web"),
                     )
                     self.assertEqual(
                         received[-1].music_video_codec_priority,
@@ -375,11 +377,13 @@ class CliConfigTests(unittest.TestCase):
 
             result = runner.invoke(main, ["--config", str(self.path), "rip", "URL"])
             self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(received[-1].song_codec_priority, ("alac", "aac-web"))
+            self.assertEqual(
+                received[-1].song_codec_priority, ("alac-hires", "aac-web")
+            )
             self.assertEqual(received[-1].music_video_codec_priority, ("h265", "h264"))
 
             for option, bad in (
-                ("--song-codec-priority", "alac,,aac-web"),
+                ("--song-codec-priority", "alac-hires,,aac-web"),
                 ("--song-codec-priority", "not-a-codec"),
                 ("--music-video-codec-priority", "h264,unknown"),
             ):
@@ -549,7 +553,7 @@ class CliConfigTests(unittest.TestCase):
                     "URL",
                     "--ask-song-codec",
                     "--song-codec",
-                    "alac",
+                    "alac-hires",
                 ],
             )
         self.assertNotEqual(result.exit_code, 0)

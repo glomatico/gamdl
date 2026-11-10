@@ -153,7 +153,7 @@ class UploadedMp3DownloadTests(unittest.IsolatedAsyncioTestCase):
             downloader._save_track = AsyncMock(side_effect=save)
             result = await downloader.download(
                 song,
-                codec=SongCodec.ALAC,
+                codec=SongCodec.ALAC_HIRES,
                 ask=True,
                 include_cover=False,
                 exclude_tags=("artist", "cover"),

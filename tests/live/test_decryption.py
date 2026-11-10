@@ -144,7 +144,8 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         streams = json.loads(probe.stdout).get("streams", [])
         self.assertEqual(len(streams), 1, "Expected exactly one audio stream")
         expected_codec = {
-            SongCodec.ALAC: "alac",
+            SongCodec.ALAC_LOSSLESS: "alac",
+            SongCodec.ALAC_HIRES: "alac",
             SongCodec.ATMOS: "eac3",
         }.get(source.codec, "aac")
         self.assertEqual(
@@ -264,7 +265,7 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
     async def test_auto_wrapper_enhanced_asset_alac(self):
         if self.session.wrapper is None:
             self.skipTest("Authenticated wrapper instance required")
-        source = await self.asset(StreamOrigin.ASSET_ENHANCED_HLS, SongCodec.ALAC)
+        source = await self.asset(StreamOrigin.ASSET_ENHANCED_HLS, SongCodec.ALAC_HIRES)
         await self.download_and_check(source, auto=True, expected_method="wrapper")
 
     async def test_web_all_other_codecs_with_content_key(self):
@@ -346,7 +347,9 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_alac_content_key_when_license_available(self):
-        source = await self.asset(StreamOrigin.ASSET_ENHANCED_HLS, codec=SongCodec.ALAC)
+        source = await self.asset(
+            StreamOrigin.ASSET_ENHANCED_HLS, codec=SongCodec.ALAC_HIRES
+        )
         try:
             key = await self.license_key(source)
         except DrmLicenseError:

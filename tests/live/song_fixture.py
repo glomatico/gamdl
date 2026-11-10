@@ -17,12 +17,15 @@ ENHANCED_CODECS = (
     SongCodec.AAC_DOWNMIX,
     SongCodec.AAC_HE_BINAURAL,
     SongCodec.AAC_HE_DOWNMIX,
-    SongCodec.ALAC,
+    SongCodec.ALAC_LOSSLESS,
+    SongCodec.ALAC_HIRES,
     SongCodec.ATMOS,
 )
 STANDARD_CODECS = (SongCodec.AAC, SongCodec.AAC_HE)
 # Apple currently rejects Widevine ALAC license requests for this fixture.
 # The same ALAC rendition can be exercised through wrapper FairPlay delivery.
 ENHANCED_WIDEVINE_CODECS = tuple(
-    codec for codec in ENHANCED_CODECS if codec != SongCodec.ALAC
+    codec
+    for codec in ENHANCED_CODECS
+    if codec not in {SongCodec.ALAC_LOSSLESS, SongCodec.ALAC_HIRES}
 )

@@ -130,7 +130,7 @@ class SearchCliTests(unittest.TestCase):
                     "--feeling-lucky",
                     "--no-lyrics",
                     "--song-codec",
-                    "alac",
+                    "alac-lossless",
                 ],
             )
         self.assertEqual(result.exit_code, 0, result.output)
@@ -138,4 +138,4 @@ class SearchCliTests(unittest.TestCase):
         self.assertEqual(received[0].search_type, "song")
         self.assertTrue(received[0].feeling_lucky)
         self.assertTrue(received[0].no_lyrics)
-        self.assertEqual(received[0].song_codec, "alac")
+        self.assertEqual(received[0].song_codec, "alac-lossless")

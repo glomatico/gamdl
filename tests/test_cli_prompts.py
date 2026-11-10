@@ -65,7 +65,7 @@ class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
                 await select_media(request)
 
     def requests(self):
-        audio = Mock(codec=SongCodec.ALAC, bitrate=995_000)
+        audio = Mock(codec=SongCodec.ALAC_HIRES, bitrate=995_000)
         video = Mock(
             codec=MusicVideoCodec.H265,
             width=1920,
@@ -90,7 +90,7 @@ class QuestionaryTests(unittest.IsolatedAsyncioTestCase):
                     "123", StreamOrigin.WEBPLAYBACK, (StreamSelectionOption(0, audio),)
                 ),
                 "codec",
-                "alac",
+                "alac-hires",
             ),
             (
                 VideoSelectionRequest("123", (VideoSelectionOption(0, video),)),

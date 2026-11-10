@@ -293,9 +293,16 @@ class WebPlaybackStream(AudioStream):
 class HlsSongStream(AudioStream):
     """Enhanced or standard HLS media playlist selected from a master."""
 
-    def __init__(self, *, hls_type: HlsType = HlsType.STANDARD, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        hls_type: HlsType = HlsType.STANDARD,
+        audio_group: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.hls_type = hls_type
+        self.audio_group = audio_group
 
 
 def _decode_data_uri(uri: str) -> bytes | None:

@@ -46,7 +46,7 @@ class UploadedSongTests(unittest.IsolatedAsyncioTestCase):
     async def test_uploaded_stream_ignores_codec_and_selector(self):
         selector = AsyncMock(side_effect=AssertionError("selector must not run"))
         stream = await self.song.get_stream(
-            codec=SongCodec.ALAC, ask=True, selector=selector
+            codec=SongCodec.ALAC_HIRES, ask=True, selector=selector
         )
         self.assertIsInstance(stream, HttpStream)
         self.assertEqual(stream.url, "https://example.com/audio")
@@ -70,7 +70,7 @@ class UploadedSongTests(unittest.IsolatedAsyncioTestCase):
         downloader._save_track = AsyncMock(side_effect=save)
         downloader.muxer.remux_file = Mock(side_effect=AssertionError("must not remux"))
         result = await downloader.download(
-            self.song, codec=SongCodec.ALAC, ask=True, tag=False
+            self.song, codec=SongCodec.ALAC_HIRES, ask=True, tag=False
         )
         self.assertEqual(result.path.suffix, ".mp3")
         self.assertEqual(result.path.read_bytes(), raw)

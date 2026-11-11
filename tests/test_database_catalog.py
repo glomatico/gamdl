@@ -16,6 +16,9 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from gamdl import _native
+from gamdl.cli.config.models import AuthConfig, DatabaseConfig
+from gamdl.cli.config.models import config_path as default_config_path
+from gamdl.cli.config.models import database_path as default_database_path
 from gamdl.cli.main import main
 from gamdl.download.database import TAG_NAMES, MediaDatabase
 from gamdl.download.enums import DatabaseStatus
@@ -41,6 +44,13 @@ class DatabaseCatalogTests(TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         return path
+
+    def test_default_files_share_home_gamdl_directory(self):
+        folder = Path.home() / ".gamdl"
+        self.assertEqual(default_config_path(), folder / "config.yml")
+        self.assertEqual(default_database_path(), folder / "media.sqlite3")
+        self.assertEqual(DatabaseConfig().path, str(folder / "media.sqlite3"))
+        self.assertEqual(AuthConfig().cookies_path, str(folder / "cookies.txt"))
 
     def test_schema_exact_tag_field_sets_and_fresh_database(self):
         created = []

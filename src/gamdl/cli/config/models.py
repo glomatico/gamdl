@@ -3,11 +3,9 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from platformdirs import user_config_path
-
 
 def config_path() -> Path:
-    return user_config_path("gamdl", appauthor=False) / "config.yaml"
+    return Path.home() / ".gamdl" / "config.yml"
 
 
 def database_path() -> Path:
@@ -17,7 +15,7 @@ def database_path() -> Path:
 @dataclass(frozen=True)
 class AuthConfig:
     mode: str | None = None
-    cookies_path: str = str(user_config_path("gamdl", appauthor=False) / "cookies.txt")
+    cookies_path: str = str(config_path().parent / "cookies.txt")
     wrapper_url: str = "http://127.0.0.1"
     media_user_token: str | None = None
     wrapper_decrypt_host: str = "127.0.0.1"

@@ -312,28 +312,33 @@ Set the Apple Music storefront with a two-letter country code such as `br`, and 
 
 #### Codec Priority (`download.song_codec_priority` / `--song-codec-priority`)
 
-Select codecs in preference order. Gamdl tries the preferred formats based on the streams actually available for each track. **Default:** `aac-web`.
+Select codecs in preference order. Gamdl tries the preferred formats based on the streams actually available for each track. **Default:** `aac` (AAC via HLS, compatible with Wrapper or Widevine/PlayReady).
 
 ```yaml
 download:
   song_codec_priority:
-    - alac-hires
-    - alac-lossless
+    - alac
     - atmos
-    - aac-web
+    - aac
 ```
 
 ```bash
-gamdl rip "<song URL>" --song-codec-priority alac-hires,alac-lossless,atmos,aac-web
+gamdl rip "<song URL>" --song-codec-priority alac,atmos,aac
 ```
 
-Supported song codec identifiers are `aac-web`, `aac-he-web`, `aac`, `aac-he`, `aac-binaural`, `aac-downmix`, `aac-he-binaural`, `aac-he-downmix`, `atmos`, `ac3`, `alac-lossless` (up to 48 kHz), and `alac-hires` (above 48 kHz). ALAC tiers are determined from enhanced-HLS audio-group metadata, rather than the generic codec regex map. To prefer Hi-Res with standard Lossless fallback, list both codecs in that order. The legacy `alac` option is no longer accepted; update existing YAML and CLI preferences.
+Supported song codec identifiers are `aac`, `aac-he`, `aac-binaural`, `aac-downmix`, `aac-he-binaural`, `aac-he-downmix`, `aac-web`, `aac-he-web`, `atmos`, `ac3`, `alac`, `alac-lossless`, and `alac-hires`.
+
+- **`aac`** uses HLS and works with Wrapper or Widevine/PlayReady. **`aac-web`** uses the separate web-playback stream, which requires Widevine/PlayReady even when Wrapper is connected.
+- **`alac`** automatically chooses the highest-quality ALAC available: Hi-Res (above 48 kHz) first, then standard Lossless (up to 48 kHz). Within a tier it favors higher sample rates, then bit depths, then bitrates. Wrapper streams take precedence over Apple Music asset streams at the same tier. The actual downloaded codec is still recorded as `alac-hires` or `alac-lossless`, not `alac`.
+- **`alac-lossless`** and **`alac-hires`** remain available when you want to request a specific tier. The tiers are identified from HLS audio-group metadata.
 
 Gamdl warns after authentication when Apple Music reports account content restrictions, which may prevent some tracks from downloading. It also warns when ALAC is selected without Wrapper, because Apple Music may refuse Widevine/PlayReady licenses for lossless streams. These are informational warnings, not download blockers; interactive ALAC selection displays the warning when that codec is chosen.
 
 #### Exact Codec (`download.song_codec` / `--song-codec`)
 
 Request one specific codec instead of a fallback list. The default is `null`. Use `--ask-song-codec` (CLI-only) to choose a stream interactively; it requires a terminal.
+
+For example, `gamdl rip "<song URL>" --song-codec alac` requests the best available ALAC tier without specifying a fallback to another format.
 
 #### Lyrics (`output.no_lyrics_file` / `--no-lyrics-file`)
 
@@ -491,7 +496,7 @@ Gamdl 4.x introduces several changes to its CLI and configuration:
 - **Subcommands:** Use `gamdl rip URL` instead of passing URLs directly to `gamdl`.
 - **YAML configuration:** Replace your old INI configuration with the new YAML settings. Run `gamdl config init` to generate a reference configuration.
 - **Authentication:** Configure Wrapper, Cookies, or Media User Token with `gamdl auth`; the old `--use-wrapper` flag is replaced by an authentication method.
-- **Codec selection:** Interactive stream selection has dedicated flags such as `--ask-song-codec`; codec-priority lists accept comma-separated CLI values or YAML lists.
+- **Codec selection:** The default is now HLS `aac` instead of `aac-web`. The generic `alac` preference automatically selects the best ALAC tier. Interactive stream selection has dedicated flags such as `--ask-song-codec`; codec-priority lists accept comma-separated CLI values or YAML lists.
 - **Native processing:** The native muxing/decryption layer replaces the old external downloader and muxer workflow. Review removed 3.x flags rather than copying them directly.
 - **Python API:** The modules and classes have been reorganized. Applications embedding Gamdl 3.x should update their imports and integration code.
 
@@ -534,7 +539,7 @@ The API is asynchronous; use context managers to close connections. More advance
 
 **Authentication fails:** Check that your session is valid, your cookies include `media-user-token`, or your wrapper is reachable. Retry `gamdl auth`.
 
-**A codec or stream is unavailable:** Not every track offers every codec. Try `--ask-song-codec`, `--ask-music-video-streams`, or a more conservative codec priority such as `aac-web`.
+**A codec or stream is unavailable:** Not every track offers every codec. Try `--ask-song-codec`, `--ask-music-video-streams`, or the default `aac` HLS codec. You can still try `aac-web` with Widevine/PlayReady when appropriate.
 
 **DRM initialization fails:** Verify that the relevant extra (`widevine` or `playready`) is installed, that a required device file is available, and that the stream supports the selected backend.
 

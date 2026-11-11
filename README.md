@@ -15,8 +15,8 @@
 - [📋 Prerequisites](#prerequisites)
 - [📦 Installation](#installation)
 - [🚀 First Run](#first-run)
-- [🔐 Authentication](#authentication)
 - [🚀 Usage](#usage)
+  - [Authentication (`auth`)](#authentication)
 - [⚙️ Configuration](#configuration)
 - [🔄 Migrating from Gamdl 3.x](#migration)
 - [🐍 Python API](#python-api)
@@ -88,32 +88,6 @@ If this is your first run, Gamdl will guide you through any settings you haven't
 Once setup is complete, Gamdl begins downloading and displays progress in the terminal. It saves your choices in `~/.gamdl/config.yml`, so these prompts won't appear again unless you clear the corresponding settings.
 
 You can change authentication later with `gamdl auth`, or override the download folder for one command with `--output-dir PATH`. For scripts and other non-interactive environments, configure authentication and the output directory beforehand; the setup wizards require an interactive terminal.
-
-<a name="authentication"></a>
-
-## 🔐 Authentication
-
-Authentication is configured automatically during the first run if you haven't selected a method yet. To change your method later, run:
-
-```bash
-gamdl auth
-```
-
-The wizard validates your selected method and saves it to the YAML configuration.
-
-### Wrapper
-
-Connect to a running [Wrapper v2](https://github.com/glomatico/wrapper-v2) service. Gamdl can use its authenticated session and compatible playback/decryption features. The default wrapper URL is `http://127.0.0.1`.
-
-### Cookies
-
-Export your cookies from [Apple Music](https://music.apple.com/) in Netscape `cookies.txt` format while signed in. The file must contain the `media-user-token` cookie. You can use a browser extension such as [Export Cookies for Firefox](https://addons.mozilla.org/addon/export-cookies-txt) or [Get cookies.txt LOCALLY for Chromium](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
-
-### Media User Token
-
-Provide your Apple Music `media-user-token` directly through the wizard. Treat the token and your cookies file as passwords; never post them in issues or logs.
-
-You can change authentication methods later with `gamdl auth`. Advanced authentication settings are described under [Configuration](#-configuration).
 
 <a name="usage"></a>
 
@@ -213,6 +187,32 @@ Use `--feeling-lucky` with `--type` to select the first result automatically:
 ```bash
 gamdl search "Thriller" --type song --feeling-lucky
 ```
+
+<a name="authentication"></a>
+
+### Authentication (`auth`)
+
+Authentication is configured automatically during the first run if you haven't selected a method yet. To change your method later, run:
+
+```bash
+gamdl auth
+```
+
+The wizard validates your selected method and saves it to the YAML configuration.
+
+#### Wrapper
+
+Connect to a running [Wrapper v2](https://github.com/glomatico/wrapper-v2) service. Gamdl can use its authenticated session and compatible playback/decryption features. The default wrapper URL is `http://127.0.0.1`.
+
+#### Cookies
+
+Export your cookies from [Apple Music](https://music.apple.com/) in Netscape `cookies.txt` format while signed in. The file must contain the `media-user-token` cookie. You can use a browser extension such as [Export Cookies for Firefox](https://addons.mozilla.org/addon/export-cookies-txt) or [Get cookies.txt LOCALLY for Chromium](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
+
+#### Media User Token
+
+Provide your Apple Music `media-user-token` directly through the wizard. Treat the token and your cookies file as passwords; never post them in issues or logs.
+
+Advanced authentication settings are described under [Configuration](#-configuration).
 
 ### Maintain the Media Database (`database`)
 

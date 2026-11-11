@@ -247,7 +247,15 @@ Gamdl matches tracks by catalog ID using the local SQLite index and embedded med
 
 ## ⚙️ Configuration
 
-Gamdl uses `~/.gamdl/config.yml` by default on all platforms. Locate it, create it, or inspect the effective settings with:
+Gamdl stores its configuration in a `.gamdl` folder inside your **home directory** (your user profile folder on Windows). For example:
+
+```text
+Windows: C:\Users\<username>\.gamdl\config.yml
+Linux:   /home/<username>/.gamdl/config.yml
+macOS:   /Users/<username>/.gamdl/config.yml
+```
+
+Find the exact location on your system, create a configuration file, or inspect the effective settings with:
 
 ```bash
 gamdl config path
@@ -257,8 +265,6 @@ gamdl config validate
 ```
 
 CLI options override YAML values for the current command. You can specify another file with the top-level `--config PATH` option, or use `--no-config` to ignore your saved settings. Do not run `config init --force` unless you want to replace your existing file.
-
-If you previously used `~/.config/gamdl/config.yaml`, copy your existing settings to `~/.gamdl/config.yml` before running the new version, or continue using `--config` / `GAMDL_CONFIG`. Gamdl does not automatically move the old file. Review any absolute cookie and database paths in the copied configuration; old SQLite schemas are not migrated automatically.
 
 Option headings below show the **YAML key / CLI flag** where both exist. Options without a YAML key are marked as CLI-only.
 
@@ -428,7 +434,7 @@ Enable generation of relative-path `.m3u8` files for Apple Music playlists. It i
 
 #### Media Index (`database.disabled` / `--no-database`, `database.path` / `--database-path`)
 
-The SQLite index is enabled by default. It tracks downloaded files with portable paths relative to `output.directory`, their codecs and their most relevant album/playlist source. Disable it with `database.disabled: true` or `--no-database`. Gamdl stores its default configuration at `~/.gamdl/config.yml` and its default index beside it at `~/.gamdl/media.sqlite3`; `database.path` remains configurable. The first creation of each file is reported as `Created config at …` or `Created database at …`. Existing custom configuration paths remain available through `--config` or `GAMDL_CONFIG`.
+The SQLite index is enabled by default. It tracks downloaded files with portable paths relative to `output.directory`, their codecs and their most relevant album/playlist source. Disable it with `database.disabled: true` or `--no-database`. The database defaults to `media.sqlite3` in the same `.gamdl` folder as `config.yml`, and `database.path` remains configurable. The first creation of each file is reported as `Created config at …` or `Created database at …`. Custom configuration paths are supported through `--config` or `GAMDL_CONFIG`.
 
 With the index enabled, `rip` checks existing catalog IDs **before** fetching per-track tags, playback streams, lyrics, or decryption information. For the default `--overwrite skip` policy, an indexed file that still exists within the output library can be reused directly. Existing cover/lyrics sidecars are also reused without network requests; missing sidecars can still be fetched, and playlist entries are finalized normally. Explicit codec selections, single-codec priorities without a verified matching codec, and `--overwrite replace` bypass the early skip so codec changes are not silently mistaken for existing matches. The same indexed ID information is used for local track resolution in `sync playlists`.
 

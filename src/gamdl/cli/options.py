@@ -57,9 +57,10 @@ class RipOptions:
             show_default=True,
         ),
     ] = ()
-    output_dir: Annotated[str, option("--output-dir", help="Destination root")] = (
-        "./Apple Music"
-    )
+    output_dir: Annotated[
+        str | None,
+        option("--output-dir", help="Destination root (prompts if unset)"),
+    ] = None
     temp_path: Annotated[
         str | None,
         option("--temp-path", help="Working directory for disk-backed downloads"),

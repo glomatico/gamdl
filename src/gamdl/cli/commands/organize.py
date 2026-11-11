@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import click
@@ -65,7 +66,12 @@ def organize(
     """
     settings = ctx.find_root().obj["settings"]
     output = settings.output
-    root = (directory or Path(output.directory)).expanduser().absolute()
+    if directory is None and output.directory is None:
+        from gamdl.cli.output_setup import resolve_output_directory
+
+        root = Path(asyncio.run(resolve_output_directory(None)))
+    else:
+        root = (directory or Path(output.directory)).expanduser().absolute()
     if not root.is_dir():
         raise click.ClickException(f"Output directory does not exist: {root}")
     values = {

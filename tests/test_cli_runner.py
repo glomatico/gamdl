@@ -174,6 +174,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         fake_downloader.itunes_api = None
         opts = RipOptions(
             urls or ("https://music.apple.com/br/playlist/my-playlist/playlist-id",),
+            output_dir="Test Music",
             no_progress=False,
             save_playlist=True,
             concurrent_downloads=2,
@@ -383,6 +384,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             result = await run_rip(
                 RipOptions(
                     ("https://music.apple.com/library",),
+                    output_dir="Test Music",
                     no_progress=False,
                     ask_song_codec=True,
                 )
@@ -502,6 +504,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                 run_rip(
                     RipOptions(
                         ("https://music.apple.com/br/album/test/111",),
+                        output_dir="Test Music",
                         no_progress=False,
                         ask_song_codec=True,
                         concurrent_downloads=3,
@@ -575,6 +578,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             result = await run_rip(
                 RipOptions(
                     urls or ("https://music.apple.com/br/album/test/111",),
+                    output_dir="Test Music",
                     no_progress=False,
                     ask_song_codec=ask,
                     concurrent_downloads=concurrency,
@@ -1072,6 +1076,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                         "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
                     ),
                     auth_mode="wrapper",
+                    output_dir="Test Music",
                     song_codec="alac-hires",
                     no_progress=False,
                 )
@@ -1122,6 +1127,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             status = await run_rip(
                 RipOptions(
                     ("https://music.apple.com/br/music-video/example/1445836237",),
+                    output_dir="Test Music",
                     music_video_container="mp4",
                     no_progress=True,
                 )
@@ -1175,6 +1181,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
                         "https://music.apple.com/br/music-video/rhythm-nation/1445836237",
                     ),
                     auth_mode="wrapper",
+                    output_dir="Test Music",
                     no_progress=False,
                 )
             )

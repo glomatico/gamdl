@@ -406,7 +406,9 @@ Embedded artwork is normally included when tagging is enabled. Saving a separate
 
 #### Output Directory (`output.directory` / `--output-dir`)
 
-Downloaded files go to `./Apple Music` by default. `output.temp_path` / `--temp-path` optionally selects a working directory for temporary download files.
+The first time you download media, `output.directory` is `null`, so Gamdl asks where to save your music and remembers your choice in `config.yml`. The suggested folder is the **Music directory of your operating system's user profile**, detected through `platformdirs` (including relocated Music folders on Windows and XDG music directories on Linux). Press Enter to accept it, or enter another location.
+
+Use `--output-dir PATH` to bypass the prompt and override the destination for a command, or set `output.directory` directly in YAML. Non-interactive downloads require one of these explicit paths. `output.temp_path` / `--temp-path` optionally selects a working directory for temporary download files.
 
 #### Filename Templates (`output.*_template` / matching CLI options)
 

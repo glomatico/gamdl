@@ -112,7 +112,9 @@ class SearchRunnerTests(unittest.IsolatedAsyncioTestCase):
         api.iter_album_tracks = album_tracks
         downloader = Mock(itunes_api=Mock())
         downloader.download = AsyncMock(side_effect=download)
-        options = RipOptions(urls=("search",), no_progress=True)
+        options = RipOptions(
+            urls=("search",), output_dir="Test Music", no_progress=True
+        )
         options.search_term = "example"
         options.search_type = media_type
         options.feeling_lucky = lucky

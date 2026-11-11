@@ -310,6 +310,17 @@ def save_auth_configuration(
         raise ConfigError("Unable to save authentication configuration") from exc
 
 
+def save_output_directory(path: Path, directory: str) -> None:
+    """Persist a confirmed music library path without changing other settings."""
+    updated = asdict(load_config(path))
+    updated["output"]["directory"] = directory
+    _validate(updated)
+    try:
+        _persist(path, updated)
+    except OSError as exc:
+        raise ConfigError("Unable to save output directory configuration") from exc
+
+
 def load_config(path: Path | None) -> AppConfig:
     """Load, validate and persist normalized YAML when the schema changes."""
     defaults = asdict(AppConfig())

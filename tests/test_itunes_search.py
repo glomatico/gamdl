@@ -241,7 +241,9 @@ class ItunesRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         downloader = Mock()
         downloader.download = AsyncMock(side_effect=download)
-        options = RipOptions(urls=("search",), no_progress=True)
+        options = RipOptions(
+            urls=("search",), output_dir="Test Music", no_progress=True
+        )
         options.search_term = "Thriller"
         options.search_type = "album"
         options.search_api = "itunes"
@@ -301,7 +303,9 @@ class ItunesRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         downloader = Mock()
         downloader.download = AsyncMock(side_effect=download)
-        options = RipOptions(urls=("search",), no_progress=True)
+        options = RipOptions(
+            urls=("search",), output_dir="Test Music", no_progress=True
+        )
         options.search_term = "Example"
         options.search_type = "song"
         options.search_api = "itunes"

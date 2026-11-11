@@ -46,7 +46,7 @@ class DownloadConfig:
 
 @dataclass(frozen=True)
 class OutputConfig:
-    directory: str = "./Apple Music"
+    directory: str | None = None
     temp_path: str | None = None
     music_video_container: str = "m4v"
     no_tag: bool = False

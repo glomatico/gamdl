@@ -51,6 +51,7 @@ from ..errors import (
 )
 from ..options import TAG_NAMES
 from ..output import console as output_console
+from ..output_setup import resolve_output_directory
 from ..progress import RipProgress
 from ..prompts import interactive, select_media, select_stream
 from ..session import authenticate as _authenticate
@@ -210,7 +211,6 @@ async def run_rip(options: RipOptions) -> int:
             "Invalid --exclude-tags field (valid: " + ", ".join(TAG_NAMES) + ")"
         )
     console = output_console()
-    formatter = _formatter(options)
     counts: Counter[str] = Counter()
     found = 0
     pending: set[asyncio.Task] = set()
@@ -234,6 +234,8 @@ async def run_rip(options: RipOptions) -> int:
         async with AsyncExitStack() as stack:
             api, wrapper = await _authenticate(options, stack, console=console)
             console.print("[green]✓[/green] Authenticated")
+            options.output_dir = await resolve_output_directory(options.output_dir)
+            formatter = _formatter(options)
             if not api.active_subscription:
                 console.print(
                     "[yellow]![/yellow] An active Apple Music subscription "

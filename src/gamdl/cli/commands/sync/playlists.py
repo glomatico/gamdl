@@ -638,7 +638,12 @@ def playlists(
     and duplicate entries, and publishes each complete playlist atomically.
     """
     settings = ctx.find_root().obj["settings"]
-    root = (directory or Path(settings.output.directory)).expanduser().absolute()
+    if directory is None and settings.output.directory is None:
+        from gamdl.cli.output_setup import resolve_output_directory
+
+        root = Path(asyncio.run(resolve_output_directory(None)))
+    else:
+        root = (directory or Path(settings.output.directory)).expanduser().absolute()
     if not root.is_dir():
         raise click.ClickException(f"Library directory does not exist: {root}")
     try:

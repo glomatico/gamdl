@@ -39,10 +39,16 @@ def _settings(ctx: click.Context):
     return settings
 
 
-def _database(settings) -> MediaDatabase:
+def _database(settings, *, directory: Path | None = None) -> MediaDatabase:
+    configured = settings.output.directory
+    if configured is None and directory is None:
+        raise click.ClickException(
+            "Output directory is not configured. Run a download to choose one, "
+            "set output.directory in the config, or use --directory with database scan."
+        )
     return MediaDatabase(
         Path(settings.database.path).expanduser(),
-        root=Path(settings.output.directory).expanduser(),
+        root=Path(configured).expanduser() if configured is not None else directory,
         save_metadata=settings.database.save_metadata,
         on_created=lambda path: click.echo(f"Created database at {path}"),
     )
@@ -63,11 +69,18 @@ def _existing(db: MediaDatabase) -> dict[Path, dict]:
 @click.pass_context
 def info(ctx: click.Context) -> None:
     """Show index location, size and missing-file count."""
-    db = _database(_settings(ctx))
-    click.echo(f"Database: {db.path}")
-    if not db.path.is_file():
+    settings = _settings(ctx)
+    path = Path(settings.database.path).expanduser()
+    click.echo(f"Database: {path}")
+    if not path.is_file():
         click.echo("Database does not exist yet.")
         return
+    if settings.output.directory is None:
+        click.echo(
+            "Output directory is not configured; cannot check indexed media paths."
+        )
+        return
+    db = _database(settings)
     try:
         rows = _rows(db)
         missing = sum(not db.decode_path(str(row["path"])).is_file() for row in rows)
@@ -301,7 +314,7 @@ def _reconstruct_sources(
 def scan(ctx: click.Context, directory: Path | None, dry_run: bool) -> None:
     """Index local media, recover tags, playlists and complete album membership."""
     settings = _settings(ctx)
-    db = _database(settings)
+    db = _database(settings, directory=directory)
     root = (directory or db.root).expanduser().resolve()
     if not root.is_dir():
         raise click.ClickException(f"Output directory does not exist: {root}")

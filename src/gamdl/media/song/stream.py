@@ -63,6 +63,12 @@ def parse_alac_audio_group(audio_group: str | None) -> tuple[int, int] | None:
     return sample_rate, int(match.group(2))
 
 
+def _alac_quality(stream: AudioStream) -> tuple[int, int, int]:
+    """Rank ALAC variants by sample rate, bit depth, then bitrate."""
+    parsed = parse_alac_audio_group(getattr(stream, "audio_group", None))
+    return (*parsed, stream.bitrate or 0) if parsed else (0, 0, stream.bitrate or 0)
+
+
 def match_hls_codec(
     audio_group: str | None, codec_string: str | None
 ) -> SongCodec | None:
@@ -381,7 +387,8 @@ class SongStreamResolver:
         """Pick highest bitrate among preferred codecs, or explicitly prompt.
 
         In interactive mode, codec preferences are not applied. The default
-        noninteractive codec is AAC Webplayback.
+        noninteractive codec is AAC HLS. Generic ALAC selects the best
+        available ALAC tier without changing the actual stream codec.
         """
         if codec is not None and codec_priority is not None:
             raise ValueError("Provide either codec or codec_priority, not both")
@@ -408,20 +415,30 @@ class SongStreamResolver:
             if codec is not None
             else tuple(SongCodec(item) for item in codec_priority)
             if codec_priority is not None
-            else (SongCodec.AAC_WEB,)
+            else (SongCodec.AAC,)
         )
         if not priorities:
             raise ValueError("codec_priority must not be empty")
         for preferred in priorities:
-            if preferred.is_web:
-                matches = [
-                    item
-                    for item in await self.get_web_streams()
-                    if item.codec == preferred
-                ]
-            else:
+            tiers = (
+                (SongCodec.ALAC_HIRES, SongCodec.ALAC_LOSSLESS)
+                if preferred == SongCodec.ALAC
+                else (preferred,)
+            )
+            for tier in tiers:
+                if tier.is_web:
+                    matches = [
+                        item
+                        for item in await self.get_web_streams()
+                        if item.codec == tier
+                    ]
+                    if matches:
+                        return max(matches, key=lambda item: item.bitrate or 0)
+                    continue
+
                 # Match codecs independently within each source. Wrapper
-                # always wins over assets, even when its bitrate is lower.
+                # always wins over assets of the same tier; for generic ALAC,
+                # try Hi-Res on both sources before falling back to Lossless.
                 origins = (
                     (StreamOrigin.WRAPPER_HLS, StreamOrigin.ASSET_ENHANCED_HLS)
                     if self.wrapper_api is not None
@@ -431,13 +448,12 @@ class SongStreamResolver:
                     matches = [
                         item
                         for item in await self.get_hls_streams(origin=origin)
-                        if item.codec == preferred
+                        if item.codec == tier
                     ]
                     if matches:
+                        if preferred == SongCodec.ALAC:
+                            return max(matches, key=_alac_quality)
                         return max(matches, key=lambda item: item.bitrate or 0)
-                continue
-            if matches:
-                return max(matches, key=lambda item: item.bitrate or 0)
         raise StreamNotAvailableError(
             "No stream matches the requested song codec preferences"
         )

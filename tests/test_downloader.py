@@ -16,7 +16,9 @@ from gamdl.download import (
     Downloader,
     DownloadFinalizationError,
     DownloadProgress,
+    DownloadResult,
     MediaDatabase,
+    MediaStatus,
     PathFormatter,
     Tags,
 )
@@ -482,6 +484,69 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         song = self.song()
         result = await downloader.download(song, codec_priority=(SongCodec.ALAC_HIRES,))
         self.assertEqual(result.status.value, "skipped")
+        tag_resolver.get_tags.assert_awaited_once()
+
+    async def test_generic_alac_single_priority_reuses_both_concrete_tiers(self):
+        for codec in (SongCodec.ALAC_HIRES, SongCodec.ALAC_LOSSLESS):
+            with self.subTest(codec=codec):
+                downloader, tag_resolver = self.downloader()
+                output_root = self.directory / f"library-{codec.value}"
+                media_path = (
+                    output_root / "Sample Artist/Unknown Album/Sample Track.m4a"
+                )
+                media_path.parent.mkdir(parents=True)
+                media_path.write_bytes(self.audio.read_bytes())
+                db = MediaDatabase(
+                    self.directory / f"{codec.value}.sqlite3", root=output_root
+                )
+                song = self.song()
+                db.record(
+                    song,
+                    DownloadResult(
+                        song.id,
+                        media_path,
+                        MediaStatus.DOWNLOADED,
+                        media_path.stat().st_size,
+                        codec,
+                    ),
+                )
+                downloader.database = db
+                downloader.path_formatter = PathFormatter(output_root)
+                song.is_uploaded = AsyncMock(
+                    side_effect=AssertionError("Index hit must avoid API requests")
+                )
+                result = await downloader.download(
+                    song, codec_priority=(SongCodec.ALAC,)
+                )
+                self.assertEqual(result.status, MediaStatus.SKIPPED)
+                self.assertEqual(result.path, media_path)
+                tag_resolver.get_tags.assert_not_awaited()
+                song.is_uploaded.assert_not_awaited()
+
+    async def test_generic_alac_does_not_reuse_existing_aac(self):
+        downloader, tag_resolver = self.downloader()
+        output_root = self.directory / "library-aac"
+        media_path = output_root / "Sample Artist/Unknown Album/Sample Track.m4a"
+        media_path.parent.mkdir(parents=True)
+        media_path.write_bytes(self.audio.read_bytes())
+        db = MediaDatabase(self.directory / "aac.sqlite3", root=output_root)
+        song = self.song()
+        db.record(
+            song,
+            DownloadResult(
+                song.id,
+                media_path,
+                MediaStatus.DOWNLOADED,
+                media_path.stat().st_size,
+                SongCodec.AAC,
+            ),
+        )
+        downloader.database = db
+        downloader.path_formatter = PathFormatter(output_root)
+        result = await downloader.download(song, codec_priority=(SongCodec.ALAC,))
+        self.assertEqual(result.status, MediaStatus.SKIPPED)
+        # The filename collision still prevents replacing the file, but the
+        # AAC index entry must not be mistaken for an ALAC early cache hit.
         tag_resolver.get_tags.assert_awaited_once()
 
     async def test_explicit_codec_and_replace_bypass_database_early_skip(self):

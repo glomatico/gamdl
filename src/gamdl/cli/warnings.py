@@ -13,7 +13,9 @@ if TYPE_CHECKING:
     from gamdl.api import AppleMusicApi, WrapperApi
 
 
-_ALAC_CODECS = frozenset({SongCodec.ALAC_HIRES, SongCodec.ALAC_LOSSLESS})
+_ALAC_CODECS = frozenset(
+    {SongCodec.ALAC, SongCodec.ALAC_HIRES, SongCodec.ALAC_LOSSLESS}
+)
 
 
 def warn_content_restrictions(api: AppleMusicApi, output: Console) -> None:

@@ -165,6 +165,136 @@ class StreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             api.get_webplayback.assert_not_awaited()
             api.get_assets.assert_awaited_once()
 
+    async def test_default_song_codec_is_aac_hls(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        client, _ = stream_client()
+        async with client:
+            stream = await song.get_stream(client=client)
+            self.assertEqual(stream.codec, SongCodec.AAC)
+            self.assertIsInstance(stream, HlsSongStream)
+            self.assertEqual(stream.origin, StreamOrigin.ASSET_ENHANCED_HLS)
+            api.get_webplayback.assert_not_awaited()
+
+    async def test_default_aac_prefers_wrapper_when_connected(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client(master=STANDARD)
+        async with client:
+            stream = await song.get_stream(client=client, wrapper_api=wrapper)
+            self.assertEqual(stream.codec, SongCodec.AAC)
+            self.assertEqual(stream.origin, StreamOrigin.WRAPPER_HLS)
+            self.assertEqual(stream.bitrate, 272000)
+            self.assertEqual(
+                [path for _, path, _ in calls], ["/media/P42_default.m3u8"]
+            )
+            api.get_webplayback.assert_not_awaited()
+            api.get_assets.assert_not_awaited()
+
+    async def test_generic_alac_picks_hires_and_preserves_concrete_codec(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        client, _ = stream_client()
+        async with client:
+            for selector in (
+                {"codec": SongCodec.ALAC},
+                {"codec_priority": (SongCodec.ALAC, SongCodec.AAC)},
+            ):
+                with self.subTest(selector=selector):
+                    stream = await song.get_stream(client=client, **selector)
+                    self.assertEqual(stream.codec, SongCodec.ALAC_HIRES)
+                    self.assertEqual(stream.audio_group, "audio-alac-96-24")
+            api.get_webplayback.assert_not_awaited()
+
+    async def test_generic_alac_falls_back_to_lossless(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        master = ENHANCED.replace("audio-alac-96-24", "audio-alac-unrecognized")
+        client, _ = stream_client(master=master)
+        async with client:
+            stream = await song.get_stream(codec=SongCodec.ALAC, client=client)
+            self.assertEqual(stream.codec, SongCodec.ALAC_LOSSLESS)
+            self.assertEqual(stream.audio_group, "audio-alac-48-24")
+
+    async def test_generic_alac_uses_sample_rate_over_compressed_bitrate(self):
+        api = fake_api()
+        song = Song.from_id("111", api=api)
+        master = (
+            ENHANCED
+            + '#EXT-X-STREAM-INF:BANDWIDTH=900000,AVERAGE-BANDWIDTH=800000,CODECS="alac",AUDIO="audio-alac-192-24"\n'
+            + "alac-192.m3u8\n"
+        )
+        client, _ = stream_client(master=master)
+        async with client:
+            stream = await song.get_stream(codec=SongCodec.ALAC, client=client)
+            self.assertEqual(stream.codec, SongCodec.ALAC_HIRES)
+            self.assertEqual(stream.audio_group, "audio-alac-192-24")
+            self.assertEqual(stream.bitrate, 800000)
+
+    async def test_generic_alac_uses_bit_depth_when_sample_rate_matches(self):
+        song = Song.from_id("111", api=fake_api())
+        master = (
+            ENHANCED
+            + '#EXT-X-STREAM-INF:BANDWIDTH=950000,AVERAGE-BANDWIDTH=850000,CODECS="alac",AUDIO="audio-alac-96-32"\n'
+            + "alac-96-32.m3u8\n"
+        )
+        client, _ = stream_client(master=master)
+        async with client:
+            selected = await song.get_stream(codec=SongCodec.ALAC, client=client)
+            self.assertEqual(selected.codec, SongCodec.ALAC_HIRES)
+            self.assertEqual(selected.audio_group, "audio-alac-96-32")
+            self.assertEqual(selected.bitrate, 850000)
+
+    async def test_generic_alac_prefers_wrapper_for_matching_tier(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+        client, calls = stream_client()
+        async with client:
+            stream = await song.get_stream(
+                codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
+            )
+            self.assertEqual(stream.codec, SongCodec.ALAC_HIRES)
+            self.assertEqual(stream.origin, StreamOrigin.WRAPPER_HLS)
+            self.assertEqual(
+                [path for _, path, _ in calls], ["/media/P42_default.m3u8"]
+            )
+            api.get_assets.assert_not_awaited()
+
+    async def test_generic_alac_checks_hires_on_assets_before_wrapper_lossless(self):
+        api = fake_api()
+        wrapper = Mock()
+        wrapper.get_playback = AsyncMock(
+            return_value={"songList": [{"hls-playlist-url": BASE + "P42_custom.m3u8"}]}
+        )
+        song = Song.from_id("111", api=api)
+        wrapper_master = ENHANCED.replace("audio-alac-96-24", "audio-alac-unrecognized")
+        client, calls = stream_client(master=wrapper_master, asset_master=ENHANCED)
+        async with client:
+            stream = await song.get_stream(
+                codec=SongCodec.ALAC, client=client, wrapper_api=wrapper
+            )
+            self.assertEqual(stream.codec, SongCodec.ALAC_HIRES)
+            self.assertEqual(stream.origin, StreamOrigin.ASSET_ENHANCED_HLS)
+            self.assertEqual(
+                [path for _, path, _ in calls],
+                ["/media/P42_default.m3u8", "/media/P93_default.m3u8"],
+            )
+
+    async def test_generic_alac_reports_unavailable_when_no_tier_exists(self):
+        song = Song.from_id("111", api=fake_api())
+        client, _ = stream_client(master=STANDARD)
+        async with client:
+            with self.assertRaises(StreamNotAvailableError):
+                await song.get_stream(codec=SongCodec.ALAC, client=client)
+
     async def test_alac_tiers_can_be_selected_independently(self):
         api = fake_api()
         song = Song.from_id("111", api=api)

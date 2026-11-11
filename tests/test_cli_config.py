@@ -666,9 +666,39 @@ class CliConfigTests(unittest.TestCase):
         config = load_config(None)
         self.assertFalse(config.output.no_lyrics_file)
         self.assertFalse(config.output.save_playlist)
-        self.assertEqual(config.download.song_codec_priority, ["aac-web"])
+        self.assertEqual(config.download.song_codec_priority, ["aac"])
         self._write("auth:\n  drm_backend: playready\n")
         self.assertEqual(load_config(self.path).auth.drm_backend, "playready")
+
+    def test_default_aac_and_generic_alac_are_exposed_through_cli(self):
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            runner = CliRunner()
+            url = "https://music.apple.com/us/song/test/123"
+            for args, expected_codec, expected_priority in (
+                ([], None, ("aac",)),
+                (["--song-codec", "alac"], "alac", ("aac",)),
+                (["--song-codec-priority", "alac,aac"], None, ("alac", "aac")),
+            ):
+                with self.subTest(args=args):
+                    result = runner.invoke(main, ["--no-config", "rip", url, *args])
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(captured[-1].song_codec, expected_codec)
+                    self.assertEqual(
+                        captured[-1].song_codec_priority, expected_priority
+                    )
+
+        self._write(
+            "download:\n  song_codec: alac\n  song_codec_priority: [alac, aac]\n"
+        )
+        config = load_config(self.path)
+        self.assertEqual(config.download.song_codec, "alac")
+        self.assertEqual(config.download.song_codec_priority, ["alac", "aac"])
 
     def test_invalid_click_option_uses_same_error_style(self):
         result = CliRunner().invoke(

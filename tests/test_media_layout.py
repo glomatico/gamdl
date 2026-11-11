@@ -127,8 +127,8 @@ class MediaPackageTests(unittest.TestCase):
         self.assertNotIn(
             media.SongCodec.ALAC_HIRES, song_constants.SONG_CODEC_REGEX_MAP
         )
-        with self.assertRaises(ValueError):
-            media.SongCodec("alac")
+        self.assertEqual(media.SongCodec("alac"), media.SongCodec.ALAC)
+        self.assertNotIn(media.SongCodec.ALAC, song_constants.SONG_CODEC_REGEX_MAP)
         self.assertEqual(
             song_stream.match_hls_codec(None, "mp4a.40.5"),
             media.SongCodec.AAC_HE,

@@ -54,14 +54,17 @@ class CliWarningsTests(unittest.IsolatedAsyncioTestCase):
 
     def test_alac_warning_respects_priority_exact_codec_and_wrapper(self):
         cases = (
+            ("alac", (), None, False, True),
             ("alac-hires", (), None, False, True),
             ("alac-lossless", (), None, False, True),
+            (None, ("alac", "aac"), None, False, True),
             (None, ("alac-hires", "alac-lossless"), None, False, True),
             (None, ("aac-web", "alac-lossless"), None, False, True),
             (None, ("aac-web",), None, False, False),
             ("aac-web", ("alac-hires",), None, False, False),
             (None, (), None, False, False),
             ("alac-hires", (), object(), False, False),
+            ("alac", (), object(), False, False),
             (None, ("alac-lossless",), object(), False, False),
             (None, ("alac-lossless",), None, True, False),
         )

@@ -32,7 +32,7 @@ class DownloadConfig:
     segment_concurrency: int = 8
     concurrent_downloads: int = 2
     song_codec: str | None = None
-    song_codec_priority: list[str] = field(default_factory=lambda: ["aac-web"])
+    song_codec_priority: list[str] = field(default_factory=lambda: ["aac"])
     music_video_codec: str | None = None
     music_video_codec_priority: list[str] = field(
         default_factory=lambda: ["h264", "h265"]

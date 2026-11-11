@@ -1022,14 +1022,25 @@ class Downloader:
                     if codec_priority is not None and len(codec_priority) == 1
                     else None
                 )
-                existing = await asyncio.to_thread(
-                    self.database.find_by_media_id,
-                    media.type,
-                    media.id,
-                    root=self.path_formatter.output_dir,
-                    extensions=suffixes,
-                    codec=required_codec,
+                # The virtual ALAC preference resolves to either concrete
+                # tier. The index records the actual codec, never "alac".
+                accepted_codecs = (
+                    (SongCodec.ALAC_HIRES.value, SongCodec.ALAC_LOSSLESS.value)
+                    if required_codec == SongCodec.ALAC.value
+                    else (required_codec,)
                 )
+                existing = None
+                for accepted_codec in accepted_codecs:
+                    existing = await asyncio.to_thread(
+                        self.database.find_by_media_id,
+                        media.type,
+                        media.id,
+                        root=self.path_formatter.output_dir,
+                        extensions=suffixes,
+                        codec=accepted_codec,
+                    )
+                    if existing is not None:
+                        break
                 if existing is not None:
                     return await self._finalize(
                         media,
@@ -1093,7 +1104,7 @@ class Downloader:
                         if codec is not None
                         else priority_codecs[0]
                         if priority_codecs
-                        else SongCodec.AAC_WEB
+                        else SongCodec.AAC
                     )
             with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
                 tags = (

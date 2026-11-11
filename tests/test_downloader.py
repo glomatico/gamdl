@@ -745,7 +745,11 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_published_song_sidecars_index_playlist_and_retry_on_skip(self):
         downloader, _ = self.downloader()
-        db = MediaDatabase(self.directory / "db" / "media.sqlite3", root=self.directory)
+        db = MediaDatabase(
+            self.directory / "db" / "media.sqlite3",
+            root=self.directory,
+            save_metadata=True,
+        )
         downloader.database = db
         song = self.song()
         song.source = MediaSource("playlist_tracks", "playlist-id", 1)
@@ -759,6 +763,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             song,
             output,
             include_cover=True,
+            exclude_tags=("artist",),
             save_cover=True,
             save_lyrics=True,
             playlist_path=playlist,
@@ -771,6 +776,8 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(playlist.read_text(), "#EXTM3U\n\n../music/song.m4a\n")
         self.assertEqual(db.get(output)["codec"], SongCodec.AAC.value)
         self.assertEqual(db.get(output)["source_id"], "playlist-id")
+        self.assertEqual(db.get_metadata(output, "songs")["artist"], "Sample Artist")
+        self.assertNotIn(b"\xa9ART", mp4_tag_atoms(output))
         song.get_cover.assert_awaited_once()  # embedded art reused for sidecar
 
         output.with_suffix(".jpg").unlink()

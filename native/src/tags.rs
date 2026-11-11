@@ -475,7 +475,13 @@ pub(crate) fn read_mp4_organize_tags<'py>(
             result.set_item(name, value)?;
         }
     }
-    result.set_item("compilation", tag.compilation())?;
+    if let Some(Data::BeSigned(bytes) | Data::Reserved(bytes)) =
+        tag.data_of(&Fourcc(*b"cpil")).next()
+    {
+        if let Some(value) = bytes.first() {
+            result.set_item("compilation", *value != 0)?;
+        }
+    }
     for (name, atom) in [
         ("title_sort", *b"sonm"),
         ("artist_sort", *b"soar"),
@@ -483,9 +489,7 @@ pub(crate) fn read_mp4_organize_tags<'py>(
         ("composer_sort", *b"soco"),
         ("xid", *b"xid "),
     ] {
-        if let Some(Data::Utf8(value) | Data::Utf16(value)) =
-            tag.data_of(&Fourcc(atom)).next()
-        {
+        if let Some(Data::Utf8(value) | Data::Utf16(value)) = tag.data_of(&Fourcc(atom)).next() {
             result.set_item(name, value)?;
         }
     }
@@ -493,10 +497,7 @@ pub(crate) fn read_mp4_organize_tags<'py>(
     if !genres.is_empty() {
         result.set_item("genre", genres)?;
     }
-    for (name, atom) in [
-        ("gapless", *b"pgap"),
-        ("explicit", *b"rtng"),
-    ] {
+    for (name, atom) in [("gapless", *b"pgap"), ("explicit", *b"rtng")] {
         if let Some(Data::BeSigned(bytes) | Data::Reserved(bytes)) =
             tag.data_of(&Fourcc(atom)).next()
         {

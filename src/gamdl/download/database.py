@@ -6,36 +6,57 @@ import json
 import sqlite3
 import threading
 import warnings
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from .enums import DatabaseStatus
 from .tags import Tags
 
 if TYPE_CHECKING:
     from gamdl.media import Media
+
     from .models import DownloadResult
 
 SCHEMA_VERSION = 1
 TAG_NAMES = tuple(field.name for field in fields(Tags) if field.name != "lyrics")
 UPLOADED_VIDEO_TAGS = (
-    "title", "artist", "title_id", "release_date", "storefront", "media_type"
+    "title",
+    "artist",
+    "title_id",
+    "release_date",
+    "storefront",
+    "media_type",
 )
 TAG_TABLES = {
     "songs": TAG_NAMES,
     "music_videos": TAG_NAMES,
     "uploaded_videos": UPLOADED_VIDEO_TAGS,
 }
-IDENTIFIER_TAGS = frozenset({"title_id", "artist_id", "album_id", "composer_id", "genre_id"})
-INTEGER_TAGS = frozenset({
-    "track_number", "track_total", "disc_number", "disc_total",
-    "compilation", "gapless", "explicit", "storefront", "media_type", "rating",
-})
+IDENTIFIER_TAGS = frozenset(
+    {"title_id", "artist_id", "album_id", "composer_id", "genre_id"}
+)
+INTEGER_TAGS = frozenset(
+    {
+        "track_number",
+        "track_total",
+        "disc_number",
+        "disc_total",
+        "compilation",
+        "gapless",
+        "explicit",
+        "storefront",
+        "media_type",
+        "rating",
+    }
+)
 KIND_TABLES = {
-    "songs": "songs", "library-songs": "songs",
-    "music-videos": "music_videos", "library-music-videos": "music_videos",
+    "songs": "songs",
+    "library-songs": "songs",
+    "music-videos": "music_videos",
+    "library-music-videos": "music_videos",
     "uploaded-videos": "uploaded_videos",
 }
 
@@ -51,13 +72,15 @@ def _table_sql(table: str) -> str:
     for name in TAG_TABLES[table]:
         constraint = (
             " CHECK (" + name + " IN (0, 1) OR " + name + " IS NULL)"
-            if name in {"compilation", "gapless", "explicit"} else ""
+            if name in {"compilation", "gapless", "explicit"}
+            else ""
         )
         columns.append(f'    "{name}" {_type_sql(name)}{constraint}')
     return (
         f"CREATE TABLE IF NOT EXISTS {table} (\n"
         "    file_id INTEGER PRIMARY KEY REFERENCES media_files(file_id) ON DELETE CASCADE,\n"
-        + ",\n".join(columns) + "\n)"
+        + ",\n".join(columns)
+        + "\n)"
     )
 
 
@@ -92,8 +115,14 @@ def _source(media: Media) -> tuple[str | None, str | None, int | None]:
     return (source.kind, str(source.id), source.index)
 
 
-def _serialize_tags(tags: Tags | dict[str, object], names: tuple[str, ...]) -> dict[str, object]:
-    data = {name: getattr(tags, name, None) for name in names} if isinstance(tags, Tags) else tags
+def _serialize_tags(
+    tags: Tags | dict[str, object], names: tuple[str, ...]
+) -> dict[str, object]:
+    data = (
+        {name: getattr(tags, name, None) for name in names}
+        if isinstance(tags, Tags)
+        else tags
+    )
     values: dict[str, object] = {}
     for name in names:
         value = data.get(name)
@@ -124,7 +153,11 @@ class MediaDatabase:
         self.path = Path(path).expanduser().absolute()
         # Programmatic callers should specify a root; retaining path.parent as
         # a conservative fallback avoids assuming a global working directory.
-        self.root = Path(root).expanduser().resolve() if root is not None else self.path.parent.resolve()
+        self.root = (
+            Path(root).expanduser().resolve()
+            if root is not None
+            else self.path.parent.resolve()
+        )
         self.save_metadata = save_metadata
         self.on_created = on_created
         self._initialized = False
@@ -135,7 +168,9 @@ class MediaDatabase:
         try:
             relative = candidate.relative_to(self.root)
         except ValueError:
-            raise ValueError(f"Media is outside the database output directory: {candidate}") from None
+            raise ValueError(
+                f"Media is outside the database output directory: {candidate}"
+            ) from None
         if not relative.parts or any(part in {".", ".."} for part in relative.parts):
             raise ValueError(f"Unsafe database media path: {candidate}")
         if candidate.resolve() != candidate or candidate.is_symlink():
@@ -146,7 +181,9 @@ class MediaDatabase:
         if not value or "\\" in value:
             raise ValueError("Invalid relative database path")
         relative = Path(value)
-        if relative.is_absolute() or any(part in {".", ".."} for part in value.split("/")):
+        if relative.is_absolute() or any(
+            part in {".", ".."} for part in value.split("/")
+        ):
             raise ValueError(f"Invalid relative database path: {value!r}")
         path = self.root / relative
         if not path.resolve().is_relative_to(self.root) or path.is_symlink():
@@ -198,7 +235,7 @@ class MediaDatabase:
                 existing = db.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 ).fetchall()
-                if existing:
+                if existing or db.execute("PRAGMA user_version").fetchone()[0] != 0:
                     self._validate(db)
                 db.execute("PRAGMA journal_mode=WAL")
                 with db:
@@ -231,7 +268,9 @@ class MediaDatabase:
             return None
         relative = self.encode_path(path)
         with closing(self._read()) as db:
-            row = db.execute("SELECT * FROM media_files WHERE path=?", (relative,)).fetchone()
+            row = db.execute(
+                "SELECT * FROM media_files WHERE path=?", (relative,)
+            ).fetchone()
         return self._file_record(row) if row is not None else None
 
     def find_by_media_id(
@@ -249,7 +288,8 @@ class MediaDatabase:
         with closing(self._read()) as db:
             rows = db.execute(
                 "SELECT * FROM media_files WHERE media_type=? AND media_id=? "
-                "ORDER BY updated_at DESC, path", (media_type, str(media_id)),
+                "ORDER BY updated_at DESC, path",
+                (media_type, str(media_id)),
             ).fetchall()
         for row in rows:
             try:
@@ -265,7 +305,11 @@ class MediaDatabase:
                 continue
             try:
                 stat = path.stat()
-                if not path.is_file() or stat.st_size <= 0 or stat.st_size != record["file_size"]:
+                if (
+                    not path.is_file()
+                    or stat.st_size <= 0
+                    or stat.st_size != record["file_size"]
+                ):
                     continue
             except OSError:
                 continue
@@ -277,7 +321,9 @@ class MediaDatabase:
             return []
         requested_root = Path(root).resolve()
         with closing(self._read()) as db:
-            rows = db.execute("SELECT path, media_type, media_id, file_size FROM media_files").fetchall()
+            rows = db.execute(
+                "SELECT path, media_type, media_id, file_size FROM media_files"
+            ).fetchall()
         records = []
         for row in rows:
             try:
@@ -300,23 +346,38 @@ class MediaDatabase:
         source: tuple[str | None, str | None, int | None] | None = None,
     ) -> DatabaseStatus:
         old = db.execute("SELECT * FROM media_files WHERE path=?", (path,)).fetchone()
-        same = old is not None and (old["media_type"], str(old["media_id"])) == (media_type, str(media_id))
+        same = old is not None and (old["media_type"], str(old["media_id"])) == (
+            media_type,
+            str(media_id),
+        )
         previous_source = (
             (old["source_kind"], old["source_id"], old["source_index"])
-            if same else (None, None, None)
+            if same
+            else (None, None, None)
         )
         incoming = source or (None, None, None)
-        if source is None or (_source_rank(previous_source[0]) >= _source_rank(incoming[0]) and previous_source[0] is not None):
+        if source is None or (
+            _source_rank(previous_source[0]) >= _source_rank(incoming[0])
+            and previous_source[0] is not None
+        ):
             chosen_source = previous_source
         else:
             chosen_source = incoming
         chosen_codec = codec if codec is not None else old["codec"] if same else None
         values = (
-            path, media_type, str(media_id), chosen_codec, file_size, *chosen_source
+            path,
+            media_type,
+            str(media_id),
+            chosen_codec,
+            file_size,
+            *chosen_source,
         )
         if same and (
-            old["codec"], old["file_size"], old["source_kind"],
-            old["source_id"], old["source_index"]
+            old["codec"],
+            old["file_size"],
+            old["source_kind"],
+            old["source_id"],
+            old["source_index"],
         ) == (chosen_codec, file_size, *chosen_source):
             return DatabaseStatus.UNCHANGED
         if old is not None and not same:
@@ -345,28 +406,41 @@ class MediaDatabase:
             raise ValueError("No database exists for source registration")
         with closing(self._read()) as db, db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT * FROM media_files WHERE path=?", (relative,)).fetchone()
+            row = db.execute(
+                "SELECT * FROM media_files WHERE path=?", (relative,)
+            ).fetchone()
             if row is None:
                 raise ValueError(f"Media is not indexed: {path}")
             if row["media_type"] == "uploaded-videos":
                 return DatabaseStatus.UNCHANGED
             return self._write_index(
-                db, relative, row["media_type"], row["media_id"], row["file_size"],
-                codec=row["codec"], source=(kind, source_id, index),
+                db,
+                relative,
+                row["media_type"],
+                row["media_id"],
+                row["file_size"],
+                codec=row["codec"],
+                source=(kind, source_id, index),
             )
 
-    def record(self, media: Media, result: DownloadResult, tags: Tags | None = None) -> DatabaseStatus:
+    def record(
+        self, media: Media, result: DownloadResult, tags: Tags | None = None
+    ) -> DatabaseStatus:
         try:
             relative = self.encode_path(result.path)
         except ValueError as error:
             warnings.warn(str(error), stacklevel=2)
-            return DatabaseStatus.UNCHANGED
+            return DatabaseStatus.SKIPPED
         size = result.path.stat().st_size
         self.initialize()
         with closing(self._read()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             status = self._write_index(
-                db, relative, media.type, str(media.id), size,
+                db,
+                relative,
+                media.type,
+                str(media.id),
+                size,
                 codec=result.codec.value if result.codec is not None else None,
                 source=_source(media),
             )
@@ -374,12 +448,12 @@ class MediaDatabase:
             try:
                 self.upsert_metadata(result.path, media.type, tags)
             except (sqlite3.Error, ValueError, TypeError, OverflowError) as error:
-                warnings.warn(f"Could not save rich media metadata: {error}", stacklevel=2)
+                warnings.warn(
+                    f"Could not save rich media metadata: {error}", stacklevel=2
+                )
         return status
 
-    def index_file(
-        self, path: Path, media_type: str, media_id: str
-    ) -> DatabaseStatus:
+    def index_file(self, path: Path, media_type: str, media_id: str) -> DatabaseStatus:
         relative = self.encode_path(path)
         size = path.stat().st_size
         self.initialize()
@@ -400,7 +474,8 @@ class MediaDatabase:
                 return None
             row = db.execute(
                 f"SELECT t.* FROM {table} t JOIN media_files m USING(file_id) "
-                "WHERE m.path=? AND m.media_type=?", (relative, media_type),
+                "WHERE m.path=? AND m.media_type=?",
+                (relative, media_type),
             ).fetchone()
         return dict(row) if row is not None else None
 
@@ -461,7 +536,9 @@ class MediaDatabase:
             ).fetchone()
             if not exists:
                 return False
-            if db.execute("SELECT 1 FROM media_files WHERE path=?", (new_path,)).fetchone():
+            if db.execute(
+                "SELECT 1 FROM media_files WHERE path=?", (new_path,)
+            ).fetchone():
                 raise FileExistsError(f"Media index already contains {destination}")
             db.execute(
                 "UPDATE media_files SET path=?, updated_at=CURRENT_TIMESTAMP WHERE path=?",

@@ -25,6 +25,7 @@ class DatabaseStatus(str, Enum):
     INSERTED = "inserted"
     UPDATED = "updated"
     UNCHANGED = "unchanged"
+    SKIPPED = "skipped"
 
 
 class OverwritePolicy(str, Enum):

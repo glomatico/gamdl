@@ -116,6 +116,76 @@ class PathFormatterTests(unittest.TestCase):
             self.root / "Unknown Artist/Record/Unknown.m4a",
         )
 
+    def test_date_placeholder_supports_strftime_formats(self):
+        cases = (
+            ("2024-07-09", "2024-07-09", "2024", "2024-07", "09"),
+            ("2024-07-09T18:34:56Z", "2024-07-09T18_34_56Z", "2024", "2024-07", "09"),
+            ("2004", "2004", "2004", "2004-01", "01"),
+            ("2004-06", "2004-06", "2004", "2004-06", "01"),
+        )
+        for raw, unchanged, year, year_month, day in cases:
+            with self.subTest(raw=raw):
+                f = PathFormatter(
+                    self.root,
+                    no_album_file_template="{date} ({date:%Y}) ({date:%Y-%m}) ({date:%d}) {title}",
+                )
+                path = f.get_media_path(
+                    self.song,
+                    Tags(artist="Artist", title="Song", release_date=raw),
+                    extension=".m4a",
+                )
+                self.assertEqual(
+                    path.name,
+                    f"{unchanged} ({year}) ({year_month}) ({day}) Song.m4a",
+                )
+
+    def test_date_specifier_works_in_album_folder_without_changing_metadata(self):
+        tags = Tags(
+            album="Album",
+            album_artist="Artist",
+            title="Track",
+            release_date="1998-10-05",
+        )
+        formatter = PathFormatter(
+            self.root,
+            album_folder_template="{album_artist}/{date:%Y}/{album}",
+            single_disc_file_template="{date:%Y-%m} {title}",
+        )
+        path = formatter.get_media_path(self.song, tags, extension=".m4a")
+        self.assertEqual(path, self.root / "Artist/1998/Album/1998-10 Track.m4a")
+        self.assertEqual(tags.release_date, "1998-10-05")
+
+    def test_missing_or_invalid_dates_fall_back_safely(self):
+        f = PathFormatter(
+            self.root, no_album_file_template="{date:%Y} - {date:%m} - {title}"
+        )
+        for raw in (None, "", "not a date", "2024-02-30", "2024-13", "2024-99-99"):
+            with self.subTest(raw=raw):
+                path = f.get_media_path(
+                    self.song,
+                    Tags(artist="Artist", title="Song", release_date=raw),
+                    extension=".m4a",
+                )
+                self.assertEqual(path.name, "Unknown Date - Unknown Date - Song.m4a")
+
+    def test_date_strftime_does_not_enable_arbitrary_field_expressions(self):
+        for template in ("{date.__class__}", "{date[raw]}"):
+            with self.subTest(template=template):
+                f = PathFormatter(self.root, no_album_file_template=template)
+                with self.assertRaises(ValueError):
+                    f.get_media_path(
+                        self.song,
+                        Tags(artist="Artist", title="Song", release_date="2024-02-29"),
+                        extension=".m4a",
+                    )
+        f = PathFormatter(self.root, no_album_file_template="{title:%Y}")
+        path = f.get_media_path(
+            self.song,
+            Tags(artist="Artist", title="Song", release_date="2024-02-29"),
+            extension=".m4a",
+        )
+        self.assertEqual(path.name, "Unknown Title.m4a")
+
     def test_bad_templates_and_extension(self):
         media = Tags(artist="Test", title="Track")
         for template in (

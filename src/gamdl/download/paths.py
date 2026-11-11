@@ -6,6 +6,7 @@ import os
 import re
 from collections.abc import Collection
 from dataclasses import dataclass
+from datetime import datetime
 from itertools import chain, count
 from pathlib import Path
 from string import Formatter
@@ -21,6 +22,28 @@ if TYPE_CHECKING:
 
 
 _INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
+
+
+@dataclass(frozen=True)
+class _ReleaseDate:
+    """Retain the original date text while supporting strftime in templates."""
+
+    raw: str
+
+    def __format__(self, spec: str) -> str:
+        if not spec.startswith("%"):
+            return format(self.raw, spec)
+        # Asset metadata can be a date, an ISO timestamp, or a partial date.
+        # Do not alter the stored tag or the unformatted {date} placeholder.
+        value = self.raw
+        if re.fullmatch(r"\d{4}", value):
+            value += "-01-01"
+        elif re.fullmatch(r"\d{4}-\d{2}", value):
+            value += "-01"
+        parsed = datetime.fromisoformat(
+            value[:-1] + "+00:00" if value.endswith("Z") else value
+        )
+        return parsed.strftime(spec)
 
 
 class _LegacyFormatter(Formatter):
@@ -171,7 +194,10 @@ class PathFormatter:
             "artist_id": fallback(tags.artist_id, "Unknown Artist ID"),
             "composer": fallback(tags.composer, "Unknown Composer"),
             "composer_id": fallback(tags.composer_id, "Unknown Composer ID"),
-            "date": fallback(tags.release_date, "Unknown Date"),
+            "date": fallback(
+                _ReleaseDate(tags.release_date) if tags.release_date else None,
+                "Unknown Date",
+            ),
             "disc": fallback(tags.disc_number, ""),
             "disc_total": fallback(tags.disc_total, ""),
             "media_type": fallback(tags.media_type, "Unknown Media Type"),

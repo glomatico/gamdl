@@ -18,6 +18,7 @@
 - [🚀 Usage](#usage)
   - [Authentication (`auth`)](#authentication)
 - [⚙️ Configuration](#configuration)
+- [🏷️ Tags and Path Templates](#tags-and-templates)
 - [🔄 Migrating from Gamdl 3.x](#migration)
 - [🐍 Python API](#python-api)
 - [🛠️ Troubleshooting](#troubleshooting)
@@ -332,6 +333,28 @@ Supported song codec identifiers are `aac`, `aac-he`, `aac-binaural`, `aac-downm
 - **`alac`** automatically chooses the highest-quality ALAC available: Hi-Res (above 48 kHz) first, then standard Lossless (up to 48 kHz). Within a tier it favors higher sample rates, then bit depths, then bitrates. Wrapper streams take precedence over Apple Music asset streams at the same tier. The actual downloaded codec is still recorded as `alac-hires` or `alac-lossless`, not `alac`.
 - **`alac-lossless`** and **`alac-hires`** remain available when you want to request a specific tier. The tiers are identified from HLS audio-group metadata.
 
+#### Song Codec Specifications
+
+These are **typical Apple Music profiles**, as documented in Gamdl 3.x. Actual bitrates, sample rates, and available streams depend on the track and the HLS manifest; Gamdl 4.x discovers the available variants instead of enforcing these values.
+
+| Codec | Typical bitrate | Audio characteristics |
+| --- | --- | --- |
+| `aac` | 256 kbps | AAC, up to 48 kHz; HLS |
+| `aac-he` | 64 kbps | HE-AAC, up to 48 kHz; HLS |
+| `aac-binaural` | 256 kbps | AAC binaural mix; HLS |
+| `aac-downmix` | 256 kbps | AAC downmix; HLS |
+| `aac-he-binaural` | 64 kbps | HE-AAC binaural mix; HLS |
+| `aac-he-downmix` | 64 kbps | HE-AAC downmix; HLS |
+| `aac-web` | 256 kbps | AAC, typically 44.1 kHz; web playback |
+| `aac-he-web` | 64 kbps | HE-AAC, typically 44.1 kHz; web playback |
+| `atmos` | 768 kbps | Dolby Atmos (E-AC-3 JOC); HLS |
+| `ac3` | 640 kbps | Dolby Digital (AC-3); HLS |
+| `alac` | Variable (lossless) | Best available ALAC tier; typically up to 24-bit/192 kHz |
+| `alac-lossless` | Variable (lossless) | ALAC at 48 kHz or below; HLS |
+| `alac-hires` | Variable (lossless) | ALAC above 48 kHz; HLS |
+
+ALAC is lossless, so its bitrate varies with the audio. The `alac` option selects a concrete tier, not a new encoded format. `--ask-song-codec` opens an interactive stream selector; `ask` is **not** a codec identifier.
+
 Gamdl warns after authentication when Apple Music reports account content restrictions, which may prevent some tracks from downloading. It also warns when ALAC is selected without Wrapper, because Apple Music may refuse Widevine/PlayReady licenses for lossless streams. These are informational warnings, not download blockers; interactive ALAC selection displays the warning when that codec is chosen.
 
 #### Exact Codec (`download.song_codec` / `--song-codec`)
@@ -365,6 +388,15 @@ gamdl rip "<music video URL>" --music-video-codec-priority h265,h264
 
 Select an exact video codec, or keep `null` to use the priority list. The maximum requested height defaults to `1080` pixels; higher resolutions depend on stream availability and your DRM capabilities. Use `--ask-music-video-streams` (CLI-only) to select audio and video streams interactively.
 
+Historically, Apple Music has offered the following music-video resolutions:
+
+| Codec | Typical resolutions |
+| --- | --- |
+| `h264` (AVC) | 240p, 360p, 480p, 540p, 720p, 1080p |
+| `h265` (HEVC) | Up to 2160p, including 1440p and 2160p variants |
+
+These are examples, **not a fixed list enforced by Gamdl**. Gamdl selects from the resolutions and bitrates advertised in the video's HLS manifest, respecting `--max-height`. The default 1080p limit excludes higher resolutions until you raise it.
+
 #### Music Video Container (`output.music_video_container` / `--music-video-container`)
 
 Music videos are saved as `.m4v` files by default, with M4V branding. Select `mp4` to save `.mp4` files with `mp42` branding instead; audio and video are still muxed losslessly. This setting does not affect songs or uploaded videos.
@@ -381,6 +413,19 @@ gamdl rip "<music video URL>" --music-video-container mp4
 #### Uploaded Video Quality (`download.uploaded_video_quality` / `--uploaded-video-quality`)
 
 Choose an uploaded video's asset variant when you need to override automatic quality selection. Use `--ask-uploaded-video-quality` (CLI-only) for an interactive choice.
+
+The available identifiers, in the default preference order, are:
+
+| Identifier | Apple Music asset variant |
+| --- | --- |
+| `1080pHdVideo` | 1080p HD |
+| `720pHdVideo` | 720p HD |
+| `sdVideoWithPlusAudio` | Standard definition with enhanced audio |
+| `sdVideo` | Standard definition |
+| `sd480pVideo` | 480p SD |
+| `provisionalUploadVideo` | Provisional upload |
+
+These are Apple Music asset names, not guaranteed resolutions or bitrates. Gamdl uses the best available variant in this order unless you select a specific one.
 
 ### Download Behavior
 
@@ -425,6 +470,8 @@ output:
 gamdl rip "<song URL>" --exclude-tags comment,title_sort,cover
 ```
 
+See [Tags and Path Templates](#tags-and-templates) for every accepted exclusion name, including fields that use different names in path templates.
+
 #### Artwork (`output.save_cover` / `--save-cover`, `output.cover_format` / `--cover-format`)
 
 Embedded artwork is normally included when tagging is enabled. Saving a separate artwork file is disabled by default. Choose `jpg` (default) or `png` for cover format.
@@ -449,7 +496,7 @@ output:
   playlist_folder_template: "Playlists/{playlist_artist}"
 ```
 
-Available fields include `title`, `title_id`, `artist`, `artist_id`, `album`, `album_artist`, `album_id`, `composer`, `composer_id`, `date`, `track`, `track_total`, `disc`, `disc_total`, `media_type`, `playlist_title`, `playlist_artist`, `playlist_id`, and `playlist_track`.
+The complete list of supported placeholders, their meanings, and the corresponding tag names is in [Tags and Path Templates](#tags-and-templates).
 
 Use `output.truncate` / `--truncate` to limit filename component length when needed.
 
@@ -486,6 +533,85 @@ Live progress is enabled by default (`ui.no_progress: false`). Set `ui.no_progre
 #### Error Tracebacks (`ui.no_tracebacks` / `--no-tracebacks`)
 
 Unexpected errors print full tracebacks at the end by default. Set `ui.no_tracebacks: true` or pass `--no-tracebacks` to hide them. Known, expected conditions remain concise. Review tracebacks before sharing, as exception messages may contain sensitive URLs or account information.
+
+<a name="tags-and-templates"></a>
+
+## 🏷️ Tags and Path Templates
+
+Gamdl 4.x separates **path placeholders** (used in filenames and folders) from **tag exclusions** (used to omit embedded metadata). Some names differ between the two. This reference lists every name supported by the current implementation.
+
+### Path Template Placeholders
+
+Use these placeholders in the `output.*_template` settings or their CLI equivalents:
+
+| Placeholder | Value | Corresponding tag for `--exclude-tags` |
+| --- | --- | --- |
+| `{album}` | Album title | `album` |
+| `{album_artist}` | Album artist | `album_artist` |
+| `{album_id}` | Apple Music album ID | `album_id` |
+| `{artist}` | Track or video artist | `artist` |
+| `{artist_id}` | Apple Music artist ID | `artist_id` |
+| `{composer}` | Composer name | `composer` |
+| `{composer_id}` | Apple Music composer ID | `composer_id` |
+| `{date}` | Release date, normally a `YYYY-MM-DD` string | `release_date` |
+| `{disc}` | Disc number | `disc_number` |
+| `{disc_total}` | Total discs | `disc_total` |
+| `{media_type}` | Numeric media type identifier | `media_type` |
+| `{playlist_artist}` | Playlist curator or artist | — |
+| `{playlist_id}` | Apple Music playlist ID | — |
+| `{playlist_title}` | Playlist title | — |
+| `{playlist_track}` | Track position in the playlist (1-based) | — |
+| `{title}` | Song or video title | `title` |
+| `{title_id}` | Apple Music song or video ID | `title_id` |
+| `{track}` | Track number | `track_number` |
+| `{track_total}` | Total tracks | `track_total` |
+
+For example, `{track:02d} {title}` produces `01 Song Title` when a track number is available. Standard Python format specs for numeric fields work; arbitrary expressions, attribute access, and indexing are not allowed. `{date}` contains a **string**, not a date object, so the old 3.x `{date:%Y}` strftime syntax is **not supported** in 4.x.
+
+Playlist placeholders are populated when playlist context is available; otherwise, fallback text is used. Missing metadata also uses readable fallbacks such as `Unknown Artist` or `Unknown Album`, or an empty string for missing numbers. Gamdl sanitizes invalid filename characters and restricts path components to safe lengths. Excluding an embedded tag does **not** remove its value from filename formatting.
+
+### Excludable Metadata Tags
+
+These are all **32** valid names for `output.exclude_tags` and `--exclude-tags`:
+
+| Tag name | Metadata omitted from the saved file |
+| --- | --- |
+| `title` | Song or video title |
+| `artist` | Track artist |
+| `album` | Album title |
+| `album_artist` | Album artist |
+| `title_id` | Apple Music song or video ID |
+| `artist_id` | Apple Music artist ID |
+| `album_id` | Apple Music album ID |
+| `track_number` | Track number (template: `{track}`) |
+| `track_total` | Total tracks |
+| `disc_number` | Disc number (template: `{disc}`) |
+| `disc_total` | Total discs |
+| `release_date` | Release date (template: `{date}`) |
+| `genre` | Genre text |
+| `genre_id` | Apple Music genre ID |
+| `isrc` | International Standard Recording Code |
+| `xid` | Apple Music external identifier |
+| `title_sort` | Title used for sorting |
+| `artist_sort` | Artist used for sorting |
+| `album_sort` | Album title used for sorting |
+| `composer` | Composer name |
+| `composer_id` | Apple Music composer ID |
+| `composer_sort` | Composer used for sorting |
+| `copyright` | Copyright notice |
+| `comment` | Comment text |
+| `compilation` | Compilation flag |
+| `gapless` | Gapless playback flag |
+| `explicit` | Explicit-content flag |
+| `storefront` | Numeric Apple Music storefront ID |
+| `media_type` | Numeric media type identifier |
+| `rating` | Content/parental rating |
+| `lyrics` | Embedded plain-text lyrics |
+| `cover` | Embedded cover artwork |
+
+For example, `--exclude-tags lyrics,cover,comment` omits those embedded fields while keeping the remaining tags. `cover` affects embedded artwork; separate artwork files are controlled by `--save-cover`. Likewise, excluding `lyrics` does not disable external LRC/text files—use `--no-lyrics-file` for that.
+
+The old 3.x special value `all` is **not accepted** as an exclusion in 4.x. Use `--no-tag` to disable embedded tagging altogether. Only metadata provided for a given item can be written, even when a tag is not excluded.
 
 <a name="migration"></a>
 

@@ -690,7 +690,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             download=replace(
                 original.download, concurrent_downloads=2, segment_concurrency=6
             ),
-            ui=replace(original.ui, progress=False),
+            ui=replace(original.ui, no_progress=True),
         )
         downloader = AsyncMock()
         downloader.download.side_effect = fake_download
@@ -755,7 +755,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
         settings = replace(
             original,
             database=replace(original.database, path=str(self.db)),
-            ui=replace(original.ui, progress=False),
+            ui=replace(original.ui, no_progress=True),
         )
         before = self.playlist.read_bytes()
         downloader = AsyncMock()

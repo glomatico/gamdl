@@ -182,8 +182,11 @@ class RipOptions:
             help="Comma-separated metadata fields to omit (or cover)",
         ),
     ] = ()
-    no_lyrics: Annotated[
-        bool, option("--no-lyrics", is_flag=True, help="Skip saving song LRC/text")
+    no_lyrics_file: Annotated[
+        bool,
+        option(
+            "--no-lyrics-file", is_flag=True, help="Skip saving song LRC/text sidecars"
+        ),
     ] = False
     save_playlist: Annotated[
         bool,
@@ -198,7 +201,10 @@ class RipOptions:
     database_path: Annotated[str | None, option("--database-path", type=str)] = None
     save_metadata: Annotated[
         bool,
-        option("--save-metadata/--no-save-metadata", help="Store resolved media tags in SQLite"),
+        option(
+            "--save-metadata/--no-save-metadata",
+            help="Store resolved media tags in SQLite",
+        ),
     ] = False
     no_progress: Annotated[
         bool,

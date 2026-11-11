@@ -186,19 +186,19 @@ class CliConfigTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertEqual(captured[0].temp_path, "/other/staging")
 
-    def test_negative_cli_flags_preserve_positive_yaml_defaults(self):
+    def test_negative_yaml_flags_preserve_existing_default_behavior(self):
         from gamdl.cli.config.loader import click_default_map
 
         defaults = click_default_map(load_config(None))
-        self.assertFalse(defaults["no_lyrics"])
+        self.assertFalse(defaults["no_lyrics_file"])
         self.assertFalse(defaults["fail_fast"])
         self.assertFalse(defaults["no_progress"])
         self.assertFalse(defaults["no_tracebacks"])
         self._write(
-            "output:\n  save_lyrics: false\ndownload:\n  continue_on_error: false\nui:\n  progress: false\n  no_tracebacks: true\n"
+            "output:\n  no_lyrics_file: true\ndownload:\n  fail_fast: true\nui:\n  no_progress: true\n  no_tracebacks: true\n"
         )
         overrides = click_default_map(load_config(self.path))
-        self.assertTrue(overrides["no_lyrics"])
+        self.assertTrue(overrides["no_lyrics_file"])
         self.assertTrue(overrides["fail_fast"])
         self.assertTrue(overrides["no_progress"])
         self.assertTrue(overrides["no_tracebacks"])
@@ -216,14 +216,14 @@ class CliConfigTests(unittest.TestCase):
                     "--no-config",
                     "rip",
                     "https://music.apple.com/br/song/test/1",
-                    "--no-lyrics",
+                    "--no-lyrics-file",
                     "--fail-fast",
                     "--no-progress",
                     "--no-tracebacks",
                 ],
             )
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertTrue(received[0].no_lyrics)
+        self.assertTrue(received[0].no_lyrics_file)
         self.assertTrue(received[0].fail_fast)
         self.assertTrue(received[0].no_progress)
         self.assertTrue(received[0].no_tracebacks)
@@ -286,6 +286,36 @@ class CliConfigTests(unittest.TestCase):
         self.assertEqual(show.exit_code, 0, show.output)
         self.assertIn("song_codec_priority:", show.output)
         self.assertEqual(self.path.read_text(), content)
+
+    def test_generated_yaml_uses_false_for_every_boolean(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        generated = CliRunner().invoke(
+            main, ["--config", str(self.path), "config", "init"]
+        )
+        self.assertEqual(generated.exit_code, 0, generated.output)
+        config = yaml.safe_load(self.path.read_text())
+        for section, settings in config.items():
+            if not isinstance(settings, dict):
+                continue
+            for name, value in settings.items():
+                if type(value) is bool:
+                    with self.subTest(setting=f"{section}.{name}"):
+                        self.assertFalse(value)
+        self.assertFalse(config["output"]["no_lyrics_file"])
+        self.assertFalse(config["output"]["no_tag"])
+        self.assertFalse(config["download"]["fail_fast"])
+        self.assertFalse(config["ui"]["no_progress"])
+        self.assertNotIn("save_lyrics", config["output"])
+        self.assertNotIn("tag", config["output"])
+        self.assertNotIn("continue_on_error", config["download"])
+        self.assertNotIn("progress", config["ui"])
+
+        defaults = click_default_map(load_config(self.path))
+        self.assertFalse(defaults["no_lyrics_file"])
+        self.assertFalse(defaults["no_tag"])
+        self.assertFalse(defaults["fail_fast"])
+        self.assertFalse(defaults["no_progress"])
 
     def test_click_cli_and_environment_precedence(self):
         self._write(
@@ -464,16 +494,16 @@ class CliConfigTests(unittest.TestCase):
         from gamdl.cli.config.loader import click_default_map
 
         settings = load_config(None)
-        self.assertTrue(settings.output.tag)
+        self.assertFalse(settings.output.no_tag)
         self.assertEqual(settings.output.exclude_tags, [])
         self.assertFalse(click_default_map(settings)["no_tag"])
         self.assertEqual(click_default_map(settings)["exclude_tags"], ())
 
         self._write(
-            "output:\n  tag: false\n  exclude_tags:\n    - comment\n    - cover\n"
+            "output:\n  no_tag: true\n  exclude_tags:\n    - comment\n    - cover\n"
         )
         configured = load_config(self.path)
-        self.assertFalse(configured.output.tag)
+        self.assertTrue(configured.output.no_tag)
         self.assertEqual(configured.output.exclude_tags, ["comment", "cover"])
         self.assertTrue(click_default_map(configured)["no_tag"])
         self.assertEqual(
@@ -513,21 +543,23 @@ class CliConfigTests(unittest.TestCase):
 
     def test_tag_settings_invalid_yaml_is_rejected_without_rewrite(self):
         for text in (
-            "output:\n  tag: null\n",
-            "output:\n  tag: no\n",  # YAML boolean false is valid
-            "output:\n  tag: disabled\n",
+            "output:\n  no_tag: null\n",
+            "output:\n  no_tag: yes\n",  # YAML boolean true is valid
+            "output:\n  no_tag: disabled\n",
             "output:\n  exclude_tags: comment,cover\n",
             "output:\n  exclude_tags: [comment, missing_tag]\n",
             "output:\n  exclude_tags: [comment, comment]\n",
             "output:\n  exclude_tags: [42]\n",
         ):
-            if text == "output:\n  tag: no\n":
+            if text == "output:\n  no_tag: yes\n":
                 self._write(text)
-                self.assertFalse(load_config(self.path).output.tag)
+                self.assertTrue(load_config(self.path).output.no_tag)
                 continue
             with self.subTest(text=text):
                 self._write(text)
-                with self.assertRaisesRegex(ConfigError, "output.(tag|exclude_tags)"):
+                with self.assertRaisesRegex(
+                    ConfigError, "output.(no_tag|exclude_tags)"
+                ):
                     load_config(self.path)
                 self.assertEqual(self.path.read_text(), text)
 
@@ -593,7 +625,7 @@ class CliConfigTests(unittest.TestCase):
 
     def test_legacy_defaults_and_missing_prd_are_valid_for_interactive_setup(self):
         config = load_config(None)
-        self.assertTrue(config.output.save_lyrics)
+        self.assertFalse(config.output.no_lyrics_file)
         self.assertFalse(config.output.save_playlist)
         self.assertEqual(config.download.song_codec_priority, ["aac-web"])
         self._write("auth:\n  drm_backend: playready\n")

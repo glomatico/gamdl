@@ -225,7 +225,7 @@ def _download_options(settings, media: Media) -> dict:
     """Use the same codec priorities and sidecars as a normal rip."""
     kwargs = {
         "overwrite": "skip",
-        "tag": settings.output.tag,
+        "tag": not settings.output.no_tag,
         "exclude_tags": settings.output.exclude_tags,
         "cover_format": settings.output.cover_format,
         "save_cover": settings.output.save_cover,
@@ -241,7 +241,7 @@ def _download_options(settings, media: Media) -> dict:
             )
             if not settings.download.song_codec
             else None,
-            save_lyrics=settings.output.save_lyrics,
+            save_lyrics=not settings.output.no_lyrics_file,
         )
     elif isinstance(media, MusicVideo):
         kwargs.update(
@@ -285,7 +285,7 @@ async def _download_missing(
         queue.put_nowait((occurrence, track))
     failures: dict[tuple[str, str], str] = {}
     with RipProgress(
-        enabled=settings.ui.progress,
+        enabled=not settings.ui.no_progress,
         max_visible=settings.ui.max_visible_tracks,
         console=output,
     ) as progress:
@@ -383,7 +383,7 @@ async def _run(
         index = await asyncio.to_thread(
             LocalMediaIndex, root, db_path if db_path.is_file() else None
         )
-    if not settings.ui.progress:
+    if settings.ui.no_progress:
         output.print(f"Checking {len(paths)} playlists against Apple Music...")
     stats: Counter[str] = Counter()
     reports: list[_PlaylistReport] = []
@@ -401,7 +401,7 @@ async def _run(
                 TaskProgressColumn(),
                 console=output,
                 transient=True,
-                disable=not settings.ui.progress,
+                disable=settings.ui.no_progress,
             )
         )
         check_task = checking.add_task("Checking", total=len(paths))
@@ -514,7 +514,11 @@ async def _run(
                     client=cdn,
                     temp_path=settings.output.temp_path,
                     path_formatter=_formatter(root, settings.output),
-                    database=MediaDatabase(db_path, root=root, save_metadata=settings.database.save_metadata)
+                    database=MediaDatabase(
+                        db_path,
+                        root=root,
+                        save_metadata=settings.database.save_metadata,
+                    )
                     if not settings.database.disabled
                     else None,
                     concurrency=settings.download.segment_concurrency,

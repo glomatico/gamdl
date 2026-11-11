@@ -39,7 +39,7 @@ class DownloadConfig:
     )
     max_height: int = 1080
     uploaded_video_quality: str | None = None
-    continue_on_error: bool = True
+    fail_fast: bool = False
     artist_auto_select: list[str] = field(default_factory=list)
     library_auto_select: list[str] = field(default_factory=list)
 
@@ -49,11 +49,11 @@ class OutputConfig:
     directory: str = "./Apple Music"
     temp_path: str | None = None
     music_video_container: str = "m4v"
-    tag: bool = True
+    no_tag: bool = False
     exclude_tags: list[str] = field(default_factory=list)
     save_cover: bool = False
     cover_format: str = "jpg"
-    save_lyrics: bool = True
+    no_lyrics_file: bool = False
     save_playlist: bool = False
     album_folder_template: str = "{album_artist}/{album}"
     compilation_folder_template: str = "Compilations/{album}"
@@ -75,7 +75,7 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class UiConfig:
-    progress: bool = True
+    no_progress: bool = False
     max_visible_tracks: int = 5
     no_tracebacks: bool = False
 

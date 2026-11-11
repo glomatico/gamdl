@@ -313,9 +313,9 @@ Supported song codec identifiers are `aac-web`, `aac-he-web`, `aac`, `aac-he`, `
 
 Request one specific codec instead of a fallback list. The default is `null`. Use `--ask-song-codec` (CLI-only) to choose a stream interactively; it requires a terminal.
 
-#### Lyrics (`output.save_lyrics` / `--no-lyrics`)
+#### Lyrics (`output.no_lyrics_file` / `--no-lyrics-file`)
 
-When metadata tagging is enabled, available song lyrics are embedded in the audio file by default as plain text (`©lyr`), independently of sidecar settings. Gamdl also saves synchronized LRC or plain-text lyric sidecars by default. Use `--no-lyrics` to disable external lyric files for a command; to omit the embedded tag, add `lyrics` to `output.exclude_tags` or use `--exclude-tags lyrics`. Disabling tagging with `--no-tag` also disables embedded lyrics.
+When metadata tagging is enabled, available song lyrics are embedded in the audio file by default as plain text (`©lyr`), independently of sidecar settings. Gamdl also saves synchronized LRC or plain-text lyric sidecars by default (`no_lyrics_file: false`). Set `output.no_lyrics_file: true` or use `--no-lyrics-file` to disable external lyric files; to omit the embedded tag, add `lyrics` to `output.exclude_tags` or use `--exclude-tags lyrics`. Disabling tagging with `--no-tag` also disables embedded lyrics.
 
 ### Music Videos and Uploaded Videos
 
@@ -365,9 +365,9 @@ Choose an uploaded video's asset variant when you need to override automatic qua
 
 Choose `skip` (default), `replace`, or `error`. Songs use their configured filename directly; music videos can receive numbered suffixes (`Title 2.m4v`) to avoid filename collisions.
 
-#### Error Handling (`download.continue_on_error` / `--fail-fast`)
+#### Error Handling (`download.fail_fast` / `--fail-fast`)
 
-The default is to continue processing remaining items after individual failures. Set `continue_on_error: false` in YAML or use `--fail-fast` to stop after an error.
+The default is to continue processing remaining items after individual failures (`fail_fast: false`). Set `download.fail_fast: true` or use `--fail-fast` to stop after an error.
 
 For `rip`, `library`, `search`, and `sync playlists`, expected Gamdl errors are reported as short messages without tracebacks. Unexpected exceptions (including DRM license failures and malformed API responses) are collected and printed with **full Python tracebacks after** the final results, once progress bars have closed. Use `--no-tracebacks` (or `ui.no_tracebacks: true` in YAML) to suppress tracebacks while keeping concise failure messages. Tracebacks may contain signed URLs, tokens, or account details; inspect them before sharing logs.
 
@@ -377,9 +377,9 @@ Choose artist categories such as `main-albums`, `singles-eps`, `top-songs`, and 
 
 ### Metadata and Artwork
 
-#### Tagging (`output.tag` / `--tag`, `--no-tag`)
+#### Tagging (`output.no_tag` / `--no-tag`, `--tag`)
 
-Metadata tagging is enabled by default (`output.tag: true`). Use `--no-tag` to skip writing metadata tags for one command, or `--tag` to enable them even when disabled in YAML.
+Metadata tagging is enabled by default (`output.no_tag: false`). Use `--no-tag` to skip writing metadata tags for one command, or `--tag` to enable them even when disabled in YAML.
 
 #### Excluded Tags (`output.exclude_tags` / `--exclude-tags`)
 
@@ -387,7 +387,7 @@ Exclude specific metadata fields, including `cover`, without disabling all taggi
 
 ```yaml
 output:
-  tag: true
+  no_tag: false
   exclude_tags:
     - comment
     - title_sort
@@ -450,9 +450,9 @@ Set `save_metadata: true` (or `--save-metadata`) to also store resolved tags in 
 
 ### Interface
 
-#### Progress Display (`ui.progress` / `--no-progress`)
+#### Progress Display (`ui.no_progress` / `--no-progress`)
 
-Live progress is enabled by default. Use `--no-progress` to disable it. `ui.max_visible_tracks` / `--max-visible-tracks` controls the number of track rows shown at once (**default:** `5`).
+Live progress is enabled by default (`ui.no_progress: false`). Set `ui.no_progress: true` or use `--no-progress` to disable it. `ui.max_visible_tracks` / `--max-visible-tracks` controls the number of track rows shown at once (**default:** `5`).
 
 #### Error Tracebacks (`ui.no_tracebacks` / `--no-tracebacks`)
 

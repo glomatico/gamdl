@@ -239,7 +239,7 @@ gamdl organize
 
 The organizer can update database paths and relative M3U playlist references. It avoids overwriting occupied destinations. **Review the dry run first**, especially when changing templates.
 
-When media paths change, `organize` repairs their references inside existing `.m3u8` playlists without changing playlist names or metadata headers. For an already-organized library, use `gamdl organize --playlists-only` (or add `--dry-run` to preview path repairs). Restoring metadata headers in legacy playlists is a separate, manual maintenance task—not an `organize` feature.
+When media paths change, `organize` repairs their references inside existing `.m3u8` playlists without changing playlist names or metadata headers. For an already-organized library, use `gamdl organize --playlists-only` (or add `--dry-run` to preview path repairs).
 
 ### Sync Apple Music Playlists (`sync playlists`)
 
@@ -335,7 +335,7 @@ Supported song codec identifiers are `aac`, `aac-he`, `aac-binaural`, `aac-downm
 
 #### Song Codec Specifications
 
-These are **typical Apple Music profiles**, as documented in Gamdl 3.x. Actual bitrates, sample rates, and available streams depend on the track and the HLS manifest; Gamdl 4.x discovers the available variants instead of enforcing these values.
+These are **typical Apple Music profiles**, not guaranteed specifications. Actual bitrates, sample rates, and available streams depend on the track and its HLS manifest; Gamdl discovers the available variants instead of enforcing these values.
 
 | Codec | Typical bitrate | Audio characteristics |
 | --- | --- | --- |
@@ -431,7 +431,7 @@ These are Apple Music asset names, not guaranteed resolutions or bitrates. Gamdl
 
 #### Download Concurrency (`download.segment_concurrency` / `--segment-concurrency`, `download.concurrent_downloads` / `--concurrent-downloads`)
 
-`segment_concurrency` controls parallel media-segment HTTP requests for an individual track (**default:** `8`); it does not directly limit Apple Music metadata or playback API requests. `concurrent_downloads` controls how many media items download simultaneously (**default:** `2`). Higher parallelism can indirectly result in overlapping API calls. Gamdl 4.0 uses only `segment_concurrency` and `--segment-concurrency`; the previous names are not supported.
+`segment_concurrency` controls parallel media-segment HTTP requests for an individual track (**default:** `8`); it does not directly limit Apple Music metadata or playback API requests. `concurrent_downloads` controls how many media items download simultaneously (**default:** `2`). Higher parallelism can indirectly result in overlapping API calls.
 
 #### Existing Files (`download.overwrite` / `--overwrite`)
 
@@ -522,8 +522,6 @@ database:
 
 Set `save_metadata: true` (or `--save-metadata`) to also store resolved tags in separate `songs`, `music_videos`, and `uploaded_videos` tables. Metadata writes reuse tags already resolved during downloading and **do not** save artwork or lyrics in SQLite. `gamdl database scan` indexes existing local media, checks local M3U playlists and complete albums to reconstruct source membership, and fills any missing metadata from embedded tags when `save_metadata` is on; it never downloads media or contacts Apple Music.
 
-**Database format change for 4.0:** Older SQLite indexes cannot be opened by this release. Gamdl never overwrites or upgrades them automatically; explicitly move the old database aside or select a fresh `database.path` to initialize the new format. The media files themselves are not touched.
-
 ### Interface
 
 #### Progress Display (`ui.no_progress` / `--no-progress`)
@@ -538,7 +536,7 @@ Unexpected errors print full tracebacks at the end by default. Set `ui.no_traceb
 
 ## 🏷️ Tags and Path Templates
 
-Gamdl 4.x separates **path placeholders** (used in filenames and folders) from **tag exclusions** (used to omit embedded metadata). Some names differ between the two. This reference lists every name supported by the current implementation.
+Gamdl separates **path placeholders** (used in filenames and folders) from **tag exclusions** (used to omit embedded metadata). Some names differ between the two. This reference lists every supported name.
 
 ### Path Template Placeholders
 
@@ -566,7 +564,9 @@ Use these placeholders in the `output.*_template` settings or their CLI equivale
 | `{track}` | Track number | `track_number` |
 | `{track_total}` | Total tracks | `track_total` |
 
-For example, `{track:02d} {title}` produces `01 Song Title` when a track number is available. Standard Python format specs for numeric fields work; arbitrary expressions, attribute access, and indexing are not allowed. `{date}` contains a **string**, not a date object, so the old 3.x `{date:%Y}` strftime syntax is **not supported** in 4.x.
+For example, `{track:02d} {title}` produces `01 Song Title` when a track number is available. Standard Python format specs for numeric fields work; arbitrary expressions, attribute access, and indexing are not allowed.
+
+The `{date}` placeholder uses the original release-date text. To select part of a date, use **strftime** specifiers such as `{date:%Y}` (year), `{date:%Y-%m}` (year and month), or `{date:%d}` (day). ISO-formatted dates and timestamps are supported; year-only and year-month values are also accepted, with missing month/day components assumed to be January/1 when formatting. Missing or invalid dates use the `Unknown Date` fallback.
 
 Playlist placeholders are populated when playlist context is available; otherwise, fallback text is used. Missing metadata also uses readable fallbacks such as `Unknown Artist` or `Unknown Album`, or an empty string for missing numbers. Gamdl sanitizes invalid filename characters and restricts path components to safe lengths. Excluding an embedded tag does **not** remove its value from filename formatting.
 
@@ -611,7 +611,7 @@ These are all **32** valid names for `output.exclude_tags` and `--exclude-tags`:
 
 For example, `--exclude-tags lyrics,cover,comment` omits those embedded fields while keeping the remaining tags. `cover` affects embedded artwork; separate artwork files are controlled by `--save-cover`. Likewise, excluding `lyrics` does not disable external LRC/text files—use `--no-lyrics-file` for that.
 
-The old 3.x special value `all` is **not accepted** as an exclusion in 4.x. Use `--no-tag` to disable embedded tagging altogether. Only metadata provided for a given item can be written, even when a tag is not excluded.
+Use `--no-tag` to disable embedded tagging altogether. Only metadata provided for a given item can be written, even when a tag is not excluded.
 
 <a name="migration"></a>
 
@@ -623,6 +623,11 @@ Gamdl 4.x introduces several changes to its CLI and configuration:
 - **YAML configuration:** Replace your old INI configuration with the new YAML settings. Run `gamdl config init` to generate a reference configuration.
 - **Authentication:** Configure Wrapper, Cookies, or Media User Token with `gamdl auth`; the old `--use-wrapper` flag is replaced by an authentication method.
 - **Codec selection:** The default is now HLS `aac` instead of `aac-web`. The generic `alac` preference automatically selects the best ALAC tier. Interactive stream selection has dedicated flags such as `--ask-song-codec`; codec-priority lists accept comma-separated CLI values or YAML lists.
+- **Date templates:** Strftime-style placeholders such as `{date:%Y}` and `{date:%Y-%m}` continue to work. Release dates are now stored as strings internally, but the path formatter parses them when a date specifier is requested.
+- **Excluded tags:** The old `all` special value is no longer accepted in `--exclude-tags`; use `--no-tag` instead. Some path placeholders use different names from tag exclusions (for example, `{date}` versus `release_date`).
+- **Download concurrency:** Use `download.segment_concurrency` / `--segment-concurrency` for media segment requests. Previous concurrency option names are not supported.
+- **Playlist organization:** `organize` can repair playlist paths, but restoring missing metadata headers in legacy playlists remains a separate, manual task.
+- **Database format:** Older SQLite indexes cannot be opened by 4.x. Gamdl does not overwrite or upgrade them automatically; move the old database aside or set a fresh `database.path`. Your downloaded media files are not touched.
 - **Native processing:** The native muxing/decryption layer replaces the old external downloader and muxer workflow. Review removed 3.x flags rather than copying them directly.
 - **Python API:** The modules and classes have been reorganized. Applications embedding Gamdl 3.x should update their imports and integration code.
 

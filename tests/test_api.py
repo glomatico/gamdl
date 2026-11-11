@@ -236,7 +236,10 @@ class AppleMusicTests(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(
                     200,
                     json={
-                        "meta": {"subscription": {"active": True, "storefront": "br"}}
+                        "meta": {"subscription": {"active": True, "storefront": "br"}},
+                        "data": [
+                            {"attributes": {"restrictions": {"music": "explicit"}}}
+                        ],
                     },
                 )
             return httpx.Response(200, json={"results": {"songs": {"data": []}}})
@@ -247,6 +250,7 @@ class AppleMusicTests(unittest.IsolatedAsyncioTestCase):
             ) as api:
                 self.assertEqual(api.storefront, "br")
                 self.assertTrue(api.active_subscription)
+                self.assertEqual(api.account_restrictions, {"music": "explicit"})
                 await api.get_search_results("Janet Jackson")
 
             self.assertFalse(client.is_closed)

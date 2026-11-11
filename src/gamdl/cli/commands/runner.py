@@ -30,6 +30,7 @@ from gamdl.media import (
     MusicVideoCodec,
     Song,
     SongCodec,
+    StreamSelectionRequest,
     UploadedVideo,
     UploadedVideoQuality,
 )
@@ -57,6 +58,7 @@ from ..prompts import interactive, select_media, select_stream
 from ..session import authenticate as _authenticate
 from ..session import create_drm
 from ..terminal import TerminalController
+from ..warnings import warn_alac_without_wrapper, warn_content_restrictions
 
 if TYPE_CHECKING:
     from ..options import RipOptions
@@ -234,6 +236,14 @@ async def run_rip(options: RipOptions) -> int:
         async with AsyncExitStack() as stack:
             api, wrapper = await _authenticate(options, stack, console=console)
             console.print("[green]✓[/green] Authenticated")
+            warn_content_restrictions(api, console)
+            warn_alac_without_wrapper(
+                wrapper,
+                console,
+                codec=options.song_codec,
+                codec_priority=options.song_codec_priority,
+                ask_song_codec=options.ask_song_codec,
+            )
             options.output_dir = await resolve_output_directory(options.output_dir)
             formatter = _formatter(options)
             if not api.active_subscription:
@@ -325,17 +335,36 @@ async def run_rip(options: RipOptions) -> int:
                     selector=choose_media,
                 )
 
+                warned_interactive_alac = False
+
                 async def process(occurrence: int, media, title: str) -> None:
                     try:
                         lease = None
                         check_stopped()
 
                         async def choose_for_track(request):
-                            nonlocal lease
+                            nonlocal lease, warned_interactive_alac
                             check_stopped()
                             if lease is None:
                                 lease = await terminal.acquire()
-                            return await choose(request, media_title=title)
+                            selected = await choose(request, media_title=title)
+                            if (
+                                wrapper is None
+                                and not warned_interactive_alac
+                                and isinstance(request, StreamSelectionRequest)
+                                and type(selected) is int
+                                and 0 <= selected < len(request.options)
+                                and request.options[selected].codec
+                                in {SongCodec.ALAC_HIRES, SongCodec.ALAC_LOSSLESS}
+                            ):
+                                warned_interactive_alac = True
+                                warn_alac_without_wrapper(
+                                    wrapper,
+                                    console,
+                                    codec=request.options[selected].codec,
+                                    codec_priority=(),
+                                )
+                            return selected
 
                         def on_event(event):
                             progress.event(occurrence, title, event)

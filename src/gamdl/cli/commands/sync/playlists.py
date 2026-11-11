@@ -47,6 +47,7 @@ from ...errors import (
 from ...output import console
 from ...progress import RipProgress
 from ...session import authenticate, create_drm
+from ...warnings import warn_alac_without_wrapper, warn_content_restrictions
 
 
 @dataclass
@@ -393,6 +394,7 @@ async def _run(
     auth_options = _auth_options(settings)
     async with AsyncExitStack() as stack:
         api, wrapper = await authenticate(auth_options, stack, console=output)
+        warn_content_restrictions(api, output)
         checking = stack.enter_context(
             Progress(
                 TextColumn("Checking Apple Music playlists"),
@@ -495,6 +497,13 @@ async def _run(
         if not dry_run:
             failures: dict[tuple[str, str], str] = {}
             if missing:
+                if any(track.kind == "songs" for track in missing.values()):
+                    warn_alac_without_wrapper(
+                        wrapper,
+                        output,
+                        codec=settings.download.song_codec,
+                        codec_priority=settings.download.song_codec_priority,
+                    )
                 # Finish ALL discovery first: a track can appear in multiple
                 # playlists, but should be downloaded only once. Concurrency
                 # here is per media item, not the stream-part concurrency.

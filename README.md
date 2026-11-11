@@ -309,6 +309,8 @@ gamdl rip "<song URL>" --song-codec-priority alac-hires,alac-lossless,atmos,aac-
 
 Supported song codec identifiers are `aac-web`, `aac-he-web`, `aac`, `aac-he`, `aac-binaural`, `aac-downmix`, `aac-he-binaural`, `aac-he-downmix`, `atmos`, `ac3`, `alac-lossless` (up to 48 kHz), and `alac-hires` (above 48 kHz). ALAC tiers are determined from enhanced-HLS audio-group metadata, rather than the generic codec regex map. To prefer Hi-Res with standard Lossless fallback, list both codecs in that order. The legacy `alac` option is no longer accepted; update existing YAML and CLI preferences.
 
+Gamdl warns after authentication when Apple Music reports account content restrictions, which may prevent some tracks from downloading. It also warns when ALAC is selected without Wrapper, because Apple Music may refuse Widevine/PlayReady licenses for lossless streams. These are informational warnings, not download blockers; interactive ALAC selection displays the warning when that codec is chosen.
+
 #### Exact Codec (`download.song_codec` / `--song-codec`)
 
 Request one specific codec instead of a fallback list. The default is `null`. Use `--ask-song-codec` (CLI-only) to choose a stream interactively; it requires a terminal.

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from platformdirs import user_config_path, user_data_path
+from platformdirs import user_config_path
 
 
 def config_path() -> Path:
@@ -11,7 +11,7 @@ def config_path() -> Path:
 
 
 def database_path() -> Path:
-    return user_data_path("gamdl", appauthor=False) / "media.sqlite3"
+    return config_path().parent / "media.sqlite3"
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,8 @@ class OutputConfig:
 
 @dataclass(frozen=True)
 class DatabaseConfig:
-    enabled: bool = False
+    disabled: bool = False
+    save_metadata: bool = False
     path: str = str(database_path())
 
 

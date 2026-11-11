@@ -152,7 +152,7 @@ class LocalMediaIndex:
         self.by_path: dict[Path, tuple[str, str]] = {}
         known: dict[Path, tuple[str, str, int]] = {}
         if database is not None and database.is_file():
-            for record in MediaDatabase(database).local_records(self.root):
+            for record in MediaDatabase(database, root=self.root).local_records(self.root):
                 kind = record["media_type"]
                 if kind in {"songs", "library-songs", "music-videos"}:
                     known[Path(record["path"])] = (

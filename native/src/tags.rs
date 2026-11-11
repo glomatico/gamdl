@@ -457,6 +457,9 @@ pub(crate) fn read_mp4_organize_tags<'py>(
         ("album_artist", tag.album_artist()),
         ("composer", tag.composer()),
         ("release_date", tag.year()),
+        ("copyright", tag.copyright()),
+        ("comment", tag.comment()),
+        ("isrc", tag.isrc()),
     ] {
         if let Some(value) = value {
             result.set_item(name, value)?;
@@ -473,12 +476,48 @@ pub(crate) fn read_mp4_organize_tags<'py>(
         }
     }
     result.set_item("compilation", tag.compilation())?;
+    for (name, atom) in [
+        ("title_sort", *b"sonm"),
+        ("artist_sort", *b"soar"),
+        ("album_sort", *b"soal"),
+        ("composer_sort", *b"soco"),
+        ("xid", *b"xid "),
+    ] {
+        if let Some(Data::Utf8(value) | Data::Utf16(value)) =
+            tag.data_of(&Fourcc(atom)).next()
+        {
+            result.set_item(name, value)?;
+        }
+    }
+    let genres: Vec<&str> = tag.genres().collect();
+    if !genres.is_empty() {
+        result.set_item("genre", genres)?;
+    }
+    for (name, atom) in [
+        ("gapless", *b"pgap"),
+        ("explicit", *b"rtng"),
+    ] {
+        if let Some(Data::BeSigned(bytes) | Data::Reserved(bytes)) =
+            tag.data_of(&Fourcc(atom)).next()
+        {
+            if let Some(value) = bytes.first() {
+                if name == "gapless" {
+                    result.set_item(name, *value != 0)?;
+                } else {
+                    result.set_item("rating", *value)?;
+                    result.set_item("explicit", *value != 0)?;
+                }
+            }
+        }
+    }
 
     for (name, atom) in [
         ("title_id", *b"cnID"),
         ("artist_id", *b"atID"),
         ("album_id", *b"plID"),
         ("composer_id", *b"cmID"),
+        ("genre_id", *b"geID"),
+        ("storefront", *b"sfID"),
         ("media_type", *b"stik"),
     ] {
         if let Some(Data::BeSigned(bytes) | Data::Reserved(bytes)) =

@@ -44,7 +44,7 @@ def initialize(ctx: click.Context, force: bool) -> None:
         ) from None
     except OSError:
         raise click.ClickException("Unable to write config") from None
-    click.echo(f"Created {path}")
+    click.echo(f"Created config at {path.absolute()}")
 
 
 @config_group.command("validate")

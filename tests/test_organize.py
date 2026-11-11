@@ -30,11 +30,11 @@ class OrganizeTests(unittest.TestCase):
         self.library = self.root / "library"
         self.library.mkdir()
         self.config = self.root / "config.yaml"
-        self.db = MediaDatabase(self.root / "index.sqlite3")
+        self.db = MediaDatabase(self.root / "index.sqlite3", root=self.library)
         self.config.write_text(
             "output:\n"
             f"  directory: '{self.library}'\n"
-            "database:\n  enabled: true\n"
+            "database:\n  disabled: false\n"
             f"  path: '{self.db.path}'\n",
             encoding="utf-8",
         )
@@ -94,7 +94,7 @@ class OrganizeTests(unittest.TestCase):
             db.execute(
                 "UPDATE media_files SET codec = 'aac-web', source_kind = 'album-tracks' "
                 "WHERE path = ?",
-                (str(old),),
+                (old.relative_to(self.library).as_posix(),),
             )
 
         expected = self.library / "Artist" / "Album" / "03 Song_one.m4a"

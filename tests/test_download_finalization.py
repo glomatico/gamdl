@@ -219,7 +219,7 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertFalse(writer.add(self.directory / "a.m4a", position=0))
 
     def test_database_index_upsert_and_skip_preserves_codec(self):
-        db = MediaDatabase(self.directory / "index" / "media.sqlite3")
+        db = MediaDatabase(self.directory / "index" / "media.sqlite3", root=self.directory)
         song = Song.from_id("1228739609", api=Mock())
         song.source = MediaSource("playlist_tracks", "playlist-01", 2)
         output = self.directory / "New Rules.m4a"

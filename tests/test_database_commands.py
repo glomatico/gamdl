@@ -24,7 +24,7 @@ class DatabaseCommandTests(TestCase):
             db = root / "index.sqlite3"
             config = root / "config.yaml"
             config.write_text(
-                f"database:\n  path: {db}\noutput:\n  directory: {output}\n"
+                f"database:\n  disabled: true\n  path: {db}\noutput:\n  directory: {output}\n"
             )
             runner = CliRunner()
             with patch(

@@ -194,8 +194,12 @@ class RipOptions:
     ] = False
     database: Annotated[
         bool, option("--database/--no-database", help="Use the SQLite media index")
-    ] = False
+    ] = True
     database_path: Annotated[str | None, option("--database-path", type=str)] = None
+    save_metadata: Annotated[
+        bool,
+        option("--save-metadata/--no-save-metadata", help="Store resolved media tags in SQLite"),
+    ] = False
     no_progress: Annotated[
         bool,
         option("--no-progress", is_flag=True, help="Disable dynamic progress bars"),

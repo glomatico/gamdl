@@ -514,8 +514,8 @@ async def _run(
                     client=cdn,
                     temp_path=settings.output.temp_path,
                     path_formatter=_formatter(root, settings.output),
-                    database=MediaDatabase(db_path)
-                    if settings.database.enabled
+                    database=MediaDatabase(db_path, root=root, save_metadata=settings.database.save_metadata)
+                    if not settings.database.disabled
                     else None,
                     concurrency=settings.download.segment_concurrency,
                 )

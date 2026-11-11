@@ -245,7 +245,12 @@ async def run_rip(options: RipOptions) -> int:
                 wrapper_api=wrapper,
                 temp_path=options.temp_path,
                 path_formatter=formatter,
-                database=MediaDatabase(Path(options.database_path).expanduser())
+                database=MediaDatabase(
+                    Path(options.database_path).expanduser(),
+                    root=formatter.output_dir,
+                    save_metadata=options.save_metadata,
+                    on_created=lambda path: click.echo(f"Created database at {path}"),
+                )
                 if options.database and options.database_path
                 else None,
                 concurrency=options.segment_concurrency,

@@ -17,7 +17,7 @@ class MediaLookupTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.library = self.root / "Apple Music"
         self.library.mkdir()
-        self.database = MediaDatabase(self.root / "media.sqlite3")
+        self.database = MediaDatabase(self.root / "media.sqlite3", root=self.root)
 
     def add(self, path: Path, media_type: str, media_id: str, codec=None) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +27,7 @@ class MediaLookupTests(unittest.TestCase):
             with sqlite3.connect(self.database.path) as connection:
                 connection.execute(
                     "UPDATE media_files SET codec=? WHERE path=?",
-                    (codec, str(path)),
+                    (codec, path.relative_to(self.root).as_posix()),
                 )
         return path
 
@@ -93,5 +93,6 @@ class MediaLookupTests(unittest.TestCase):
         target = self.add(self.library / "target.m4a", "songs", "999")
         link = self.library / "linked.m4a"
         link.symlink_to(target)
-        self.database.index_file(link, "songs", "1000")
+        with self.assertRaisesRegex(ValueError, "Symlinked media"):
+            self.database.index_file(link, "songs", "1000")
         self.assertIsNone(self.database.find_by_media_id("songs", "1000"))

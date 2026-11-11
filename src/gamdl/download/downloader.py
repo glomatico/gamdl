@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import warnings
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
@@ -121,6 +122,7 @@ class _PreparedFile:
     codec: SongCodec | MusicVideoCodec | UploadedVideoQuality | None
     methods: tuple[str, ...]
     cover_bytes: bytes | None = None
+    resolved_tags: Tags | None = None
 
 
 class Downloader:
@@ -610,6 +612,7 @@ class Downloader:
             methods = (method,)
 
         artwork = None
+        catalog_tags = resolved_tags
         if tag:
             if resolved_tags is None:
                 with self._stage(event_callback, media.id, DownloadStage.FETCHING_TAGS):
@@ -620,6 +623,7 @@ class Downloader:
                     )
             else:
                 tags = resolved_tags
+            catalog_tags = tags
             tags = replace(
                 tags,
                 **{
@@ -644,7 +648,7 @@ class Downloader:
                 await _complete_write(
                     self.muxer.tag, prepared_path, tags=tags, cover_bytes=artwork
                 )
-        return _PreparedFile(prepared_path, selected_codec, methods, artwork)
+        return _PreparedFile(prepared_path, selected_codec, methods, artwork, catalog_tags)
 
     async def _save_sidecars(
         self,
@@ -759,6 +763,7 @@ class Downloader:
         playlist_tags: PlaylistTags | None,
         playlist_index: int | None,
         prepared_cover: bytes | None = None,
+        resolved_tags: Tags | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> DownloadResult:
         """Retryable, idempotent post-publication operations.
@@ -795,15 +800,16 @@ class Downloader:
                     event_callback, media.id, DownloadStage.UPDATING_DATABASE
                 ):
                     db_status = await _complete_write(
-                        self.database.record, media, result
+                        self.database.record, media, result, resolved_tags
                     )
                 result = replace(
                     result, database=DatabaseResult(self.database.path, db_status)
                 )
             except Exception as exc:
-                raise DownloadFinalizationError(
-                    result.path, "database", result
-                ) from exc
+                warnings.warn(
+                    f"Download completed but database registration failed: {exc}",
+                    stacklevel=2,
+                )
 
         if playlist_path is not None:
             try:
@@ -1043,6 +1049,7 @@ class Downloader:
                         else None,
                         playlist_tags=playlist_tags,
                         playlist_index=playlist_index,
+                        resolved_tags=None,
                         event_callback=event_callback,
                     )
         generated_video_path: Path | None = None
@@ -1139,6 +1146,7 @@ class Downloader:
                     else None,
                     playlist_tags=playlist_tags,
                     playlist_index=playlist_index,
+                    resolved_tags=resolved_tags,
                     event_callback=event_callback,
                 )
             if overwrite == "error":
@@ -1243,5 +1251,6 @@ class Downloader:
             playlist_tags=playlist_tags,
             playlist_index=playlist_index,
             prepared_cover=prepared.cover_bytes,
+            resolved_tags=prepared.resolved_tags,
             event_callback=event_callback,
         )

@@ -745,7 +745,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_published_song_sidecars_index_playlist_and_retry_on_skip(self):
         downloader, _ = self.downloader()
-        db = MediaDatabase(self.directory / "db" / "media.sqlite3")
+        db = MediaDatabase(self.directory / "db" / "media.sqlite3", root=self.directory)
         downloader.database = db
         song = self.song()
         song.source = MediaSource("playlist_tracks", "playlist-id", 1)
@@ -883,12 +883,10 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         destination = self.directory / "repair.m4a"
         failure = Mock(record=Mock(side_effect=OSError("database busy")))
         downloader.database = failure
-        with self.assertRaises(DownloadFinalizationError) as raised:
-            await downloader.download(song, destination)
-        self.assertEqual(raised.exception.stage, "database")
-        self.assertEqual(raised.exception.path, destination)
-        self.assertEqual(raised.exception.partial_result.status, "downloaded")
-        self.assertIsNone(raised.exception.partial_result.database)
+        with self.assertWarnsRegex(UserWarning, "database registration failed"):
+            completed = await downloader.download(song, destination)
+        self.assertEqual(completed.status, "downloaded")
+        self.assertIsNone(completed.database)
         self.assertTrue(destination.is_file())
         downloader.database = MediaDatabase(self.directory / "media.sqlite3")
         downloader._read_track.reset_mock()

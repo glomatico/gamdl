@@ -424,16 +424,21 @@ Enable generation of relative-path `.m3u8` files for Apple Music playlists. It i
 
 ### Database
 
-#### Media Index (`database.enabled` / `--database`, `database.path` / `--database-path`)
+#### Media Index (`database.disabled` / `--no-database`, `database.path` / `--database-path`)
 
-The SQLite index is optional and disabled for new downloads by default. Enable it to track published files and help recognize existing downloads. Use the `database` commands described in [Usage](#-usage) to manage the index independently.
+The SQLite index is enabled by default. It tracks downloaded files with portable paths relative to `output.directory`, their codecs and their most relevant album/playlist source. Disable it with `database.disabled: true` or `--no-database`. The default database is `media.sqlite3` beside `config.yaml` in Gamdl's configuration directory, and `database.path` is configurable. The first creation of each file is reported as `Created config at …` or `Created database at …`.
 
 With the index enabled, `rip` checks existing catalog IDs **before** fetching per-track tags, playback streams, lyrics, or decryption information. For the default `--overwrite skip` policy, an indexed file that still exists within the output library can be reused directly. Existing cover/lyrics sidecars are also reused without network requests; missing sidecars can still be fetched, and playlist entries are finalized normally. Explicit codec selections, single-codec priorities without a verified matching codec, and `--overwrite replace` bypass the early skip so codec changes are not silently mistaken for existing matches. The same indexed ID information is used for local track resolution in `sync playlists`.
 
 ```yaml
 database:
-  enabled: true
+  disabled: false
+  save_metadata: false
 ```
+
+Set `save_metadata: true` (or `--save-metadata`) to also store resolved tags in separate `songs`, `music_videos`, and `uploaded_videos` tables. Metadata writes reuse tags already resolved during downloading and **do not** save artwork or lyrics in SQLite. `gamdl database scan` indexes existing local media, checks local M3U playlists and complete albums to reconstruct source membership, and fills any missing metadata from embedded tags when `save_metadata` is on; it never downloads media or contacts Apple Music.
+
+**Database format change for 4.0:** Older SQLite indexes cannot be opened by this release. Gamdl never overwrites or upgrades them automatically; explicitly move the old database aside or select a fresh `database.path` to initialize the new format. The media files themselves are not touched.
 
 ### Interface
 

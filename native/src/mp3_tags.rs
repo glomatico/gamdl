@@ -107,10 +107,19 @@ pub(crate) fn read_mp3_organize_tags<'py>(
         ("album_artist", tag.album_artist()),
         ("composer", tag.text_for_frame_id("TCOM")),
         ("release_date", tag.text_for_frame_id("TDRC")),
+        ("copyright", tag.text_for_frame_id("TCOP")),
+        ("title_sort", tag.text_for_frame_id("TSOT")),
+        ("artist_sort", tag.text_for_frame_id("TSOP")),
+        ("album_sort", tag.text_for_frame_id("TSOA")),
+        ("composer_sort", tag.text_for_frame_id("TSOC")),
+        ("isrc", tag.text_for_frame_id("TSRC")),
     ] {
         if let Some(value) = value {
             result.set_item(name, value)?;
         }
+    }
+    if let Some(value) = tag.genre() {
+        result.set_item("genre", value.split("; ").collect::<Vec<_>>())?;
     }
     for (name, value) in [
         ("track_number", tag.track()),

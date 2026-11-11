@@ -80,7 +80,7 @@ def organize(
             "truncate": truncate,
         }.items()
     }
-    db = MediaDatabase(Path(settings.database.path).expanduser())
+    db = MediaDatabase(Path(settings.database.path).expanduser(), root=root)
     try:
         formatter = PathFormatter(root, **values)
         with Progress(
@@ -129,7 +129,7 @@ def organize(
             counts = execute_organization(
                 plan,
                 db,
-                update_index=settings.database.enabled,
+                update_index=not settings.database.disabled,
                 playlists_only=playlists_only,
                 on_move=lambda: progress.advance(task),
             )

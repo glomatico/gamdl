@@ -14,6 +14,7 @@
 - [✨ Features](#features)
 - [📋 Prerequisites](#prerequisites)
 - [📦 Installation](#installation)
+- [🚀 First Run](#first-run)
 - [🔐 Authentication](#authentication)
 - [🚀 Usage](#usage)
 - [⚙️ Configuration](#configuration)
@@ -69,17 +70,36 @@ gamdl --help
 
 If a prebuilt wheel is not available for your platform, installing from source requires Rust and the native build dependencies.
 
+<a name="first-run"></a>
+
+## 🚀 First Run
+
+After installing Gamdl, you can start a download right away:
+
+```bash
+gamdl rip "https://music.apple.com/us/album/never-gonna-give-you-up-2022-remaster/1624945511?i=1624945512"
+```
+
+If this is your first run, Gamdl will guide you through any settings you haven't configured yet:
+
+1. **Authentication:** Choose **Wrapper**, **Cookies**, or **Media User Token**. Follow the on-screen instructions to connect your Apple Music account. See [Authentication](#authentication) for details about each method.
+2. **Output directory:** Choose where your downloads will be saved. Gamdl suggests your operating system's **Music** folder; press **Enter** to accept it or enter a different path.
+
+Once setup is complete, Gamdl begins downloading and displays progress in the terminal. It saves your choices in `~/.gamdl/config.yml`, so these prompts won't appear again unless you clear the corresponding settings.
+
+You can change authentication later with `gamdl auth`, or override the download folder for one command with `--output-dir PATH`. For scripts and other non-interactive environments, configure authentication and the output directory beforehand; the setup wizards require an interactive terminal.
+
 <a name="authentication"></a>
 
 ## 🔐 Authentication
 
-Run the authentication setup wizard:
+Authentication is configured automatically during the first run if you haven't selected a method yet. To change your method later, run:
 
 ```bash
 gamdl auth
 ```
 
-On an unconfigured installation, Gamdl also offers authentication setup on first use. The wizard validates your choice and saves it to the YAML configuration.
+The wizard validates your selected method and saves it to the YAML configuration.
 
 ### Wrapper
 
@@ -255,7 +275,7 @@ Linux:   /home/<username>/.gamdl/config.yml
 macOS:   /Users/<username>/.gamdl/config.yml
 ```
 
-Find the exact location on your system, create a configuration file, or inspect the effective settings with:
+Gamdl creates a configuration file automatically on first use when needed. To find its location, create one manually, or inspect the effective settings, use:
 
 ```bash
 gamdl config path

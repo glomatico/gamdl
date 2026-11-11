@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 import tempfile
 import unittest
-from contextlib import closing
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
@@ -22,7 +20,7 @@ from gamdl.cli.commands.sync.playlists import (
 )
 from gamdl.cli.config.models import AppConfig
 from gamdl.cli.progress import RipProgress
-from gamdl.download import DownloadResult, MediaStatus
+from gamdl.download import DownloadResult, MediaDatabase, MediaStatus
 from gamdl.media.exceptions import StreamNotAvailableError
 from gamdl.sync.playlists import (
     LocalMediaIndex,
@@ -92,22 +90,15 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
         self.playlist = self.root / "Playlists/Editor/List.m3u8"
         self.playlist.parent.mkdir(parents=True)
         self.media = {}
-        with closing(sqlite3.connect(self.db)) as db, db:
-            db.execute(
-                "CREATE TABLE media_files (path TEXT, media_type TEXT, "
-                "media_id TEXT, file_size INTEGER)"
-            )
+        self.catalog = MediaDatabase(self.db, root=self.root)
+        self.catalog.initialize()
 
     def add_media(self, media_id: str, name: str, kind: str = "songs") -> Path:
         file = self.root / "Artist/Album" / name
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_bytes(b"fake-media-" + media_id.encode())
         self.media[media_id] = file
-        with closing(sqlite3.connect(self.db)) as db, db:
-            db.execute(
-                "INSERT INTO media_files VALUES (?,?,?,?)",
-                (str(file), kind, media_id, file.stat().st_size),
-            )
+        self.catalog.index_file(file, kind, media_id)
         return file
 
     def set_playlist(self, *names: str, ending="\n", bom=b"", extinf=False):

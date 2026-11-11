@@ -426,6 +426,14 @@ class MediaDatabase:
             if row is None:
                 return False
             db.execute(_table_sql(table))
+            previous_row = db.execute(
+                f"SELECT * FROM {table} WHERE file_id=?", (row["file_id"],)
+            ).fetchone()
+            if previous_row is not None and not any(
+                value is not None and previous_row[name] is None
+                for name, value in values.items()
+            ):
+                return False
             quoted = ", ".join(f'"{column}"' for column in columns)
             placeholders = ", ".join("?" for _ in columns)
             updates = ", ".join(

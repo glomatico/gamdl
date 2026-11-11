@@ -224,7 +224,7 @@ def _show_membership_changes(
 def _download_options(settings, media: Media) -> dict:
     """Use the same codec priorities and sidecars as a normal rip."""
     kwargs = {
-        "overwrite": "skip",
+        "overwrite": False,
         "tag": not settings.output.no_tag,
         "exclude_tags": settings.output.exclude_tags,
         "cover_format": settings.output.cover_format,

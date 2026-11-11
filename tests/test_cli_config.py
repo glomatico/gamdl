@@ -317,6 +317,45 @@ class CliConfigTests(unittest.TestCase):
         self.assertFalse(defaults["fail_fast"])
         self.assertFalse(defaults["no_progress"])
 
+    def test_overwrite_boolean_yaml_and_cli_precedence(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        self.assertIs(load_config(None).download.overwrite, False)
+        self.assertIs(click_default_map(load_config(None))["overwrite"], False)
+        self._write("download:\n  overwrite: true\n")
+        self.assertIs(load_config(self.path).download.overwrite, True)
+        self.assertIs(click_default_map(load_config(self.path))["overwrite"], True)
+
+        received = []
+
+        async def fake_run(options):
+            received.append(options.overwrite)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            runner = CliRunner()
+            args = ["--config", str(self.path), "rip", "URL"]
+            for extra, expected in (
+                ([], True),
+                (["--no-overwrite"], False),
+                (["--overwrite"], True),
+            ):
+                with self.subTest(args=extra):
+                    result = runner.invoke(main, [*args, *extra])
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertIs(received[-1], expected)
+            default = runner.invoke(main, ["--no-config", "rip", "URL"])
+            self.assertEqual(default.exit_code, 0, default.output)
+            self.assertIs(received[-1], False)
+
+        for invalid in ("skip", "replace", "error", "not-a-boolean", "123"):
+            with self.subTest(invalid=invalid):
+                self._write(f"download:\n  overwrite: {invalid}\n")
+                with self.assertRaisesRegex(
+                    ConfigError, "download.overwrite must be a boolean"
+                ):
+                    load_config(self.path)
+
     def test_click_cli_and_environment_precedence(self):
         self._write(
             "config_version: 1\n"

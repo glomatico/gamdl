@@ -31,7 +31,6 @@ class DatabaseStatus(str, Enum):
 class OverwritePolicy(str, Enum):
     SKIP = "skip"
     REPLACE = "replace"
-    ERROR = "error"
 
 
 class DecryptionMethod(str, Enum):

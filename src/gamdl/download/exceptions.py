@@ -26,5 +26,5 @@ class DownloadFinalizationError(GamdlError):
         self.partial_result = partial_result
         super().__init__(
             f"Media is available at {path}, but {stage} finalization failed; "
-            "retry with overwrite='skip'"
+            "retry with overwrite=False"
         )

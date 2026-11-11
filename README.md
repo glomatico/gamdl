@@ -363,7 +363,7 @@ Choose an uploaded video's asset variant when you need to override automatic qua
 
 #### Existing Files (`download.overwrite` / `--overwrite`)
 
-Choose `skip` (default), `replace`, or `error`. Songs use their configured filename directly; music videos can receive numbered suffixes (`Title 2.m4v`) to avoid filename collisions.
+Existing files are skipped by default (`download.overwrite: false`). Use the `--overwrite` flag or set `download.overwrite: true` to replace them. `--no-overwrite` overrides a YAML `true` value for one command. Songs use their configured filename directly; music videos can receive numbered suffixes (`Title 2.m4v`) to avoid filename collisions.
 
 #### Error Handling (`download.fail_fast` / `--fail-fast`)
 
@@ -436,7 +436,7 @@ Enable generation of relative-path `.m3u8` files for Apple Music playlists. It i
 
 The SQLite index is enabled by default. It tracks downloaded files with portable paths relative to `output.directory`, their codecs and their most relevant album/playlist source. Disable it with `database.disabled: true` or `--no-database`. The database defaults to `media.sqlite3` in the same `.gamdl` folder as `config.yml`, and `database.path` remains configurable. The first creation of each file is reported as `Created config at …` or `Created database at …`. Custom configuration paths are supported through `--config` or `GAMDL_CONFIG`.
 
-With the index enabled, `rip` checks existing catalog IDs **before** fetching per-track tags, playback streams, lyrics, or decryption information. For the default `--overwrite skip` policy, an indexed file that still exists within the output library can be reused directly. Existing cover/lyrics sidecars are also reused without network requests; missing sidecars can still be fetched, and playlist entries are finalized normally. Explicit codec selections, single-codec priorities without a verified matching codec, and `--overwrite replace` bypass the early skip so codec changes are not silently mistaken for existing matches. The same indexed ID information is used for local track resolution in `sync playlists`.
+With the index enabled, `rip` checks existing catalog IDs **before** fetching per-track tags, playback streams, lyrics, or decryption information. With overwrite disabled (default), an indexed file that still exists within the output library can be reused directly. Existing cover/lyrics sidecars are also reused without network requests; missing sidecars can still be fetched, and playlist entries are finalized normally. Explicit codec selections, single-codec priorities without a verified matching codec, and `--overwrite` bypass the early skip so codec changes are not silently mistaken for existing matches. The same indexed ID information is used for local track resolution in `sync playlists`.
 
 ```yaml
 database:
@@ -514,7 +514,7 @@ The API is asynchronous; use context managers to close connections. More advance
 
 **DRM initialization fails:** Verify that the relevant extra (`widevine` or `playready`) is installed, that a required device file is available, and that the stream supports the selected backend.
 
-**A download is skipped:** The default overwrite policy is `skip`. Use `--overwrite replace` if you intentionally want to replace the existing file.
+**A download is skipped:** The default is `download.overwrite: false`. Use `--overwrite` if you intentionally want to replace the existing file.
 
 **The library has unexpected paths:** Check your filename templates and use `gamdl organize --dry-run` before applying changes.
 

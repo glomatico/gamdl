@@ -78,7 +78,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         target = self.directory / "published.bin"
         target.write_bytes(b"old")
         self.assertFalse(original_publish_file(source, target, overwrite="skip"))
-        with self.assertRaises(FileExistsError):
+        with self.assertRaises(ValueError):
             original_publish_file(source, target, overwrite="error")
         self.assertTrue(original_publish_file(source, target, overwrite="replace"))
         self.assertEqual(target.read_bytes(), b"new content")
@@ -411,7 +411,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(playlist.exists())
         self.assertIsNotNone(db.get(output))
 
-    async def test_atomic_download_skip_replace_and_error(self):
+    async def test_atomic_download_skip_and_replace(self):
         downloader, tags = self.downloader()
         song = self.song()
         output = self.directory / "subdir" / "song.m4a"
@@ -422,9 +422,9 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(output.read_bytes(), b"my existing file")
         downloader._read_track.assert_not_awaited()
         tags.get_tags.assert_not_awaited()
-        with self.assertRaises(FileExistsError):
+        with self.assertRaises(TypeError):
             await downloader.download(song, output, overwrite="error")
-        result = await downloader.download(song, output, overwrite="replace")
+        result = await downloader.download(song, output, overwrite=True)
         self.assertEqual(result.status, "overwritten")
         self.assertEqual(result.codec, SongCodec.AAC)
         self.assertEqual(result.decryption_methods, ("none",))
@@ -498,7 +498,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         await downloader.download(song, codec=SongCodec.ALAC_HIRES)
         tag_resolver.get_tags.assert_awaited_once()
         tag_resolver.get_tags.reset_mock()
-        result = await downloader.download(song, overwrite="replace", codec=SongCodec.AAC)
+        result = await downloader.download(song, overwrite=True, codec=SongCodec.AAC)
         self.assertEqual(result.status.value, "overwritten")
         tag_resolver.get_tags.assert_awaited()
 
@@ -651,7 +651,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         output = self.directory / "existing.m4a"
         output.write_bytes(b"keep")
         with patch("gamdl.download.publication.os.link", side_effect=FileExistsError):
-            result = await downloader.download(song, output, overwrite="skip")
+            result = await downloader.download(song, output, overwrite=False)
         self.assertEqual(result.status, "skipped")
         self.assertEqual(output.read_bytes(), b"keep")
         self.assertEqual(list(self.directory.glob(".existing*")), [])
@@ -730,7 +730,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             await downloader.download(song, self.directory / "invalid.mp4")
         with self.assertRaises(ValueError):
             await downloader.download(video, self.directory / "invalid.m4a")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             await downloader.download(
                 song, self.directory / "valid.m4a", overwrite="rename"
             )
@@ -1058,7 +1058,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list(first.path.parent.glob("*.m4a")), [first.path])
 
         # Explicit replacement still works and never adds an ID suffix.
-        replaced = await downloader.download(song, overwrite="replace")
+        replaced = await downloader.download(song, overwrite=True)
         self.assertEqual(replaced.status, "overwritten")
         self.assertEqual(replaced.path, first.path)
         self.assertEqual(list(first.path.parent.glob("*.m4a")), [first.path])
@@ -1084,7 +1084,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await downloader.download(song)).status, "skipped")
         downloader._read_track.assert_not_awaited()
         self.assertEqual(list(expected.parent.glob("*.m4a")), [expected])
-        replaced = await downloader.download(song, overwrite="replace")
+        replaced = await downloader.download(song, overwrite=True)
         self.assertEqual(replaced.path, expected)
         self.assertEqual(replaced.status, "overwritten")
 
@@ -1216,7 +1216,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             "gamdl.download.downloader.publish_file", side_effect=competing_publish
         ):
             result = await downloader.download(
-                self.uploaded_video("555"), overwrite="replace"
+                self.uploaded_video("555"), overwrite=True
             )
         self.assertEqual(result.status, "downloaded")
         self.assertEqual(result.path.name, "Original Upload 2.m4v")

@@ -35,7 +35,7 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertTrue(publish_bytes(b"first", output, overwrite="skip"))
         self.assertFalse(publish_bytes(b"second", output, overwrite="skip"))
         self.assertEqual(output.read_bytes(), b"first")
-        with self.assertRaises(FileExistsError):
+        with self.assertRaises(ValueError):
             publish_bytes(b"third", output, overwrite="error")
         self.assertEqual(output.read_bytes(), b"first")
         self.assertTrue(publish_bytes(b"replaced", output, overwrite="replace"))
@@ -74,7 +74,7 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
             publish_bytes_result(b"ignored", lyrics, overwrite="skip"),
             FileStatus.SKIPPED,
         )
-        with self.assertRaises(FileExistsError):
+        with self.assertRaises(ValueError):
             publish_bytes_result(b"ignored", lyrics, overwrite="error")
         self.assertEqual(
             publish_bytes_result(b"[00:00.00] Updated", lyrics, overwrite="replace"),
@@ -219,7 +219,9 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertFalse(writer.add(self.directory / "a.m4a", position=0))
 
     def test_database_index_upsert_and_skip_preserves_codec(self):
-        db = MediaDatabase(self.directory / "index" / "media.sqlite3", root=self.directory)
+        db = MediaDatabase(
+            self.directory / "index" / "media.sqlite3", root=self.directory
+        )
         song = Song.from_id("1228739609", api=Mock())
         song.source = MediaSource("playlist_tracks", "playlist-01", 2)
         output = self.directory / "New Rules.m4a"

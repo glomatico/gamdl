@@ -655,7 +655,7 @@ class Downloader:
         media: Song | MusicVideo | UploadedVideo,
         destination: Path,
         *,
-        overwrite: str,
+        overwrite: OverwritePolicy,
         save_cover: bool,
         cover_format: CoverFormat,
         save_lyrics: bool,
@@ -755,7 +755,7 @@ class Downloader:
         media: Song | MusicVideo | UploadedVideo,
         result: DownloadResult,
         *,
-        overwrite: str,
+        overwrite: OverwritePolicy,
         save_cover: bool,
         cover_format: CoverFormat,
         save_lyrics: bool,
@@ -769,7 +769,7 @@ class Downloader:
         """Retryable, idempotent post-publication operations.
 
         If an operation fails, leave the finished file untouched and report
-        its path. A subsequent call with ``overwrite='skip'`` replays only
+        its path. A subsequent call with ``overwrite=False`` replays only
         the finalization work, not the expensive media download.
         """
 
@@ -906,7 +906,7 @@ class Downloader:
         media: Song | MusicVideo | UploadedVideo,
         output: str | os.PathLike[str] | None = None,
         *,
-        overwrite: OverwritePolicy | str = OverwritePolicy.SKIP,
+        overwrite: bool = False,
         codec: SongCodec | None = None,
         video_codec: MusicVideoCodec | None = None,
         codec_priority: Sequence[SongCodec | MusicVideoCodec] | None = None,
@@ -937,7 +937,7 @@ class Downloader:
         An explicit .mp4 video path opts into mp42 branding. Automatically
         generated video paths use Gamdl 3.x's numbered suffixes (Title 2.m4v)
         and reuse files whose catalog ID matches an index entry or MP4 cnID.
-        ``skip`` avoids media transfer, but still performs requested
+        ``overwrite=False`` avoids media transfer, but still performs requested
         sidecar/playlist/database finalization. Sidecars, playlist entries and
         index updates are opt-in and idempotent; ``get_bytes`` never performs them.
         Tagged catalog songs embed plain-text lyrics by default. Exclude the
@@ -949,9 +949,9 @@ class Downloader:
         cover_format = CoverFormat(cover_format)
         if video_extension not in (".m4v", ".mp4"):
             raise ValueError("video_extension must be '.m4v' or '.mp4'")
-        if overwrite not in OverwritePolicy._value2member_map_:
-            raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
-        overwrite = OverwritePolicy(overwrite)
+        if type(overwrite) is not bool:
+            raise TypeError("overwrite must be a boolean")
+        overwrite = OverwritePolicy.REPLACE if overwrite else OverwritePolicy.SKIP
         if save_lyrics and not isinstance(media, Song):
             raise ValueError("save_lyrics is supported for songs only")
         if playlist_index is not None and (
@@ -1132,25 +1132,22 @@ class Downloader:
             container = "mp4" if destination.suffix.lower() == ".mp4" else "m4v"
 
         destination_existed = await asyncio.to_thread(destination.exists)
-        if destination_existed:
-            if overwrite == "skip":
-                return await self._finalize(
-                    media,
-                    DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None),
-                    overwrite=overwrite,
-                    save_cover=save_cover,
-                    cover_format=cover_format,
-                    save_lyrics=save_lyrics,
-                    playlist_path=Path(playlist_path)
-                    if playlist_path is not None
-                    else None,
-                    playlist_tags=playlist_tags,
-                    playlist_index=playlist_index,
-                    resolved_tags=resolved_tags,
-                    event_callback=event_callback,
-                )
-            if overwrite == "error":
-                raise FileExistsError(destination)
+        if destination_existed and overwrite == OverwritePolicy.SKIP:
+            return await self._finalize(
+                media,
+                DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None),
+                overwrite=overwrite,
+                save_cover=save_cover,
+                cover_format=cover_format,
+                save_lyrics=save_lyrics,
+                playlist_path=Path(playlist_path)
+                if playlist_path is not None
+                else None,
+                playlist_tags=playlist_tags,
+                playlist_index=playlist_index,
+                resolved_tags=resolved_tags,
+                event_callback=event_callback,
+            )
 
         # System temporary directories may be RAM-backed (e.g. /tmp on Arch).
         # Default to the destination filesystem for bounded-RAM staging and
@@ -1180,11 +1177,11 @@ class Downloader:
                 selected_song_stream=selected_song_stream,
             )
             # A newly created generated video slot must never be replaced
-            # even when the user requested overwrite='replace'.
+            # even when the user requested overwrite=True.
             publish_policy = (
-                "skip"
+                OverwritePolicy.SKIP
                 if generated_video_path is not None
-                and overwrite == "replace"
+                and overwrite == OverwritePolicy.REPLACE
                 and not destination_existed
                 else overwrite
             )
@@ -1198,7 +1195,7 @@ class Downloader:
             if (
                 not published
                 and generated_video_path is not None
-                and publish_policy == "skip"
+                and publish_policy == OverwritePolicy.SKIP
             ):
                 # A different ID may have claimed the filename; retry with
                 # the same staged media without re-downloading or re-muxing.
@@ -1219,7 +1216,7 @@ class Downloader:
                             publish_file,
                             prepared.path,
                             destination,
-                            overwrite="skip",
+                            overwrite=OverwritePolicy.SKIP,
                         )
                     if published:
                         break

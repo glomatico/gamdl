@@ -28,7 +28,7 @@ class AuthConfig:
 
 @dataclass(frozen=True)
 class DownloadConfig:
-    overwrite: str = "skip"
+    overwrite: bool = False
     segment_concurrency: int = 8
     concurrent_downloads: int = 2
     song_codec: str | None = None

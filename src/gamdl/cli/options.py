@@ -65,8 +65,12 @@ class RipOptions:
         option("--temp-path", help="Working directory for disk-backed downloads"),
     ] = None
     overwrite: Annotated[
-        str, option("--overwrite", type=click.Choice(["skip", "replace", "error"]))
-    ] = "skip"
+        bool,
+        option(
+            "--overwrite/--no-overwrite",
+            help="Replace existing files instead of skipping them",
+        ),
+    ] = False
     segment_concurrency: Annotated[
         int,
         option(

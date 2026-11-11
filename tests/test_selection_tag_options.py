@@ -24,13 +24,13 @@ class SelectionOptionsTests(unittest.TestCase):
                 "download:\n"
                 "  rip_auto_select: [artist-main-albums]\n"
                 "  segment_concurrency: 5\n"
-                "  overwrite: replace\n"
+                "  overwrite: true\n"
                 "  removed_setting: true\n"
             )
             path.write_text(original)
             config = load_config(path)
             self.assertEqual(config.download.segment_concurrency, 5)
-            self.assertEqual(config.download.overwrite, "replace")
+            self.assertIs(config.download.overwrite, True)
             self.assertEqual((path.parent / "config.yaml.bak").read_text(), original)
             updated = yaml.safe_load(path.read_text())
             self.assertNotIn("rip_auto_select", updated["download"])
@@ -47,7 +47,7 @@ class SelectionOptionsTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.yaml"
-            original = "download:\n  rip_auto_select: []\n  overwrite: invalid\n"
+            original = "download:\n  rip_auto_select: []\n  overwrite: replace\n"
             path.write_text(original)
             with self.assertRaises(ConfigError):
                 load_config(path)

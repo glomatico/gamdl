@@ -140,8 +140,6 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         or not auth.storefront.isalpha()
     ):
         raise ConfigError("auth.storefront must be a two-letter country code")
-    if download.overwrite not in {"skip", "replace", "error"}:
-        raise ConfigError("download.overwrite must be skip, replace, or error")
     if output.cover_format not in {item.value for item in CoverFormat}:
         raise ConfigError("output.cover_format must be jpg or png")
     if output.music_video_container not in {"m4v", "mp4"}:

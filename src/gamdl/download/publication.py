@@ -18,18 +18,15 @@ def publish_bytes_result(
 ) -> FileStatus:
     """Publish on the same filesystem; return False if another writer won.
 
-    ``skip`` and ``error`` never overwrite existing files, even if another
+    ``skip`` never overwrites existing files, even if another
     process creates a destination after the caller's initial existence check.
     Temporary files are removed after all successes, errors and cancellations.
     """
     if overwrite not in OverwritePolicy._value2member_map_:
-        raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
+        raise ValueError("overwrite must be 'skip' or 'replace'")
     overwrite = OverwritePolicy(overwrite)
-    if destination.exists():
-        if overwrite == OverwritePolicy.SKIP:
-            return FileStatus.SKIPPED
-        if overwrite == OverwritePolicy.ERROR:
-            raise FileExistsError(destination)
+    if destination.exists() and overwrite == OverwritePolicy.SKIP:
+        return FileStatus.SKIPPED
     destination.parent.mkdir(parents=True, exist_ok=True)
     staged: Path | None = None
     try:
@@ -53,8 +50,6 @@ def publish_bytes_result(
             try:
                 os.link(staged, destination)
             except FileExistsError:
-                if overwrite == OverwritePolicy.ERROR:
-                    raise
                 return FileStatus.SKIPPED
             return FileStatus.CREATED
     finally:
@@ -78,13 +73,10 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
     source intact so filename-collision retries can reuse it.
     """
     if overwrite not in OverwritePolicy._value2member_map_:
-        raise ValueError("overwrite must be 'skip', 'replace', or 'error'")
+        raise ValueError("overwrite must be 'skip' or 'replace'")
     overwrite = OverwritePolicy(overwrite)
-    if destination.exists():
-        if overwrite == OverwritePolicy.SKIP:
-            return False
-        if overwrite == OverwritePolicy.ERROR:
-            raise FileExistsError(destination)
+    if destination.exists() and overwrite == OverwritePolicy.SKIP:
+        return False
     destination.parent.mkdir(parents=True, exist_ok=True)
     if overwrite == OverwritePolicy.REPLACE:
         # A private directory gives os.link() a collision-free destination.
@@ -112,8 +104,6 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
         try:
             os.link(source, destination)
         except FileExistsError:
-            if overwrite == OverwritePolicy.ERROR:
-                raise
             return False
         except OSError as exc:
             if exc.errno not in {
@@ -144,8 +134,6 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
         try:
             os.link(staged, destination)
         except FileExistsError:
-            if overwrite == OverwritePolicy.ERROR:
-                raise
             return False
         return True
     finally:

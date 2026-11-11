@@ -14,7 +14,6 @@ from gamdl.download import (
     FileStatus,
     MediaDatabase,
     MediaStatus,
-    OverwritePolicy,
     PathFormatter,
     PlaylistStatus,
     PlaylistTags,
@@ -126,7 +125,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
             save_lyrics=True,
             save_playlist=True,
             playlist_tags=playlist,
-            overwrite=OverwritePolicy.REPLACE,
+            overwrite=True,
         )
         self.assertEqual(overwritten.status, MediaStatus.OVERWRITTEN)
         self.assertEqual(overwritten.cover.status, FileStatus.OVERWRITTEN)
@@ -205,7 +204,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         )
 
         outcome = await downloader.download(
-            song, filename, overwrite="skip", save_cover=True, save_lyrics=True
+            song, filename, overwrite=False, save_cover=True, save_lyrics=True
         )
         self.assertEqual(outcome.status, MediaStatus.SKIPPED)
         self.assertEqual(outcome.cover.status, FileStatus.CREATED)

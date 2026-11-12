@@ -1,6 +1,6 @@
 [package]
 name = "gamdl-native"
-version = "4.0.0-alpha.0"
+version = "4.0.0"
 edition = "2024"
 license = "MIT"
 description = "Native MP4 processing for Gamdl"

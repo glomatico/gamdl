@@ -22,22 +22,51 @@ from tests.test_muxer import description_fixture, packet_hashes
 
 def packets(path):
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_packets",
-         "-show_entries", "packet=pos,size,pts,duration", "-of", "json", str(path)],
-        capture_output=True, check=True, text=True,
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_packets",
+            "-show_entries",
+            "packet=pos,size,pts,duration",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
     )
-    return [{k: int(v) for k, v in p.items()} for p in json.loads(result.stdout)["packets"]]
+    return [
+        {k: int(v) for k, v in p.items()} for p in json.loads(result.stdout)["packets"]
+    ]
 
 
 def decode(path):
     return subprocess.run(
-        ["ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", str(path),
-         "-map", "0:a:0", "-f", "s32le", "-"],
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-xerror",
+            "-i",
+            str(path),
+            "-map",
+            "0:a:0",
+            "-f",
+            "s32le",
+            "-",
+        ],
         capture_output=True,
     )
 
 
-@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "Requires FFmpeg")
+@unittest.skipUnless(
+    shutil.which("ffmpeg") and shutil.which("ffprobe"), "Requires FFmpeg"
+)
 class AlacRepairTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -52,19 +81,47 @@ class AlacRepairTests(unittest.TestCase):
         for index in range(8192 + 19):
             for channel in range(channels):
                 limit = 1 << (depth - 1)
-                value = (rng.randrange(-limit, limit) if noise else
-                         int(math.sin(index * (channel + 1) * 0.031) * limit * 0.7))
+                value = (
+                    rng.randrange(-limit, limit)
+                    if noise
+                    else int(math.sin(index * (channel + 1) * 0.031) * limit * 0.7)
+                )
                 if silence:
                     value = 0
-                pcm.extend(struct.pack("<h" if depth == 16 else "<i",
-                                       value if depth == 16 else value << 8))
+                pcm.extend(
+                    struct.pack(
+                        "<h" if depth == 16 else "<i",
+                        value if depth == 16 else value << 8,
+                    )
+                )
         subprocess.run(
-            ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f",
-             "s16le" if depth == 16 else "s32le", "-ar", "44100" if depth == 16 else "96000",
-             "-ac", str(channels), "-i", "pipe:0", "-c:a", "alac",
-             "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
-             "-frag_duration", "10000", "-f", "mp4", str(path)],
-            input=pcm, capture_output=True, check=True,
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "s16le" if depth == 16 else "s32le",
+                "-ar",
+                "44100" if depth == 16 else "96000",
+                "-ac",
+                str(channels),
+                "-i",
+                "pipe:0",
+                "-c:a",
+                "alac",
+                "-movflags",
+                "+frag_keyframe+empty_moov+default_base_moof",
+                "-frag_duration",
+                "10000",
+                "-f",
+                "mp4",
+                str(path),
+            ],
+            input=pcm,
+            capture_output=True,
+            check=True,
         )
         return path
 
@@ -73,15 +130,17 @@ class AlacRepairTests(unittest.TestCase):
         for index, p in enumerate(packets(source)):
             if index not in indices:
                 continue
-            packet = data[p["pos"]:p["pos"] + p["size"]]
+            packet = data[p["pos"] : p["pos"] + p["size"]]
             # FFmpeg's encoder emits END followed only by byte-align zeros.
             # Locate that independent encoder output, not Gamdl's scanner.
             last_one = len(packet) * 8 - 1
             while not packet[last_one // 8] & (1 << (7 - last_one % 8)):
                 last_one -= 1
             end = last_one - 2
-            self.assertEqual([(packet[b // 8] >> (7 - b % 8)) & 1
-                              for b in range(end, end + 3)], [1, 1, 1])
+            self.assertEqual(
+                [(packet[b // 8] >> (7 - b % 8)) & 1 for b in range(end, end + 3)],
+                [1, 1, 1],
+            )
             for n in range(3):
                 bit = end + n
                 byte = p["pos"] + bit // 8
@@ -93,10 +152,15 @@ class AlacRepairTests(unittest.TestCase):
 
     def test_repairs_escape_and_compressed_frames_without_reencoding(self):
         for depth, channels, noise, silence in (
-            (16, 2, True, False), (16, 2, False, False),
-            (16, 1, False, True), (24, 2, False, False), (24, 6, False, False),
+            (16, 2, True, False),
+            (16, 2, False, False),
+            (16, 1, False, True),
+            (24, 2, False, False),
+            (24, 6, False, False),
         ):
-            with self.subTest(depth=depth, channels=channels, noise=noise, silence=silence):
+            with self.subTest(
+                depth=depth, channels=channels, noise=noise, silence=silence
+            ):
                 healthy = self.fixture(depth, channels, noise, silence)
                 expected = packet_hashes(healthy)
                 good_pcm = decode(healthy)
@@ -113,8 +177,10 @@ class AlacRepairTests(unittest.TestCase):
                 Muxer().remux_file(malformed, disk)
                 self.assertEqual(memory.read_bytes(), disk.read_bytes())
                 self.assertEqual(packet_hashes(disk), expected)
-                self.assertEqual([(p["size"], p["pts"], p["duration"]) for p in packets(disk)],
-                                 [(p["size"], p["pts"], p["duration"]) for p in packets(healthy)])
+                self.assertEqual(
+                    [(p["size"], p["pts"], p["duration"]) for p in packets(disk)],
+                    [(p["size"], p["pts"], p["duration"]) for p in packets(healthy)],
+                )
                 Muxer().tag(disk, tags=Tags(title="Repaired synthetic ALAC"))
                 self.assertEqual(packet_hashes(disk), expected)
                 repaired_pcm = decode(disk)
@@ -144,8 +210,10 @@ class AlacRepairTests(unittest.TestCase):
         p = packets(malformed)[1]
         # Declare more PCM than this packet contains; do not touch MP4 tables.
         data[p["pos"] + 2] |= 0x10
-        data[p["pos"] + 3:p["pos"] + 7] = b"\xff" * 4
-        self.assertEqual(Muxer().remux(bytes(data)), Muxer(repair_alac=False).remux(bytes(data)))
+        data[p["pos"] + 3 : p["pos"] + 7] = b"\xff" * 4
+        self.assertEqual(
+            Muxer().remux(bytes(data)), Muxer(repair_alac=False).remux(bytes(data))
+        )
 
     def test_default_downloader_repairs_before_tagging_for_both_apis(self):
         healthy = self.fixture(16, 2, True)
@@ -155,11 +223,15 @@ class AlacRepairTests(unittest.TestCase):
 
         async def run():
             song = Song.from_id("111", api=Mock())
-            song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.ALAC_LOSSLESS))
+            song.get_stream = AsyncMock(
+                return_value=Mock(codec=SongCodec.ALAC_LOSSLESS)
+            )
             song.get_cover = AsyncMock(return_value=None)
             song.get_lyrics = AsyncMock(return_value=None)
             resolver = Mock()
-            resolver.get_tags = AsyncMock(return_value=Tags(title="ALAC repair fixture"))
+            resolver.get_tags = AsyncMock(
+                return_value=Tags(title="ALAC repair fixture")
+            )
             downloader = Downloader(tag_resolver=resolver)
             downloader._read_track = AsyncMock(return_value=(original, "none"))
 
@@ -169,7 +241,9 @@ class AlacRepairTests(unittest.TestCase):
 
             downloader._save_track = AsyncMock(side_effect=save)
             memory = self.directory / "download-bytes.m4a"
-            memory.write_bytes(await downloader.get_bytes(song, codec=SongCodec.ALAC_LOSSLESS))
+            memory.write_bytes(
+                await downloader.get_bytes(song, codec=SongCodec.ALAC_LOSSLESS)
+            )
             disk = self.directory / "download-file.m4a"
             await downloader.download(song, disk, codec=SongCodec.ALAC_LOSSLESS)
             for path in (memory, disk):
@@ -185,11 +259,27 @@ class AlacRepairTests(unittest.TestCase):
             with self.subTest(codec=codec):
                 source = self.directory / f"{codec}.fmp4"
                 subprocess.run(
-                    ["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i",
-                     "sine=sample_rate=48000:duration=0.3", "-c:a", codec,
-                     "-movflags", "+frag_keyframe+delay_moov+default_base_moof",
-                     "-frag_duration", "100000", "-f", "mp4", str(source)],
-                    capture_output=True, check=True,
+                    [
+                        "ffmpeg",
+                        "-nostdin",
+                        "-v",
+                        "error",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "sine=sample_rate=48000:duration=0.3",
+                        "-c:a",
+                        codec,
+                        "-movflags",
+                        "+frag_keyframe+delay_moov+default_base_moof",
+                        "-frag_duration",
+                        "100000",
+                        "-f",
+                        "mp4",
+                        str(source),
+                    ],
+                    capture_output=True,
+                    check=True,
                 )
                 data = source.read_bytes()
                 expected = Muxer(repair_alac=False).remux(data)

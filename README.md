@@ -16,7 +16,6 @@
 - [📦 Installation](#installation)
 - [🚀 First Run](#first-run)
 - [🚀 Usage](#usage)
-  - [Authentication (`auth`)](#authentication)
 - [⚙️ Configuration](#configuration)
 - [🏷️ Tags and Path Templates](#tags-and-templates)
 - [🔄 Migrating from Gamdl 3.x](#migration)

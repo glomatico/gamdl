@@ -119,6 +119,18 @@ gamdl rip "<artist URL>" --artist-auto-select main-albums,music-videos
 
 Add `--select` to choose album or playlist tracks interactively instead of using the default automatic selection.
 
+### ISRC Input
+
+Download a song or music video using its 12-character International Standard Recording Code (ISRC) without looking up an Apple Music sharing URL:
+
+```bash
+gamdl rip isrc:USUM71703085
+```
+
+`isrc:` queries both the song and music-video catalogs using Apple's `filter[isrc]` API. An ISRC can identify multiple catalog entries; if the lookup returns more than one match, Gamdl opens its existing selection interface so you can choose which to download. A single match is downloaded directly. Multiple matches require an interactive terminal.
+
+The lookup uses the current authenticated storefront. Apple's response may reference alternate releases in `meta.filters.isrc`; for now Gamdl resolves only the returned `data` matches, not every alternate release ID. Empty results mean no matching resource was returned in that storefront.
+
 ### Browse Your Library (`library`)
 
 Browse your saved albums, playlists, songs, and music videos:

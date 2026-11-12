@@ -1,7 +1,7 @@
 [project]
 name = "gamdl"
 version = "4.0.0a0"
-description = "Gamdl — an Apple Music command-line toolkit."
+description = "A command-line app for downloading Apple Music songs, albums, playlists, music videos, and uploaded videos."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

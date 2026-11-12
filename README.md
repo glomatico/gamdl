@@ -741,6 +741,14 @@ cargo test --manifest-path native/Cargo.toml
 
 Some media-related tests also require FFmpeg and FFprobe.
 
+### Releasing to PyPI
+
+The [publishing workflow](.github/workflows/python-publish.yml) builds a source distribution and precompiled ABI3 wheels for Linux (x86_64/ARM64), Windows (x86_64/ARM64), and macOS (universal2). Every wheel is installed and smoke-tested, and the full artifact set is checked before publication.
+
+Run **Publish Python Package** manually from GitHub Actions to build and inspect artifacts **without publishing**. Publishing occurs only when a GitHub Release is published with a tag matching `pyproject.toml` (for example, `v4.0.0`). The workflow must be present on the repository's default branch for the release trigger to work.
+
+PyPI [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) must be configured for repository `glomatico/gamdl`, workflow `python-publish.yml`, and GitHub environment `pypi`. No long-lived PyPI token is needed. Configure GitHub environment protection rules as desired before publishing a release.
+
 <a name="license"></a>
 
 ## 📄 License

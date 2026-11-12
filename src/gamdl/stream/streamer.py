@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Callable
 from os import PathLike
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Literal, Self
+from typing import Literal
 
 from gamdl import _native
 from gamdl.api.wrapper import WrapperApi
@@ -174,7 +174,7 @@ class Streamer(AsyncIterator[bytes]):
         self._decryption_method: str | None = None
         self._used = False
 
-    async def __aenter__(self) -> Self:
+    async def __aenter__(self) -> Streamer:
         if self._used:
             raise RuntimeError("A Streamer instance cannot be reopened")
         self._used = True

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Self
+from typing import Any
 
 import httpx
 
@@ -39,7 +39,7 @@ class ItunesApi:
         self.storefront_id = storefront_id
         self.language = language
 
-    async def __aenter__(self) -> Self:
+    async def __aenter__(self) -> ItunesApi:
         return self
 
     async def __aexit__(self, *_exc: object) -> None:

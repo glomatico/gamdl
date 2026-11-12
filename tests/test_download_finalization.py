@@ -84,6 +84,60 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertEqual(media.read_bytes(), b"already downloaded")
         self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 
+    def test_sidecar_publication_without_hardlinks(self):
+        """Mac external volumes can reject os.link with ENOTSUP (errno 45)."""
+        destination = self.directory / "song.lrc"
+        with patch(
+            "gamdl.download.publication.os.link",
+            side_effect=OSError(errno.ENOTSUP, "Operation not supported"),
+        ):
+            self.assertEqual(
+                publish_bytes_result(b"lyrics", destination, overwrite="skip"),
+                FileStatus.CREATED,
+            )
+        self.assertEqual(destination.read_bytes(), b"lyrics")
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
+
+    def test_file_publication_without_hardlinks_or_exclusive_rename(self):
+        """Last-resort exclusive copy must not replace existing media."""
+        source = self.directory / "completed.bin"
+        source.write_bytes(b"finished download")
+        destination = self.directory / "song.m4a"
+        with (
+            patch(
+                "gamdl.download.publication.os.link",
+                side_effect=OSError(errno.ENOTSUP, "Operation not supported"),
+            ),
+            patch("gamdl.download.publication._rename_noreplace", return_value=None),
+        ):
+            self.assertTrue(publish_file(source, destination, overwrite="skip"))
+            self.assertFalse(publish_file(source, destination, overwrite="skip"))
+        self.assertEqual(destination.read_bytes(), b"finished download")
+        self.assertEqual(source.read_bytes(), b"finished download")
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
+
+    def test_exclusive_copy_failure_removes_incomplete_publication(self):
+        destination = self.directory / "song.m4a"
+
+        def fail_copy(source, output, *, length):
+            output.write(b"partial")
+            raise OSError("Copy interrupted")
+
+        with (
+            patch(
+                "gamdl.download.publication.os.link",
+                side_effect=OSError(errno.ENOTSUP, "Operation not supported"),
+            ),
+            patch("gamdl.download.publication._rename_noreplace", return_value=None),
+            patch(
+                "gamdl.download.publication.shutil.copyfileobj", side_effect=fail_copy
+            ),
+            self.assertRaisesRegex(OSError, "Copy interrupted"),
+        ):
+            publish_bytes_result(b"complete file", destination, overwrite="skip")
+        self.assertFalse(destination.exists())
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
+
     def test_maximum_length_media_publication_replace_and_cross_device(self):
         """Both media publication branches must work with NAME_MAX filenames."""
         source = self.directory / "staged.bin"

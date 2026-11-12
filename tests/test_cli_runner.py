@@ -1045,6 +1045,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         itunes = AsyncMock()
         itunes.__aenter__.return_value = itunes
         downloader = Mock(itunes_api=None)
+        downloader.tag_resolver.itunes_api = None
         downloader.download = AsyncMock(
             return_value=DownloadResult(
                 video.id, Path("Rhythm Nation.m4v"), MediaStatus.SKIPPED, 0, None
@@ -1084,6 +1085,7 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 0)
         create_itunes.assert_awaited_once_with(storefront="br", language="en-US")
         self.assertIs(downloader.itunes_api, itunes)
+        self.assertIs(downloader.tag_resolver.itunes_api, itunes)
         kwargs = downloader.download.await_args.kwargs
         self.assertNotIn("codec", kwargs)
         self.assertEqual(kwargs["video_extension"], ".m4v")

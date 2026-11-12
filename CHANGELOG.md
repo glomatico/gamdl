@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fix a full-screen authentication wizard crash when switching from the last menu choice to a token or credential prompt.
+- Restore music-video iTunes tag fallback by passing the lazily initialized iTunes API to the downloader's tag resolver.
+- Allow song and sidecar publication on filesystems that do not support hard links, including macOS external drives. Preserve no-overwrite behavior and use exclusive atomic rename when supported.
+
 ## 4.0.0
 
 Gamdl 4.0 is a major redesign of the CLI, Python API, download engine, configuration, and local-library tooling. It retains core capabilities from 3.9.1—including song, album, playlist, artist, music-video, uploaded-video, and Apple Music Classical downloads; multiple audio/video codecs; metadata; and synchronized lyrics—while substantially changing how they are resolved, downloaded, and managed.

@@ -58,6 +58,17 @@ class FullScreenWizard:
         self.buffer = Buffer(multiline=False)
         keys = KeyBindings()
 
+        def body_cursor_position() -> Point:
+            # The cursor must always refer to a rendered line. In particular,
+            # choosing the last authentication method leaves `self.cursor` at
+            # 2, but the next entry/busy screen has only one content row.
+            return Point(
+                0,
+                3
+                + (1 if self.description else 0)
+                + (self.cursor if self.stage == "choice" else 0),
+            )
+
         def body() -> FormattedText:
             fragments = heading(self.title)
             if self.description:
@@ -85,9 +96,7 @@ class FullScreenWizard:
             FormattedTextControl(
                 body,
                 focusable=True,
-                get_cursor_position=lambda: Point(
-                    0, 3 + (1 if self.description else 0) + self.cursor
-                ),
+                get_cursor_position=body_cursor_position,
             ),
             height=Dimension(min=5, preferred=12, max=18),
             always_hide_cursor=True,

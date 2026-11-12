@@ -681,6 +681,13 @@ async def run_rip(options: RipOptions) -> int:
                                                     )
                                                 )
                                             )
+                                            # Downloader constructs its resolver
+                                            # before the first video is discovered.
+                                            # Update both consumers when the lazy
+                                            # iTunes client becomes available.
+                                            downloader.tag_resolver.itunes_api = (
+                                                downloader.itunes_api
+                                            )
                                         except GamdlApiError:
                                             pass
                                     check_stopped()

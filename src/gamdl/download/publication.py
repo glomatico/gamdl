@@ -2,15 +2,94 @@
 
 from __future__ import annotations
 
+import ctypes
 import errno
 import os
 import shutil
+import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from .enums import FileStatus, OverwritePolicy
 
 Overwrite = OverwritePolicy | str
+
+_NO_HARDLINK = {
+    errno.EXDEV,
+    errno.EPERM,
+    errno.EOPNOTSUPP,
+    errno.ENOTSUP,
+    errno.ENOSYS,
+}
+
+
+def _rename_noreplace(source: Path, destination: Path) -> bool | None:
+    """Atomically rename without replacement, if the platform supports it.
+
+    None means the filesystem/kernel cannot provide this operation. Unlike
+    os.rename(), neither renameat2 nor renamex_np overwrites an existing file.
+    """
+    if sys.platform not in {"linux", "darwin"}:
+        return None
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        if sys.platform == "darwin":
+            rename = libc.renamex_np
+            rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+            arguments = (os.fsencode(source), os.fsencode(destination), 0x4)
+        else:
+            rename = libc.renameat2
+            rename.argtypes = [
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_uint,
+            ]
+            arguments = (-100, os.fsencode(source), -100, os.fsencode(destination), 1)
+    except AttributeError:
+        return None
+    rename.restype = ctypes.c_int
+    if rename(*arguments) == 0:
+        return True
+    code = ctypes.get_errno()
+    if code in {errno.EEXIST, errno.ENOTEMPTY}:
+        return False
+    if code in _NO_HARDLINK | {errno.EINVAL}:
+        return None
+    raise OSError(code, os.strerror(code), os.fspath(destination))
+
+
+def _publish_noreplace(staged: Path, destination: Path) -> bool:
+    """Publish a complete staged file without replacing an existing target."""
+    try:
+        os.link(staged, destination)
+    except FileExistsError:
+        return False
+    except OSError as exc:
+        if exc.errno not in _NO_HARDLINK:
+            raise
+    else:
+        return True
+
+    renamed = _rename_noreplace(staged, destination)
+    if renamed is not None:
+        return renamed
+
+    # Last resort for filesystems without hard links *or* exclusive rename:
+    # O_EXCL prevents clobbering another writer, even though the completed
+    # file cannot be made visible atomically on such a filesystem.
+    try:
+        output = destination.open("xb")
+    except FileExistsError:
+        return False
+    try:
+        with output, staged.open("rb") as stream:
+            shutil.copyfileobj(stream, output, length=1024 * 1024)
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        raise
+    return True
 
 
 def publish_bytes_result(
@@ -47,11 +126,11 @@ def publish_bytes_result(
             staged.replace(destination)
             return FileStatus.OVERWRITTEN if existed else FileStatus.CREATED
         else:
-            try:
-                os.link(staged, destination)
-            except FileExistsError:
-                return FileStatus.SKIPPED
-            return FileStatus.CREATED
+            return (
+                FileStatus.CREATED
+                if _publish_noreplace(staged, destination)
+                else FileStatus.SKIPPED
+            )
     finally:
         if staged is not None:
             staged.unlink(missing_ok=True)
@@ -87,12 +166,7 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
             try:
                 os.link(source, staged)
             except OSError as exc:
-                if exc.errno not in {
-                    errno.EXDEV,
-                    errno.EPERM,
-                    errno.EOPNOTSUPP,
-                    errno.ENOTSUP,
-                }:
+                if exc.errno not in _NO_HARDLINK:
                     raise
                 with source.open("rb") as stream, staged.open("xb") as output:
                     shutil.copyfileobj(stream, output, length=1024 * 1024)
@@ -106,12 +180,7 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
         except FileExistsError:
             return False
         except OSError as exc:
-            if exc.errno not in {
-                errno.EXDEV,
-                errno.EPERM,
-                errno.EOPNOTSUPP,
-                errno.ENOTSUP,
-            }:
+            if exc.errno not in _NO_HARDLINK:
                 raise
         else:
             return True
@@ -128,14 +197,7 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
             staged = Path(output.name)
             with source.open("rb") as stream:
                 shutil.copyfileobj(stream, output, length=1024 * 1024)
-        if overwrite == OverwritePolicy.REPLACE:
-            staged.replace(destination)
-            return True
-        try:
-            os.link(staged, destination)
-        except FileExistsError:
-            return False
-        return True
+        return _publish_noreplace(staged, destination)
     finally:
         if staged is not None:
             staged.unlink(missing_ok=True)

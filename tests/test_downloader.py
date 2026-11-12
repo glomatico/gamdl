@@ -434,7 +434,9 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(brands(output)[0], b"M4A ")
         self.assertEqual(list(output.parent.glob(".*.part")), [])
 
-    async def test_database_early_skip_avoids_all_media_and_existing_sidecar_requests(self):
+    async def test_database_early_skip_avoids_all_media_and_existing_sidecar_requests(
+        self,
+    ):
         downloader, tag_resolver = self.downloader()
         output_root = self.directory / "library"
         media_path = output_root / "Sample Artist/Unknown Album/Sample Track.m4a"
@@ -447,8 +449,12 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         downloader.database = db
         downloader.path_formatter = PathFormatter(output_root)
         song = self.song()
-        song.is_uploaded = AsyncMock(side_effect=AssertionError("Unnecessary API lookup"))
-        song.get_lyrics = AsyncMock(side_effect=AssertionError("Unnecessary lyrics API"))
+        song.is_uploaded = AsyncMock(
+            side_effect=AssertionError("Unnecessary API lookup")
+        )
+        song.get_lyrics = AsyncMock(
+            side_effect=AssertionError("Unnecessary lyrics API")
+        )
         song.get_cover = AsyncMock(side_effect=AssertionError("Unnecessary cover API"))
         playlist = output_root / "Playlists/example.m3u8"
         result = await downloader.download(

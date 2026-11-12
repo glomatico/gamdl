@@ -116,6 +116,7 @@ def sample_tables(data: bytes) -> list[dict[bytes, bytes]]:
 
 def description_fixture(data: bytes, distinct: bool = False) -> bytes:
     """Model HLS key rotation: three entries, trex default and tfhd switches."""
+
     def word(value):
         return value.to_bytes(4, "big")
 
@@ -130,7 +131,8 @@ def description_fixture(data: bytes, distinct: bool = False) -> bytes:
             entries = [
                 box(
                     codec,
-                    entry + (extra if distinct and i == 1 else b"")
+                    entry
+                    + (extra if distinct and i == 1 else b"")
                     + box(b"free", b"retired-key-" + bytes([i])),
                 )
                 for i in range(3)
@@ -147,7 +149,14 @@ def description_fixture(data: bytes, distinct: bool = False) -> bytes:
             offset = int.from_bytes(body[8:12], "big", signed=True)
             body = body[:8] + (offset + 4).to_bytes(4, "big", signed=True) + body[12:]
         elif kind in (
-            b"moov", b"trak", b"mdia", b"minf", b"stbl", b"mvex", b"moof", b"traf"
+            b"moov",
+            b"trak",
+            b"mdia",
+            b"minf",
+            b"stbl",
+            b"mvex",
+            b"moof",
+            b"traf",
         ):
             body = b"".join(rewrite(k, b, description) for k, b in atoms(body))
         return box(kind, body)
@@ -309,9 +318,7 @@ class NativeAvMuxTests(unittest.TestCase):
         output = self.mux()
         self.assertEqual(track_flags(output.read_bytes()), [7, 7])
         disk_output = self.directory / "movie-flags.m4v"
-        Muxer().mux_file(
-            video=self.video, audio=self.audio, destination=disk_output
-        )
+        Muxer().mux_file(video=self.video, audio=self.audio, destination=disk_output)
         self.assertEqual(disk_output.read_bytes(), output.read_bytes())
         for kind, source in (("v", self.video), ("a", self.audio)):
             self.assertEqual(track_hashes(source, kind), track_hashes(output, kind))
@@ -769,7 +776,7 @@ class NativeMp4RemuxTests(unittest.TestCase):
                     )
                     self.assertNotIn(b"retired-key-", table[b"stsd"])
                     references = [
-                        int.from_bytes(table[b"stsc"][at:at + 4], "big")
+                        int.from_bytes(table[b"stsc"][at : at + 4], "big")
                         for at in range(16, len(table[b"stsc"]), 12)
                     ]
                     self.assertEqual(references, [1, 2, 1] if distinct else [1])

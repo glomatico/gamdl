@@ -648,7 +648,9 @@ class Downloader:
                 await _complete_write(
                     self.muxer.tag, prepared_path, tags=tags, cover_bytes=artwork
                 )
-        return _PreparedFile(prepared_path, selected_codec, methods, artwork, catalog_tags)
+        return _PreparedFile(
+            prepared_path, selected_codec, methods, artwork, catalog_tags
+        )
 
     async def _save_sidecars(
         self,

@@ -43,6 +43,7 @@ class SelectionKind(str, Enum):
 
     ALBUM_TRACKS = "album_tracks"
     PLAYLIST_TRACKS = "playlist_tracks"
+    ISRC = "isrc"
     ARTIST = "artist"
     LIBRARY = "library"
     LIBRARY_PLAYLISTS = "library-playlists"

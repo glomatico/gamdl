@@ -11,6 +11,29 @@ from gamdl.pagination import MediaPage
 class CatalogEndpoints:
     """Catalog reads, including playlist, album and artist relationships."""
 
+    async def _get_by_isrc(self, isrc: str, media_type: str) -> dict[str, Any]:
+        """Look up catalog songs or music videos by ISRC.
+
+        Apple's API has separate endpoints for each resource type. The
+        response may also list alternate releases in `meta.filters.isrc`;
+        `data` contains the resource(s) actually returned by the lookup.
+        """
+        if media_type not in {"songs", "music-videos"}:
+            raise ValueError("ISRC lookup supports songs and music-videos only")
+        return await self._get(
+            f"/v1/catalog/{self.storefront}/{media_type}",
+            operation="get_by_isrc",
+            params={"filter[isrc]": isrc, "l": self.language},
+        )
+
+    async def get_songs_by_isrc(self, isrc: str) -> dict[str, Any]:
+        """Fetch catalog song matches for an International Standard Recording Code."""
+        return await self._get_by_isrc(isrc, "songs")
+
+    async def get_music_videos_by_isrc(self, isrc: str) -> dict[str, Any]:
+        """Fetch catalog music-video matches for an ISRC."""
+        return await self._get_by_isrc(isrc, "music-videos")
+
     async def get_song(
         self,
         song_id: str,

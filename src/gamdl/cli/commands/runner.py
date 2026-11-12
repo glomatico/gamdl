@@ -196,7 +196,7 @@ async def run_rip(options: RipOptions) -> int:
     """Process discovered tracks concurrently, returning a stable CLI exit code."""
     _check_options(options)
     if not options.urls:
-        raise click.UsageError("Provide at least one Apple Music URL")
+        raise click.UsageError("Provide at least one Apple Music URL or ISRC input")
     artist_values = [
         v.strip() for group in options.artist_auto_select for v in group.split(",")
     ]

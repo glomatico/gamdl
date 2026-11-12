@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from typing import TYPE_CHECKING
 
@@ -12,7 +14,12 @@ from .base import Media, MediaSource
 from .constants import ARTIST_COLLECTIONS, DEFAULT_AUTO_SELECT, LIBRARY_COLLECTIONS
 from .cover_cache import CoverCache
 from .enums import SelectionKind
-from .exceptions import SelectionRequiredError, UnsupportedMediaError
+from .exceptions import (
+    GamdlMediaError,
+    MediaNotFoundError,
+    SelectionRequiredError,
+    UnsupportedMediaError,
+)
 from .models import (
     ArtistBrowseRequest,
     ArtistBrowseResult,
@@ -41,6 +48,12 @@ Selector = Callable[
     ],
     Sequence[int] | ArtistBrowseResult | Awaitable[Sequence[int] | ArtistBrowseResult],
 ]
+
+_ISRC_INPUT = re.compile(
+    r"isrc:([A-Z]{2}[A-Z0-9]{3}[0-9]{7})",
+    re.IGNORECASE,
+)
+_ISRC = re.compile(r"[A-Z]{2}[A-Z0-9]{3}[0-9]{7}")
 
 
 class MediaResolver:
@@ -93,6 +106,86 @@ class MediaResolver:
         yield UploadedVideo.from_id(
             media_id, api=self.api, cover_cache=self.cover_cache
         )
+
+    async def from_isrc(self, isrc: str) -> AsyncIterator[Media]:
+        """Resolve an ISRC into a song, a music video, or a selected match.
+
+        Query both catalog resource types. A single result downloads directly;
+        multiple results require the existing interactive media selector,
+        never arbitrary auto-selection.
+        """
+        isrc = isrc.upper()
+        if _ISRC.fullmatch(isrc) is None:
+            raise UnsupportedMediaError(
+                "ISRC must have 12 characters (e.g. USUM71703085)"
+            )
+        kinds = ("songs", "music-videos")
+        calls = {
+            "songs": self.api.get_songs_by_isrc,
+            "music-videos": self.api.get_music_videos_by_isrc,
+        }
+        responses = await asyncio.gather(*(calls[kind](isrc) for kind in kinds))
+        candidates: list[tuple[str, dict]] = []
+        seen: set[tuple[str, str]] = set()
+        for kind, response in zip(kinds, responses, strict=True):
+            data = response.get("data")
+            if not isinstance(data, list):
+                raise GamdlMediaError("Invalid Apple Music ISRC lookup response")
+            for item in data:
+                if (
+                    not isinstance(item, dict)
+                    or item.get("type") != kind
+                    or not isinstance(item.get("id"), str)
+                    or not item["id"]
+                ):
+                    raise GamdlMediaError("Invalid Apple Music ISRC match")
+                key = (kind, item["id"])
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append((kind, item))
+        if not candidates:
+            raise MediaNotFoundError(f"No songs or music videos found for ISRC {isrc}")
+
+        def as_media(kind: str, item: dict) -> Media:
+            # A filter lookup does not guarantee extended asset metadata.
+            # Resolve the selected catalog ID normally during download.
+            return Media.from_id(
+                item["id"],
+                media_type=kind,
+                api=self.api,
+                cover_cache=self.cover_cache,
+            )
+
+        if len(candidates) == 1:
+            kind, item = candidates[0]
+            yield as_media(kind, item)
+            return
+        if self.selector is None:
+            raise SelectionRequiredError(SelectionKind.ISRC.value)
+        options = tuple(
+            SelectionOption(
+                index=index,
+                title=(
+                    f"{'Music video' if kind == 'music-videos' else 'Song'} · "
+                    f"{(item.get('attributes') or {}).get('artistName') or 'Unknown artist'}"
+                    f" — {(item.get('attributes') or {}).get('name') or item['id']}"
+                    f" ({item['id']})"
+                ),
+                media=as_media(kind, item),
+            )
+            for index, (kind, item) in enumerate(candidates)
+        )
+        selected = await self._selected_indices(
+            self.selector(
+                SelectionRequest(
+                    kind=SelectionKind.ISRC, source_id=isrc, options=options
+                )
+            ),
+            len(options),
+        )
+        for option in options:
+            if option.index in selected:
+                yield option.media
 
     async def _from_collection(
         self,
@@ -491,7 +584,16 @@ class MediaResolver:
                     yield media
 
     async def from_url(self, url: str | AppleMusicUrlInfo) -> AsyncIterator[Media]:
-        """Resolve a URL or previously parsed URL info without fetching landing pages."""
+        """Resolve an Apple Music URL or an `isrc:` input."""
+        if isinstance(url, str) and url.strip().lower().startswith("isrc"):
+            match = _ISRC_INPUT.fullmatch(url.strip())
+            if match is None:
+                raise UnsupportedMediaError(
+                    "Invalid ISRC input; use isrc: followed by a 12-character ISRC"
+                )
+            async for media in self.from_isrc(match.group(1)):
+                yield media
+            return
         info = (
             url if isinstance(url, AppleMusicUrlInfo) else AppleMusicUrlInfo.parse(url)
         )

@@ -1,12 +1,15 @@
 """3.x-compatible Apple Music URL patterns and 4.x resolver routing."""
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from gamdl.media import (
     AppleMusicUrlInfo,
+    MediaNotFoundError,
     MediaResolver,
     MusicVideo,
+    SelectionKind,
+    SelectionRequiredError,
     Song,
     UnsupportedMediaError,
     UploadedVideo,
@@ -243,3 +246,135 @@ class UrlResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
             ]
         self.api.iter_album_tracks.assert_not_called()
         self.api.iter_playlist_tracks.assert_not_called()
+
+
+class IsrcResolverTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.api = Mock()
+        self.api.get_songs_by_isrc = AsyncMock(return_value={"data": []})
+        self.api.get_music_videos_by_isrc = AsyncMock(return_value={"data": []})
+        self.api.get_song = AsyncMock(
+            return_value={
+                "data": [
+                    {
+                        "id": "123",
+                        "type": "songs",
+                        "attributes": {"name": "Full metadata"},
+                    }
+                ]
+            }
+        )
+        self.code = "USUM71703085"
+
+    def resource(self, kind, id, title="My Track"):
+        return {
+            "id": id,
+            "type": kind,
+            "attributes": {"name": title, "artistName": "Artist"},
+        }
+
+    async def test_generic_single_song_downloads_without_selection(self):
+        self.api.get_songs_by_isrc.return_value = {
+            "data": [self.resource("songs", "123", "Filter result")],
+            "meta": {"filters": {"isrc": {self.code: [{"id": "999"}]}}},
+        }
+        resolver = MediaResolver(self.api)
+        results = [m async for m in resolver.from_url("isrc:usum71703085")]
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0], Song)
+        self.assertEqual(results[0].id, "123")
+        self.api.get_songs_by_isrc.assert_awaited_once_with(self.code)
+        self.api.get_music_videos_by_isrc.assert_awaited_once_with(self.code)
+        self.api.get_song.assert_not_awaited()
+        # A filtered result does not seed the full download metadata.
+        self.assertEqual(
+            (await results[0].get_metadata())["attributes"]["name"], "Full metadata"
+        )
+        self.api.get_song.assert_awaited_once_with("123")
+
+    async def test_generic_video_match_without_song(self):
+        self.api.get_music_videos_by_isrc.return_value = {
+            "data": [self.resource("music-videos", "456")]
+        }
+        video = [m async for m in MediaResolver(self.api).from_url("isrc:USUM71703085")]
+        self.assertEqual([(type(m), m.id) for m in video], [(MusicVideo, "456")])
+        self.api.get_songs_by_isrc.assert_awaited_once_with(self.code)
+        self.api.get_music_videos_by_isrc.assert_awaited_once_with(self.code)
+
+    async def test_mixed_results_offer_selection_and_can_choose_both(self):
+        self.api.get_songs_by_isrc.return_value = {
+            "data": [self.resource("songs", "123")]
+        }
+        self.api.get_music_videos_by_isrc.return_value = {
+            "data": [self.resource("music-videos", "456")]
+        }
+        seen = []
+
+        async def select(request):
+            seen.append(request)
+            return [1]
+
+        resolver = MediaResolver(self.api, selector=select)
+        selected = [m async for m in resolver.from_url("isrc:USUM71703085")]
+        self.assertEqual([(type(m), m.id) for m in selected], [(MusicVideo, "456")])
+        self.assertEqual(seen[0].kind, SelectionKind.ISRC)
+        self.assertEqual(seen[0].source_id, self.code)
+        self.assertIn("Song", seen[0].options[0].title)
+        self.assertIn("Music video", seen[0].options[1].title)
+
+        both = [
+            m
+            async for m in MediaResolver(self.api, selector=lambda _: [0, 1]).from_url(
+                "isrc:USUM71703085"
+            )
+        ]
+        self.assertEqual([m.id for m in both], ["123", "456"])
+        with self.assertRaises(SelectionRequiredError):
+            _ = [m async for m in MediaResolver(self.api).from_url("isrc:USUM71703085")]
+
+    async def test_duplicate_matches_deduplicated_and_multiple_prompt(self):
+        item = self.resource("songs", "123")
+        self.api.get_songs_by_isrc.return_value = {
+            "data": [item, item, self.resource("songs", "999")]
+        }
+        selected_requests = []
+
+        def select(request):
+            selected_requests.append(request)
+            return [1]
+
+        matches = [
+            m
+            async for m in MediaResolver(self.api, selector=select).from_url(
+                "isrc:USUM71703085"
+            )
+        ]
+        self.assertEqual([m.id for m in matches], ["999"])
+        self.assertEqual(len(selected_requests[0].options), 2)
+        self.api.get_music_videos_by_isrc.assert_awaited_once_with(self.code)
+
+    async def test_empty_invalid_and_malformed_responses(self):
+        with self.assertRaises(MediaNotFoundError):
+            _ = [m async for m in MediaResolver(self.api).from_url("isrc:USUM71703085")]
+        self.api.get_songs_by_isrc.reset_mock()
+        for invalid in (
+            "isrc:",
+            "isrc:USUM7170308",
+            "isrc:USUM717030850",
+            "isrc:123456789012",
+            "isrc:USUM7170308!",
+            "isrc-song:USUM71703085",
+            "isrc-music-video:USUM71703085",
+            "isrc-song:USUM7170308?foo=x",
+            "isrc-music-video:US-UM7-17-03085",
+            "isrc-video:USUM71703085",
+        ):
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaises(UnsupportedMediaError),
+            ):
+                _ = [m async for m in MediaResolver(self.api).from_url(invalid)]
+        self.api.get_songs_by_isrc.assert_not_awaited()
+        self.api.get_songs_by_isrc.return_value = {"bad": "payload"}
+        with self.assertRaisesRegex(Exception, "Invalid Apple Music ISRC lookup"):
+            _ = [m async for m in MediaResolver(self.api).from_url("isrc:USUM71703085")]

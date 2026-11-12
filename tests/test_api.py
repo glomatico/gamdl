@@ -227,6 +227,45 @@ class AuthenticationTests(unittest.TestCase):
 
 
 class AppleMusicTests(unittest.IsolatedAsyncioTestCase):
+    async def test_isrc_lookup_uses_separate_catalog_endpoints(self):
+        requests = []
+        code = "USUM71703085"
+
+        def handler(request):
+            requests.append(request)
+            kind = request.url.path.rsplit("/", 1)[-1]
+            return httpx.Response(
+                200,
+                json={
+                    "data": [{"id": "123", "type": kind, "attributes": {"isrc": code}}],
+                    "meta": {"filters": {"isrc": {code: [{"id": "123"}]}}},
+                },
+            )
+
+        async with mock_client(handler) as client:
+            async with await AppleMusicApi.create(
+                client=client, storefront="br", language="pt-BR", token="test-token"
+            ) as api:
+                song = await api.get_songs_by_isrc(code)
+                video = await api.get_music_videos_by_isrc(code)
+                with self.assertRaises(ValueError):
+                    await api._get_by_isrc(code, "albums")
+
+        self.assertEqual(
+            [r.url.path for r in requests],
+            [
+                "/v1/catalog/br/songs",
+                "/v1/catalog/br/music-videos",
+            ],
+        )
+        self.assertEqual([r.url.params["filter[isrc]"] for r in requests], [code, code])
+        self.assertEqual([r.url.params["l"] for r in requests], ["pt-BR", "pt-BR"])
+        self.assertTrue(
+            all(r.headers["authorization"] == "Bearer test-token" for r in requests)
+        )
+        self.assertEqual(song["data"][0]["type"], "songs")
+        self.assertEqual(video["data"][0]["type"], "music-videos")
+
     async def test_account_auth_and_search(self):
         requests = []
 

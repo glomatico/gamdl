@@ -214,7 +214,7 @@ Export your cookies from [Apple Music](https://music.apple.com/) in Netscape `co
 
 Provide your Apple Music `media-user-token` directly through the wizard. Treat the token and your cookies file as passwords; never post them in issues or logs.
 
-Advanced authentication settings are described under [Configuration](#-configuration).
+Advanced authentication settings are described under [Configuration](#configuration).
 
 ### Maintain the Media Database (`database`)
 
@@ -384,6 +384,8 @@ download:
 ```bash
 gamdl rip "<music video URL>" --music-video-codec-priority h265,h264
 ```
+
+<a name="video-codec-and-resolution"></a>
 
 #### Video Codec and Resolution (`download.music_video_codec` / `--music-video-codec`, `download.max_height` / `--max-height`)
 

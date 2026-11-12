@@ -2,6 +2,7 @@
 
 use pyo3::prelude::*;
 
+mod alac;
 mod decrypt;
 mod input;
 mod mp3_tags;

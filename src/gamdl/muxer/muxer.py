@@ -18,27 +18,32 @@ if TYPE_CHECKING:
 class Muxer:
     """Native operations on MP4 containers.
 
-    Native audio remuxing operates on bytes and preserves encoded packets.
+    Native audio remuxing repairs malformed ALAC END trailers by default,
+    preserving audio data and healthy packets without re-encoding.
     Tagging operates on an MP4 file. Tag temporary outputs before publishing
     the final path.
     """
 
+    def __init__(self, *, repair_alac: bool = True) -> None:
+        """Disable repair only when exact source packets are required."""
+        self.repair_alac = repair_alac
+
     def remux(self, data: bytes) -> bytes:
         """Flatten decrypted, single-track fragmented MP4 audio without transcoding.
 
-        Preserves compressed samples and codec configuration. Returns an
+        Preserves audio data and codec configuration. Returns an
         ordinary seekable M4A in memory; unsupported input fails closed.
         Call after native Streamer decryption, before optional file tagging.
         """
         if not isinstance(data, bytes):
             raise TypeError("data must be MP4 bytes")
-        return _native.remux_mp4(data)
+        return _native.remux_mp4(data, self.repair_alac)
 
     def remux_file(
         self, source: str | PathLike[str], destination: str | PathLike[str]
     ) -> None:
         """Remux staged fMP4 audio from disk to disk with bounded memory."""
-        _native.remux_mp4_file(fspath(source), fspath(destination))
+        _native.remux_mp4_file(fspath(source), fspath(destination), self.repair_alac)
 
     def mux(
         self,

@@ -1,12 +1,14 @@
 //! Lossless conversion of a single-track audio fMP4 to a seekable MP4.
 //!
-//! Rebuild sample tables from trun/tfhd/trex; copy sample payloads untouched
-//! and consolidate equivalent clear sample descriptions. Reject unsupported
+//! Rebuild sample tables from trun/tfhd/trex; repair missing ALAC END markers
+//! by default, copy all other payloads untouched, and consolidate equivalent
+//! clear sample descriptions. Reject unsupported
 //! layouts rather than silently emitting a truncated/corrupt file.
 
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 
+use crate::alac::{self, Config as AlacConfig};
 use crate::input::{Input, read_metadata};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -242,6 +244,7 @@ struct Info {
     entries: u32,
     stsd: Vec<u8>,
     description_map: Vec<u32>,
+    alac_configs: Vec<Option<AlacConfig>>,
 }
 
 #[derive(Clone)]
@@ -249,6 +252,34 @@ struct Sample {
     bytes: std::ops::Range<usize>,
     duration: u32,
     description: u32,
+    alac: Option<AlacConfig>,
+}
+
+fn alac_config(input: &(impl Input + ?Sized), entry: Atom) -> Option<AlacConfig> {
+    if &entry.name != b"alac" || input.slice(entry.data + 8..entry.data + 10)? != [0, 0] {
+        return None;
+    }
+    let children = atoms(input, entry.data + 28, entry.end).ok()?;
+    // A protected entry is never eligible, even if its fourcc is misleading.
+    if children.iter().any(|atom| &atom.name == b"sinf") {
+        return None;
+    }
+    let mut configs = Vec::new();
+    for child in children {
+        if &child.name == b"alac" {
+            configs.push(child);
+        } else if &child.name == b"wave" {
+            let nested = self::children(input, child).ok()?;
+            if nested.iter().any(|atom| &atom.name == b"sinf") {
+                return None;
+            }
+            configs.extend(nested.into_iter().filter(|a| &a.name == b"alac"));
+        }
+    }
+    if configs.len() != 1 {
+        return None;
+    }
+    AlacConfig::parse(input.slice(configs[0].data..configs[0].end)?)
 }
 
 fn info(bytes: &(impl Input + ?Sized), moov: Atom) -> Result<Info> {
@@ -318,6 +349,10 @@ fn info(bytes: &(impl Input + ?Sized), moov: Atom) -> Result<Info> {
         return Err(UNSUPPORTED);
     }
     let (stsd, description_map) = normalize_stsd(bytes, stsd)?;
+    let alac_configs = descriptions
+        .iter()
+        .map(|entry| alac_config(bytes, *entry))
+        .collect();
     Ok(Info {
         track_id,
         media_scale,
@@ -328,6 +363,7 @@ fn info(bytes: &(impl Input + ?Sized), moov: Atom) -> Result<Info> {
         entries,
         stsd,
         description_map,
+        alac_configs,
     })
 }
 
@@ -476,6 +512,7 @@ fn parse_fragment(
                 bytes: cursor..end,
                 duration: sample_duration,
                 description: info.description_map[description as usize - 1],
+                alac: info.alac_configs[description as usize - 1],
             });
             cursor = end;
         }
@@ -698,7 +735,7 @@ fn remux_plan(input: &(impl Input + ?Sized)) -> Result<(Vec<u8>, Vec<u8>, Vec<Sa
     Ok((ftyp_bytes, rebuilt, samples, cursor))
 }
 
-fn remux(input: &[u8]) -> Result<Vec<u8>> {
+fn remux(input: &[u8], repair_alac: bool) -> Result<Vec<u8>> {
     let (ftyp_bytes, rebuilt, samples, cursor) = remux_plan(input)?;
     let mut out = Vec::with_capacity(usize::try_from(cursor).map_err(|_| UNSUPPORTED)?);
     out.extend_from_slice(&ftyp_bytes);
@@ -710,13 +747,17 @@ fn remux(input: &[u8]) -> Result<Vec<u8>> {
             .to_be_bytes(),
     );
     for s in &samples {
+        let start = out.len();
         out.extend_from_slice(&input[s.bytes.clone()]);
+        if repair_alac && let Some(config) = s.alac {
+            alac::repair(&mut out[start..], config);
+        }
     }
     Ok(out)
 }
 
 /// Write samples from a staged source through a bounded scratch buffer.
-fn remux_to_file(input: &mut File, output: &str) -> PyResult<()> {
+fn remux_to_file(input: &mut File, output: &str, repair_alac: bool) -> PyResult<()> {
     let (ftyp, moov, samples, cursor) = {
         let metadata = read_metadata(input)?;
         remux_plan(&metadata).map_err(PyValueError::new_err)?
@@ -731,7 +772,21 @@ fn remux_to_file(input: &mut File, output: &str) -> PyResult<()> {
         writer.write_all(b"mdat")?;
         writer.write_all(&(cursor - (ftyp.len() + moov.len()) as u64).to_be_bytes())?;
         for sample in samples {
-            copy_range(input, &mut writer, sample.bytes, &mut scratch)?;
+            if repair_alac
+                && sample.bytes.len() <= alac::MAX_PACKET
+                && let Some(config) = sample.alac
+            {
+                let size = sample.bytes.len();
+                if scratch.len() < size {
+                    scratch.resize(size, 0);
+                }
+                input.seek(SeekFrom::Start(sample.bytes.start as u64))?;
+                input.read_exact(&mut scratch[..size])?;
+                alac::repair(&mut scratch[..size], config);
+                writer.write_all(&scratch[..size])?;
+            } else {
+                copy_range(input, &mut writer, sample.bytes, &mut scratch)?;
+            }
         }
         writer.flush()
     })();
@@ -743,18 +798,75 @@ fn remux_to_file(input: &mut File, output: &str) -> PyResult<()> {
 }
 
 #[pyfunction]
-pub(crate) fn remux_mp4_file(py: Python<'_>, input: String, output: String) -> PyResult<()> {
+#[pyo3(signature = (input, output, repair_alac=true))]
+pub(crate) fn remux_mp4_file(
+    py: Python<'_>,
+    input: String,
+    output: String,
+    repair_alac: bool,
+) -> PyResult<()> {
     if input == output {
         return Err(PyValueError::new_err("Input and output paths must differ"));
     }
     py.detach(|| {
         let mut file = File::open(&input).map_err(PyOSError::new_err)?;
-        remux_to_file(&mut file, &output)
+        remux_to_file(&mut file, &output, repair_alac)
     })
 }
 
 #[pyfunction]
-pub(crate) fn remux_mp4(py: Python<'_>, input: Vec<u8>) -> PyResult<Bound<'_, PyBytes>> {
-    let output = py.detach(|| remux(&input)).map_err(PyValueError::new_err)?;
+#[pyo3(signature = (input, repair_alac=true))]
+pub(crate) fn remux_mp4(
+    py: Python<'_>,
+    input: Vec<u8>,
+    repair_alac: bool,
+) -> PyResult<Bound<'_, PyBytes>> {
+    let output = py
+        .detach(|| remux(&input, repair_alac))
+        .map_err(PyValueError::new_err)?;
     Ok(PyBytes::new(py, &output))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alac_repair_requires_one_clear_supported_configuration() {
+        let mut cookie = vec![0; 28];
+        cookie[4..8].copy_from_slice(&4096u32.to_be_bytes());
+        cookie[9] = 16;
+        cookie[10] = 40;
+        cookie[11] = 10;
+        cookie[12] = 14;
+        cookie[13] = 2;
+        let config = boxed(b"alac", &cookie).unwrap();
+        let protected = boxed(b"sinf", &[]).unwrap();
+        let entry = |kind: &[u8; 4], payload: &[u8], version: u8| {
+            let mut header = vec![0; 28];
+            header[9] = version;
+            header.extend_from_slice(payload);
+            boxed(kind, &header).unwrap()
+        };
+        for (payload, supported) in [
+            (config.clone(), true),
+            (boxed(b"wave", &config).unwrap(), true),
+            ([config.as_slice(), &config].concat(), false),
+            ([protected.as_slice(), &config].concat(), false),
+            (
+                boxed(b"wave", &[protected.as_slice(), &config].concat()).unwrap(),
+                false,
+            ),
+            (boxed(b"alac", &cookie[..27]).unwrap(), false),
+        ] {
+            let data = entry(b"alac", &payload, 0);
+            let atom = atoms(&data, 0, data.len()).unwrap()[0];
+            assert_eq!(alac_config(&data, atom).is_some(), supported);
+        }
+        for (kind, version) in [(b"mp4a", 0), (b"enca", 0), (b"alac", 1)] {
+            let data = entry(kind, &config, version);
+            let atom = atoms(&data, 0, data.len()).unwrap()[0];
+            assert!(alac_config(&data, atom).is_none());
+        }
+    }
 }

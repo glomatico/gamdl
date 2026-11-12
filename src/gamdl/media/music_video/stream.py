@@ -338,14 +338,12 @@ class MusicVideoStreamResolver:
             video_playlist, video_stream = choices[index]
             video_info = video_playlist.stream_info
             video_group = getattr(video_info, "audio", None)
-            # Separate A/V tracks can be chosen independently. Audio groups
-            # from other variants in the same master may offer different
-            # codecs (such as AAC versus Atmos), as in Gamdl 3.x.
+            # Video and audio are downloaded separately. AAC may be offered
+            # under an audio group attached to a different video variant
+            # (e.g. an AVC variant when the chosen HEVC variant uses Atmos).
             group_codecs = {
                 group: str(getattr(playlist.stream_info, "codecs", "") or "").lower()
                 for playlist in manifest.playlists
-                if _video_codec(getattr(playlist.stream_info, "codecs", None))
-                is not None
                 if (group := getattr(playlist.stream_info, "audio", None))
             }
             renditions = [
@@ -355,7 +353,7 @@ class MusicVideoStreamResolver:
                 and audio.uri
                 and (
                     audio.group_id in group_codecs
-                    if ask and group_codecs
+                    if group_codecs
                     else video_group is None or audio.group_id == video_group
                 )
             ]
@@ -383,9 +381,12 @@ class MusicVideoStreamResolver:
                 )
                 if "ec-3" in audio_codec_value or "atmos" in audio_group:
                     audio_codec = SongCodec.ATMOS
-                elif "ac-3" in audio_codec_value:
+                elif "ac-3" in audio_codec_value or "ac3" in audio_group:
                     audio_codec = SongCodec.AC3
-                elif "mp4a.40.5" in audio_codec_value:
+                elif (
+                    "mp4a.40.5" in audio_codec_value
+                    or "mp4a.40.29" in audio_codec_value
+                ):
                     audio_codec = SongCodec.AAC_HE
                 else:
                     audio_codec = SongCodec.AAC
@@ -407,20 +408,20 @@ class MusicVideoStreamResolver:
                         language=getattr(audio, "language", None),
                     )
                 )
+
+            async def populate_bitrate(option: AudioSelectionOption) -> None:
+                if option.bitrate:
+                    return
+                try:
+                    audio_manifest = await option.stream.get_manifest()
+                except StreamManifestError:
+                    # Bitrate is optional metadata; a failed probe must not
+                    # prevent choosing an otherwise valid audio rendition.
+                    return
+                option.stream.bitrate = _audio_playlist_bitrate(audio_manifest)
+
             if ask:
                 assert selector is not None
-
-                async def populate_bitrate(option: AudioSelectionOption) -> None:
-                    if option.bitrate:
-                        return
-                    try:
-                        audio_manifest = await option.stream.get_manifest()
-                    except StreamManifestError:
-                        # Bitrate is optional metadata; a failed probe must not
-                        # prevent choosing an otherwise valid audio rendition.
-                        return
-                    option.stream.bitrate = _audio_playlist_bitrate(audio_manifest)
-
                 await asyncio.gather(
                     *(populate_bitrate(option) for option in audio_options)
                 )
@@ -433,15 +434,40 @@ class MusicVideoStreamResolver:
                     selector, audio_request, len(audio_options)
                 )
             else:
-                selected = min(
-                    range(len(renditions)),
-                    key=lambda i: (
-                        str(getattr(renditions[i], "default", "")).upper()
-                        not in {"YES", "TRUE"},
-                        "stereo" not in str(renditions[i].group_id).lower(),
-                        str(renditions[i].name),
-                    ),
+                # Avoid surround/Atmos for automatic downloads. Choose the
+                # highest-bitrate AAC even if HE-AAC advertises a higher
+                # bitrate; HE-AAC is only the fallback when AAC is absent.
+                candidates = [
+                    option
+                    for option in audio_options
+                    if option.codec in {SongCodec.AAC, SongCodec.AAC_HE}
+                ]
+                if not candidates:
+                    raise StreamNotAvailableError(
+                        "Music video has no AAC or HE-AAC audio rendition"
+                    )
+                best_codec = (
+                    SongCodec.AAC
+                    if any(option.codec == SongCodec.AAC for option in candidates)
+                    else SongCodec.AAC_HE
                 )
+                candidates = [
+                    option for option in candidates if option.codec == best_codec
+                ]
+                if len(candidates) > 1:
+                    await asyncio.gather(
+                        *(populate_bitrate(option) for option in candidates)
+                    )
+                selected = min(
+                    candidates,
+                    key=lambda option: (
+                        -(option.bitrate or 0),
+                        str(getattr(renditions[option.index], "default", "")).upper()
+                        not in {"YES", "TRUE"},
+                        "stereo" not in str(option.group_id).lower(),
+                        str(option.name),
+                    ),
+                ).index
             return MusicVideoStreams(
                 video=video_stream, audio=audio_options[selected].stream
             )

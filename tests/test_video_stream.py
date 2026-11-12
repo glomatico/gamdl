@@ -292,7 +292,10 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (hevc_first.video.codec, hevc_first.video.height), ("h265", 2160)
         )
-        self.assertEqual(hevc_first.audio.url, "https://cdn.example.com/atmos.m3u8")
+        # Even when the preferred video links an Atmos group, automatic
+        # selection picks AAC from another variant in the same master.
+        self.assertEqual(hevc_first.audio.url, "https://cdn.example.com/audio.m3u8")
+        self.assertEqual(hevc_first.audio.codec.value, "aac")
         # Height is a hard limit even when HEVC is preferred.
         fallback = await self.media.get_streams(
             client=self.client,
@@ -347,7 +350,7 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                     max_height=None,
                 )
 
-    async def test_priority_without_usable_audio_falls_back(self):
+    async def test_priority_without_aac_never_falls_back_to_atmos(self):
         video_with_orphan_audio = MASTER.replace(
             'RESOLUTION=1920x1080,AUDIO="audio-stereo"',
             'RESOLUTION=1920x1080,AUDIO="missing-group"',
@@ -368,15 +371,110 @@ class VideoStreamDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                     ]
                 }
             )
-            chosen = await self.media.get_streams(
-                client=client,
-                wrapper_api=wrapper,
-                itunes_api=self.itunes,
-                codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
-                max_height=None,
+            with self.assertRaisesRegex(StreamNotAvailableError, "AAC or HE-AAC"):
+                await self.media.get_streams(
+                    client=client,
+                    wrapper_api=wrapper,
+                    itunes_api=self.itunes,
+                    codec_priority=[MusicVideoCodec.H264, MusicVideoCodec.H265],
+                    max_height=None,
+                )
+
+    async def test_auto_audio_highest_bitrate_aac_over_default_and_atmos(self):
+        # The 128 kbps default AAC loses to the 320 kbps non-default AAC.
+        playlist = {
+            "/audio.m3u8": "#EXTM3U\n#EXT-X-BITRATE:128\n#EXTINF:6,\na.m4s\n",
+            "/audio-es.m3u8": "#EXTM3U\n#EXT-X-BITRATE:320\n#EXTINF:6,\nb.m4s\n",
+            "/atmos.m3u8": AUDIO_PLAYLISTS["/atmos.m3u8"],
+        }
+        calls = []
+
+        def handle(request):
+            path = request.url.path
+            calls.append(path)
+            if path == "/master.m3u8":
+                return httpx.Response(200, text=MASTER)
+            if path in playlist:
+                return httpx.Response(200, text=playlist[path])
+            return httpx.Response(404)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            streams = await self.media.get_streams(
+                client=client, itunes_api=self.itunes
             )
-            self.assertEqual(chosen.video.codec, MusicVideoCodec.H265)
-            self.assertEqual(chosen.audio.codec.value, "atmos")
+            self.assertEqual(streams.audio.url, "https://cdn.example.com/audio-es.m3u8")
+            self.assertEqual(streams.audio.codec.value, "aac")
+            self.assertEqual(streams.audio.bitrate, 320_000)
+            self.assertNotIn("/atmos.m3u8", calls)
+            self.assertNotIn("/audio1.m4s", calls)
+
+    async def test_auto_audio_prefers_aac_over_higher_bitrate_he_aac(self):
+        he_group = (
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-he",NAME="HE",DEFAULT=YES,URI="he.m3u8"\n'
+            '#EXT-X-STREAM-INF:BANDWIDTH=3500000,CODECS="avc1.640028,mp4a.40.5",RESOLUTION=1920x1080,AUDIO="audio-he"\n'
+            "he-video.m3u8\n"
+        )
+        master = MASTER + he_group
+
+        def handle(request):
+            if request.url.path == "/master.m3u8":
+                return httpx.Response(200, text=master)
+            if request.url.path == "/he.m3u8":
+                return httpx.Response(
+                    200, text="#EXTM3U\n#EXT-X-BITRATE:640\n#EXTINF:6,\na.m4s\n"
+                )
+            if request.url.path in AUDIO_PLAYLISTS:
+                return httpx.Response(200, text=AUDIO_PLAYLISTS[request.url.path])
+            return httpx.Response(404)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            streams = await self.media.get_streams(
+                client=client, itunes_api=self.itunes
+            )
+            self.assertEqual(streams.audio.codec.value, "aac")
+            self.assertEqual(streams.audio.url, "https://cdn.example.com/audio.m3u8")
+
+    async def test_auto_audio_falls_back_to_highest_bitrate_he_aac(self):
+        he_only = MASTER.replace("mp4a.40.2", "mp4a.40.5")
+
+        def handle(request):
+            if request.url.path == "/master.m3u8":
+                return httpx.Response(200, text=he_only)
+            if request.url.path in AUDIO_PLAYLISTS:
+                return httpx.Response(200, text=AUDIO_PLAYLISTS[request.url.path])
+            return httpx.Response(404)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            streams = await self.media.get_streams(
+                client=client, itunes_api=self.itunes
+            )
+            self.assertEqual(streams.audio.codec.value, "aac-he")
+            self.assertEqual(streams.audio.url, "https://cdn.example.com/audio.m3u8")
+            self.assertEqual(streams.audio.bitrate, 256_000)
+
+    async def test_auto_audio_rejects_only_surround_formats(self):
+        surround = MASTER.replace("mp4a.40.2", "ac-3")
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, text=surround))
+        ) as client:
+            with self.assertRaisesRegex(StreamNotAvailableError, "AAC or HE-AAC"):
+                await self.media.get_streams(client=client, itunes_api=self.itunes)
+
+    async def test_auto_audio_missing_bitrate_uses_default_aac(self):
+        # No segment hints or audio-only bandwidth information are available.
+        def handle(request):
+            if request.url.path == "/master.m3u8":
+                return httpx.Response(200, text=MASTER)
+            if request.url.path in ("/audio.m3u8", "/audio-es.m3u8"):
+                return httpx.Response(200, text="#EXTM3U\n#EXTINF:6,\na.m4s\n")
+            return httpx.Response(404)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            streams = await self.media.get_streams(
+                client=client, itunes_api=self.itunes
+            )
+            self.assertEqual(streams.audio.url, "https://cdn.example.com/audio.m3u8")
+            self.assertIsNone(streams.audio.bitrate)
 
     async def test_priority_validation_before_network(self):
         for kwargs in (

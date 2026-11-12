@@ -51,7 +51,7 @@ jobs:
       - name: Build source distribution
         run: |
           python -m pip install "maturin==1.11.5"
-          maturin sdist --locked --out dist
+          maturin sdist --out dist
       - uses: actions/upload-artifact@v4
         with:
           name: dist-sdist

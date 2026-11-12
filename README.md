@@ -364,9 +364,31 @@ Request one specific codec instead of a fallback list. The default is `null`. Us
 
 For example, `gamdl rip "<song URL>" --song-codec alac` requests the best available ALAC tier without specifying a fallback to another format.
 
-#### Lyrics (`output.no_lyrics_file` / `--no-lyrics-file`)
+#### Lyrics (`output.lyrics_file_format`, `output.embedded_lyrics_format`)
 
-When metadata tagging is enabled, available song lyrics are embedded in the audio file by default as plain text (`©lyr`), independently of sidecar settings. Gamdl also saves synchronized LRC or plain-text lyric sidecars by default (`no_lyrics_file: false`). Set `output.no_lyrics_file: true` or use `--no-lyrics-file` to disable external lyric files; to omit the embedded tag, add `lyrics` to `output.exclude_tags` or use `--exclude-tags lyrics`. Disabling tagging with `--no-tag` also disables embedded lyrics.
+Choose the lyrics representation independently for external sidecars and embedded metadata:
+
+```yaml
+output:
+  lyrics_file_format: lrc
+  embedded_lyrics_format: text
+```
+
+Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these settings. Both accept `lrc`, `srt`, `ttml`, `text`, and `enhanced-lrc`.
+
+| Format | External extension | Behavior |
+| --- | --- | --- |
+| `lrc` | `.lrc` | Standard line timestamps |
+| `enhanced-lrc` | `.lrc` | Word/syllable timestamps when available; otherwise standard line LRC |
+| `srt` | `.srt` | Subtitle cues from lines with start and end timestamps |
+| `ttml` | `.ttml` | Original Apple Music TTML |
+| `text` | `.txt` | Plain lyrics without timing |
+
+**External files are strict:** if the selected format cannot be produced, Gamdl reports the lyrics sidecar as unavailable rather than silently saving a different type. The only exception is `enhanced-lrc` degrading to line LRC when syllable timing is missing. Existing media is reused when only a sidecar needs to be created or refreshed; an existing sidecar with a different extension is not mistaken for the requested format.
+
+**Embedded lyrics** use the standard `©lyr` text metadata atom, even when formatted as LRC, SRT or TTML. If the requested embedded representation is unavailable, Gamdl falls back to line LRC when synchronized, then plain text. Some players display embedded timestamps or XML as literal text instead of synchronized lyrics, so `text` remains the default.
+
+Sidecars are enabled by default (`no_lyrics_file: false`). Set `output.no_lyrics_file: true` or use `--no-lyrics-file` to disable external lyrics; to omit embedded lyrics, add `lyrics` to `output.exclude_tags` or use `--exclude-tags lyrics`. `--no-tag` also disables embedded lyrics. These controls are independent of the format settings.
 
 ### Music Videos and Uploaded Videos
 
@@ -620,7 +642,7 @@ These are all **32** valid names for `output.exclude_tags` and `--exclude-tags`:
 | `lyrics` | Embedded plain-text lyrics |
 | `cover` | Embedded cover artwork |
 
-For example, `--exclude-tags lyrics,cover,comment` omits those embedded fields while keeping the remaining tags. `cover` affects embedded artwork; separate artwork files are controlled by `--save-cover`. Likewise, excluding `lyrics` does not disable external LRC/text files—use `--no-lyrics-file` for that.
+For example, `--exclude-tags lyrics,cover,comment` omits those embedded fields while keeping the remaining tags. `cover` affects embedded artwork; separate artwork files are controlled by `--save-cover`. Likewise, excluding `lyrics` does not disable external lyrics files—use `--no-lyrics-file` for that.
 
 Use `--no-tag` to disable embedded tagging altogether. Only metadata provided for a given item can be written, even when a tag is not excluded.
 

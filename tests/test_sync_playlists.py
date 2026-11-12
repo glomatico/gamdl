@@ -3,25 +3,28 @@
 from __future__ import annotations
 
 import asyncio
-from importlib import import_module
 import tempfile
 import unittest
 from dataclasses import replace
+from importlib import import_module
 from io import StringIO
 from pathlib import Path
-from unittest.mock import AsyncMock, patch as mock_patch
+from unittest.mock import AsyncMock, Mock
+from unittest.mock import patch as mock_patch
 
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 
 from gamdl.cli.commands.sync.playlists import (
     _describe_error,
+    _download_options,
     _include_traceback,
     _run,
 )
 from gamdl.cli.config.models import AppConfig
 from gamdl.cli.progress import RipProgress
 from gamdl.download import DownloadResult, MediaDatabase, MediaStatus
+from gamdl.media import Song
 from gamdl.media.exceptions import StreamNotAvailableError
 from gamdl.sync.playlists import (
     LocalMediaIndex,
@@ -86,6 +89,20 @@ class FakeItunes:
 
 
 class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
+    def test_sync_download_options_forward_lyrics_formats(self):
+        config = AppConfig()
+        config = replace(
+            config,
+            output=replace(
+                config.output,
+                lyrics_file_format="srt",
+                embedded_lyrics_format="enhanced-lrc",
+            ),
+        )
+        options = _download_options(config, Song.from_id("12345", api=Mock()))
+        self.assertEqual(options["lyrics_file_format"], "srt")
+        self.assertEqual(options["embedded_lyrics_format"], "enhanced-lrc")
+
     def test_expected_and_unexpected_failure_classification(self):
         for error in (
             PlaylistSyncError("Incomplete playlist"),

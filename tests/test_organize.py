@@ -83,6 +83,8 @@ class OrganizeTests(unittest.TestCase):
             ),
         )
         (old.with_suffix(".lrc")).write_text("Lyrics\n", encoding="utf-8")
+        (old.with_suffix(".srt")).write_text("Subtitle lyrics\n", encoding="utf-8")
+        (old.with_suffix(".ttml")).write_text("<tt/>\n", encoding="utf-8")
         (old.with_suffix(".jpg")).write_bytes(b"cover")
         contents = hashlib.sha256(old.read_bytes()).digest()
         playlist = self.library / "Playlists" / "Curator" / "List.m3u8"
@@ -114,6 +116,8 @@ class OrganizeTests(unittest.TestCase):
         self.assertFalse(old.exists())
         self.assertEqual(hashlib.sha256(expected.read_bytes()).digest(), contents)
         self.assertEqual(expected.with_suffix(".lrc").read_text(), "Lyrics\n")
+        self.assertEqual(expected.with_suffix(".srt").read_text(), "Subtitle lyrics\n")
+        self.assertEqual(expected.with_suffix(".ttml").read_text(), "<tt/>\n")
         self.assertEqual(expected.with_suffix(".jpg").read_bytes(), b"cover")
         self.assertFalse(old.parent.exists())
         new_ref = Path(os.path.relpath(expected, playlist.parent)).as_posix()

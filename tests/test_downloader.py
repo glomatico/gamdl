@@ -221,7 +221,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         downloader, tags = self.downloader()
         song = self.song()
         song.get_lyrics = AsyncMock(
-            return_value=Mock(to_plain_text=lambda: "These are sample lyrics")
+            return_value=Lyrics(stanzas=[[LyricsLine("These are sample lyrics")]])
         )
         value = await downloader.get_bytes(
             song,
@@ -398,6 +398,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
                 tag=False,
                 save_cover=True,
                 save_lyrics=True,
+                lyrics_file_format="text",
                 playlist_path=playlist,
             )
 
@@ -924,7 +925,12 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         song.get_cover.return_value = Mock(get_cover_bytes=AsyncMock(return_value=PNG))
         output = self.directory / "unsynced.m4a"
         await downloader.download(
-            song, output, tag=False, save_cover=True, save_lyrics=True
+            song,
+            output,
+            tag=False,
+            save_cover=True,
+            save_lyrics=True,
+            lyrics_file_format="text",
         )
         self.assertEqual(output.with_suffix(".txt").read_text(), "Hello")
         self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)

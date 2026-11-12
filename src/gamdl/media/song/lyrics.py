@@ -3,10 +3,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from enum import Enum
 from xml.etree import ElementTree
 
 from ..exceptions import GamdlMediaError
+
+
+class LyricsFormat(str, Enum):
+    """Supported sidecar and embedded lyrics representations."""
+
+    LRC = "lrc"
+    SRT = "srt"
+    TTML = "ttml"
+    TEXT = "text"
+    ENHANCED_LRC = "enhanced-lrc"
+
+    @property
+    def extension(self) -> str:
+        return {
+            LyricsFormat.LRC: ".lrc",
+            LyricsFormat.SRT: ".srt",
+            LyricsFormat.TTML: ".ttml",
+            LyricsFormat.TEXT: ".txt",
+            LyricsFormat.ENHANCED_LRC: ".lrc",
+        }[self]
+
+
+class LyricsFormatUnavailableError(GamdlMediaError):
+    """Requested lyrics representation cannot be produced from this source."""
 
 
 def _local(tag: str) -> str:
@@ -74,8 +99,8 @@ class Lyrics:
     """Lyrics grouped into stanzas, retaining the source TTML losslessly.
 
     Conversion methods never contact the Apple Music API. Timing is in integer
-    milliseconds. When ``syllable=True``, supported exports are plain text,
-    enhanced A2 LRC and original TTML; only SRT remains unavailable.
+    milliseconds. When ``syllable=True``, enhanced A2 LRC can retain
+    per-syllable timing, while SRT exports only complete line-level cues.
     """
 
     stanzas: list[list[LyricsLine]] = field(default_factory=list)
@@ -106,7 +131,7 @@ class Lyrics:
 
         Args:
             xml: Raw TTML document, preserved for lossless export.
-            syllable: Enable enhanced LRC and restrict other output formats.
+            syllable: Enable enhanced LRC for direct ``to_lrc()`` calls.
                 Set when the source is Apple's syllable-lyrics endpoint.
         """
         try:
@@ -179,16 +204,19 @@ class Lyrics:
             "\n".join(line.text for line in stanza) for stanza in self.stanzas
         )
 
-    def to_lrc(self) -> str:
-        """Export standard LRC or A2 enhanced LRC when ``syllable=True``.
+    def to_lrc(self, *, enhanced: bool | None = None) -> str:
+        """Export standard LRC or A2 enhanced LRC.
 
         A2 uses ``[mm:ss.xx]`` for each line and ``<mm:ss.xx>`` before each
         timed word/syllable. Text outside timed spans is retained verbatim.
+        If omitted, ``enhanced`` retains the original ``syllable`` behavior.
         """
+        if enhanced is None:
+            enhanced = self.syllable
         values: list[str] = []
         for line in self.lines:
             prefix = f"[{_lrc_stamp(line.start)}]" if line.start is not None else ""
-            if self.syllable and line.segments:
+            if enhanced and line.segments:
                 content = "".join(
                     (f"<{_lrc_stamp(s.start)}>" if s.start is not None else "") + s.text
                     for s in line.segments
@@ -200,10 +228,6 @@ class Lyrics:
 
     def to_srt(self) -> str:
         """Convert fully timed lines to SRT without inventing missing end times."""
-        if self.syllable:
-            raise GamdlMediaError(
-                "Syllable-synced lyrics cannot export to SRT; use plain text, LRC or raw TTML"
-            )
         timed = [
             line
             for line in self.lines
@@ -219,3 +243,41 @@ class Lyrics:
         if self.source_ttml is None:
             raise GamdlMediaError("No original TTML is available for lossless export")
         return self.source_ttml
+
+    def render(self, format: LyricsFormat | str, *, embedded: bool = False) -> str:
+        """Render a selected format; embedded tags may fall back to LRC/text.
+
+        Files are strict except enhanced LRC, which naturally degrades to
+        line-level LRC when syllable timing is missing.
+        """
+        requested = LyricsFormat(format)
+
+        def convert(target: LyricsFormat) -> str:
+            if target == LyricsFormat.TEXT:
+                return self.to_plain_text()
+            if target == LyricsFormat.TTML:
+                if self.source_ttml is None:
+                    raise LyricsFormatUnavailableError("Original TTML is unavailable")
+                return self.to_ttml()
+            if target in {LyricsFormat.LRC, LyricsFormat.ENHANCED_LRC}:
+                if not self.is_synced:
+                    raise LyricsFormatUnavailableError(
+                        "LRC requires synchronized lyrics"
+                    )
+                return self.to_lrc(enhanced=target == LyricsFormat.ENHANCED_LRC)
+            if not any(
+                line.start is not None and line.end is not None for line in self.lines
+            ):
+                raise LyricsFormatUnavailableError(
+                    "SRT requires lines with start and end timestamps"
+                )
+            return self.to_srt()
+
+        try:
+            return convert(requested)
+        except LyricsFormatUnavailableError:
+            if not embedded:
+                raise
+            if self.is_synced:
+                return convert(LyricsFormat.LRC)
+            return convert(LyricsFormat.TEXT)

@@ -15,6 +15,9 @@ from gamdl.media import (
     CoverFormat,
     GamdlMediaError,
     Lyrics,
+    LyricsFormat,
+    LyricsFormatUnavailableError,
+    LyricsLine,
     Media,
     MediaResolver,
     MusicVideo,
@@ -261,8 +264,7 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             timed.to_plain_text(), "Hello world\nAnother line\n\nUntimed line"
         )
-        with self.assertRaises(GamdlMediaError):
-            timed.to_srt()
+        self.assertIn("00:00:01,200", timed.to_srt())
         self.assertIs(
             timed, await song.get_lyrics(syllable=True, lyrics_language="pt-BR")
         )
@@ -390,7 +392,7 @@ class LyricsTests(unittest.TestCase):
         )
         self.assertEqual(lyrics.to_ttml(), TTML)
 
-    def test_a2_enhanced_lrc_and_syllable_only_exports(self):
+    def test_a2_enhanced_lrc_and_line_level_srt(self):
         lyrics = Lyrics.from_ttml(TTML, syllable=True)
         self.assertTrue(lyrics.is_syllable_synced)
         self.assertEqual(len(lyrics.stanzas), 2)
@@ -403,9 +405,37 @@ class LyricsTests(unittest.TestCase):
         self.assertEqual(
             lyrics.to_plain_text(), "Hello world\nAnother line\n\nUntimed line"
         )
-        with self.assertRaisesRegex(GamdlMediaError, "cannot export to SRT"):
-            lyrics.to_srt()
+        self.assertIn("00:00:01,200", lyrics.to_srt())
         self.assertFalse(hasattr(lyrics, "to_enhanced_lrc"))
+
+    def test_selected_format_conversion_and_strict_file_rules(self):
+        lyrics = Lyrics.from_ttml(TTML, syllable=True)
+        self.assertEqual(
+            lyrics.render(LyricsFormat.LRC).splitlines()[0],
+            "[00:01.20]Hello world",
+        )
+        self.assertEqual(
+            lyrics.render(LyricsFormat.ENHANCED_LRC).splitlines()[0],
+            "[00:01.20]<00:01.20>Hello <00:01.70>world",
+        )
+        self.assertEqual(lyrics.render("ttml"), TTML)
+        self.assertEqual(lyrics.render("text"), lyrics.to_plain_text())
+        self.assertIn("00:00:01,200", lyrics.render("srt"))
+        self.assertEqual(LyricsFormat.ENHANCED_LRC.extension, ".lrc")
+        self.assertEqual(LyricsFormat.TTML.extension, ".ttml")
+
+    def test_external_no_fallback_and_embedded_fallback(self):
+        plain = Lyrics(stanzas=[[LyricsLine("Just words")]])
+        for fmt in ("lrc", "enhanced-lrc", "srt", "ttml"):
+            with self.subTest(format=fmt):
+                with self.assertRaises(LyricsFormatUnavailableError):
+                    plain.render(fmt)
+                self.assertEqual(plain.render(fmt, embedded=True), "Just words")
+        timed = Lyrics(stanzas=[[LyricsLine("Timed", start=1230)]])
+        with self.assertRaises(LyricsFormatUnavailableError):
+            timed.render("srt")
+        self.assertEqual(timed.render("srt", embedded=True), "[00:01.23]Timed")
+        self.assertEqual(timed.render("enhanced-lrc"), "[00:01.23]Timed")
 
     def test_nested_timed_spans_never_duplicate_lyrics(self):
         # Apple's TTML can contain an untimed wrapper span around background

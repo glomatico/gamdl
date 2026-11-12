@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import warnings
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, suppress
@@ -25,6 +26,8 @@ from gamdl.media import (
     AudioStream,
     CoverFormat,
     HttpStream,
+    LyricsFormat,
+    LyricsFormatUnavailableError,
     MusicVideo,
     MusicVideoCodec,
     MusicVideoStreamSelector,
@@ -64,6 +67,15 @@ class _SidecarError(Exception):
     def __init__(self, stage: str):
         self.stage = stage
         super().__init__(stage)
+
+
+async def _lyrics_for_format(media: Song, format: LyricsFormat):
+    """Use syllable lyrics for enhanced LRC, with line lyrics as fallback."""
+    if format == LyricsFormat.ENHANCED_LRC:
+        enhanced = await media.get_lyrics(syllable=True)
+        if enhanced is not None and enhanced.is_syllable_synced:
+            return enhanced
+    return await media.get_lyrics()
 
 
 def _tag_bytes(
@@ -317,6 +329,7 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
+        embedded_lyrics_format: LyricsFormat,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
@@ -461,9 +474,12 @@ class Downloader:
                 and isinstance(media, Song)
                 and selected_codec is not None
             ):
-                lyrics = await media.get_lyrics()
+                lyrics = await _lyrics_for_format(media, embedded_lyrics_format)
                 if lyrics is not None:
-                    tags = replace(tags, lyrics=lyrics.to_plain_text())
+                    tags = replace(
+                        tags,
+                        lyrics=lyrics.render(embedded_lyrics_format, embedded=True),
+                    )
             if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
@@ -497,6 +513,7 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
+        embedded_lyrics_format: LyricsFormat,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
@@ -637,9 +654,12 @@ class Downloader:
                 and isinstance(media, Song)
                 and selected_codec is not None
             ):
-                lyrics = await media.get_lyrics()
+                lyrics = await _lyrics_for_format(media, embedded_lyrics_format)
                 if lyrics is not None:
-                    tags = replace(tags, lyrics=lyrics.to_plain_text())
+                    tags = replace(
+                        tags,
+                        lyrics=lyrics.render(embedded_lyrics_format, embedded=True),
+                    )
             if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
@@ -661,6 +681,7 @@ class Downloader:
         save_cover: bool,
         cover_format: CoverFormat,
         save_lyrics: bool,
+        lyrics_file_format: LyricsFormat,
         prepared_cover: bytes | None,
         event_callback: DownloadEventCallback | None = None,
         on_result: Callable[[str, FileResult], None] | None = None,
@@ -715,35 +736,54 @@ class Downloader:
             assert isinstance(media, Song)
             try:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
-                    existing_lyrics = next(
-                        (
-                            sidecar
-                            for suffix in (".lrc", ".txt")
-                            if (sidecar := destination.with_suffix(suffix)).is_file()
-                        ),
-                        None,
-                    )
+                    sidecar = destination.with_suffix(lyrics_file_format.extension)
+                    existing_lyrics = sidecar.is_file()
+                    refresh_lrc = False
+                    if (
+                        existing_lyrics
+                        and overwrite == OverwritePolicy.SKIP
+                        and lyrics_file_format
+                        in {LyricsFormat.LRC, LyricsFormat.ENHANCED_LRC}
+                    ):
+                        old = sidecar.read_text(encoding="utf-8", errors="replace")
+                        contains_syllables = bool(
+                            re.search(r"<\d{2,}:\d{2}\.\d{2}>", old)
+                        )
+                        refresh_lrc = (
+                            lyrics_file_format == LyricsFormat.ENHANCED_LRC
+                            and not contains_syllables
+                        ) or (
+                            lyrics_file_format == LyricsFormat.LRC
+                            and contains_syllables
+                        )
                     if (
                         overwrite == OverwritePolicy.SKIP
-                        and existing_lyrics is not None
+                        and existing_lyrics
+                        and not refresh_lrc
                     ):
-                        lyrics_result = FileResult(existing_lyrics, FileStatus.SKIPPED)
+                        lyrics_result = FileResult(sidecar, FileStatus.SKIPPED)
                     else:
-                        lyrics = await media.get_lyrics()
+                        lyrics = await _lyrics_for_format(media, lyrics_file_format)
                         if lyrics is not None:
-                            if lyrics.is_synced:
-                                sidecar = destination.with_suffix(".lrc")
-                                contents = lyrics.to_lrc()
+                            try:
+                                contents = lyrics.render(lyrics_file_format)
+                            except LyricsFormatUnavailableError:
+                                lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
                             else:
-                                sidecar = destination.with_suffix(".txt")
-                                contents = lyrics.to_plain_text()
-                            status = await _complete_write(
-                                publish_bytes_result,
-                                contents.encode("utf-8"),
-                                sidecar,
-                                overwrite=overwrite,
-                            )
-                            lyrics_result = FileResult(sidecar, status)
+                                if refresh_lrc and existing_lyrics and old == contents:
+                                    lyrics_result = FileResult(
+                                        sidecar, FileStatus.SKIPPED
+                                    )
+                                else:
+                                    status = await _complete_write(
+                                        publish_bytes_result,
+                                        contents.encode("utf-8"),
+                                        sidecar,
+                                        overwrite=OverwritePolicy.REPLACE
+                                        if refresh_lrc
+                                        else overwrite,
+                                    )
+                                    lyrics_result = FileResult(sidecar, status)
                         else:
                             lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
                     if on_result is not None:
@@ -761,6 +801,7 @@ class Downloader:
         save_cover: bool,
         cover_format: CoverFormat,
         save_lyrics: bool,
+        lyrics_file_format: LyricsFormat,
         playlist_path: Path | None,
         playlist_tags: PlaylistTags | None,
         playlist_index: int | None,
@@ -787,6 +828,7 @@ class Downloader:
                 save_cover=save_cover,
                 cover_format=cover_format,
                 save_lyrics=save_lyrics,
+                lyrics_file_format=lyrics_file_format,
                 prepared_cover=prepared_cover,
                 event_callback=event_callback,
                 on_result=save_result,
@@ -875,11 +917,13 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
+        embedded_lyrics_format: LyricsFormat | str = LyricsFormat.TEXT,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
         """Return finished MP4-family bytes without publishing a media file."""
         cover_format = CoverFormat(cover_format)
+        embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         prepared = await self._prepare(
             media,
             codec=codec,
@@ -895,6 +939,7 @@ class Downloader:
             exclude_tags=exclude_tags,
             include_cover=include_cover,
             cover_format=cover_format,
+            embedded_lyrics_format=embedded_lyrics_format,
             progress_callback=progress_callback,
             event_callback=event_callback,
         )
@@ -928,6 +973,8 @@ class Downloader:
         cover_format: CoverFormat | str = CoverFormat.JPG,
         save_cover: bool = False,
         save_lyrics: bool = False,
+        lyrics_file_format: LyricsFormat | str = LyricsFormat.LRC,
+        embedded_lyrics_format: LyricsFormat | str = LyricsFormat.TEXT,
         playlist_path: str | os.PathLike[str] | None = None,
         playlist_index: int | None = None,
         save_playlist: bool = False,
@@ -949,6 +996,8 @@ class Downloader:
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
         cover_format = CoverFormat(cover_format)
+        lyrics_file_format = LyricsFormat(lyrics_file_format)
+        embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         if video_extension not in (".m4v", ".mp4"):
             raise ValueError("video_extension must be '.m4v' or '.mp4'")
         if type(overwrite) is not bool:
@@ -1057,6 +1106,7 @@ class Downloader:
                         save_cover=save_cover,
                         cover_format=cover_format,
                         save_lyrics=save_lyrics,
+                        lyrics_file_format=lyrics_file_format,
                         playlist_path=Path(playlist_path)
                         if playlist_path is not None
                         else None,
@@ -1153,6 +1203,7 @@ class Downloader:
                 save_cover=save_cover,
                 cover_format=cover_format,
                 save_lyrics=save_lyrics,
+                lyrics_file_format=lyrics_file_format,
                 playlist_path=Path(playlist_path)
                 if playlist_path is not None
                 else None,
@@ -1184,6 +1235,7 @@ class Downloader:
                 exclude_tags=exclude_tags,
                 include_cover=include_cover,
                 cover_format=cover_format,
+                embedded_lyrics_format=embedded_lyrics_format,
                 progress_callback=progress_callback,
                 event_callback=event_callback,
                 resolved_tags=resolved_tags,
@@ -1257,6 +1309,7 @@ class Downloader:
             save_cover=save_cover,
             cover_format=cover_format,
             save_lyrics=save_lyrics,
+            lyrics_file_format=lyrics_file_format,
             playlist_path=Path(playlist_path) if playlist_path is not None else None,
             playlist_tags=playlist_tags,
             playlist_index=playlist_index,

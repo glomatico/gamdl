@@ -391,6 +391,8 @@ async def run_rip(options: RipOptions) -> int:
                             "cover_format": options.cover_format,
                             "save_lyrics": not options.no_lyrics_file
                             and isinstance(media, Song),
+                            "lyrics_file_format": options.lyrics_file_format,
+                            "embedded_lyrics_format": options.embedded_lyrics_format,
                             "save_playlist": options.save_playlist
                             and media.source is not None
                             and media.source.playlist is not None,

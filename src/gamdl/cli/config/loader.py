@@ -11,7 +11,13 @@ from typing import Any
 import yaml
 
 from gamdl.download import PathFormatter, PlaylistTags, Tags
-from gamdl.media import CoverFormat, MusicVideoCodec, SongCodec, UploadedVideoQuality
+from gamdl.media import (
+    CoverFormat,
+    LyricsFormat,
+    MusicVideoCodec,
+    SongCodec,
+    UploadedVideoQuality,
+)
 from gamdl.media.constants import ARTIST_AUTO_SELECT_NAMES, LIBRARY_AUTO_SELECT_NAMES
 
 from ..options import TAG_NAMES
@@ -142,6 +148,12 @@ def _validate(config: dict[str, Any]) -> AppConfig:
         raise ConfigError("auth.storefront must be a two-letter country code")
     if output.cover_format not in {item.value for item in CoverFormat}:
         raise ConfigError("output.cover_format must be jpg or png")
+    for name in ("lyrics_file_format", "embedded_lyrics_format"):
+        if getattr(output, name) not in {item.value for item in LyricsFormat}:
+            raise ConfigError(
+                f"output.{name} must be one of "
+                + ", ".join(item.value for item in LyricsFormat)
+            )
     if output.music_video_container not in {"m4v", "mp4"}:
         raise ConfigError("output.music_video_container must be m4v or mp4")
     for name, values, allowed in (
@@ -385,6 +397,8 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "exclude_tags": tuple(o.exclude_tags),
         "cover_format": o.cover_format,
         "no_lyrics_file": o.no_lyrics_file,
+        "lyrics_file_format": o.lyrics_file_format,
+        "embedded_lyrics_format": o.embedded_lyrics_format,
         "save_playlist": o.save_playlist,
         "fail_fast": d.fail_fast,
         "artist_auto_select": tuple(d.artist_auto_select),

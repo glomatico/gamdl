@@ -9,7 +9,13 @@ from dataclass_click import argument
 from dataclass_click import option as dataclass_option
 
 from gamdl.download.tags import Tags
-from gamdl.media import CoverFormat, MusicVideoCodec, SongCodec, UploadedVideoQuality
+from gamdl.media import (
+    CoverFormat,
+    LyricsFormat,
+    MusicVideoCodec,
+    SongCodec,
+    UploadedVideoQuality,
+)
 
 TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
 
@@ -189,10 +195,24 @@ class RipOptions:
     ] = ()
     no_lyrics_file: Annotated[
         bool,
-        option(
-            "--no-lyrics-file", is_flag=True, help="Skip saving song LRC/text sidecars"
-        ),
+        option("--no-lyrics-file", is_flag=True, help="Skip saving external lyrics"),
     ] = False
+    lyrics_file_format: Annotated[
+        str,
+        option(
+            "--lyrics-file-format",
+            type=click.Choice([item.value for item in LyricsFormat]),
+            help="External lyrics format (default: lrc)",
+        ),
+    ] = LyricsFormat.LRC.value
+    embedded_lyrics_format: Annotated[
+        str,
+        option(
+            "--embedded-lyrics-format",
+            type=click.Choice([item.value for item in LyricsFormat]),
+            help="Embedded lyrics format (default: text)",
+        ),
+    ] = LyricsFormat.TEXT.value
     save_playlist: Annotated[
         bool,
         option("--save-playlist/--no-save-playlist", help="Generate M3U for playlists"),

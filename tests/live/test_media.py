@@ -8,8 +8,8 @@ from __future__ import annotations
 import os
 import unittest
 
-from gamdl.media import GamdlMediaError, Lyrics, MediaResolver, Song
 from gamdl.download import TagResolver
+from gamdl.media import Lyrics, MediaResolver, Song
 from tests.live_auth import LiveSettings, open_live_session
 
 ALBUM_ID = "1559885420"
@@ -65,8 +65,7 @@ class MediaLiveTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(syllable.to_plain_text(), lyrics.to_plain_text())
         self.assertTrue(syllable.to_plain_text())
-        with self.assertRaisesRegex(GamdlMediaError, "cannot export to SRT"):
-            syllable.to_srt()
+        self.assertTrue(syllable.to_srt())
         self.assertEqual(syllable.to_ttml(), syllable.source_ttml)
 
     async def test_album_resolver_and_seeded_metadata(self) -> None:

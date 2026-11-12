@@ -23,7 +23,7 @@ from .publication import publish_bytes
 from .tags import Tags
 
 MEDIA_EXTENSIONS = frozenset({".m4a", ".m4v", ".mp4", ".mp3"})
-SIDECAR_EXTENSIONS = (".lrc", ".txt", ".jpg", ".jpeg", ".png")
+SIDECAR_EXTENSIONS = (".lrc", ".srt", ".ttml", ".txt", ".jpg", ".jpeg", ".png")
 _TRACK_NUMBER = re.compile(r"^(?:\d{1,3}-)?\d{1,3}\s+")
 
 

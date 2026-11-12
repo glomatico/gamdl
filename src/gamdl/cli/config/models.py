@@ -54,6 +54,8 @@ class OutputConfig:
     save_cover: bool = False
     cover_format: str = "jpg"
     no_lyrics_file: bool = False
+    lyrics_file_format: str = "lrc"
+    embedded_lyrics_format: str = "text"
     save_playlist: bool = False
     album_folder_template: str = "{album_artist}/{album}"
     compilation_folder_template: str = "Compilations/{album}"

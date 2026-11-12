@@ -247,6 +247,8 @@ def _download_options(settings, media: Media) -> dict:
             if not settings.download.song_codec
             else None,
             save_lyrics=not settings.output.no_lyrics_file,
+            lyrics_file_format=settings.output.lyrics_file_format,
+            embedded_lyrics_format=settings.output.embedded_lyrics_format,
         )
     elif isinstance(media, MusicVideo):
         kwargs.update(

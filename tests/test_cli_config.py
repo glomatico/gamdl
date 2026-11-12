@@ -13,6 +13,64 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_lyrics_formats_defaults_yaml_cli_and_validation(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        defaults = load_config(None)
+        self.assertEqual(defaults.output.lyrics_file_format, "lrc")
+        self.assertEqual(defaults.output.embedded_lyrics_format, "text")
+        self._write(
+            "output:\n  lyrics_file_format: enhanced-lrc\n"
+            "  embedded_lyrics_format: ttml\n"
+        )
+        configured = load_config(self.path)
+        self.assertEqual(configured.output.lyrics_file_format, "enhanced-lrc")
+        self.assertEqual(configured.output.embedded_lyrics_format, "ttml")
+        self.assertEqual(
+            click_default_map(configured)["lyrics_file_format"], "enhanced-lrc"
+        )
+        self.assertEqual(
+            click_default_map(configured)["embedded_lyrics_format"], "ttml"
+        )
+
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            runner = CliRunner()
+            args = ["--config", str(self.path), "rip", "URL"]
+            base = runner.invoke(main, args)
+            self.assertEqual(base.exit_code, 0, base.output)
+            self.assertEqual(captured[-1].lyrics_file_format, "enhanced-lrc")
+            self.assertEqual(captured[-1].embedded_lyrics_format, "ttml")
+            override = runner.invoke(
+                main,
+                [
+                    *args,
+                    "--lyrics-file-format",
+                    "srt",
+                    "--embedded-lyrics-format",
+                    "lrc",
+                ],
+            )
+            self.assertEqual(override.exit_code, 0, override.output)
+            self.assertEqual(captured[-1].lyrics_file_format, "srt")
+            self.assertEqual(captured[-1].embedded_lyrics_format, "lrc")
+            for flag in ("--lyrics-file-format", "--embedded-lyrics-format"):
+                invalid = runner.invoke(main, [*args, flag, "vtt"])
+                self.assertNotEqual(invalid.exit_code, 0)
+                self.assertIn("Invalid value", invalid.output)
+
+        for key in ("lyrics_file_format", "embedded_lyrics_format"):
+            for bad in ("vtt", "LRC", "", 1, None):
+                with self.subTest(key=key, invalid=bad):
+                    self._write(yaml.safe_dump({"output": {key: bad}}))
+                    with self.assertRaisesRegex(ConfigError, f"output.{key}"):
+                        load_config(self.path)
+
     def test_music_video_container_defaults_yaml_cli_and_validation(self):
         from gamdl.cli.config.loader import click_default_map
 

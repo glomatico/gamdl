@@ -42,7 +42,13 @@ from .resolver import (
 )
 from .song import Song, SongStreamSelector
 from .song.enums import SongCodec
-from .song.lyrics import Lyrics, LyricsLine, LyricsSegment
+from .song.lyrics import (
+    Lyrics,
+    LyricsFormat,
+    LyricsFormatUnavailableError,
+    LyricsLine,
+    LyricsSegment,
+)
 from .song.models import (
     StreamSelectionOption,
     StreamSelectionRequest,
@@ -92,6 +98,8 @@ __all__ = [
     "HttpStream",
     "HlsType",
     "Lyrics",
+    "LyricsFormat",
+    "LyricsFormatUnavailableError",
     "LyricsLine",
     "LyricsSegment",
     "Media",

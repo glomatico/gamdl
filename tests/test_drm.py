@@ -294,6 +294,61 @@ class DrmHandlerTests(unittest.IsolatedAsyncioTestCase):
             DrmBackend.PLAYREADY,
         )
 
+    async def test_security_level_inspection_from_existing_cdm(self):
+        for backend, level in (
+            (DrmBackend.WIDEVINE, 1),
+            (DrmBackend.WIDEVINE, 3),
+            (DrmBackend.PLAYREADY, 2000),
+            (DrmBackend.PLAYREADY, 3000),
+            (DrmBackend.WIDEVINE, None),
+        ):
+            with self.subTest(backend=backend, level=level):
+                device = Mock(security_level=level)
+                drm = (
+                    Drm.from_widevine(fake_api(), cdm=device)
+                    if backend == DrmBackend.WIDEVINE
+                    else Drm.from_playready(fake_api(), cdm=device)
+                )
+                self.assertEqual(await drm.get_device_security_level(), level)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("pywidevine"), "pywidevine optional dependency"
+    )
+    async def test_bundled_widevine_level_is_l3_without_cdm_initialization(self):
+        drm = Drm.from_widevine(fake_api())
+        self.assertEqual(await drm.get_device_security_level(), 3)
+        self.assertIsNone(drm._cdm)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("pywidevine"), "pywidevine optional dependency"
+    )
+    async def test_custom_widevine_level_inspected_without_cdm_or_license(self):
+        drm = Drm.from_widevine(fake_api(), device_path="device.wvd")
+        with patch(
+            "pywidevine.Device.load", return_value=Mock(security_level=1)
+        ) as loader:
+            self.assertEqual(await drm.get_device_security_level(), 1)
+            loader.assert_called_once_with("device.wvd")
+        self.assertIsNone(drm._cdm)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("pyplayready"), "pyplayready optional dependency"
+    )
+    async def test_custom_playready_security_level_and_invalid_file(self):
+        drm = Drm.from_playready(fake_api(), device_path="device.prd")
+        with patch(
+            "pyplayready.device.Device.load",
+            return_value=Mock(security_level=2000),
+        ) as loader:
+            self.assertEqual(await drm.get_device_security_level(), 2000)
+            loader.assert_called_once_with("device.prd")
+        with patch(
+            "pyplayready.device.Device.load",
+            side_effect=ValueError("device file contains sensitive info"),
+        ):
+            self.assertIsNone(await drm.get_device_security_level())
+        self.assertIsNone(drm._cdm)
+
     async def test_matching_drm_signaling_does_not_open_cdm(self):
         api = fake_api()
         widevine = Drm.from_widevine(api)

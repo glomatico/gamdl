@@ -58,7 +58,11 @@ from ..prompts import interactive, select_media, select_stream
 from ..session import authenticate as _authenticate
 from ..session import create_drm
 from ..terminal import TerminalController
-from ..warnings import warn_alac_without_wrapper, warn_content_restrictions
+from ..warnings import (
+    warn_alac_without_wrapper,
+    warn_content_restrictions,
+    warn_high_resolution_security,
+)
 
 if TYPE_CHECKING:
     from ..options import RipOptions
@@ -252,6 +256,9 @@ async def run_rip(options: RipOptions) -> int:
                     "was not confirmed"
                 )
             drm = await create_drm(options, api)
+            await warn_high_resolution_security(
+                drm, console, max_height=options.max_height
+            )
             downloader = Downloader(
                 drm=drm,
                 wrapper_api=wrapper,

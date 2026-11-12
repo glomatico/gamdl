@@ -47,7 +47,11 @@ from ...errors import (
 from ...output import console
 from ...progress import RipProgress
 from ...session import authenticate, create_drm
-from ...warnings import warn_alac_without_wrapper, warn_content_restrictions
+from ...warnings import (
+    warn_alac_without_wrapper,
+    warn_content_restrictions,
+    warn_high_resolution_security,
+)
 
 
 @dataclass
@@ -508,6 +512,10 @@ async def _run(
                 # playlists, but should be downloaded only once. Concurrency
                 # here is per media item, not the stream-part concurrency.
                 drm = await create_drm(auth_options, api)
+                if any(track.kind == "music-videos" for track in missing.values()):
+                    await warn_high_resolution_security(
+                        drm, output, max_height=settings.download.max_height
+                    )
                 itunes = await stack.enter_async_context(
                     await ItunesApi.create(
                         storefront=api.storefront,

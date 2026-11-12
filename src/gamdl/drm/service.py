@@ -178,6 +178,49 @@ class Drm:
                 self._cdm = await _make_cdm(self.backend, self._device_path)
             return self._cdm
 
+    async def get_device_security_level(self) -> int | None:
+        """Read the configured device level without opening a DRM session.
+
+        Keep CDM initialization lazy: requesting a high video resolution
+        should not force a DRM setup for unrelated audio-only downloads.
+        Unknown or unreadable levels are left to normal DRM initialization.
+        """
+        if self._cdm is not None:
+            level = getattr(self._cdm, "security_level", None)
+            return (
+                int(level)
+                if isinstance(level, int) and not isinstance(level, bool)
+                else None
+            )
+
+        def inspect_device() -> int | None:
+            if self.backend == DrmBackend.WIDEVINE:
+                from pywidevine import Device
+
+                if self._device_path is None:
+                    from .default_wvd import WVD
+
+                    device = Device.loads(WVD)
+                else:
+                    device = Device.load(str(self._device_path))
+            else:
+                from pyplayready.device import Device
+
+                if self._device_path is None:
+                    return None
+                device = Device.load(str(self._device_path))
+            level = getattr(device, "security_level", None)
+            return (
+                int(level)
+                if isinstance(level, int) and not isinstance(level, bool)
+                else None
+            )
+
+        try:
+            return await asyncio.to_thread(inspect_device)
+        except Exception:  # noqa: BLE001 - informational inspection must not stop DRM
+            return None
+
     def has_signaling(self, drm_info: DRMInfo) -> bool:
         """Whether this backend has enough signaling to attempt a license.
 

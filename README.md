@@ -1,4 +1,8 @@
-# Gamdl (Glomatico's Apple Music Downloader)
+<p align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/0/0f/Apple_Music_Logo_%282026%29.svg" alt="Apple Music logo" width="220">
+</p>
+
+<h1 align="center">Gamdl<br><sub><sub>Glomatico's Apple Music Downloader</sub></sub></h1>
 
 [![PyPI version](https://img.shields.io/pypi/v/gamdl?color=blue)](https://pypi.org/project/gamdl/)
 [![Python versions](https://img.shields.io/pypi/pyversions/gamdl)](https://pypi.org/project/gamdl/)

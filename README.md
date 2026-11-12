@@ -400,6 +400,12 @@ Historically, Apple Music has offered the following music-video resolutions:
 
 These are examples, **not a fixed list enforced by Gamdl**. Gamdl selects from the resolutions and bitrates advertised in the video's HLS manifest, respecting `--max-height`. The default 1080p limit excludes higher resolutions until you raise it.
 
+#### Music Video Audio Selection
+
+For music videos, Gamdl automatically selects the **highest-bitrate AAC** track available. If no AAC rendition is available, it falls back to the **highest-bitrate HE-AAC** track. It never automatically selects Dolby Atmos or AC-3, even if those are marked as the default audio tracks in the HLS manifest.
+
+Audio may come from a different audio group than the chosen video variant. When needed, Gamdl reads audio playlist metadata to estimate bitrate without downloading media segments. If an audio bitrate cannot be determined, the playlist's default designation and stereo group are used as tiebreakers. If neither AAC nor HE-AAC is available, automatic selection reports an unavailable stream rather than choosing a surround codec. To select an audio stream manually (including Atmos or AC-3), use `--ask-music-video-streams`.
+
 #### Music Video Container (`output.music_video_container` / `--music-video-container`)
 
 Music videos are saved as `.m4v` files by default, with M4V branding. Select `mp4` to save `.mp4` files with `mp42` branding instead; audio and video are still muxed losslessly. This setting does not affect songs or uploaded videos.

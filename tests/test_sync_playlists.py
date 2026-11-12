@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from importlib import import_module
 import tempfile
 import unittest
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch as mock_patch
 
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
@@ -30,6 +31,23 @@ from gamdl.sync.playlists import (
     publish_playlist,
     remote_track,
 )
+
+
+def patch(target: str, *args, **kwargs):
+    """Patch the actual command module, avoiding Python 3.10 name collisions.
+
+    The sync package exports a Click command named ``playlists``. Older
+    unittest.mock versions can resolve the dotted target to that command
+    instead of to the submodule with the same name.
+    """
+    prefix = "gamdl.cli.commands.sync.playlists."
+    if not target.startswith(prefix):
+        raise ValueError(f"Unexpected patch target: {target}")
+    obj = import_module("gamdl.cli.commands.sync.playlists")
+    parts = target[len(prefix) :].split(".")
+    for part in parts[:-1]:
+        obj = getattr(obj, part)
+    return mock_patch.object(obj, parts[-1], *args, **kwargs)
 
 
 def resource(media_id: str, kind: str = "songs") -> dict:

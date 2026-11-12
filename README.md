@@ -51,17 +51,19 @@ Codec and resolution availability varies by track, account, authentication metho
 
 ## 📦 Installation
 
-Install Gamdl from [PyPI](https://pypi.org/project/gamdl/) with your preferred DRM backend:
+**Recommended:** Install Gamdl with the Widevine extra from [PyPI](https://pypi.org/project/gamdl/). It includes a built-in **Widevine L3 device**, so you don't need to provide a separate device file for standard downloads:
 
 ```bash
 python -m pip install "gamdl[widevine]"
 ```
 
-For PlayReady instead:
+If you prefer PlayReady, install its extra instead:
 
 ```bash
 python -m pip install "gamdl[playready]"
 ```
+
+**PlayReady does not include a device.** You must supply your own compatible `.prd` file using `--device-path` or `auth.device_path` in your configuration. For videos above 1080p, see [Video Codec and Resolution](#video-codec-and-resolution).
 
 The base package can also be installed with `python -m pip install gamdl`, but protected streams require a supported DRM setup or a compatible wrapper. After installation, check the CLI with:
 
@@ -303,7 +305,7 @@ Avoid passing secrets on the command line when possible, as they may be recorded
 
 #### DRM Backend (`auth.drm_backend` / `--drm-backend`)
 
-Choose `widevine` (default) or `playready`. For a custom provisioned device, use `auth.device_path` / `--device-path`. Widevine can use the bundled default device when applicable; PlayReady requires a compatible device file. Protected media must also have suitable DRM signaling and licenses.
+Choose `widevine` (default) or `playready`. For a custom provisioned device, use `auth.device_path` / `--device-path`. Widevine uses the bundled **L3** device by default, while PlayReady **requires** a compatible `.prd` device file. For higher-security playback, provide an appropriately provisioned device. Protected media must also have suitable DRM signaling and licenses.
 
 #### Storefront and Language (`auth.storefront` / `--storefront`, `auth.language` / `--language`)
 
@@ -387,6 +389,8 @@ gamdl rip "<music video URL>" --music-video-codec-priority h265,h264
 #### Video Codec and Resolution (`download.music_video_codec` / `--music-video-codec`, `download.max_height` / `--max-height`)
 
 Select an exact video codec, or keep `null` to use the priority list. The maximum requested height defaults to `1080` pixels; higher resolutions depend on stream availability and your DRM capabilities. Use `--ask-music-video-streams` (CLI-only) to select audio and video streams interactively.
+
+**Videos above 1080p require a Widevine L1 or PlayReady SL3000 (SL3K) device.** The bundled Widevine device is L3 and does not meet that requirement. Provide an appropriately provisioned device with `--device-path` (or `auth.device_path`) if you increase `--max-height` beyond 1080. Gamdl warns when it detects an insufficient device security level; the warning does not prevent downloading, and a higher security level alone does not guarantee a compatible license or stream.
 
 Historically, Apple Music has offered the following music-video resolutions:
 

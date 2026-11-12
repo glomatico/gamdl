@@ -16,9 +16,8 @@ target/
 *.pyd
 *.dylib
 
-# Local configuration and private development diary
+# Local configuration and private files
 .env
 .env.*
 !.env.example
 /.local/
-/scripts/dump_stream.py

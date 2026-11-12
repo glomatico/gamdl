@@ -64,6 +64,7 @@ manifest-path = "native/Cargo.toml"
 python-source = "src"
 module-name = "gamdl._native"
 bindings = "pyo3"
+include = ["LICENSE"]
 
 [tool.uv]
 cache-keys = [

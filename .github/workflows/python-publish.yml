@@ -1,11 +1,17 @@
 # Build precompiled, Python 3.10+ ABI3 wheels before a PyPI release.
-# Manual runs validate the distributions without publishing anything.
+# Manual runs validate distributions without publishing, unless the explicit
+# missing-sdist recovery option is enabled.
 name: Publish Python Package
 
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish_missing_sdist:
+        description: "Recovery only: upload a missing sdist for an existing PyPI release"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -52,6 +58,17 @@ jobs:
         run: |
           python -m pip install "maturin==1.11.5"
           maturin sdist --out dist
+      - name: Verify source distribution includes its license
+        run: |
+          python - <<'PY'
+          import tarfile
+          from pathlib import Path
+
+          archive, = Path("dist").glob("gamdl-*.tar.gz")
+          with tarfile.open(archive, "r:gz") as source:
+              expected = f"{archive.name.removesuffix('.tar.gz')}/LICENSE"
+              assert expected in source.getnames(), f"Missing {expected} in {archive}"
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: dist-sdist
@@ -60,6 +77,7 @@ jobs:
 
   build-wheels:
     name: Wheel ${{ matrix.name }}
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish_missing_sdist }}
     needs: validate-release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -136,6 +154,7 @@ jobs:
 
   verify-distributions:
     name: Verify release artifacts
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish_missing_sdist }}
     needs: [validate-release, build-sdist, build-wheels]
     runs-on: ubuntu-latest
     steps:
@@ -155,6 +174,7 @@ jobs:
           python -m twine check dist/*
           python - <<'PY'
           import os
+          import tarfile
           from pathlib import Path
 
           version = os.environ["PACKAGE_VERSION"]
@@ -163,6 +183,8 @@ jobs:
           assert len(wheels) == 5 and len(sdists) == 1, (wheels, sdists)
           assert all(p.name.startswith(f"gamdl-{version}-") for p in wheels)
           assert sdists[0].name == f"gamdl-{version}.tar.gz"
+          with tarfile.open(sdists[0], "r:gz") as archive:
+              assert f"gamdl-{version}/LICENSE" in archive.getnames()
           names = [wheel.name for wheel in wheels]
           assert all("cp310-abi3" in name for name in names), names
           assert any("manylinux" in n and "x86_64" in n for n in names), names
@@ -188,6 +210,50 @@ jobs:
           pattern: dist-*
           path: dist/
           merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  pypi-recover-sdist:
+    name: Recover missing PyPI source distribution
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_missing_sdist }}
+    needs: [validate-release, build-sdist]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/gamdl/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Verify an existing PyPI release is missing only its sdist
+        env:
+          PACKAGE_VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          version = os.environ["PACKAGE_VERSION"]
+          assert [p.name for p in Path("dist").iterdir()] == [
+              f"gamdl-{version}.tar.gz"
+          ], "Recovery must publish exactly one source distribution"
+          with urllib.request.urlopen(
+              f"https://pypi.org/pypi/gamdl/{version}/json", timeout=15
+          ) as response:
+              release = json.load(response)
+          files = [entry["filename"] for entry in release["urls"]]
+          assert len([name for name in files if name.endswith(".whl")]) == 5, files
+          assert not any(name.endswith(".tar.gz") for name in files), files
+          PY
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/

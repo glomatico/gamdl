@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Restore configurable cover artwork dimensions with separate `output.embedded_cover_size` and `output.file_cover_size` settings (both default to 1200 pixels), including CLI flags and playlist sync support.
 - Fix a full-screen authentication wizard crash when switching from the last menu choice to a token or credential prompt.
 - Restore music-video iTunes tag fallback by passing the lazily initialized iTunes API to the downloader's tag resolver.
 - Publish downloads and sidecars through ordinary copies and renames instead of hard links to improve Windows and external-drive compatibility. Preserve no-overwrite behavior, temporary-file cleanup, and completed-file visibility where the filesystem supports exclusive renames.

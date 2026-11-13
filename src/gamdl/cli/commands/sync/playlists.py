@@ -233,6 +233,8 @@ def _download_options(settings, media: Media) -> dict:
         "tag": not settings.output.no_tag,
         "exclude_tags": settings.output.exclude_tags,
         "cover_format": settings.output.cover_format,
+        "embedded_cover_size": settings.output.embedded_cover_size,
+        "file_cover_size": settings.output.file_cover_size,
         "save_cover": settings.output.save_cover,
         "save_playlist": False,
     }

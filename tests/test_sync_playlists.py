@@ -97,11 +97,15 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
                 config.output,
                 lyrics_file_format="srt",
                 embedded_lyrics_format="enhanced-lrc",
+                embedded_cover_size=400,
+                file_cover_size=2400,
             ),
         )
         options = _download_options(config, Song.from_id("12345", api=Mock()))
         self.assertEqual(options["lyrics_file_format"], "srt")
         self.assertEqual(options["embedded_lyrics_format"], "enhanced-lrc")
+        self.assertEqual(options["embedded_cover_size"], 400)
+        self.assertEqual(options["file_cover_size"], 2400)
 
     def test_expected_and_unexpected_failure_classification(self):
         for error in (

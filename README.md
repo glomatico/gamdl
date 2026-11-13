@@ -521,9 +521,18 @@ gamdl rip "<song URL>" --exclude-tags comment,title_sort,cover
 
 See [Tags and Path Templates](#tags-and-templates) for every accepted exclusion name, including fields that use different names in path templates.
 
-#### Artwork (`output.save_cover` / `--save-cover`, `output.cover_format` / `--cover-format`)
+#### Artwork (`output.save_cover`, `output.cover_format`, `output.embedded_cover_size`, `output.file_cover_size`)
 
-Embedded artwork is normally included when tagging is enabled. Saving a separate artwork file is disabled by default. Choose `jpg` (default) or `png` for cover format.
+Embedded artwork is normally included when tagging is enabled. Saving a separate artwork file is disabled by default. Choose `jpg` (default) or `png` for cover format. Both cover sizes default to **1200 × 1200 pixels**, independently configurable:
+
+```yaml
+output:
+  embedded_cover_size: 600
+  file_cover_size: 2400
+  save_cover: true
+```
+
+Use `--embedded-cover-size` and `--file-cover-size` to override these per command. If the sizes match, Gamdl reuses the artwork bytes for the saved cover. If the sizes differ, it fetches separate resolutions from Apple Music. `--exclude-tags cover` affects only embedded artwork, not the external cover. `--no-tag` disables embedding, while `--save-cover` still saves an external image.
 
 ### Files and Folders
 

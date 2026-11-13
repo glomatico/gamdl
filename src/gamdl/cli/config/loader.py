@@ -396,6 +396,8 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "no_tag": o.no_tag,
         "exclude_tags": tuple(o.exclude_tags),
         "cover_format": o.cover_format,
+        "embedded_cover_size": o.embedded_cover_size,
+        "file_cover_size": o.file_cover_size,
         "no_lyrics_file": o.no_lyrics_file,
         "lyrics_file_format": o.lyrics_file_format,
         "embedded_lyrics_format": o.embedded_lyrics_format,

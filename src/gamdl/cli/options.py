@@ -177,6 +177,22 @@ class RipOptions:
             help="Embedded and saved artwork format (jpg or png)",
         ),
     ] = CoverFormat.JPG.value
+    embedded_cover_size: Annotated[
+        int,
+        option(
+            "--embedded-cover-size",
+            type=click.IntRange(min=1),
+            help="Embedded cover dimensions in pixels (square, default: 1200)",
+        ),
+    ] = 1200
+    file_cover_size: Annotated[
+        int,
+        option(
+            "--file-cover-size",
+            type=click.IntRange(min=1),
+            help="Saved cover dimensions in pixels (square, default: 1200)",
+        ),
+    ] = 1200
     no_tag: Annotated[
         bool,
         option(

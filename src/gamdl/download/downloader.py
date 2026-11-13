@@ -329,6 +329,7 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
+        embedded_cover_size: int,
         embedded_lyrics_format: LyricsFormat,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
@@ -483,7 +484,11 @@ class Downloader:
             if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
-                    artwork = await cover.get_cover_bytes(format=cover_format.value)
+                    artwork = await cover.get_cover_bytes(
+                        width=embedded_cover_size,
+                        height=embedded_cover_size,
+                        format=cover_format.value,
+                    )
             # The current Rust tagger is file-based. This temporary output is
             # private; neither API publishes an untagged intermediate file.
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
@@ -513,6 +518,7 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
+        embedded_cover_size: int,
         embedded_lyrics_format: LyricsFormat,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
@@ -663,7 +669,11 @@ class Downloader:
             if include_cover and "cover" not in exclude_tags:
                 cover = await media.get_cover()
                 if cover is not None:
-                    artwork = await cover.get_cover_bytes(format=cover_format.value)
+                    artwork = await cover.get_cover_bytes(
+                        width=embedded_cover_size,
+                        height=embedded_cover_size,
+                        format=cover_format.value,
+                    )
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
                 await _complete_write(
                     self.muxer.tag, prepared_path, tags=tags, cover_bytes=artwork
@@ -680,6 +690,8 @@ class Downloader:
         overwrite: OverwritePolicy,
         save_cover: bool,
         cover_format: CoverFormat,
+        embedded_cover_size: int,
+        file_cover_size: int,
         save_lyrics: bool,
         lyrics_file_format: LyricsFormat,
         prepared_cover: bytes | None,
@@ -700,11 +712,19 @@ class Downloader:
                         # merely to confirm an existing sidecar.
                         cover_result = FileResult(existing_cover, FileStatus.SKIPPED)
                     else:
-                        cover_bytes = prepared_cover
+                        cover_bytes = (
+                            prepared_cover
+                            if embedded_cover_size == file_cover_size
+                            else None
+                        )
                         if cover_bytes is None:
                             cover = await media.get_cover()
                             cover_bytes = (
-                                await cover.get_cover_bytes(format=cover_format.value)
+                                await cover.get_cover_bytes(
+                                    width=file_cover_size,
+                                    height=file_cover_size,
+                                    format=cover_format.value,
+                                )
                                 if cover is not None
                                 else None
                             )
@@ -800,6 +820,8 @@ class Downloader:
         overwrite: OverwritePolicy,
         save_cover: bool,
         cover_format: CoverFormat,
+        embedded_cover_size: int,
+        file_cover_size: int,
         save_lyrics: bool,
         lyrics_file_format: LyricsFormat,
         playlist_path: Path | None,
@@ -827,6 +849,8 @@ class Downloader:
                 overwrite=overwrite,
                 save_cover=save_cover,
                 cover_format=cover_format,
+                embedded_cover_size=embedded_cover_size,
+                file_cover_size=file_cover_size,
                 save_lyrics=save_lyrics,
                 lyrics_file_format=lyrics_file_format,
                 prepared_cover=prepared_cover,
@@ -917,12 +941,15 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
+        embedded_cover_size: int = 1200,
         embedded_lyrics_format: LyricsFormat | str = LyricsFormat.TEXT,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
         """Return finished MP4-family bytes without publishing a media file."""
         cover_format = CoverFormat(cover_format)
+        if type(embedded_cover_size) is not int or embedded_cover_size < 1:
+            raise ValueError("embedded_cover_size must be a positive integer")
         embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         prepared = await self._prepare(
             media,
@@ -939,6 +966,7 @@ class Downloader:
             exclude_tags=exclude_tags,
             include_cover=include_cover,
             cover_format=cover_format,
+            embedded_cover_size=embedded_cover_size,
             embedded_lyrics_format=embedded_lyrics_format,
             progress_callback=progress_callback,
             event_callback=event_callback,
@@ -971,6 +999,8 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
+        embedded_cover_size: int = 1200,
+        file_cover_size: int = 1200,
         save_cover: bool = False,
         save_lyrics: bool = False,
         lyrics_file_format: LyricsFormat | str = LyricsFormat.LRC,
@@ -996,6 +1026,10 @@ class Downloader:
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
         cover_format = CoverFormat(cover_format)
+        if type(embedded_cover_size) is not int or embedded_cover_size < 1:
+            raise ValueError("embedded_cover_size must be a positive integer")
+        if type(file_cover_size) is not int or file_cover_size < 1:
+            raise ValueError("file_cover_size must be a positive integer")
         lyrics_file_format = LyricsFormat(lyrics_file_format)
         embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         if video_extension not in (".m4v", ".mp4"):
@@ -1105,6 +1139,8 @@ class Downloader:
                         overwrite=overwrite,
                         save_cover=save_cover,
                         cover_format=cover_format,
+                        embedded_cover_size=embedded_cover_size,
+                        file_cover_size=file_cover_size,
                         save_lyrics=save_lyrics,
                         lyrics_file_format=lyrics_file_format,
                         playlist_path=Path(playlist_path)
@@ -1202,6 +1238,8 @@ class Downloader:
                 overwrite=overwrite,
                 save_cover=save_cover,
                 cover_format=cover_format,
+                embedded_cover_size=embedded_cover_size,
+                file_cover_size=file_cover_size,
                 save_lyrics=save_lyrics,
                 lyrics_file_format=lyrics_file_format,
                 playlist_path=Path(playlist_path)
@@ -1235,6 +1273,7 @@ class Downloader:
                 exclude_tags=exclude_tags,
                 include_cover=include_cover,
                 cover_format=cover_format,
+                embedded_cover_size=embedded_cover_size,
                 embedded_lyrics_format=embedded_lyrics_format,
                 progress_callback=progress_callback,
                 event_callback=event_callback,
@@ -1308,6 +1347,8 @@ class Downloader:
             overwrite=overwrite,
             save_cover=save_cover,
             cover_format=cover_format,
+            embedded_cover_size=embedded_cover_size,
+            file_cover_size=file_cover_size,
             save_lyrics=save_lyrics,
             lyrics_file_format=lyrics_file_format,
             playlist_path=Path(playlist_path) if playlist_path is not None else None,

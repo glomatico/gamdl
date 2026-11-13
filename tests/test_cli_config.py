@@ -215,6 +215,64 @@ class CliConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "output.cover_format"):
             load_config(self.path)
 
+    def test_cover_sizes_defaults_yaml_cli_and_validation(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        defaults = load_config(None)
+        self.assertEqual(defaults.output.embedded_cover_size, 1200)
+        self.assertEqual(defaults.output.file_cover_size, 1200)
+        self.assertEqual(click_default_map(defaults)["embedded_cover_size"], 1200)
+        self.assertEqual(click_default_map(defaults)["file_cover_size"], 1200)
+        self._write("output:\n  embedded_cover_size: 450\n  file_cover_size: 2400\n")
+        config = load_config(self.path)
+        self.assertEqual(config.output.embedded_cover_size, 450)
+        self.assertEqual(config.output.file_cover_size, 2400)
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with (
+            patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run),
+            patch("gamdl.cli.commands.library.require_terminal"),
+            patch("gamdl.cli.commands.search.require_terminal"),
+        ):
+            runner = CliRunner()
+            for command in (["rip", "URL"], ["library"], ["search", "music"]):
+                with self.subTest(command=command):
+                    base = ["--config", str(self.path), *command]
+                    result = runner.invoke(main, base)
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(captured[-1].embedded_cover_size, 450)
+                    self.assertEqual(captured[-1].file_cover_size, 2400)
+                    override = runner.invoke(
+                        main,
+                        [
+                            *base,
+                            "--embedded-cover-size",
+                            "1000",
+                            "--file-cover-size",
+                            "800",
+                        ],
+                    )
+                    self.assertEqual(override.exit_code, 0, override.output)
+                    self.assertEqual(captured[-1].embedded_cover_size, 1000)
+                    self.assertEqual(captured[-1].file_cover_size, 800)
+                    for name in ("embedded", "file"):
+                        invalid = runner.invoke(
+                            main, [*base, f"--{name}-cover-size", "0"]
+                        )
+                        self.assertNotEqual(invalid.exit_code, 0)
+                        self.assertIn("Invalid value", invalid.output)
+
+        for name in ("embedded_cover_size", "file_cover_size"):
+            for value in (0, -1, 2.5, True, "1200", None):
+                with self.subTest(name=name, invalid=value):
+                    self._write(yaml.safe_dump({"output": {name: value}}))
+                    with self.assertRaisesRegex(ConfigError, f"output.{name}"):
+                        load_config(self.path)
+
     def test_configured_temp_path_and_cli_override(self):
         from gamdl.cli.config.loader import click_default_map
 

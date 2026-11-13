@@ -1,4 +1,4 @@
-"""Atomic publication of completed media files and optional sidecar bytes."""
+"""Publish completed media through ordinary copies and atomic renames."""
 
 from __future__ import annotations
 
@@ -8,19 +8,11 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import NamedTemporaryFile
 
 from .enums import FileStatus, OverwritePolicy
 
 Overwrite = OverwritePolicy | str
-
-_NO_HARDLINK = {
-    errno.EXDEV,
-    errno.EPERM,
-    errno.EOPNOTSUPP,
-    errno.ENOTSUP,
-    errno.ENOSYS,
-}
 
 
 def _rename_noreplace(source: Path, destination: Path) -> bool | None:
@@ -29,6 +21,13 @@ def _rename_noreplace(source: Path, destination: Path) -> bool | None:
     None means the filesystem/kernel cannot provide this operation. Unlike
     os.rename(), neither renameat2 nor renamex_np overwrites an existing file.
     """
+    if sys.platform == "win32":
+        # On Windows os.rename fails if the destination exists (unlike Unix).
+        try:
+            source.rename(destination)
+        except FileExistsError:
+            return False
+        return True
     if sys.platform not in {"linux", "darwin"}:
         return None
     libc = ctypes.CDLL(None, use_errno=True)
@@ -55,30 +54,19 @@ def _rename_noreplace(source: Path, destination: Path) -> bool | None:
     code = ctypes.get_errno()
     if code in {errno.EEXIST, errno.ENOTEMPTY}:
         return False
-    if code in _NO_HARDLINK | {errno.EINVAL}:
+    if code in {errno.ENOSYS, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EINVAL}:
         return None
     raise OSError(code, os.strerror(code), os.fspath(destination))
 
 
 def _publish_noreplace(staged: Path, destination: Path) -> bool:
     """Publish a complete staged file without replacing an existing target."""
-    try:
-        os.link(staged, destination)
-    except FileExistsError:
-        return False
-    except OSError as exc:
-        if exc.errno not in _NO_HARDLINK:
-            raise
-    else:
-        return True
-
     renamed = _rename_noreplace(staged, destination)
     if renamed is not None:
         return renamed
 
-    # Last resort for filesystems without hard links *or* exclusive rename:
-    # O_EXCL prevents clobbering another writer, even though the completed
-    # file cannot be made visible atomically on such a filesystem.
+    # Fallback for filesystems without exclusive rename. O_EXCL prevents
+    # replacing an existing file, but cannot guarantee atomic visibility.
     try:
         output = destination.open("xb")
     except FileExistsError:
@@ -145,11 +133,10 @@ def publish_bytes(data: bytes, destination: Path, *, overwrite: Overwrite) -> bo
 
 
 def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bool:
-    """Publish an existing staged file atomically using bounded-memory I/O.
+    """Copy media beside its destination, then rename the completed copy.
 
-    Hardlink completed media on the same filesystem, otherwise stage a chunked
-    copy beside the destination. Never publish incomplete files. Keep the
-    source intact so filename-collision retries can reuse it.
+    The original source remains available for retries and other callers.
+    Never expose a partial copy on filesystems supporting atomic rename.
     """
     if overwrite not in OverwritePolicy._value2member_map_:
         raise ValueError("overwrite must be 'skip' or 'replace'")
@@ -157,34 +144,6 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
     if destination.exists() and overwrite == OverwritePolicy.SKIP:
         return False
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if overwrite == OverwritePolicy.REPLACE:
-        # A private directory gives os.link() a collision-free destination.
-        # Atomically rename the new hardlink over the old file; unlike a
-        # second full-file copy, this is O(1) on the same filesystem.
-        with TemporaryDirectory(prefix=".gamdl-", dir=destination.parent) as directory:
-            staged = Path(directory) / "media"
-            try:
-                os.link(source, staged)
-            except OSError as exc:
-                if exc.errno not in _NO_HARDLINK:
-                    raise
-                with source.open("rb") as stream, staged.open("xb") as output:
-                    shutil.copyfileobj(stream, output, length=1024 * 1024)
-            staged.replace(destination)
-        return True
-    if overwrite != OverwritePolicy.REPLACE:
-        # Same-filesystem staging can publish the completed source without a
-        # second media copy, while still handling a competing writer safely.
-        try:
-            os.link(source, destination)
-        except FileExistsError:
-            return False
-        except OSError as exc:
-            if exc.errno not in _NO_HARDLINK:
-                raise
-        else:
-            return True
-        # A custom temp_path may be on another filesystem: copy in chunks.
     staged: Path | None = None
     try:
         with NamedTemporaryFile(
@@ -197,6 +156,9 @@ def publish_file(source: Path, destination: Path, *, overwrite: Overwrite) -> bo
             staged = Path(output.name)
             with source.open("rb") as stream:
                 shutil.copyfileobj(stream, output, length=1024 * 1024)
+        if overwrite == OverwritePolicy.REPLACE:
+            staged.replace(destination)
+            return True
         return _publish_noreplace(staged, destination)
     finally:
         if staged is not None:

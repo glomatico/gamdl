@@ -4,7 +4,8 @@
 
 - Fix a full-screen authentication wizard crash when switching from the last menu choice to a token or credential prompt.
 - Restore music-video iTunes tag fallback by passing the lazily initialized iTunes API to the downloader's tag resolver.
-- Allow song and sidecar publication on filesystems that do not support hard links, including macOS external drives. Preserve no-overwrite behavior and use exclusive atomic rename when supported.
+- Publish downloads and sidecars through ordinary copies and renames instead of hard links to improve Windows and external-drive compatibility. Preserve no-overwrite behavior, temporary-file cleanup, and completed-file visibility where the filesystem supports exclusive renames.
+- Organize files and sidecars without hard links, retaining originals until destination publication and database updates succeed.
 
 ## 4.0.0
 

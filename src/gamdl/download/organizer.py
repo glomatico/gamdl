@@ -19,7 +19,7 @@ from gamdl import _native
 
 from .database import MediaDatabase
 from .paths import PathFormatter
-from .publication import publish_bytes
+from .publication import publish_bytes, publish_file
 from .tags import Tags
 
 MEDIA_EXTENSIONS = frozenset({".m4a", ".m4v", ".mp4", ".mp3"})
@@ -261,9 +261,9 @@ def plan_organization(
     return OrganizePlan(root, accepted, counts, playlists, problems)
 
 
-def _link_move(root: Path, files: list[tuple[Path, Path]]) -> None:
-    """Publish all destinations exclusively before removing any source."""
-    linked: list[Path] = []
+def _copy_move(root: Path, files: list[tuple[Path, Path]]) -> None:
+    """Copy all files without replacement; leave sources for DB rollback."""
+    created: list[Path] = []
     try:
         for source, destination in files:
             if not _safe_parents(root, destination):
@@ -271,10 +271,11 @@ def _link_move(root: Path, files: list[tuple[Path, Path]]) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             if source.is_symlink() or not source.is_file():
                 raise OSError(f"Media source changed during organization: {source}")
-            os.link(source, destination, follow_symlinks=False)
-            linked.append(destination)
+            if not publish_file(source, destination, overwrite="skip"):
+                raise FileExistsError(f"Destination already exists: {destination}")
+            created.append(destination)
     except BaseException:
-        for destination in reversed(linked):
+        for destination in reversed(created):
             destination.unlink(missing_ok=True)
         raise
 
@@ -420,7 +421,7 @@ def execute_organization(
         return counts
 
     # A destination may be another planned move's source. Free that source
-    # before trying to publish its replacement, so the normal exclusive-link
+    # before trying to publish its replacement, so the no-overwrite
     # guarantee remains in force. Cycles cannot be resolved without staging;
     # leave every file involved untouched rather than risk overwriting it.
     source_owner = {
@@ -454,9 +455,9 @@ def execute_organization(
         move = plan.moves[i]
         files = [(move.source, move.destination), *move.sidecars]
         try:
-            # New files are linked atomically with exclusive creation. If the
-            # filesystem changes after planning, nothing is overwritten.
-            _link_move(plan.root, files)
+            # Copy to complete temporary files, then rename them exclusively.
+            # Keep original sources intact until the index update succeeds.
+            _copy_move(plan.root, files)
             try:
                 relocated = (
                     database.relocate(move.source, move.destination)

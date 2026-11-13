@@ -1215,7 +1215,7 @@ class Downloader:
 
         # System temporary directories may be RAM-backed (e.g. /tmp on Arch).
         # Default to the destination filesystem for bounded-RAM staging and
-        # cheap atomic hardlink publication. An explicit temp_path overrides it.
+        # atomic rename of a completed copy. An explicit temp_path overrides it.
         scratch_root = self.temp_path or destination.parent
         await asyncio.to_thread(scratch_root.mkdir, parents=True, exist_ok=True)
         with TemporaryDirectory(prefix="gamdl-", dir=scratch_root) as directory:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import errno
-import os
 import sqlite3
 import tempfile
 import unittest
@@ -84,12 +82,11 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertEqual(media.read_bytes(), b"already downloaded")
         self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 
-    def test_sidecar_publication_without_hardlinks(self):
-        """Mac external volumes can reject os.link with ENOTSUP (errno 45)."""
+    def test_sidecar_publication_uses_no_hardlinks(self):
         destination = self.directory / "song.lrc"
         with patch(
             "gamdl.download.publication.os.link",
-            side_effect=OSError(errno.ENOTSUP, "Operation not supported"),
+            side_effect=AssertionError("Hardlinks are forbidden"),
         ):
             self.assertEqual(
                 publish_bytes_result(b"lyrics", destination, overwrite="skip"),
@@ -98,22 +95,61 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), b"lyrics")
         self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 
-    def test_file_publication_without_hardlinks_or_exclusive_rename(self):
+    def test_file_publication_without_exclusive_rename(self):
         """Last-resort exclusive copy must not replace existing media."""
         source = self.directory / "completed.bin"
         source.write_bytes(b"finished download")
         destination = self.directory / "song.m4a"
         with (
-            patch(
-                "gamdl.download.publication.os.link",
-                side_effect=OSError(errno.ENOTSUP, "Operation not supported"),
-            ),
             patch("gamdl.download.publication._rename_noreplace", return_value=None),
         ):
             self.assertTrue(publish_file(source, destination, overwrite="skip"))
             self.assertFalse(publish_file(source, destination, overwrite="skip"))
         self.assertEqual(destination.read_bytes(), b"finished download")
         self.assertEqual(source.read_bytes(), b"finished download")
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
+
+    def test_competing_writer_wins_without_overwrite(self):
+        """A destination created while we copy must survive both publishers."""
+        from gamdl.download.publication import _rename_noreplace
+
+        source = self.directory / "finished.bin"
+        source.write_bytes(b"complete media")
+        destination = self.directory / "race.m4a"
+
+        def competing_writer(staged, target):
+            target.write_bytes(b"other writer")
+            return _rename_noreplace(staged, target)
+
+        with patch(
+            "gamdl.download.publication._rename_noreplace",
+            side_effect=competing_writer,
+        ):
+            self.assertFalse(publish_file(source, destination, overwrite="skip"))
+        self.assertEqual(destination.read_bytes(), b"other writer")
+        self.assertEqual(source.read_bytes(), b"complete media")
+        self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
+
+    def test_interrupted_media_copy_keeps_original_and_cleans_staging(self):
+        source = self.directory / "finished.bin"
+        source.write_bytes(b"complete media")
+        destination = self.directory / "existing.m4a"
+        destination.write_bytes(b"previous media")
+
+        def interrupted_copy(source, output, *, length):
+            output.write(b"partial")
+            raise OSError("Simulated interrupted copy")
+
+        with (
+            patch(
+                "gamdl.download.publication.shutil.copyfileobj",
+                side_effect=interrupted_copy,
+            ),
+            self.assertRaisesRegex(OSError, "Simulated interrupted copy"),
+        ):
+            publish_file(source, destination, overwrite="replace")
+        self.assertEqual(destination.read_bytes(), b"previous media")
+        self.assertEqual(source.read_bytes(), b"complete media")
         self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 
     def test_exclusive_copy_failure_removes_incomplete_publication(self):
@@ -124,10 +160,6 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
             raise OSError("Copy interrupted")
 
         with (
-            patch(
-                "gamdl.download.publication.os.link",
-                side_effect=OSError(errno.ENOTSUP, "Operation not supported"),
-            ),
             patch("gamdl.download.publication._rename_noreplace", return_value=None),
             patch(
                 "gamdl.download.publication.shutil.copyfileobj", side_effect=fail_copy
@@ -138,8 +170,8 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertFalse(destination.exists())
         self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 
-    def test_maximum_length_media_publication_replace_and_cross_device(self):
-        """Both media publication branches must work with NAME_MAX filenames."""
+    def test_maximum_length_media_publication_replace_and_copy_fallback(self):
+        """Both media publication branches work with NAME_MAX filenames."""
         source = self.directory / "staged.bin"
         source.write_bytes(b"new media")
         target = self.directory / ("W" * 251 + ".m4a")
@@ -148,22 +180,8 @@ class PublicationAndFinalizationStorageTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), b"new media")
 
         target.unlink()
-        original_link = os.link
-        attempted = False
-
-        def cross_device_once(source_path, target_path):
-            nonlocal attempted
-            if not attempted:
-                attempted = True
-                raise OSError(errno.EXDEV, "different filesystem")
-            return original_link(source_path, target_path)
-
-        with patch(
-            "gamdl.download.publication.os.link",
-            side_effect=cross_device_once,
-        ):
+        with patch("gamdl.download.publication._rename_noreplace", return_value=None):
             self.assertTrue(publish_file(source, target, overwrite="skip"))
-        self.assertTrue(attempted)
         self.assertEqual(target.read_bytes(), b"new media")
         self.assertEqual(list(self.directory.glob(".gamdl-*")), [])
 

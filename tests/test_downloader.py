@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import errno
 import shutil
 import subprocess
 import tempfile
@@ -53,23 +52,15 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         source = self.directory / "staged.bin"
         source.write_bytes(b"example-media" * 8000)
         destination = self.directory / "nested" / "published.bin"
-        real_link = __import__("os").link
-        attempted = False
-
-        def simulate_other_device(old, new):
-            nonlocal attempted
-            if not attempted:
-                attempted = True
-                raise OSError(errno.EXDEV, "Cross-device link")
-            return real_link(old, new)
-
+        # A source on a separate filesystem needs no special-case logic:
+        # publication always copies into the destination directory first.
         with patch(
-            "gamdl.download.publication.os.link", side_effect=simulate_other_device
+            "gamdl.download.publication.os.link",
+            side_effect=AssertionError("Hardlinks are forbidden"),
         ):
             self.assertTrue(
                 original_publish_file(source, destination, overwrite="skip")
             )
-        self.assertTrue(attempted)
         self.assertEqual(destination.read_bytes(), source.read_bytes())
         self.assertTrue(source.exists())
         self.assertEqual(list(destination.parent.glob(".*.part")), [])
@@ -88,30 +79,26 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list(self.directory.glob(".*.part")), [])
         self.assertFalse(list(self.directory.glob(".published.bin.*")))
 
-    def test_file_publication_replace_hardlinks_without_copying(self):
+    def test_file_publication_replace_uses_independent_copy(self):
         source = self.directory / "staged.bin"
         source.write_bytes(b"new content")
         target = self.directory / "published.bin"
         target.write_bytes(b"previous media")
         with patch(
-            "gamdl.download.publication.shutil.copyfileobj",
-            side_effect=AssertionError("Same-filesystem replace must not copy"),
+            "gamdl.download.publication.os.link",
+            side_effect=AssertionError("Hardlinks are forbidden"),
         ):
             self.assertTrue(original_publish_file(source, target, overwrite="replace"))
         self.assertEqual(target.read_bytes(), b"new content")
-        self.assertEqual(target.stat().st_ino, source.stat().st_ino)
+        self.assertNotEqual(target.stat().st_ino, source.stat().st_ino)
         self.assertFalse(list(self.directory.glob(".published.bin.*")))
 
-    def test_file_publication_replace_falls_back_for_other_filesystems(self):
+    def test_file_publication_replace_copies_independently(self):
         source = self.directory / "staged.bin"
         source.write_bytes(b"example-media" * 8000)
         target = self.directory / "published.bin"
         target.write_bytes(b"old")
-        with patch(
-            "gamdl.download.publication.os.link",
-            side_effect=OSError(errno.EXDEV, "Cross-device link"),
-        ):
-            self.assertTrue(original_publish_file(source, target, overwrite="replace"))
+        self.assertTrue(original_publish_file(source, target, overwrite="replace"))
         self.assertEqual(target.read_bytes(), source.read_bytes())
         self.assertNotEqual(target.stat().st_ino, source.stat().st_ino)
         self.assertFalse(list(self.directory.glob(".published.bin.*")))
@@ -722,8 +709,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         song = self.song()
         output = self.directory / "existing.m4a"
         output.write_bytes(b"keep")
-        with patch("gamdl.download.publication.os.link", side_effect=FileExistsError):
-            result = await downloader.download(song, output, overwrite=False)
+        result = await downloader.download(song, output, overwrite=False)
         self.assertEqual(result.status, "skipped")
         self.assertEqual(output.read_bytes(), b"keep")
         self.assertEqual(list(self.directory.glob(".existing*")), [])

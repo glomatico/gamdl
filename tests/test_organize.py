@@ -297,21 +297,21 @@ class OrganizeTests(unittest.TestCase):
         self.assertFalse(recognized.exists())
         self.assertEqual(self.db.get(target)["media_type"], "music-videos")
 
-    def test_failed_sidecar_link_rolls_back_and_keeps_database(self):
+    def test_failed_sidecar_copy_rolls_back_and_keeps_database(self):
         old = self.media(
             "raw/song.m4a",
             Tags(title="Song", artist="Artist", title_id=234),
         )
         old.with_suffix(".lrc").write_text("lyrics")
         self.db.index_file(old, "songs", "234")
-        real_link = os.link
+        from gamdl.download.publication import publish_file
 
-        def failing_link(source, target, **kwargs):
+        def failing_copy(source, target, **kwargs):
             if str(target).endswith(".lrc"):
                 raise OSError("simulated sidecar failure")
-            return real_link(source, target, **kwargs)
+            return publish_file(source, target, **kwargs)
 
-        with patch("gamdl.download.organizer.os.link", side_effect=failing_link):
+        with patch("gamdl.download.organizer.publish_file", side_effect=failing_copy):
             result = self.invoke()
         self.assertEqual(result.exit_code, 1, result.output)
         self.assertIn("simulated sidecar failure", result.output)

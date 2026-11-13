@@ -1093,6 +1093,67 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
         # uses its own H.264/H.265 defaults when priority is None.
         self.assertIsNone(kwargs["codec_priority"])
 
+    async def test_use_album_date_initializes_itunes_before_song_resolution(self):
+        song = Song.from_id("1559885421", api=self.api)
+        song.get_metadata = AsyncMock(
+            return_value={"attributes": {"name": "Album Date Test"}}
+        )
+
+        class Resolver:
+            def __init__(self, api, **kwargs):
+                pass
+
+            async def from_url(self, url):
+                yield song
+
+        itunes = AsyncMock()
+        itunes.__aenter__.return_value = itunes
+        downloader = Mock(itunes_api=None)
+        downloader.download = AsyncMock(
+            return_value=DownloadResult(
+                song.id, Path("song.m4a"), MediaStatus.DOWNLOADED, 1024, SongCodec.AAC
+            )
+        )
+        with (
+            patch(
+                "gamdl.cli.commands.runner._authenticate",
+                new_callable=AsyncMock,
+                return_value=(self.api, None),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.Downloader", return_value=downloader
+            ) as make,
+            patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
+            patch(
+                "gamdl.cli.commands.runner.ItunesApi.create",
+                new_callable=AsyncMock,
+                return_value=itunes,
+            ) as create_itunes,
+        ):
+            result = await run_rip(
+                RipOptions(
+                    ("https://music.apple.com/br/song/test/1559885421",),
+                    output_dir="Test Music",
+                    use_album_date=True,
+                    date_tag_template="%Y",
+                    no_progress=True,
+                )
+            )
+        self.assertEqual(result, 0)
+        create_itunes.assert_awaited_once_with(storefront="br", language="en-US")
+        self.assertIs(make.call_args.kwargs["itunes_api"], itunes)
+        resolver = make.call_args.kwargs["tag_resolver"]
+        self.assertTrue(resolver.use_album_date)
+        self.assertIs(resolver.itunes_api, itunes)
+        self.assertEqual(
+            downloader.download.await_args.kwargs["date_tag_template"], "%Y"
+        )
+
     async def test_music_video_container_mp4_reaches_downloader(self):
         video = MusicVideo.from_id("1445836237", api=self.api)
         video.get_metadata = AsyncMock(

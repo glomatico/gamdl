@@ -121,6 +121,13 @@ class RipOptions:
         str | None,
         option("--song-codec", type=click.Choice([c.value for c in SongCodec])),
     ] = None
+    use_album_date: Annotated[
+        bool,
+        option(
+            "--use-album-date/--no-use-album-date",
+            help="Use album release date for songs (requires iTunes lookup)",
+        ),
+    ] = False
     song_codec_priority: Annotated[
         tuple[str, ...],
         option(
@@ -252,6 +259,14 @@ class RipOptions:
             help="Embedded lyrics format (default: text)",
         ),
     ] = LyricsFormat.TEXT.value
+    date_tag_template: Annotated[
+        str,
+        option(
+            "--date-tag-template",
+            type=str,
+            help="strftime template for media release-date tags",
+        ),
+    ] = "%Y-%m-%dT%H:%M:%SZ"
     save_playlist: Annotated[
         bool,
         option("--save-playlist/--no-save-playlist", help="Generate M3U for playlists"),

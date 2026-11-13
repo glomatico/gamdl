@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Restore `download.use_album_date` (`--use-album-date`) for songs, using cached iTunes album release dates with playback-date fallback, and `output.date_tag_template` (`--date-tag-template`) for strftime-based date tags. Preserve the original date for filenames and SQLite metadata; both settings are supported by playlist sync.
 - Restore configurable cover artwork dimensions with separate `output.embedded_cover_size` and `output.file_cover_size` settings (both default to 1200 pixels), including CLI flags, playlist sync support, and `max` for Apple's maximum-resolution artwork URL (`10000x0w-999.<format>`).
 - Fix a full-screen authentication wizard crash when switching from the last menu choice to a token or credential prompt.
 - Restore music-video iTunes tag fallback by passing the lazily initialized iTunes API to the downloader's tag resolver.

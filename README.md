@@ -521,6 +521,23 @@ gamdl rip "<song URL>" --exclude-tags comment,title_sort,cover
 
 See [Tags and Path Templates](#tags-and-templates) for every accepted exclusion name, including fields that use different names in path templates.
 
+#### Album Release Date (`download.use_album_date` / `--use-album-date`)
+
+Songs normally use the release date returned by playback metadata. Set `download.use_album_date: true` or `--use-album-date` to prefer the album's release date, fetched from iTunes using its album ID. This option defaults to `false`. When no album ID or release date is available, the song's original date is retained. The album lookup is cached across songs on the same album. `--no-use-album-date` overrides a YAML `true` value for one command. This setting also applies to downloads performed by `gamdl sync playlists`.
+
+#### Date Tag Template (`output.date_tag_template` / `--date-tag-template`)
+
+The date stored in the media file's `©day` (or MP3 `TDRC`) tag supports Python `strftime` formatting. The Gamdl 3.x default is `%Y-%m-%dT%H:%M:%SZ`; to store only the release year, use `%Y`, or `%Y-%m-%d` for a calendar date:
+
+```yaml
+download:
+  use_album_date: true
+output:
+  date_tag_template: "%Y-%m-%d"
+```
+
+Use `--date-tag-template "%Y"` to override the template for a command. Full ISO timestamps and partial dates (year or year-month) are supported; missing month/day components become January/1 for formatting. If Apple supplies an unrecognized date, its original value is preserved. This affects **only the date written to the media tag**; date placeholders in filenames and the original date stored in the database remain unchanged. Existing files are not retagged unless overwritten.
+
 #### Artwork (`output.save_cover`, `output.cover_format`, `output.embedded_cover_size`, `output.file_cover_size`)
 
 Embedded artwork is normally included when tagging is enabled. Saving a separate artwork file is disabled by default. Choose `jpg` (default) or `png` for cover format. Both cover sizes default to **1200 × 1200 pixels**, independently configurable:

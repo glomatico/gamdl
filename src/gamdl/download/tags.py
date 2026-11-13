@@ -2,10 +2,38 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from .exceptions import TagResolutionError
+
+DEFAULT_DATE_TAG_TEMPLATE = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def format_date_tag(date: str | None, template: str) -> str | None:
+    """Format Apple's ISO release date for a file tag, not paths or the index.
+
+    Apple can supply a full timestamp, a date, or a partial year/month. Keep
+    unrecognized metadata intact instead of failing the entire download.
+    """
+    if not isinstance(template, str) or not template.strip():
+        raise ValueError("date_tag_template must be a nonempty strftime format")
+    if date is None:
+        return None
+    value = date
+    if re.fullmatch(r"\d{4}", value):
+        value += "-01-01"
+    elif re.fullmatch(r"\d{4}-\d{2}", value):
+        value += "-01"
+    try:
+        parsed = datetime.fromisoformat(
+            value[:-1] + "+00:00" if value.endswith("Z") else value
+        )
+    except ValueError:
+        return date
+    return parsed.strftime(template)
 
 
 @dataclass(frozen=True)

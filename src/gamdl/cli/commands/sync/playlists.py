@@ -23,7 +23,7 @@ from rich.table import Table
 from rich.text import Text
 
 from gamdl.api import ItunesApi
-from gamdl.download import Downloader, MediaDatabase, PathFormatter
+from gamdl.download import Downloader, MediaDatabase, PathFormatter, TagResolver
 from gamdl.media import Media, MusicVideo, MusicVideoCodec, Song, SongCodec
 from gamdl.sync.playlists import (
     LocalMediaIndex,
@@ -235,6 +235,7 @@ def _download_options(settings, media: Media) -> dict:
         "cover_format": settings.output.cover_format,
         "embedded_cover_size": settings.output.embedded_cover_size,
         "file_cover_size": settings.output.file_cover_size,
+        "date_tag_template": settings.output.date_tag_template,
         "save_cover": settings.output.save_cover,
         "save_playlist": False,
     }
@@ -532,6 +533,13 @@ async def _run(
                     drm=drm,
                     wrapper_api=wrapper,
                     itunes_api=itunes,
+                    tag_resolver=TagResolver(
+                        wrapper_api=wrapper,
+                        itunes_api=itunes,
+                        use_album_date=True,
+                    )
+                    if settings.download.use_album_date
+                    else None,
                     client=cdn,
                     temp_path=settings.output.temp_path,
                     path_formatter=_formatter(root, settings.output),

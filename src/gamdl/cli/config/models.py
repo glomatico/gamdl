@@ -31,6 +31,7 @@ class AuthConfig:
 @dataclass(frozen=True)
 class DownloadConfig:
     overwrite: bool = False
+    use_album_date: bool = False
     segment_concurrency: int = 8
     concurrent_downloads: int = 2
     song_codec: str | None = None
@@ -60,6 +61,7 @@ class OutputConfig:
     no_lyrics_file: bool = False
     lyrics_file_format: str = "lrc"
     embedded_lyrics_format: str = "text"
+    date_tag_template: str = "%Y-%m-%dT%H:%M:%SZ"
     save_playlist: bool = False
     album_folder_template: str = "{album_artist}/{album}"
     compilation_folder_template: str = "Compilations/{album}"

@@ -1045,6 +1045,62 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(ValueError, "file_cover_size"):
                     await downloader.download(song, destination, file_cover_size=size)
 
+    async def test_date_tag_template_only_changes_written_tag_not_saved_metadata(self):
+        downloader, resolver = self.downloader()
+        db = MediaDatabase(
+            self.directory / "date-index.sqlite3",
+            root=self.directory,
+            save_metadata=True,
+        )
+        downloader.database = db
+        original_date = "2004-11-12T12:30:00Z"
+        tags = Tags(
+            title="Date Example",
+            artist="Example",
+            title_id=111,
+            release_date=original_date,
+        )
+        resolver.get_tags.return_value = tags
+        song = self.song()
+        output = self.directory / "date-template.m4a"
+
+        result = await downloader.download(song, output, date_tag_template="%Y-%m")
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(mp4_tag_atoms(output)[b"\xa9day"], [(1, b"2004-11")])
+        self.assertEqual(
+            db.get_metadata(output, "songs")["release_date"], original_date
+        )
+        self.assertEqual(resolver.get_tags.return_value.release_date, original_date)
+
+        bytes_result = await downloader.get_bytes(song, date_tag_template="%Y")
+        bytes_file = self.directory / "date-template-bytes.m4a"
+        bytes_file.write_bytes(bytes_result)
+        self.assertEqual(mp4_tag_atoms(bytes_file)[b"\xa9day"], [(1, b"2004")])
+
+        default = self.directory / "date-default.m4a"
+        await downloader.download(song, default)
+        self.assertEqual(
+            mp4_tag_atoms(default)[b"\xa9day"], [(1, b"2004-11-12T12:30:00Z")]
+        )
+
+        no_date_tag = self.directory / "date-excluded.m4a"
+        await downloader.download(
+            song, no_date_tag, date_tag_template="%Y", exclude_tags=("release_date",)
+        )
+        self.assertNotIn(b"\xa9day", mp4_tag_atoms(no_date_tag))
+
+    async def test_invalid_date_tag_templates_rejected_without_download(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        target = self.directory / "bad-date-template.m4a"
+        for invalid in ("", "  ", None, 123):
+            with self.subTest(value=invalid):
+                with self.assertRaisesRegex(ValueError, "date_tag_template"):
+                    await downloader.download(song, target, date_tag_template=invalid)
+                with self.assertRaisesRegex(ValueError, "date_tag_template"):
+                    await downloader.get_bytes(song, date_tag_template=invalid)
+        self.assertFalse(target.exists())
+
     async def test_get_bytes_cover_format_and_invalid_raw(self):
         downloader, _ = self.downloader()
         song = self.song()

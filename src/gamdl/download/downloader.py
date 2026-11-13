@@ -59,7 +59,7 @@ from .paths import PathFormatter, PlaylistTags
 from .playlist import PlaylistWriter
 from .publication import publish_bytes_result, publish_file
 from .tag_resolver import TagResolver
-from .tags import Tags
+from .tags import DEFAULT_DATE_TAG_TEMPLATE, Tags, format_date_tag
 
 
 class _SidecarError(Exception):
@@ -332,6 +332,7 @@ class Downloader:
         cover_format: CoverFormat,
         embedded_cover_size: CoverSize,
         embedded_lyrics_format: LyricsFormat,
+        date_tag_template: str,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
@@ -490,6 +491,10 @@ class Downloader:
                         height=embedded_cover_size,
                         format=cover_format.value,
                     )
+            tags = replace(
+                tags,
+                release_date=format_date_tag(tags.release_date, date_tag_template),
+            )
             # The current Rust tagger is file-based. This temporary output is
             # private; neither API publishes an untagged intermediate file.
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
@@ -521,6 +526,7 @@ class Downloader:
         cover_format: CoverFormat,
         embedded_cover_size: CoverSize,
         embedded_lyrics_format: LyricsFormat,
+        date_tag_template: str,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
         resolved_tags: Tags | None = None,
@@ -675,6 +681,10 @@ class Downloader:
                         height=embedded_cover_size,
                         format=cover_format.value,
                     )
+            tags = replace(
+                tags,
+                release_date=format_date_tag(tags.release_date, date_tag_template),
+            )
             with self._stage(event_callback, media.id, DownloadStage.TAGGING):
                 await _complete_write(
                     self.muxer.tag, prepared_path, tags=tags, cover_bytes=artwork
@@ -944,12 +954,14 @@ class Downloader:
         cover_format: CoverFormat | str = CoverFormat.JPG,
         embedded_cover_size: CoverSize = 1200,
         embedded_lyrics_format: LyricsFormat | str = LyricsFormat.TEXT,
+        date_tag_template: str = DEFAULT_DATE_TAG_TEMPLATE,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
         """Return finished MP4-family bytes without publishing a media file."""
         cover_format = CoverFormat(cover_format)
         validate_cover_size(embedded_cover_size, name="embedded_cover_size")
+        format_date_tag(None, date_tag_template)
         embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         prepared = await self._prepare(
             media,
@@ -968,6 +980,7 @@ class Downloader:
             cover_format=cover_format,
             embedded_cover_size=embedded_cover_size,
             embedded_lyrics_format=embedded_lyrics_format,
+            date_tag_template=date_tag_template,
             progress_callback=progress_callback,
             event_callback=event_callback,
         )
@@ -1005,6 +1018,7 @@ class Downloader:
         save_lyrics: bool = False,
         lyrics_file_format: LyricsFormat | str = LyricsFormat.LRC,
         embedded_lyrics_format: LyricsFormat | str = LyricsFormat.TEXT,
+        date_tag_template: str = DEFAULT_DATE_TAG_TEMPLATE,
         playlist_path: str | os.PathLike[str] | None = None,
         playlist_index: int | None = None,
         save_playlist: bool = False,
@@ -1028,6 +1042,7 @@ class Downloader:
         cover_format = CoverFormat(cover_format)
         validate_cover_size(embedded_cover_size, name="embedded_cover_size")
         validate_cover_size(file_cover_size, name="file_cover_size")
+        format_date_tag(None, date_tag_template)
         lyrics_file_format = LyricsFormat(lyrics_file_format)
         embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         if video_extension not in (".m4v", ".mp4"):
@@ -1273,6 +1288,7 @@ class Downloader:
                 cover_format=cover_format,
                 embedded_cover_size=embedded_cover_size,
                 embedded_lyrics_format=embedded_lyrics_format,
+                date_tag_template=date_tag_template,
                 progress_callback=progress_callback,
                 event_callback=event_callback,
                 resolved_tags=resolved_tags,

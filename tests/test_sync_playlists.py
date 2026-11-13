@@ -99,6 +99,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
                 embedded_lyrics_format="enhanced-lrc",
                 embedded_cover_size=400,
                 file_cover_size=2400,
+                date_tag_template="%Y-%m",
             ),
         )
         options = _download_options(config, Song.from_id("12345", api=Mock()))
@@ -106,6 +107,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(options["embedded_lyrics_format"], "enhanced-lrc")
         self.assertEqual(options["embedded_cover_size"], 400)
         self.assertEqual(options["file_cover_size"], 2400)
+        self.assertEqual(options["date_tag_template"], "%Y-%m")
 
     def test_expected_and_unexpected_failure_classification(self):
         for error in (
@@ -591,7 +593,9 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
 
         original = AppConfig()
         settings = replace(
-            original, database=replace(original.database, path=str(self.db))
+            original,
+            database=replace(original.database, path=str(self.db)),
+            download=replace(original.download, use_album_date=True),
         )
         before = self.playlist.read_bytes()
         downloader = AsyncMock()
@@ -611,7 +615,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "gamdl.cli.commands.sync.playlists.Downloader", return_value=downloader
-            ),
+            ) as constructor,
         ):
             code = await _run(
                 settings,
@@ -624,6 +628,7 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(code, 0)
         drm.assert_awaited_once()
+        self.assertTrue(constructor.call_args.kwargs["tag_resolver"].use_album_date)
         self.assertNotEqual(self.playlist.read_bytes(), before)
         self.assertEqual(
             [e.path for e in self.snapshot().entries],

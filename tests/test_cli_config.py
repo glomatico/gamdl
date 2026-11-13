@@ -13,6 +13,65 @@ from gamdl.cli.main import main
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_album_date_and_date_tag_template_defaults_yaml_and_cli(self):
+        from gamdl.cli.config.loader import click_default_map
+
+        default = load_config(None)
+        self.assertFalse(default.download.use_album_date)
+        self.assertEqual(default.output.date_tag_template, "%Y-%m-%dT%H:%M:%SZ")
+        self.assertFalse(click_default_map(default)["use_album_date"])
+        self.assertEqual(
+            click_default_map(default)["date_tag_template"], "%Y-%m-%dT%H:%M:%SZ"
+        )
+        self._write(
+            "download:\n  use_album_date: true\n"
+            'output:\n  date_tag_template: "%Y-%m-%d"\n'
+        )
+        configured = load_config(self.path)
+        self.assertTrue(configured.download.use_album_date)
+        self.assertEqual(configured.output.date_tag_template, "%Y-%m-%d")
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with (
+            patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run),
+            patch("gamdl.cli.commands.library.require_terminal"),
+            patch("gamdl.cli.commands.search.require_terminal"),
+        ):
+            for command in (["rip", "URL"], ["library"], ["search", "music"]):
+                with self.subTest(command=command):
+                    base = ["--config", str(self.path), *command]
+                    result = CliRunner().invoke(main, base)
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertTrue(captured[-1].use_album_date)
+                    self.assertEqual(captured[-1].date_tag_template, "%Y-%m-%d")
+                    override = CliRunner().invoke(
+                        main,
+                        [
+                            *base,
+                            "--no-use-album-date",
+                            "--date-tag-template",
+                            "%Y",
+                        ],
+                    )
+                    self.assertEqual(override.exit_code, 0, override.output)
+                    self.assertFalse(captured[-1].use_album_date)
+                    self.assertEqual(captured[-1].date_tag_template, "%Y")
+
+        for value in ("true", None, 0, 1):
+            with self.subTest(bad_album_date=value):
+                self._write(yaml.safe_dump({"download": {"use_album_date": value}}))
+                with self.assertRaisesRegex(ConfigError, "download.use_album_date"):
+                    load_config(self.path)
+        for value in ("", " ", None, 1, False):
+            with self.subTest(bad_template=value):
+                self._write(yaml.safe_dump({"output": {"date_tag_template": value}}))
+                with self.assertRaisesRegex(ConfigError, "output.date_tag_template"):
+                    load_config(self.path)
+
     def test_lyrics_formats_defaults_yaml_cli_and_validation(self):
         from gamdl.cli.config.loader import click_default_map
 

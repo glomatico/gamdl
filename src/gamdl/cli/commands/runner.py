@@ -19,6 +19,7 @@ from gamdl.download import (
     DownloadFinalizationError,
     MediaDatabase,
     PathFormatter,
+    TagResolver,
 )
 from gamdl.download.events import DownloadStage, EventState
 from gamdl.exceptions import GamdlError
@@ -259,9 +260,29 @@ async def run_rip(options: RipOptions) -> int:
             await warn_high_resolution_security(
                 drm, console, max_height=options.max_height
             )
+            # Album dates need an iTunes client before the first song tags.
+            # Otherwise videos continue initializing iTunes lazily.
+            album_itunes = (
+                await stack.enter_async_context(
+                    await ItunesApi.create(
+                        storefront=api.storefront,
+                        language=options.language,
+                    )
+                )
+                if options.use_album_date
+                else None
+            )
             downloader = Downloader(
                 drm=drm,
                 wrapper_api=wrapper,
+                itunes_api=album_itunes,
+                tag_resolver=TagResolver(
+                    wrapper_api=wrapper,
+                    itunes_api=album_itunes,
+                    use_album_date=True,
+                )
+                if options.use_album_date
+                else None,
                 temp_path=options.temp_path,
                 path_formatter=formatter,
                 database=MediaDatabase(
@@ -395,6 +416,7 @@ async def run_rip(options: RipOptions) -> int:
                             and isinstance(media, Song),
                             "lyrics_file_format": options.lyrics_file_format,
                             "embedded_lyrics_format": options.embedded_lyrics_format,
+                            "date_tag_template": options.date_tag_template,
                             "save_playlist": options.save_playlist
                             and media.source is not None
                             and media.source.playlist is not None,

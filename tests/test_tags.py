@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 from gamdl.api.exceptions import GamdlApiResponseError
 from gamdl.download import TagResolutionError, TagResolver, Tags
+from gamdl.download.tags import DEFAULT_DATE_TAG_TEMPLATE, format_date_tag
 from gamdl.media import MusicVideo, Song, SongCodec, UploadedVideo
 from gamdl.media.song.stream import SongStreamResolver
 from tests.test_media import PLAYBACK_TAG_DATA, SONG_DATA, VIDEO_DATA, fake_api
@@ -77,6 +78,28 @@ VIDEO_COLLECTION = {
 
 
 class TagModelTests(unittest.TestCase):
+    def test_legacy_date_tag_template_and_partial_dates(self):
+        self.assertEqual(DEFAULT_DATE_TAG_TEMPLATE, "%Y-%m-%dT%H:%M:%SZ")
+        self.assertEqual(
+            format_date_tag("1990-04-12", DEFAULT_DATE_TAG_TEMPLATE),
+            "1990-04-12T00:00:00Z",
+        )
+        self.assertEqual(
+            format_date_tag("2020-03-04T12:34:56Z", DEFAULT_DATE_TAG_TEMPLATE),
+            "2020-03-04T12:34:56Z",
+        )
+        self.assertEqual(format_date_tag("1990-04-12", "%Y"), "1990")
+        self.assertEqual(format_date_tag("1990-04", "%Y/%m/%d"), "1990/04/01")
+        self.assertEqual(format_date_tag("1990", "%Y-%m"), "1990-01")
+        self.assertEqual(format_date_tag("not-a-date", "%Y"), "not-a-date")
+        self.assertIsNone(format_date_tag(None, "%Y"))
+        for invalid in ("", " ", None, False, 123):
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaisesRegex(ValueError, "date_tag_template"),
+            ):
+                format_date_tag("2020-01-01", invalid)
+
     def test_playback_asset_normalization_and_media_types(self):
         tags = Tags.from_asset_metadata(PLAYBACK_TAG_DATA)
         self.assertEqual(tags.title, "Never Gonna Give You Up")

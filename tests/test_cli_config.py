@@ -259,15 +259,36 @@ class CliConfigTests(unittest.TestCase):
                     self.assertEqual(override.exit_code, 0, override.output)
                     self.assertEqual(captured[-1].embedded_cover_size, 1000)
                     self.assertEqual(captured[-1].file_cover_size, 800)
+                    maximum = runner.invoke(
+                        main,
+                        [
+                            *base,
+                            "--embedded-cover-size",
+                            "max",
+                            "--file-cover-size",
+                            "max",
+                        ],
+                    )
+                    self.assertEqual(maximum.exit_code, 0, maximum.output)
+                    self.assertEqual(captured[-1].embedded_cover_size, "max")
+                    self.assertEqual(captured[-1].file_cover_size, "max")
                     for name in ("embedded", "file"):
-                        invalid = runner.invoke(
-                            main, [*base, f"--{name}-cover-size", "0"]
-                        )
-                        self.assertNotEqual(invalid.exit_code, 0)
-                        self.assertIn("Invalid value", invalid.output)
+                        for value in ("0", "-1", "MAX", "unlimited"):
+                            invalid = runner.invoke(
+                                main, [*base, f"--{name}-cover-size", value]
+                            )
+                            self.assertNotEqual(invalid.exit_code, 0)
+                            self.assertIn("Invalid value", invalid.output)
+
+        self._write("output:\n  embedded_cover_size: max\n  file_cover_size: max\n")
+        configured = load_config(self.path)
+        self.assertEqual(configured.output.embedded_cover_size, "max")
+        self.assertEqual(configured.output.file_cover_size, "max")
+        self.assertEqual(click_default_map(configured)["embedded_cover_size"], "max")
+        self.assertEqual(click_default_map(configured)["file_cover_size"], "max")
 
         for name in ("embedded_cover_size", "file_cover_size"):
-            for value in (0, -1, 2.5, True, "1200", None):
+            for value in (0, -1, 2.5, True, "1200", "MAX", "unlimited", None):
                 with self.subTest(name=name, invalid=value):
                     self._write(yaml.safe_dump({"output": {name: value}}))
                     with self.assertRaisesRegex(ConfigError, f"output.{name}"):

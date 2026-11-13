@@ -244,6 +244,37 @@ class SongOperationTests(unittest.IsolatedAsyncioTestCase):
             "https://example.test/640x640ac.png",
         )
 
+    async def test_cover_maximum_resolution_replaces_entire_size_component(self):
+        for template in (
+            "{w}x{h}.{f}",
+            "{w}x{h}bb.jpg",
+            "{w}x{h}ac.png",
+            "{w}x{h}bb.{f}",
+        ):
+            with self.subTest(template=template):
+                cover = Cover.from_metadata(
+                    {"url": f"https://artwork.example.test/image/{template}?version=1"}
+                )
+                self.assertEqual(
+                    cover.get_formatted_url(width="max", height="max"),
+                    "https://artwork.example.test/image/10000x0w-999.jpg?version=1",
+                )
+                self.assertEqual(
+                    cover.get_formatted_url(width="max", height="max", format="png"),
+                    "https://artwork.example.test/image/10000x0w-999.png?version=1",
+                )
+        cover = Cover.from_metadata({"url": "https://example.test/{w}x{h}bb.jpg"})
+        for width, height in (("max", 1200), (1200, "max"), ("MAX", "MAX")):
+            with (
+                self.subTest(width=width, height=height),
+                self.assertRaises(ValueError),
+            ):
+                cover.get_formatted_url(width=width, height=height)
+        with self.assertRaisesRegex(ValueError, "requires an Apple size template"):
+            Cover("https://example.test/static.jpg").get_formatted_url(
+                width="max", height="max"
+            )
+
     async def test_lyrics_cached_separately_by_kind_and_locale(self):
         api = fake_api()
         song = Song.from_id("1559885421", api=api)

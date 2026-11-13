@@ -949,6 +949,73 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             width=600, height=600, format="jpg"
         )
 
+    async def test_maximum_cover_sizes_support_embedded_and_sidecar(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        cover = Mock(get_cover_bytes=AsyncMock(return_value=PNG))
+        song.get_cover.return_value = cover
+        destination = self.directory / "max-artwork.m4a"
+
+        await downloader.download(
+            song,
+            destination,
+            cover_format="png",
+            embedded_cover_size=600,
+            file_cover_size="max",
+            save_cover=True,
+        )
+        self.assertIn(b"covr", mp4_tag_atoms(destination))
+        self.assertEqual(destination.with_suffix(".png").read_bytes(), PNG)
+        cover.get_cover_bytes.assert_has_awaits(
+            [
+                call(width=600, height=600, format="png"),
+                call(width="max", height="max", format="png"),
+            ]
+        )
+        self.assertEqual(cover.get_cover_bytes.await_count, 2)
+
+        destination.with_suffix(".png").unlink()
+        cover.get_cover_bytes.reset_mock()
+        result = await downloader.download(
+            song,
+            destination,
+            cover_format="png",
+            embedded_cover_size=600,
+            file_cover_size="max",
+            save_cover=True,
+        )
+        self.assertEqual(result.status, "skipped")
+        cover.get_cover_bytes.assert_awaited_once_with(
+            width="max", height="max", format="png"
+        )
+
+        song.get_cover.reset_mock()
+        cover.get_cover_bytes.reset_mock()
+        data = await downloader.get_bytes(
+            song, cover_format="png", embedded_cover_size="max"
+        )
+        self.assertTrue(data)
+        cover.get_cover_bytes.assert_awaited_once_with(
+            width="max", height="max", format="png"
+        )
+
+    async def test_equal_maximum_cover_sizes_share_one_fetch(self):
+        downloader, _ = self.downloader()
+        song = self.song()
+        cover = Mock(get_cover_bytes=AsyncMock(return_value=JPEG))
+        song.get_cover.return_value = cover
+        destination = self.directory / "both-max.m4a"
+        await downloader.download(
+            song,
+            destination,
+            embedded_cover_size="max",
+            file_cover_size="max",
+            save_cover=True,
+        )
+        cover.get_cover_bytes.assert_awaited_once_with(
+            width="max", height="max", format="jpg"
+        )
+
     async def test_untagged_download_only_fetches_file_cover_size(self):
         downloader, _ = self.downloader()
         song = self.song()
@@ -971,7 +1038,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         downloader, _ = self.downloader()
         song = self.song()
         destination = self.directory / "invalid-cover-size.m4a"
-        for size in (0, -1, 2.5, True, "1200", None):
+        for size in (0, -1, 2.5, True, "1200", "MAX", None):
             with self.subTest(size=size):
                 with self.assertRaisesRegex(ValueError, "embedded_cover_size"):
                     await downloader.get_bytes(song, embedded_cover_size=size)

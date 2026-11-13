@@ -40,6 +40,7 @@ from gamdl.media import (
     UploadedVideoStreamSelector,
     VideoStream,
 )
+from gamdl.media.cover import CoverSize, validate_cover_size
 from gamdl.muxer import Muxer
 from gamdl.stream import Streamer, StreamProgress
 
@@ -329,7 +330,7 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
-        embedded_cover_size: int,
+        embedded_cover_size: CoverSize,
         embedded_lyrics_format: LyricsFormat,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
@@ -518,7 +519,7 @@ class Downloader:
         exclude_tags: Sequence[str],
         include_cover: bool,
         cover_format: CoverFormat,
-        embedded_cover_size: int,
+        embedded_cover_size: CoverSize,
         embedded_lyrics_format: LyricsFormat,
         progress_callback: Callable[[DownloadProgress], None] | None,
         event_callback: DownloadEventCallback | None = None,
@@ -690,8 +691,8 @@ class Downloader:
         overwrite: OverwritePolicy,
         save_cover: bool,
         cover_format: CoverFormat,
-        embedded_cover_size: int,
-        file_cover_size: int,
+        embedded_cover_size: CoverSize,
+        file_cover_size: CoverSize,
         save_lyrics: bool,
         lyrics_file_format: LyricsFormat,
         prepared_cover: bytes | None,
@@ -820,8 +821,8 @@ class Downloader:
         overwrite: OverwritePolicy,
         save_cover: bool,
         cover_format: CoverFormat,
-        embedded_cover_size: int,
-        file_cover_size: int,
+        embedded_cover_size: CoverSize,
+        file_cover_size: CoverSize,
         save_lyrics: bool,
         lyrics_file_format: LyricsFormat,
         playlist_path: Path | None,
@@ -941,15 +942,14 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
-        embedded_cover_size: int = 1200,
+        embedded_cover_size: CoverSize = 1200,
         embedded_lyrics_format: LyricsFormat | str = LyricsFormat.TEXT,
         progress_callback: Callable[[DownloadProgress], None] | None = None,
         event_callback: DownloadEventCallback | None = None,
     ) -> bytes:
         """Return finished MP4-family bytes without publishing a media file."""
         cover_format = CoverFormat(cover_format)
-        if type(embedded_cover_size) is not int or embedded_cover_size < 1:
-            raise ValueError("embedded_cover_size must be a positive integer")
+        validate_cover_size(embedded_cover_size, name="embedded_cover_size")
         embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         prepared = await self._prepare(
             media,
@@ -999,8 +999,8 @@ class Downloader:
         exclude_tags: Sequence[str] = (),
         include_cover: bool = True,
         cover_format: CoverFormat | str = CoverFormat.JPG,
-        embedded_cover_size: int = 1200,
-        file_cover_size: int = 1200,
+        embedded_cover_size: CoverSize = 1200,
+        file_cover_size: CoverSize = 1200,
         save_cover: bool = False,
         save_lyrics: bool = False,
         lyrics_file_format: LyricsFormat | str = LyricsFormat.LRC,
@@ -1026,10 +1026,8 @@ class Downloader:
         if not isinstance(media, (Song, MusicVideo, UploadedVideo)):
             raise TypeError("Unsupported media type for Downloader")
         cover_format = CoverFormat(cover_format)
-        if type(embedded_cover_size) is not int or embedded_cover_size < 1:
-            raise ValueError("embedded_cover_size must be a positive integer")
-        if type(file_cover_size) is not int or file_cover_size < 1:
-            raise ValueError("file_cover_size must be a positive integer")
+        validate_cover_size(embedded_cover_size, name="embedded_cover_size")
+        validate_cover_size(file_cover_size, name="file_cover_size")
         lyrics_file_format = LyricsFormat(lyrics_file_format)
         embedded_lyrics_format = LyricsFormat(embedded_lyrics_format)
         if video_extension not in (".m4v", ".mp4"):

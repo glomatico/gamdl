@@ -16,8 +16,31 @@ from gamdl.media import (
     SongCodec,
     UploadedVideoQuality,
 )
+from gamdl.media.cover import CoverSize
 
 TAG_NAMES = tuple(field.name for field in fields(Tags)) + ("cover",)
+
+
+class CoverSizeType(click.ParamType):
+    """Parse a positive pixel dimension or Apple's maximum-resolution mode."""
+
+    name = "pixels or max"
+
+    def convert(self, value, param, ctx):
+        if value == "max":
+            return value
+        if type(value) is int:
+            size = value
+        elif isinstance(value, str):
+            try:
+                size = int(value)
+            except ValueError:
+                self.fail("Expected a positive integer or 'max'", param, ctx)
+        else:
+            self.fail("Expected a positive integer or 'max'", param, ctx)
+        if size > 0:
+            return size
+        self.fail("Expected a positive integer or 'max'", param, ctx)
 
 
 def option(*names, **kwargs):
@@ -178,19 +201,19 @@ class RipOptions:
         ),
     ] = CoverFormat.JPG.value
     embedded_cover_size: Annotated[
-        int,
+        CoverSize,
         option(
             "--embedded-cover-size",
-            type=click.IntRange(min=1),
-            help="Embedded cover dimensions in pixels (square, default: 1200)",
+            type=CoverSizeType(),
+            help="Embedded cover pixels or max (default: 1200)",
         ),
     ] = 1200
     file_cover_size: Annotated[
-        int,
+        CoverSize,
         option(
             "--file-cover-size",
-            type=click.IntRange(min=1),
-            help="Saved cover dimensions in pixels (square, default: 1200)",
+            type=CoverSizeType(),
+            help="Saved cover pixels or max (default: 1200)",
         ),
     ] = 1200
     no_tag: Annotated[

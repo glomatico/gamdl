@@ -94,6 +94,33 @@ class InstanceCacheTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CoverCacheTests(unittest.IsolatedAsyncioTestCase):
+    async def test_maximum_cover_uses_exact_url_and_cache(self):
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(str(request.url))
+            return httpx.Response(200, content=b"max-cover")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            cache = CoverCache(client=client)
+            cover = Cover.from_metadata(
+                {"url": "https://artwork.example.test/{w}x{h}bb.jpg?image=album-one"},
+                cache=cache,
+            )
+            self.assertEqual(
+                await cover.get_cover_bytes(width="max", height="max", format="png"),
+                b"max-cover",
+            )
+            self.assertEqual(
+                await cover.get_cover_bytes(width="max", height="max", format="png"),
+                b"max-cover",
+            )
+            self.assertEqual(
+                requests,
+                ["https://artwork.example.test/10000x0w-999.png?image=album-one"],
+            )
+            await cache.aclose()
+
     async def test_apple_fixed_extension_url_respects_format_and_cache_key(self):
         requests = []
 

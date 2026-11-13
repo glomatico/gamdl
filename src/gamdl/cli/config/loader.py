@@ -19,6 +19,7 @@ from gamdl.media import (
     UploadedVideoQuality,
 )
 from gamdl.media.constants import ARTIST_AUTO_SELECT_NAMES, LIBRARY_AUTO_SELECT_NAMES
+from gamdl.media.cover import validate_cover_size
 
 from ..options import TAG_NAMES
 from .models import (
@@ -92,6 +93,14 @@ def _validate(config: dict[str, Any]) -> AppConfig:
             elif isinstance(hint, bool):
                 if type(value) is not bool:
                     raise ConfigError(f"{path} must be a boolean")
+            elif section == "output" and key in {
+                "embedded_cover_size",
+                "file_cover_size",
+            }:
+                try:
+                    validate_cover_size(value, name=path)
+                except ValueError as exc:
+                    raise ConfigError(str(exc)) from exc
             elif isinstance(hint, int):
                 if type(value) is not int or value < 1:
                     raise ConfigError(f"{path} must be a positive integer")

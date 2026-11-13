@@ -532,7 +532,9 @@ output:
   save_cover: true
 ```
 
-Use `--embedded-cover-size` and `--file-cover-size` to override these per command. If the sizes match, Gamdl reuses the artwork bytes for the saved cover. If the sizes differ, it fetches separate resolutions from Apple Music. `--exclude-tags cover` affects only embedded artwork, not the external cover. `--no-tag` disables embedding, while `--save-cover` still saves an external image.
+Use `--embedded-cover-size` and `--file-cover-size` to override these per command. Either value may also be `max`, which requests the maximum artwork Apple offers using `10000x0w-999.jpg` or `10000x0w-999.png` instead of a square pixel dimension. For example, `file_cover_size: max` saves the highest-resolution available cover while retaining smaller embedded artwork. The returned dimensions depend on Apple's source image.
+
+If the sizes match (including both set to `max`), Gamdl reuses the artwork bytes for the saved cover. If the sizes differ, it fetches separate resolutions from Apple Music. `--exclude-tags cover` affects only embedded artwork, not the external cover. `--no-tag` disables embedding, while `--save-cover` still saves an external image.
 
 ### Files and Folders
 

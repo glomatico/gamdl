@@ -24,6 +24,12 @@ from .tags import Tags
 
 MEDIA_EXTENSIONS = frozenset({".m4a", ".m4v", ".mp4", ".mp3"})
 SIDECAR_EXTENSIONS = (".lrc", ".srt", ".ttml", ".txt", ".jpg", ".jpeg", ".png")
+FOLDER_ARTWORK_NAMES = frozenset(
+    f"{stem}.{extension}"
+    for stem in ("cover", "folder")
+    for extension in ("jpg", "jpeg", "png")
+)
+_OTHER_AUDIO_EXTENSIONS = frozenset({".flac", ".alac", ".wav", ".aac", ".ogg", ".opus"})
 _TRACK_NUMBER = re.compile(r"^(?:\d{1,3}-)?\d{1,3}\s+")
 
 
@@ -280,6 +286,58 @@ def _copy_move(root: Path, files: list[tuple[Path, Path]]) -> None:
         raise
 
 
+def _relocate_folder_artwork(
+    root: Path, replacements: dict[Path, Path], problems: list[str]
+) -> tuple[int, int]:
+    """Relocate shared album covers only for unambiguous, vacated folders.
+
+    Shared artwork is not a media sidecar (e.g. ``Cover.jpg`` alongside
+    ``01 Song.m4a``), so the per-track move planner cannot associate it with
+    one track. Do not guess when a source folder has any remaining media or
+    successful moves point to several destination folders.
+    """
+    destinations: dict[Path, set[Path]] = {}
+    for source, destination in replacements.items():
+        if source.parent != root:
+            destinations.setdefault(source.parent, set()).add(destination.parent)
+
+    moved = errors = 0
+    for source_dir, target_dirs in sorted(destinations.items()):
+        if len(target_dirs) != 1:
+            continue
+        destination_dir = next(iter(target_dirs))
+        if source_dir == destination_dir or source_dir.is_symlink():
+            continue
+        if not source_dir.is_dir() or not _safe_parents(root, destination_dir):
+            continue
+        try:
+            entries = list(source_dir.iterdir())
+            if any(
+                entry.suffix.lower() in MEDIA_EXTENSIONS | _OTHER_AUDIO_EXTENSIONS
+                for entry in entries
+            ):
+                continue
+            artwork = [
+                (entry, destination_dir / entry.name)
+                for entry in entries
+                if entry.name.casefold() in FOLDER_ARTWORK_NAMES
+                and entry.is_file()
+                and not entry.is_symlink()
+            ]
+            if not artwork:
+                continue
+            # Preserve both sources and existing destination artwork if one
+            # asset cannot be published; no partial group relocation.
+            _copy_move(root, artwork)
+            for source, _ in artwork:
+                source.unlink()
+            moved += len(artwork)
+        except (OSError, ValueError) as error:
+            errors += 1
+            problems.append(f"Cannot relocate album artwork from {source_dir}: {error}")
+    return moved, errors
+
+
 def _reference_key(root: Path, path: Path) -> tuple[str, str, str, str] | None:
     """Conservative album/artist/title match across filename renumbering.
 
@@ -513,6 +571,11 @@ def execute_organization(
     counts["playlist_references_repaired"] = repaired
     counts["playlist_references_unresolved"] = unresolved
     counts["errors"] += playlist_errors
+    artwork_moved, artwork_errors = _relocate_folder_artwork(
+        plan.root, replacements, plan.problems
+    )
+    counts["folder_artwork_moved"] = artwork_moved
+    counts["errors"] += artwork_errors
     # Remove only parent directories vacated by moved files, not unrelated
     # empty directories or the configured root itself.
     for parent in sorted(parents, key=lambda p: len(p.parts), reverse=True):

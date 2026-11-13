@@ -256,6 +256,8 @@ gamdl organize
 
 The organizer can update database paths and relative M3U playlist references. It avoids overwriting occupied destinations. **Review the dry run first**, especially when changing templates.
 
+It also moves track-specific cover and lyrics sidecars. If every media file in an old album folder is successfully relocated to the same new folder, recognized shared album artwork (`Cover.jpg`, `folder.jpg`, and JPG/JPEG/PNG variants) follows the album. Existing destination artwork is never replaced; unrelated files and ambiguous shared covers remain in place. Old directories are removed only if empty. Artwork orphaned by a **previous** organize run may require manual relocation because the old media-to-folder relationship is no longer available.
+
 When media paths change, `organize` repairs their references inside existing `.m3u8` playlists without changing playlist names or metadata headers. For an already-organized library, use `gamdl organize --playlists-only` (or add `--dry-run` to preview path repairs).
 
 ### Sync Apple Music Playlists (`sync playlists`)

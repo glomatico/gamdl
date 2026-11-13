@@ -134,6 +134,113 @@ class OrganizeTests(unittest.TestCase):
         self.assertEqual(second.exit_code, 0, second.output)
         self.assertIn("moved 0", second.output)
 
+    def test_album_level_artwork_relocated_and_legacy_folder_removed(self):
+        tags = {"artist": "Artist", "album_artist": "Artist", "album": "Album"}
+        old_dir = self.library / "Old Album Folder"
+        first = self.media(
+            "Old Album Folder/a.m4a",
+            Tags(title="First", track_number=1, **tags),
+        )
+        second = self.media(
+            "Old Album Folder/b.m4a",
+            Tags(title="Second", track_number=2, **tags),
+        )
+        (old_dir / "Cover.jpg").write_bytes(b"shared album artwork")
+        (old_dir / "folder.PNG").write_bytes(b"second album artwork")
+        first.with_suffix(".lrc").write_text("First lyrics")
+        output_dir = self.library / "Artist" / "Album"
+
+        preview = self.invoke("--dry-run")
+        self.assertEqual(preview.exit_code, 0, preview.output)
+        self.assertTrue((old_dir / "Cover.jpg").exists())
+        self.assertFalse(output_dir.exists())
+
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue((output_dir / "01 First.m4a").exists())
+        self.assertTrue((output_dir / "02 Second.m4a").exists())
+        self.assertEqual((output_dir / "01 First.lrc").read_text(), "First lyrics")
+        self.assertEqual(
+            (output_dir / "Cover.jpg").read_bytes(), b"shared album artwork"
+        )
+        self.assertEqual(
+            (output_dir / "folder.PNG").read_bytes(), b"second album artwork"
+        )
+        self.assertFalse(old_dir.exists())
+        self.assertFalse(first.exists())
+        self.assertFalse(second.exists())
+
+    def test_album_artwork_collision_does_not_overwrite_or_delete_source(self):
+        old = self.media(
+            "old/song.m4a",
+            Tags(title="Song", artist="Artist", album_artist="Artist", album="Album"),
+        )
+        old_cover = old.parent / "Cover.jpg"
+        old_cover.write_bytes(b"original")
+        destination = self.library / "Artist" / "Album"
+        destination.mkdir(parents=True)
+        (destination / "Cover.jpg").write_bytes(b"existing destination art")
+
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertTrue((destination / "Song.m4a").exists())
+        self.assertEqual(
+            (destination / "Cover.jpg").read_bytes(), b"existing destination art"
+        )
+        self.assertEqual(old_cover.read_bytes(), b"original")
+        self.assertTrue(old.parent.exists())
+
+    def test_shared_artwork_stays_when_source_folder_has_other_media(self):
+        old = self.media(
+            "old/song.m4a",
+            Tags(title="Song", artist="Artist", album_artist="Artist", album="Album"),
+        )
+        self.media("old/untagged.m4a")
+        cover = old.parent / "Cover.jpg"
+        cover.write_bytes(b"shared cover")
+
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue((self.library / "Artist/Album/Song.m4a").exists())
+        self.assertFalse((self.library / "Artist/Album/Cover.jpg").exists())
+        self.assertEqual(cover.read_bytes(), b"shared cover")
+
+    def test_shared_artwork_stays_when_old_folder_contains_multiple_albums(self):
+        first = self.media(
+            "old/first.m4a",
+            Tags(title="First", artist="Artist", album_artist="Artist", album="One"),
+        )
+        self.media(
+            "old/second.m4a",
+            Tags(title="Second", artist="Artist", album_artist="Artist", album="Two"),
+        )
+        cover = first.parent / "Cover.jpg"
+        cover.write_bytes(b"ambiguous artwork")
+
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue((self.library / "Artist/One/First.m4a").exists())
+        self.assertTrue((self.library / "Artist/Two/Second.m4a").exists())
+        self.assertEqual(cover.read_bytes(), b"ambiguous artwork")
+
+    def test_shared_artwork_relocated_without_deleting_unrelated_files(self):
+        old = self.media(
+            "old/song.m4a",
+            Tags(title="Song", artist="Artist", album_artist="Artist", album="Album"),
+        )
+        cover = old.parent / "Cover.jpg"
+        cover.write_bytes(b"shared cover")
+        notes = old.parent / "README.txt"
+        notes.write_text("Keep my notes")
+
+        result = self.invoke()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(
+            (self.library / "Artist/Album/Cover.jpg").read_bytes(), b"shared cover"
+        )
+        self.assertEqual(notes.read_text(), "Keep my notes")
+        self.assertTrue(old.parent.exists())
+
     def test_playlists_only_recovers_old_album_case_and_track_number(self):
         actual = self.media(
             "Janet Jackson/All for You/18 Doesn't Really Matter.m4a",

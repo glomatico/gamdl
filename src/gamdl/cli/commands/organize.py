@@ -140,7 +140,13 @@ def organize(
                 on_move=lambda: progress.advance(task),
             )
         for problem in plan.problems:
-            if problem.startswith(("Cannot move ", "Cannot update playlist ")):
+            if problem.startswith(
+                (
+                    "Cannot move ",
+                    "Cannot update playlist ",
+                    "Cannot relocate album artwork ",
+                )
+            ):
                 click.echo(f"Warning: {problem}", err=True)
     click.echo(
         ("Dry run: " if dry_run else "")
@@ -151,6 +157,8 @@ def organize(
         + f"errors {counts['errors']}."
     )
     if not dry_run:
+        if counts["folder_artwork_moved"]:
+            click.echo(f"Shared album artwork moved: {counts['folder_artwork_moved']}.")
         click.echo(f"Playlists updated: {counts['playlists_updated']}.")
         click.echo(
             f"Playlist references repaired: {counts['playlist_references_repaired']}; "

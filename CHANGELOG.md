@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Relocate shared album artwork (`Cover.jpg`, `folder.jpg`, and PNG/JPEG variants) when `organize` moves all media from one legacy folder to a single destination. Preserve existing artwork and unrelated files, and remove vacated directories only when empty. Fixes #361.
+
 ## 4.0.1
 
 - Restore `download.use_album_date` (`--use-album-date`) for songs, using cached iTunes album release dates with playback-date fallback, and `output.date_tag_template` (`--date-tag-template`) for strftime-based date tags. Preserve the original date for filenames and SQLite metadata; both settings are supported by playlist sync.

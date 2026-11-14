@@ -188,7 +188,7 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
                 browse_artist(self.request, input=pipe, output=DummyOutput())
             )
             await asyncio.sleep(0.07)
-            pipe.send_text("\r")  # Expand first category
+            pipe.send_text("\x1b[C")  # Right: expand first category
             await asyncio.sleep(0.12)
             pipe.send_text("\x1b[C")  # Right: next page
             await asyncio.sleep(0.12)
@@ -197,12 +197,12 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.08)
             pipe.send_text("\x1b")  # Back to category list
             await asyncio.sleep(0.60)
-            pipe.send_text("\x1b[F\r")
+            pipe.send_text("\r")  # Enter confirms from any highlighted row
             result = await asyncio.wait_for(task, timeout=3)
         self.assertEqual(result.selections, (ArtistCategorySelection(MAIN, (2,)),))
         self.assertEqual(self.calls, [(MAIN, 0), (MAIN, 1)])
 
-    async def test_real_ptk_keyboard_space_enter_and_download_action(self):
+    async def test_real_ptk_keyboard_space_marks_enter_confirms_from_root(self):
         """Exercise the terminal event loop rather than just calling state methods."""
         with create_pipe_input() as pipe:
             task = asyncio.create_task(
@@ -212,13 +212,33 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             pipe.send_text(" ")  # Space: whole category, without API calls
             await asyncio.sleep(0.03)
             self.assertEqual(self.calls, [])
-            pipe.send_text("\r")  # Enter: expand, not download
+            pipe.send_text("\r")  # Enter: submit, not expand
+            result = await asyncio.wait_for(task, timeout=3)
+        self.assertEqual(result.selections, (ArtistCategorySelection(MAIN),))
+        self.assertEqual(self.calls, [])
+
+    async def test_enter_on_highlighted_artist_item_confirms_without_toggling(self):
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                browse_artist(self.request, input=pipe, output=DummyOutput())
+            )
+            await asyncio.sleep(0.07)
+            pipe.send_text("\x1b[C")  # Right: open albums
             await asyncio.sleep(0.12)
-            self.assertEqual(self.calls, [(MAIN, 0)])
-            pipe.send_text("\x01")  # Ctrl+A: mark all in category
-            pipe.send_text("\x1b")  # Escape: go back to categories
-            await asyncio.sleep(0.60)  # VT100 escape disambiguation timeout
-            pipe.send_text("\x1b[F")  # End: Download selected
+            pipe.send_text(" \r")  # Space marks first item; Enter confirms it
+            result = await asyncio.wait_for(task, timeout=3)
+        self.assertEqual(result.selections, (ArtistCategorySelection(MAIN, (0,)),))
+
+    async def test_enter_without_marks_does_not_open_or_download(self):
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                browse_artist(self.request, input=pipe, output=DummyOutput())
+            )
+            await asyncio.sleep(0.07)
             pipe.send_text("\r")
+            await asyncio.sleep(0.08)
+            self.assertFalse(task.done())
+            self.assertEqual(self.calls, [])
+            pipe.send_text(" \r")
             result = await asyncio.wait_for(task, timeout=3)
         self.assertEqual(result.selections, (ArtistCategorySelection(MAIN),))

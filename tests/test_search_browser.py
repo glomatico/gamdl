@@ -84,6 +84,54 @@ class SearchBrowserStateTests(unittest.TestCase):
 
 
 class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
+    async def test_space_marks_and_enter_downloads_highlighted_search_result(self):
+        async def load(cursor):
+            return MediaPage((item("first"), item("second")))
+
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                select_search_results(
+                    {"songs": PageCache(load)},
+                    "test",
+                    media_type="songs",
+                    input=pipe,
+                    output=DummyOutput(),
+                )
+            )
+            await asyncio.sleep(0.1)
+            pipe.send_text("\r")  # Enter with no marks must not toggle first item
+            await asyncio.sleep(0.05)
+            self.assertFalse(task.done())
+            pipe.send_text("\x1b[B \r")  # Mark second item, submit from its row
+            result = await asyncio.wait_for(task, 3)
+        self.assertEqual(result, {"songs": (1,)})
+
+    async def test_space_does_not_browse_category_and_enter_from_hub_submits(self):
+        calls = []
+
+        async def load(cursor):
+            calls.append(cursor)
+            return MediaPage((item("first"),))
+
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                select_search_results(
+                    {"songs": PageCache(load)}, "test",
+                    input=pipe, output=DummyOutput(),
+                )
+            )
+            await asyncio.sleep(0.08)
+            pipe.send_text(" \r")  # Space doesn't open/mark a category; Enter no-op
+            await asyncio.sleep(0.08)
+            self.assertFalse(task.done())
+            self.assertEqual(calls, [])
+            pipe.send_text("\x1b[C")  # Right opens the category
+            await asyncio.sleep(0.09)
+            pipe.send_text(" b\r")  # Mark one, B returns, Enter downloads at hub
+            result = await asyncio.wait_for(task, 3)
+        self.assertEqual(result, {"songs": (0,)})
+        self.assertEqual(calls, [None])
+
     async def test_select_across_types_then_download_from_root(self):
         calls = {"songs": [], "music-videos": [], "uploaded-videos": []}
 
@@ -105,11 +153,11 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 calls, {"songs": [], "music-videos": [], "uploaded-videos": []}
             )
 
-            pipe.send_text("\r")  # Expand Songs.
+            pipe.send_text("\x1b[C")  # Right: expand Songs.
             await asyncio.sleep(0.09)
             pipe.send_text(" \x7f")  # Select one song, return to media types.
             await asyncio.sleep(0.09)
-            pipe.send_text("\x1b[B\r")  # Expand Music videos.
+            pipe.send_text("\x1b[B\x1b[C")  # Down and Right: expand videos.
             await asyncio.sleep(0.09)
             pipe.send_text("\x1b[B \x7f")  # Select second video, back.
             await asyncio.sleep(0.09)
@@ -137,13 +185,13 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 select_search_results(caches, "test", input=pipe, output=DummyOutput())
             )
             await asyncio.sleep(0.08)
-            pipe.send_text("\r")
+            pipe.send_text("\x1b[C")
             await asyncio.sleep(0.09)
             pipe.send_text(" \x1b[C")  # Select first, go to page 2.
             await asyncio.sleep(0.09)
             pipe.send_text(" \x7f\x7f")  # Select second, return to root.
             await asyncio.sleep(0.09)
-            pipe.send_text("\r")  # Reopen Songs (cached).
+            pipe.send_text("\x1b[C")  # Reopen Songs (cached).
             await asyncio.sleep(0.09)
             pipe.send_text("\x1b[C")  # Cached next page.
             await asyncio.sleep(0.09)
@@ -173,11 +221,11 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await asyncio.sleep(0.08)
-            pipe.send_text("\r")
+            pipe.send_text("\x1b[C")
             await asyncio.sleep(0.1)
             self.assertFalse(task.done())
             self.assertEqual(attempts, 1)
-            pipe.send_text("\r")  # Retry on same root menu.
+            pipe.send_text("\x1b[C")  # Right: retry on root menu.
             await asyncio.sleep(0.09)
             pipe.send_text(" \x7f\x1b[B\r")
             result = await asyncio.wait_for(task, 3)
@@ -205,7 +253,7 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await asyncio.sleep(0.08)
-            pipe.send_text("\r")
+            pipe.send_text("\x1b[C")
             await asyncio.sleep(0.09)
             pipe.send_text("\x1b[C")
             await asyncio.sleep(0.09)
@@ -229,7 +277,7 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
             )
             await asyncio.sleep(0.08)
             pipe.send_text("\x01")  # Ctrl+A at root must not select the category.
-            pipe.send_text("\r")
+            pipe.send_text("\x1b[C")
             await asyncio.sleep(0.1)
             pipe.send_text("\x01")  # Ctrl+A inside results must not select every item.
             pipe.send_text("\x1b[B\x1b[B\x1b[B\r")  # Attempt Download selected.
@@ -256,9 +304,9 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await asyncio.sleep(0.08)
-            pipe.send_text("\r")
+            pipe.send_text("\x1b[C")
             await asyncio.sleep(0.09)
-            pipe.send_text("\x7f\x1b[B\r")
+            pipe.send_text("\x7f\x1b[B\x1b[C")  # Open videos
             await asyncio.sleep(0.09)
             pipe.send_text(" \x7f\x1b[B\r")
             result = await asyncio.wait_for(task, 3)
@@ -288,7 +336,7 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
             )
             await asyncio.sleep(0.1)
             self.assertFalse(task.done())
-            pipe.send_text("\r")  # Retry first page from inside the browser.
+            pipe.send_text("\x1b[C")  # Right: retry first page.
             await asyncio.sleep(0.09)
             pipe.send_text(" \x1b[B\r")
             result = await asyncio.wait_for(task, 3)
@@ -313,7 +361,7 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await asyncio.sleep(0.08)
-            pipe.send_text("\r")
+            pipe.send_text("\x1b[C")
             await asyncio.sleep(0.09)
             pipe.send_text("\x1b[C")
             await asyncio.sleep(0.09)

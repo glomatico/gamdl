@@ -147,7 +147,7 @@ class ArtistBrowserState:
         return f"Unable to load page ({'HTTP ' + str(code) if code is not None else type(exc).__name__})"
 
     async def expand(self):
-        """Enter on a root category expands it; never triggers a download."""
+        """Right arrow on a root category expands it; never downloads."""
         if self.loading or self.category is not None or self.cursor == self.rows - 1:
             return
         kind = self.request.categories[self.cursor][0]
@@ -243,7 +243,7 @@ class ArtistBrowserState:
 async def browse_artist(
     request: ArtistBrowseRequest, *, input=None, output=None
 ) -> ArtistBrowseResult:
-    """Run full-screen Prompt Toolkit UI with explicit Download selected action."""
+    """Run full-screen Prompt Toolkit UI; Enter confirms marked selections."""
     state = ArtistBrowserState(request)
     kb = KeyBindings()
     tasks: set[asyncio.Task] = set()
@@ -300,8 +300,8 @@ async def browse_artist(
         summary = f"{len(state.selected)} categories selected"
         return menu_footer(
             summary
-            + "  ·  ↑/↓ navigate  ·  ←/→ pages  ·  Space mark  ·  Enter open/download",
-            "Ctrl+A select all  ·  Ctrl+D clear  ·  PgUp/PgDn jump  ·  Esc back  ·  Ctrl+C cancel",
+            + "  ·  ↑/↓ navigate  ·  → open/next page  ·  ← previous page  ·  Space mark",
+            "Enter download marked  ·  Ctrl+A select all  ·  Ctrl+D clear  ·  Esc back  ·  Ctrl+C cancel",
         )
 
     app = make_app(
@@ -361,7 +361,11 @@ async def browse_artist(
 
     @kb.add("right")
     def right(event):
-        if state.category is not None and not state.loading:
+        if state.loading:
+            return
+        if state.category is None:
+            start_task(state.expand())
+        else:
             start_task(state.next_page())
 
     @kb.add("left")
@@ -372,15 +376,10 @@ async def browse_artist(
     def enter(event):
         if state.loading:
             return
-        if state.cursor == state.rows - 1:
-            if not state.selected:
-                state.error = "Select at least one item before downloading"
-                return
-            app.exit(result=state.result())
-        elif state.category is not None:
-            state.toggle()
-        else:
-            start_task(state.expand())
+        if not state.selected:
+            state.error = "Select at least one item before downloading (Space to mark)"
+            return
+        app.exit(result=state.result())
 
     @kb.add("escape")
     @kb.add("backspace")

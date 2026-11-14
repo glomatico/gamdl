@@ -2,7 +2,7 @@
 
 Search categories are navigation only: they cannot be selected wholesale.
 Selections are individual result occurrences, retained across categories and
-cached pages until the user explicitly chooses Download selected.
+cached pages until the user confirms with Enter.
 """
 
 from __future__ import annotations
@@ -193,7 +193,7 @@ async def select_search_results(
                 fragments.append(
                     (
                         "class:focused" if state.cursor == index else "class:action",
-                        f" {'❯' if state.cursor == index else ' '}     Back to media types\n",
+                        f" {'❯' if state.cursor == index else ' '}     Back to media types (B)\n",
                     )
                 )
 
@@ -215,13 +215,13 @@ async def select_search_results(
     def controls() -> FormattedText:
         if state.category is None:
             instructions = (
-                "↑/↓ Navigate · Enter/Space Browse · Enter Download · Esc Cancel"
+                "↑/↓ Navigate · → Browse category · Enter Download marked · Esc Cancel"
             )
         else:
             instructions = (
-                "↑/↓ Navigate · ←/→ Pages · Backspace/Esc Back · Space Select · Enter Select/Download"
+                "↑/↓ Navigate · ←/→ Pages · B types · Space Mark · Enter Download marked"
                 if not state.fixed_type
-                else "↑/↓ Navigate · ←/→ Pages · Space Select · Enter Download · Esc Cancel"
+                else "↑/↓ Navigate · ←/→ Pages · Space Mark · Enter Download marked · Esc Cancel"
             )
         return footer(
             f"{state.total_selected} selected across media types", instructions
@@ -261,10 +261,10 @@ async def select_search_results(
         task.add_done_callback(done)
         app.invalidate()
 
-    def error_message(exc: Exception, *, next_page: bool = False) -> str:
+    def error_message(exc: Exception) -> str:
         status = getattr(exc, "status_code", None)
         reason = f"HTTP {status}" if status is not None else type(exc).__name__
-        action = "Press → to retry" if next_page else "Press Enter to retry"
+        action = "Press → to retry"
         return f"Unable to load results ({reason}). {action}."
 
     async def load_first(kind: str) -> None:
@@ -290,7 +290,7 @@ async def select_search_results(
         except asyncio.CancelledError:
             return
         except Exception as exc:  # noqa: BLE001 - network errors are recoverable
-            state.error = error_message(exc, next_page=True)
+            state.error = error_message(exc)
         finally:
             state.loading = False
             app.invalidate()
@@ -347,7 +347,13 @@ async def select_search_results(
 
     @keys.add("right")
     def right(event):
-        if state.loading or state.category is None:
+        if state.loading:
+            return
+        if state.category is None:
+            if state.cursor < len(state.categories):
+                kind = state.categories[state.cursor][0]
+                state.root_cursor = state.cursor
+                browse_category(kind)
             return
         kind = state.category
         if not caches[kind].pages:
@@ -359,13 +365,12 @@ async def select_search_results(
     def toggle(event):
         if state.loading:
             return
-        if state.category is None:
-            if state.cursor < len(state.categories):
-                kind = state.categories[state.cursor][0]
-                state.root_cursor = state.cursor
-                browse_category(kind)
-        else:
+        if state.category is not None:
             state.toggle()
+
+    @keys.add("b")
+    def types(event):
+        state.back_to_categories()
 
     @keys.add("c-a")
     def prevent_bulk_select(event):
@@ -376,24 +381,7 @@ async def select_search_results(
     def enter(event):
         if state.loading:
             return
-        if state.category is None:
-            if state.cursor < len(state.categories):
-                kind = state.categories[state.cursor][0]
-                state.root_cursor = state.cursor
-                browse_category(kind)
-            else:
-                confirm()
-            return
-
-        kind = state.category
-        if not caches[kind].pages:
-            launch(load_first(kind))
-        elif state.cursor < len(state.items):
-            state.toggle()
-        elif not state.fixed_type and state.cursor == len(state.items):
-            state.back_to_categories()
-        else:
-            confirm()
+        confirm()
 
     @keys.add("escape")
     def escape(event):

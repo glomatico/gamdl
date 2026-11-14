@@ -102,9 +102,19 @@ class TuiSelectionTests(unittest.IsolatedAsyncioTestCase):
             lambda pipe, out: select_many(
                 "Playlist tracks", choices, input=pipe, output=out
             ),
-            " \x1b[F\r",  # First duplicate only, then Download selected
+            " \r",  # Space marks first duplicate; Enter confirms from the item
         )
         self.assertEqual(result, [4])
+
+    async def test_multiselect_enter_without_marks_does_not_toggle_or_submit(self):
+        choices = [MenuChoice("Track A", 8), MenuChoice("Track B", 2)]
+        result = await self.send_keys(
+            lambda pipe, out: select_many(
+                "Album tracks", choices, input=pipe, output=out
+            ),
+            "\r \r",  # Initial Enter does nothing; Space marks; Enter submits
+        )
+        self.assertEqual(result, [8])
 
     async def test_multiselect_invert_and_clear(self):
         choices = [MenuChoice("A", 5), MenuChoice("B", 2), MenuChoice("C", 8)]

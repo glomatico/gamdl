@@ -278,10 +278,12 @@ Gamdl matches tracks by catalog ID using the local SQLite index and embedded med
 
 | Key | Action |
 | --- | --- |
-| Arrow keys | Navigate options |
-| Space | Toggle an item in a multi-select menu |
+| Up / Down | Move between options |
+| Left / Right | Browse pages; Right opens artist/search categories |
+| Space | Mark or unmark items in a multi-select menu (artist categories may also be marked) |
 | Ctrl + A | Select all items where supported |
-| Enter | Confirm or open the selected item |
+| Enter | Confirm the selected single-choice option, or start downloading all marked items in a multi-select menu |
+| B | Return to media types in the search browser |
 
 <a name="configuration"></a>
 

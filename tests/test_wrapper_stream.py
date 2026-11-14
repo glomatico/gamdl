@@ -61,7 +61,7 @@ class TemariStreamTests(unittest.IsolatedAsyncioTestCase):
         self.http.hits.clear()
         self.api = WrapperApi(
             ApiHttpClient("wrapper"),
-            "http://127.0.0.1:40020",
+            "http://127.0.0.1",
             session={"state": "authenticated"},
         )
         self.api.get_context = AsyncMock(return_value=SYNTHETIC_CONTEXT)

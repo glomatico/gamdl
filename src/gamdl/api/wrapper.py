@@ -73,7 +73,7 @@ class WrapperApi:
     async def create(
         cls,
         *,
-        base_url: str = "http://127.0.0.1:40020",
+        base_url: str = "http://127.0.0.1",
         get_credentials: CredentialsPrompt | None = None,
         get_2fa_code: TwoFactorPrompt | None = None,
         client: httpx.AsyncClient | None = None,

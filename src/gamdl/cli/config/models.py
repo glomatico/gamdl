@@ -18,7 +18,7 @@ def database_path() -> Path:
 class AuthConfig:
     mode: str | None = None
     cookies_path: str = str(config_path().parent / "cookies.txt")
-    wrapper_url: str = "http://127.0.0.1:40020"
+    wrapper_url: str = "http://127.0.0.1"
     media_user_token: str | None = None
     storefront: str | None = None
     language: str = "en-US"

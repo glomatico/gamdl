@@ -106,7 +106,7 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
             result = await asyncio.wait_for(task, 3)
         self.assertEqual(result, {"songs": (1,)})
 
-    async def test_space_does_not_browse_category_and_enter_from_hub_submits(self):
+    async def test_space_does_not_browse_but_enter_opens_category_on_hub(self):
         calls = []
 
         async def load(cursor):
@@ -121,16 +121,62 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await asyncio.sleep(0.08)
-            pipe.send_text(" \r")  # Space doesn't open/mark a category; Enter no-op
-            await asyncio.sleep(0.08)
+            pipe.send_text(" ")  # Space doesn't open or mark a category
+            await asyncio.sleep(0.07)
             self.assertFalse(task.done())
             self.assertEqual(calls, [])
-            pipe.send_text("\x1b[C")  # Right opens the category
+            pipe.send_text("\r")  # Enter opens the highlighted category
             await asyncio.sleep(0.09)
-            pipe.send_text(" b\r")  # Mark one, B returns, Enter downloads at hub
+            self.assertEqual(calls, [None])
+            self.assertFalse(task.done())
+            pipe.send_text(" b\x1b[F\r")  # Mark, B returns; Download action confirms
             result = await asyncio.wait_for(task, 3)
         self.assertEqual(result, {"songs": (0,)})
         self.assertEqual(calls, [None])
+
+    async def test_enter_on_root_category_opens_even_with_marked_results(self):
+        async def load(cursor):
+            return MediaPage((item("result"),))
+
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                select_search_results(
+                    {"songs": PageCache(load), "music-videos": PageCache(load)},
+                    "test", input=pipe, output=DummyOutput(),
+                )
+            )
+            await asyncio.sleep(0.08)
+            pipe.send_text("\r")  # Open songs
+            await asyncio.sleep(0.10)
+            pipe.send_text(" \x7f")  # Mark a song; Backspace to hub
+            await asyncio.sleep(0.08)
+            pipe.send_text("\x1b[B\r")  # Enter on videos must open videos
+            await asyncio.sleep(0.10)
+            self.assertFalse(task.done())
+            pipe.send_text("\r")  # On multi-select page, Enter downloads marked song
+            result = await asyncio.wait_for(task, 3)
+        self.assertEqual(result, {"songs": (0,)})
+
+    async def test_enter_on_back_action_returns_to_categories(self):
+        async def load(cursor):
+            return MediaPage((item("result"),))
+
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                select_search_results(
+                    {"songs": PageCache(load)}, "test",
+                    input=pipe, output=DummyOutput(),
+                )
+            )
+            await asyncio.sleep(0.08)
+            pipe.send_text("\r")  # Open songs
+            await asyncio.sleep(0.10)
+            pipe.send_text(" \x1b[B\r")  # Mark; Enter on Back to media types
+            await asyncio.sleep(0.08)
+            self.assertFalse(task.done())
+            pipe.send_text("\x1b[F\r")  # Now on hub: Download selected
+            result = await asyncio.wait_for(task, 3)
+        self.assertEqual(result, {"songs": (0,)})
 
     async def test_select_across_types_then_download_from_root(self):
         calls = {"songs": [], "music-videos": [], "uploaded-videos": []}

@@ -147,7 +147,7 @@ class ArtistBrowserState:
         return f"Unable to load page ({'HTTP ' + str(code) if code is not None else type(exc).__name__})"
 
     async def expand(self):
-        """Right arrow on a root category expands it; never downloads."""
+        """Enter/Right on a root category opens it without downloading."""
         if self.loading or self.category is not None or self.cursor == self.rows - 1:
             return
         kind = self.request.categories[self.cursor][0]
@@ -243,7 +243,7 @@ class ArtistBrowserState:
 async def browse_artist(
     request: ArtistBrowseRequest, *, input=None, output=None
 ) -> ArtistBrowseResult:
-    """Run full-screen Prompt Toolkit UI; Enter confirms marked selections."""
+    """Run full-screen artist browser with navigation and multi-select pages."""
     state = ArtistBrowserState(request)
     kb = KeyBindings()
     tasks: set[asyncio.Task] = set()
@@ -298,10 +298,14 @@ async def browse_artist(
 
     def footer() -> FormattedText:
         summary = f"{len(state.selected)} categories selected"
+        instructions = (
+            "↑/↓ navigate  ·  Enter/→ open category  ·  Space mark  ·  Enter on Download selected confirms"
+            if state.category is None
+            else "↑/↓ navigate  ·  ←/→ pages  ·  Space mark  ·  Enter download marked"
+        )
         return menu_footer(
-            summary
-            + "  ·  ↑/↓ navigate  ·  → open/next page  ·  ← previous page  ·  Space mark",
-            "Enter download marked  ·  Ctrl+A select all  ·  Ctrl+D clear  ·  Esc back  ·  Ctrl+C cancel",
+            summary + "  ·  " + instructions,
+            "Ctrl+A select all  ·  Ctrl+D clear  ·  PgUp/PgDn jump  ·  Esc back  ·  Ctrl+C cancel",
         )
 
     app = make_app(
@@ -376,10 +380,16 @@ async def browse_artist(
     def enter(event):
         if state.loading:
             return
-        if not state.selected:
+        if state.category is None and state.cursor < len(state.request.categories):
+            # The category list is a navigation page, even if some categories
+            # have been marked with Space for downloading in bulk.
+            start_task(state.expand())
+        elif not state.selected:
             state.error = "Select at least one item before downloading (Space to mark)"
-            return
-        app.exit(result=state.result())
+        else:
+            # Item lists are multi-select pages; Enter confirms from any row.
+            # The root's explicit Download selected row also confirms.
+            app.exit(result=state.result())
 
     @kb.add("escape")
     @kb.add("backspace")

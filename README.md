@@ -282,8 +282,13 @@ Gamdl matches tracks by catalog ID using the local SQLite index and embedded med
 | Left / Right | Browse pages; Right opens artist/search categories |
 | Space | Mark or unmark items in a multi-select menu (artist categories may also be marked) |
 | Ctrl + A | Select all items where supported |
-| Enter | Confirm the selected single-choice option, or start downloading all marked items in a multi-select menu |
+| Enter | Open/confirm the highlighted option on navigation and single-choice menus; start downloading the marked items on multi-select item pages |
 | B | Return to media types in the search browser |
+
+In artist and search category lists, Enter opens the highlighted category.
+Use Space to mark items (or entire artist categories), then Enter from a
+multi-select item page to download the marked selection. On category lists,
+the explicit **Download selected** row confirms any previously marked items.
 
 <a name="configuration"></a>
 

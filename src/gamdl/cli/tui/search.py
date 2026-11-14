@@ -215,7 +215,7 @@ async def select_search_results(
     def controls() -> FormattedText:
         if state.category is None:
             instructions = (
-                "↑/↓ Navigate · → Browse category · Enter Download marked · Esc Cancel"
+                "↑/↓ Navigate · Enter/→ Open category · Enter on Download selected to confirm · Esc Cancel"
             )
         else:
             instructions = (
@@ -264,7 +264,7 @@ async def select_search_results(
     def error_message(exc: Exception) -> str:
         status = getattr(exc, "status_code", None)
         reason = f"HTTP {status}" if status is not None else type(exc).__name__
-        action = "Press → to retry"
+        action = "Press Enter or → to retry"
         return f"Unable to load results ({reason}). {action}."
 
     async def load_first(kind: str) -> None:
@@ -381,7 +381,20 @@ async def select_search_results(
     def enter(event):
         if state.loading:
             return
-        confirm()
+        if state.category is None:
+            if state.cursor < len(state.categories):
+                kind = state.categories[state.cursor][0]
+                state.root_cursor = state.cursor
+                browse_category(kind)
+            else:
+                confirm()
+        elif not state.fixed_type and state.cursor == len(state.items):
+            # Explicit Back to media types is a navigation action.
+            state.back_to_categories()
+        else:
+            # Results are multi-select; Enter submits the marked items without
+            # toggling whichever result happens to have keyboard focus.
+            confirm()
 
     @keys.add("escape")
     def escape(event):

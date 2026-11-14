@@ -6,6 +6,8 @@ from pathlib import Path
 import click
 import yaml
 
+from gamdl import __version__
+
 from .loader import load_config
 from .models import AppConfig
 
@@ -30,7 +32,7 @@ def initialize(ctx: click.Context, force: bool) -> None:
     path: Path = ctx.find_root().obj["config_path"]
     path.parent.mkdir(parents=True, exist_ok=True)
     template = (
-        "# Gamdl 4.0 configuration; CLI flags override these values.\n"
+        f"# Gamdl {__version__} configuration; CLI flags override these values.\n"
         "# Configuration schema changes are normalized automatically.\n"
         "\n" + yaml.safe_dump(asdict(AppConfig()), sort_keys=False, allow_unicode=True)
     )

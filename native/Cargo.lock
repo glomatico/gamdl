@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "gamdl-native"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "aes",
  "ctr",

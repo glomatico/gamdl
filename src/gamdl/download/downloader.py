@@ -79,6 +79,20 @@ async def _lyrics_for_format(media: Song, format: LyricsFormat):
     return await media.get_lyrics()
 
 
+def _external_cover_path(
+    media: Song | MusicVideo | UploadedVideo, destination: Path, extension: str
+) -> Path:
+    """Use one shared cover per song folder, or a per-file video cover.
+
+    This follows Gamdl 3.x: songs use Cover.jpg / Cover.png even when a
+    single track is requested; music videos and uploaded videos use the
+    media filename as their artwork sidecar's stem.
+    """
+    if isinstance(media, Song):
+        return destination.parent / f"Cover{extension}"
+    return destination.with_suffix(extension)
+
+
 def _tag_bytes(
     muxer: Muxer,
     data: bytes,
@@ -715,8 +729,10 @@ class Downloader:
         if save_cover:
             try:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_COVER):
-                    existing_cover = destination.with_suffix(
-                        ".jpg" if cover_format == CoverFormat.JPG else ".png"
+                    existing_cover = _external_cover_path(
+                        media,
+                        destination,
+                        ".jpg" if cover_format == CoverFormat.JPG else ".png",
                     )
                     if overwrite == OverwritePolicy.SKIP and existing_cover.is_file():
                         # A known media file needs no Apple artwork request
@@ -748,7 +764,9 @@ class Downloader:
                                 raise ValueError(
                                     "Cover sidecar must contain JPEG or PNG bytes"
                                 )
-                            cover_path = destination.with_suffix(extension)
+                            cover_path = _external_cover_path(
+                                media, destination, extension
+                            )
                             status = await _complete_write(
                                 publish_bytes_result,
                                 cover_bytes,

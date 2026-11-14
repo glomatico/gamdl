@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 4.0.2 (unreleased)
 
+- Display the complete installed Gamdl version in the CLI banner and generated configuration comments, rather than always showing `Gamdl 4.0`.
+- Restore Gamdl 3.x external artwork naming: song and album tracks share `Cover.jpg` (or `Cover.png`) in their album folder, while music videos and uploaded videos retain artwork files matching their media filenames. Reuse an existing album cover without an additional download when overwrite is disabled.
 - Relocate shared album artwork (`Cover.jpg`, `folder.jpg`, and PNG/JPEG variants) when `organize` moves all media from one legacy folder to a single destination. Preserve existing artwork and unrelated files, and remove vacated directories only when empty. Fixes #361.
+
+## Planned for a future release
+
+- Integrate Temari-based local AAC/ALAC decryption with the rewritten Wrapper-v2 1.0.0 context and authentication APIs. This work is being developed separately on the `temari` branch and is **not part of 4.0.2**.
 
 ## 4.0.1
 

@@ -555,6 +555,8 @@ Use `--embedded-cover-size` and `--file-cover-size` to override these per comman
 
 If the sizes match (including both set to `max`), Gamdl reuses the artwork bytes for the saved cover. If the sizes differ, it fetches separate resolutions from Apple Music. `--exclude-tags cover` affects only embedded artwork, not the external cover. `--no-tag` disables embedding, while `--save-cover` still saves an external image.
 
+External artwork for songs uses the shared filename `Cover.jpg` (or `Cover.png`) inside the album folder, including when downloading individual songs or playlist tracks. Music videos and uploaded videos instead use the media filename, for example `Video.m4v` and `Video.jpg`. When overwrite is disabled, an existing shared album cover is reused rather than fetched and replaced for every track.
+
 ### Files and Folders
 
 #### Output Directory (`output.directory` / `--output-dir`)

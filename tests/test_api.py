@@ -6,7 +6,7 @@ import logging
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -681,29 +681,61 @@ class ItunesTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WrapperTests(unittest.IsolatedAsyncioTestCase):
+    async def test_apple_music_auth_uses_exported_wrapper_tokens(self):
+        wrapper = type("MockWrapper", (), {})()
+        wrapper.get_credentials = AsyncMock(return_value={
+            "dev_token": "synthetic-dev",
+            "music_user_token": "synthetic-music",
+        })
+        with patch.object(AppleMusicApi, "create", new_callable=AsyncMock) as create:
+            await AppleMusicApi.from_wrapper(wrapper, storefront="br")
+        wrapper.get_credentials.assert_awaited_once_with()
+        self.assertEqual(create.await_args.kwargs["token"], "synthetic-dev")
+        self.assertEqual(create.await_args.kwargs["media_user_token"], "synthetic-music")
+        self.assertEqual(create.await_args.kwargs["storefront"], "br")
+
     async def test_wrapper_login_and_two_factor_callback(self):
         state = {"authenticated": False}
         endpoints = []
 
         def handler(request):
             endpoints.append(request.url.path)
-            if request.url.path == "/me":
+            if request.url.path == "/info":
                 return httpx.Response(
                     200,
                     json={
-                        "version": "0.0.2",
-                        "auth": {
-                            "state": "logged_in"
-                            if state["authenticated"]
-                            else "logged_out"
-                        },
+                        "version": "1.0.0",
+                        "protocol_version": 1,
+                        "profile": "apple-music-3.6.0.1109-x86_64-research-v1",
+                        "context_format": "temari",
+                        "decryption": "client_side",
                     },
                 )
-            if request.url.path == "/login":
-                return httpx.Response(202)
-            if request.url.path == "/login/2fa":
+            if request.url.path == "/session":
+                return httpx.Response(200, json={
+                    "state": "authenticated" if state["authenticated"] else "logged_out"
+                })
+            if request.url.path == "/session/restore":
+                return httpx.Response(404, json={"error":{"code":"no_cached_session"}})
+            if request.url.path == "/session/login":
+                return httpx.Response(202, json={
+                    "status": "challenge",
+                    "kind": "two_factor",
+                    "challenge_id": "opaque",
+                })
+            if request.url.path == "/session/challenge":
+                assert request.content == (
+                    b'{"challenge_id":"opaque","code":"123456"}'
+                ) or request.content == (
+                    b'{"challenge_id": "opaque", "code": "123456"}'
+                )
                 state["authenticated"] = True
-                return httpx.Response(200)
+                return httpx.Response(200, json={"state":"authenticated"})
+            if request.url.path == "/session/credentials":
+                return httpx.Response(200, json={
+                    "dev_token":"synthetic-developer",
+                    "music_user_token":"synthetic-media-user",
+                })
             return httpx.Response(200, json={"playback": "ok"})
 
         async def get_code():
@@ -717,8 +749,14 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
                 get_2fa_code=get_code,
             ) as api:
                 self.assertEqual((await api.get_playback("42"))["playback"], "ok")
-                self.assertEqual(api.decrypt_port, 10020)
-        self.assertEqual(endpoints, ["/me", "/login", "/login/2fa", "/me", "/playback"])
+                credentials = await api.get_credentials()
+                self.assertEqual(credentials["dev_token"], "synthetic-developer")
+        self.assertEqual(
+            endpoints,
+            ["/info", "/session", "/session/restore", "/session",
+             "/session/login", "/session/challenge", "/session",
+             "/playback", "/session/credentials"]
+        )
 
     async def test_rejects_wrong_version(self):
         async with mock_client(

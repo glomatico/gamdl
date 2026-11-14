@@ -259,6 +259,7 @@ dependencies = [
  "pyo3",
  "pyo3-async-runtimes",
  "reqwest",
+ "temari",
  "tokio",
 ]
 
@@ -1061,6 +1062,14 @@ name = "target-lexicon"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
+
+[[package]]
+name = "temari"
+version = "0.3.1"
+source = "git+https://github.com/glomatico/Temari.git?rev=dfdbb8bd0fcbce82b23e56c527556b185e832dbd#dfdbb8bd0fcbce82b23e56c527556b185e832dbd"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "thiserror"

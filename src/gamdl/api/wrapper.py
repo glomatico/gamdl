@@ -1,7 +1,14 @@
-"""Wrapper-v2 session, login/2FA and playback client."""
+"""Standalone Wrapper-v2 1.0.0 client: sessions, playback and Temari contexts.
+
+The wrapper exports Apple Music tokens to the trusted local client but never
+decrypts media samples.
+Contexts are fetched per content key and consumed in Gamdl's native Rust
+extension. Do not expose an unauthenticated Wrapper server to the network.
+"""
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -12,17 +19,20 @@ from gamdl.transport import ApiHttpClient, RequestPacer
 from .auth import invoke_prompt
 from .exceptions import GamdlApiResponseError, GamdlAuthenticationError
 
-TARGET_WRAPPER_API_VERSION = "0.0.2"
+WRAPPER_VERSION = "1.0.0"
+WRAPPER_PROTOCOL = 1
+TEMARI_PROFILE = "apple-music-3.6.0.1109-x86_64-research-v1"
+
 CredentialsPrompt = Callable[[], tuple[str, str] | Awaitable[tuple[str, str]]]
 TwoFactorPrompt = Callable[[], str | Awaitable[str]]
 
 
 class WrapperApi:
-    """Access a wrapper-v2 instance for authentication and playback metadata.
+    """A trusted local Wrapper-v2 HTTP session; no sample socket.
 
-    Credential and 2FA callbacks belong to the calling application, not this
-    API. The wrapper's HTTP base URL is separate from the host/port used by
-    the eventual native decryption engine.
+    An optional HTTPX client supplied to :meth:`create` stays caller-owned.
+    Context requests are serialized per instance to respect the single native
+    worker. The wrapper itself is never logged out when this client closes.
     """
 
     def __init__(
@@ -30,16 +40,12 @@ class WrapperApi:
         http: ApiHttpClient,
         base_url: str,
         *,
-        me: dict[str, Any],
-        decrypt_host: str = "127.0.0.1",
-        decrypt_port: int = 10020,
+        session: dict[str, Any],
     ) -> None:
         self.http = http
         self.base_url = base_url.rstrip("/")
-        self.me = me
-        # Decryption socket configuration is distinct from the HTTP API.
-        self.decrypt_host = decrypt_host
-        self.decrypt_port = decrypt_port
+        self.session = session
+        self._native_lock = asyncio.Lock()
 
     async def __aenter__(self) -> WrapperApi:
         return self
@@ -48,90 +54,67 @@ class WrapperApi:
         await self.aclose()
 
     async def aclose(self) -> None:
-        """Release the HTTP client if it is owned by this wrapper instance."""
         await self.http.aclose()
 
     @staticmethod
-    def validate_api_version(me: dict[str, Any]) -> None:
-        """Require the wrapper's current API contract version.
-
-        Raises:
-            GamdlApiResponseError: ``/me`` reports an incompatible version.
-        """
-        if me.get("version") != TARGET_WRAPPER_API_VERSION:
+    def validate_info(info: dict[str, Any]) -> None:
+        if (
+            info.get("version") != WRAPPER_VERSION
+            or info.get("protocol_version") != WRAPPER_PROTOCOL
+            or info.get("profile") != TEMARI_PROFILE
+            or info.get("context_format") != "temari"
+            or info.get("decryption") != "client_side"
+        ):
             raise GamdlApiResponseError(
-                f"Unsupported wrapper API version (expected {TARGET_WRAPPER_API_VERSION})"
+                f"Unsupported Wrapper-v2 API or Temari profile (requires {WRAPPER_VERSION})"
             )
 
     @classmethod
     async def create(
         cls,
         *,
-        base_url: str = "http://127.0.0.1",
-        decrypt_host: str = "127.0.0.1",
-        decrypt_port: int = 10020,
+        base_url: str = "http://127.0.0.1:40020",
         get_credentials: CredentialsPrompt | None = None,
         get_2fa_code: TwoFactorPrompt | None = None,
         client: httpx.AsyncClient | None = None,
         pacer: RequestPacer | None = None,
     ) -> WrapperApi:
-        """Connect to a wrapper instance and optionally complete authentication.
-
-        Queries ``/me``, checks API compatibility, and invokes the supplied
-        callbacks if the wrapper reports ``logged_out``. Callback functions
-        can be synchronous or asynchronous; no interactive UI is required.
-
-        Args:
-            base_url: Base URL for wrapper HTTP endpoints.
-            decrypt_host: Host used later by the native decryption engine.
-            decrypt_port: Port used later by the native decryption engine.
-            get_credentials: Optional callback returning username/password.
-            get_2fa_code: Optional callback providing a two-factor code when
-                the login endpoint requests one.
-            client: Optional caller-owned HTTPX client.
-            pacer: Optional shared request pacer.
-
-        Returns:
-            Authenticated and version-checked wrapper client.
-
-        Raises:
-            GamdlAuthenticationError: Login is required or failed.
-            GamdlApiResponseError: Wrapper API version is incompatible.
-        """
-        http = ApiHttpClient("wrapper", client=client, pacer=pacer, timeout=600.0)
         base_url = base_url.rstrip("/")
+        http = ApiHttpClient("wrapper", client=client, pacer=pacer, timeout=620.0)
         try:
-            me = await cls.get_me(http, base_url)
-            cls.validate_api_version(me)
-            if me.get("auth", {}).get("state") == "logged_out" and get_credentials:
+            info = await http.request_json(
+                "GET", f"{base_url}/info", operation="wrapper_info"
+            )
+            cls.validate_info(info)
+            session = await cls.get_session(http, base_url)
+            if session.get("state") == "logged_out":
+                try:
+                    await http.request_json(
+                        "POST",
+                        f"{base_url}/session/restore",
+                        operation="wrapper_restore",
+                    )
+                except GamdlApiResponseError as error:
+                    if error.status_code != 404:
+                        raise
+                session = await cls.get_session(http, base_url)
+            if session.get("state") != "authenticated" and get_credentials is not None:
                 username, password = await invoke_prompt(get_credentials)
                 await cls.login(http, base_url, username, password, get_2fa_code)
-                me = await cls.get_me(http, base_url)
-                cls.validate_api_version(me)
-
-            if me.get("auth", {}).get("state") == "logged_out":
+                session = await cls.get_session(http, base_url)
+            if session.get("state") != "authenticated":
                 raise GamdlAuthenticationError("Wrapper is not authenticated")
-
-            return cls(
-                http,
-                base_url,
-                me=me,
-                decrypt_host=decrypt_host,
-                decrypt_port=decrypt_port,
-            )
+            return cls(http, base_url, session=session)
         except BaseException:
             await http.aclose()
             raise
 
     @staticmethod
-    async def get_me(http: ApiHttpClient, base_url: str) -> dict[str, Any]:
-        """Fetch the wrapper's account and API status response.
-
-        This response may include authentication tokens. Never log it or
-        display the raw dictionary to users.
-        """
+    async def get_session(
+        http: ApiHttpClient, base_url: str
+    ) -> dict[str, Any]:
         return await http.request_json(
-            "GET", f"{base_url}/me", operation="wrapper_get_me"
+            "GET", f"{base_url}/session", operation="wrapper_session"
         )
 
     @staticmethod
@@ -142,18 +125,9 @@ class WrapperApi:
         password: str,
         get_2fa_code: TwoFactorPrompt | None = None,
     ) -> None:
-        """Submit wrapper credentials and handle the optional 2FA challenge.
-
-        An HTTP 202 from the login endpoint requests a second POST to
-        ``/login/2fa``. Neither POST is retried automatically by our HTTP
-        wrapper. Callback results are not logged or stored.
-
-        Raises:
-            GamdlAuthenticationError: Missing 2FA callback or rejected login.
-        """
         response = await http.request(
             "POST",
-            f"{base_url}/login",
+            f"{base_url}/session/login",
             operation="wrapper_login",
             json={"username": username, "password": password},
         )
@@ -164,15 +138,25 @@ class WrapperApi:
                 "Wrapper login failed", status_code=response.status_code
             )
         if get_2fa_code is None:
-            raise GamdlAuthenticationError(
-                "Wrapper requires a two-factor authentication code"
-            )
+            raise GamdlAuthenticationError("Wrapper requires a two-factor code")
+        # Never echo or log the challenge ID or code.
+        try:
+            challenge = response.json()
+            challenge_id = challenge["challenge_id"]
+            if (
+                challenge.get("kind") != "two_factor"
+                or not isinstance(challenge_id, str)
+                or not challenge_id
+            ):
+                raise ValueError
+        except (ValueError, KeyError, TypeError):
+            raise GamdlAuthenticationError("Wrapper returned an invalid login challenge") from None
         code = await invoke_prompt(get_2fa_code)
         reply = await http.request(
             "POST",
-            f"{base_url}/login/2fa",
-            operation="wrapper_login_2fa",
-            json={"code": code},
+            f"{base_url}/session/challenge",
+            operation="wrapper_2fa",
+            json={"challenge_id": challenge_id, "code": code},
         )
         if reply.status_code != 200:
             raise GamdlAuthenticationError(
@@ -181,10 +165,45 @@ class WrapperApi:
             )
 
     async def get_playback(self, media_id: str) -> dict[str, Any]:
-        """Fetch raw wrapper playback metadata for an Apple Music media ID."""
-        return await self.http.request_json(
-            "GET",
-            f"{self.base_url}/playback",
-            operation="wrapper_get_playback",
-            params={"adam_id": media_id},
-        )
+        async with self._native_lock:
+            return await self.http.request_json(
+                "GET",
+                f"{self.base_url}/playback",
+                operation="wrapper_playback",
+                params={"adam_id": media_id},
+            )
+
+    async def get_credentials(self) -> dict[str, str]:
+        """Export Apple Music credentials; never cache or log the response."""
+        async with self._native_lock:
+            result = await self.http.request_json(
+                "GET", f"{self.base_url}/session/credentials",
+                operation="wrapper_credentials",
+            )
+        if not all(
+            isinstance(result.get(name), str) and result[name]
+            for name in ("dev_token", "music_user_token")
+        ):
+            raise GamdlAuthenticationError("Wrapper authentication tokens are missing")
+        return result
+
+    async def get_context(self, media_id: str, key_uri: str) -> dict[str, Any]:
+        """Retrieve one Temari context; no caching across keys or sessions."""
+        if not media_id.isascii() or not media_id.isdecimal():
+            raise ValueError("A numeric Apple Music media ID is required")
+        if not key_uri.startswith("skd://") or len(key_uri) <= 6:
+            raise ValueError("A FairPlay SKD key URI is required")
+        async with self._native_lock:
+            context = await self.http.request_json(
+                "GET",
+                f"{self.base_url}/key",
+                operation="wrapper_context",
+                params={"adamId": media_id, "uri": key_uri},
+            )
+        if (
+            context.get("profile") != TEMARI_PROFILE
+            or not all(isinstance(context.get(name), str) for name in ("ctx", "state"))
+            or not all(isinstance(context.get(name), int) for name in ("bl", "r9b"))
+        ):
+            raise GamdlApiResponseError("Wrapper returned an incompatible Temari context")
+        return context

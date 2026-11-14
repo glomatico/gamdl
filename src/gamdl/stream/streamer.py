@@ -3,13 +3,14 @@
 Playlist discovery remains in gamdl.media. Network requests, bounded
 concurrency and retries are implemented by the native Tokio/reqwest backend.
 This layer can automatically acquire a key through an injected DRM backend,
-use wrapper-v2 for eligible Apple song HLS, or pass through encrypted bytes if
-neither method is available. Rust decrypts CENC/AES-CTR and CBCS/AES-CBC
+obtain a Temari context from Wrapper-v2 for eligible Apple song HLS, or pass
+through encrypted bytes if neither method is available. Rust decrypts CENC/AES-CTR and CBCS/AES-CBC
 samples before yielding or saving, preserving the fragmented MP4 layout.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Callable
 from os import PathLike
 from pathlib import Path
@@ -93,7 +94,7 @@ class Streamer(AsyncIterator[bytes]):
     """Async context manager yielding bytes from one media track.
 
     Streamer owns the native HTTP client and cancels pending requests
-    when the context exits. Wrapper-v2 is preferred when supplied for eligible
+    when the context exits. Temari via Wrapper-v2 is preferred when supplied for eligible
     song HLS with usable FairPlay metadata. Otherwise, an injected Drm backend
     acquires the content key when compatible signaling exists. With neither
     path available, stream bytes are passed through unchanged, even if encrypted.
@@ -101,9 +102,9 @@ class Streamer(AsyncIterator[bytes]):
     mutually exclusive with drm. License/decryption failures are never silently
     downgraded to encrypted output. Enhanced HLS song CBCS automatically
     applies the legacy prefetch key to sample description 1 and the licensed
-    key to description 2. Wrapper does NOT support decrypting video samples:
-    video always uses an available direct DRM backend, never wrapper-v2.
-    A separate music-video audio track may still use wrapper-v2.
+    key to description 2. Temari in this path does NOT support video samples:
+    video always uses an available direct DRM backend.
+    A separate music-video audio track may use Temari.
     Progressive HTTP downloads are returned unchanged; MP4 DRM for standalone
     files, arbitrary HLS key rotation and track muxing are not supported yet.
     Do not share one Streamer iterator between independent consumers.
@@ -150,14 +151,7 @@ class Streamer(AsyncIterator[bytes]):
             isinstance(source, AudioStream)
             and source.origin in {StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS}
         )
-        if wrapper_api is not None and wrapper_eligible:
-            self._wrapper = (
-                wrapper_api.decrypt_host,
-                wrapper_api.decrypt_port,
-                source.media_id,
-            )
-        else:
-            self._wrapper = None
+        self._context_provider = wrapper_api if wrapper_eligible else None
         if isinstance(decryption_key, ContentKey):
             self._key = decryption_key.key
             self._kid = decryption_key.kid
@@ -188,22 +182,34 @@ class Streamer(AsyncIterator[bytes]):
             parts = await _plan(self.source)
             key, kid = self._key, self._kid
             method = "explicit_key" if key is not None else "none"
-            wrapper = None
-            if key is None and (self._wrapper is not None or self._drm is not None):
+            temari_context = None
+            if key is None and (self._context_provider is not None or self._drm is not None):
                 info = await self.source.get_drm_info()
                 fairplay_uri = info.fairplay_streaming
                 if (
-                    self._wrapper is not None
+                    self._context_provider is not None
                     and isinstance(fairplay_uri, str)
                     and fairplay_uri.startswith("skd://")
                     and len(fairplay_uri) > len("skd://")
                 ):
                     if not self.source.media_id:
                         raise ValueError(
-                            "Wrapper sample delivery requires a song media ID"
+                            "Temari context acquisition requires a song media ID"
                         )
-                    wrapper = (*self._wrapper, fairplay_uri)
-                    method = "wrapper"
+                    if self._key_event_callback is not None:
+                        self._key_event_callback("started")
+                    try:
+                        context = await self._context_provider.get_context(
+                            self.source.media_id, fairplay_uri
+                        )
+                    except BaseException:
+                        if self._key_event_callback is not None:
+                            self._key_event_callback("failed")
+                        raise
+                    if self._key_event_callback is not None:
+                        self._key_event_callback("completed")
+                    temari_context = json.dumps(context, separators=(",", ":"))
+                    method = "temari"
                 elif self._drm is not None and self._drm.has_signaling(info):
                     if not self.source.media_id:
                         raise ValueError("DRM license request requires a media ID")
@@ -242,7 +248,7 @@ class Streamer(AsyncIterator[bytes]):
                 key,
                 kid,
                 enhanced_song,
-                wrapper,
+                temari_context,
                 isinstance(self.source, HlsSongStream)
                 and self.source.origin
                 in {
@@ -259,7 +265,7 @@ class Streamer(AsyncIterator[bytes]):
             # The worker now owns the native copy (or validation has failed).
             self._key = None
             self._kid = None
-            self._wrapper = None
+            self._context_provider = None
             self._drm = None
         return self
 

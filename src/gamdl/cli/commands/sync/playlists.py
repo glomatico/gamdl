@@ -165,8 +165,6 @@ def _auth_options(settings) -> SimpleNamespace:
         language=settings.auth.language,
         drm_backend=settings.auth.drm_backend,
         device_path=settings.auth.device_path,
-        wrapper_decrypt_host=settings.auth.wrapper_decrypt_host,
-        wrapper_decrypt_port=settings.auth.wrapper_decrypt_port,
     )
 
 

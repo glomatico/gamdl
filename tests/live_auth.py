@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class LiveSettings:
     """Local test configuration; repr intentionally excludes credentials."""
 
-    wrapper_url: str = "http://127.0.0.1"
+    wrapper_url: str = "http://127.0.0.1:40020"
     storefront: str = "br"
     developer_token: str | None = None
     media_user_token: str | None = None
@@ -39,7 +39,7 @@ class LiveSettings:
         """Load the local .env only for explicitly requested live tests."""
         load_dotenv(ROOT / ".env", override=False)
         return cls(
-            wrapper_url=os.getenv("GAMDL_WRAPPER_URL", "http://127.0.0.1"),
+            wrapper_url=os.getenv("GAMDL_WRAPPER_URL", "http://127.0.0.1:40020"),
             storefront=os.getenv("GAMDL_APPLE_STOREFRONT", "br"),
             developer_token=os.getenv("GAMDL_APPLE_DEVELOPER_TOKEN") or None,
             media_user_token=os.getenv("GAMDL_APPLE_MEDIA_USER_TOKEN") or None,
@@ -72,7 +72,7 @@ async def open_live_session(
 
     A reachable but unauthenticated wrapper is not accepted. Failed choices
     are closed before trying the next source. All HTTP resources are closed at
-    context exit, and neither tokens nor wrapper `/me` responses are logged.
+    context exit, and neither tokens nor wrapper credentials are logged.
     """
     pacer = RequestPacer(interval=interval)
     async with AsyncExitStack() as stack:
@@ -80,7 +80,7 @@ async def open_live_session(
             async with AsyncExitStack() as wrapper_stack:
                 try:
                     # Keep HTTP available for the entire session, including
-                    # playback requests after the initial /me call.
+                    # playback requests after the initial /session call.
                     wrapper_http = await wrapper_stack.enter_async_context(
                         httpx.AsyncClient(timeout=3.0)
                     )
@@ -89,10 +89,7 @@ async def open_live_session(
                         client=wrapper_http,
                         pacer=pacer,
                     )
-                    if wrapper.me.get("auth", {}).get("state") not in {
-                        "authenticated",
-                        "logged_in",
-                    }:
+                    if wrapper.session.get("state") != "authenticated":
                         raise ValueError("Wrapper has no authenticated session")
                     api = await AppleMusicApi.from_wrapper(
                         wrapper,

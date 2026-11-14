@@ -220,7 +220,9 @@ The wizard validates your selected method and saves it to the YAML configuration
 
 #### Wrapper
 
-Connect to a running [Wrapper v2](https://github.com/glomatico/wrapper-v2) service. Gamdl can use its authenticated session and compatible playback/decryption features. The default wrapper URL is `http://127.0.0.1`.
+Connect to the rewritten [Wrapper-v2](https://github.com/glomatico/wrapper-v2) 1.0.0 server. It authenticates your Apple Music account, exports the developer and media-user tokens to Gamdl, and provides Temari-compatible contexts for local sample decryption. No separate browser login, decryption socket, or API bearer token is required. The default URL is `http://127.0.0.1:40020`.
+
+**Keep Wrapper local and private.** Its `/session/credentials` endpoint exports live Apple Music tokens without HTTP authentication. Do not expose port 40020 to the internet, and do not put untrusted containers on its Docker network.
 
 #### Cookies
 
@@ -316,7 +318,7 @@ Choose `wrapper`, `cookies`, or `media-user-token`. The default is `null`, which
 
 #### Credentials and Wrapper Connection
 
-`auth.cookies_path` / `--cookies-path` specifies the cookies file. `auth.media_user_token` / `--media-user-token` supplies a token directly. `auth.wrapper_url` / `--wrapper-url` sets the wrapper's HTTP address; `auth.wrapper_decrypt_host` / `--wrapper-decrypt-host` and `auth.wrapper_decrypt_port` / `--wrapper-decrypt-port` configure its decryption endpoint (default port `10020`).
+`auth.cookies_path` / `--cookies-path` specifies the cookies file. `auth.media_user_token` / `--media-user-token` supplies a token directly. `auth.wrapper_url` / `--wrapper-url` sets Wrapper-v2's HTTP address (default `http://127.0.0.1:40020`). When using Wrapper, Gamdl retrieves Apple Music tokens from `/session/credentials` and FairPlay contexts from `/key`. The old sample-decryption TCP host/port options have been removed.
 
 Avoid passing secrets on the command line when possible, as they may be recorded in shell history.
 

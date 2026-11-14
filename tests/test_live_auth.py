@@ -21,7 +21,7 @@ class FakeApi:
 class AuthPriorityTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrapper_wins_over_token_and_cookies(self):
         wrapper = type(
-            "FakeWrapper", (), {"me": {"auth": {"state": "authenticated"}}}
+            "FakeWrapper", (), {"session": {"state": "authenticated"}}
         )()
         api = FakeApi()
         settings = LiveSettings(
@@ -115,7 +115,7 @@ class AuthPriorityTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("private-data", str(failure.exception))
 
     async def test_logged_out_wrapper_is_not_selected(self):
-        wrapper = type("FakeWrapper", (), {"me": {"auth": {"state": "logged_out"}}})()
+        wrapper = type("FakeWrapper", (), {"session": {"state": "logged_out"}})()
         settings = LiveSettings(
             media_user_token="test-user-token", developer_token="test-dev"
         )

@@ -278,8 +278,6 @@ async def _authenticate_selected(
         wrapper = await stack.enter_async_context(
             await WrapperApi.create(
                 base_url=options.wrapper_url,
-                decrypt_host=options.wrapper_decrypt_host,
-                decrypt_port=options.wrapper_decrypt_port,
                 get_credentials=credentials,
                 get_2fa_code=two_factor,
             )

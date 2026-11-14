@@ -78,7 +78,7 @@ class WizardTuiTests(unittest.IsolatedAsyncioTestCase):
                     api, wrapper = await asyncio.wait_for(task, 2)
                     self.assertIsInstance(api, FakeApi)
                     self.assertIsInstance(wrapper, FakeApi)
-            self.assertEqual(captured["url"], "http://127.0.0.1")
+            self.assertEqual(captured["url"], "http://127.0.0.1:40020")
             self.assertEqual(
                 captured["credentials"], ("person@example.com", "password123")
             )

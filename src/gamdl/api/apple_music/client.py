@@ -191,10 +191,11 @@ class AppleMusicApi(
     ) -> AppleMusicApi:
         """Create a client using authentication tokens from an active wrapper.
 
-        ``wrapper.me`` must contain both the developer and music-user tokens.
+        Wrapper must expose both the developer and music-user tokens through
+        its trusted local ``/session/credentials`` endpoint.
         Additional keyword arguments are forwarded to :meth:`create`.
         """
-        credentials = credentials_from_wrapper(wrapper.me)
+        credentials = credentials_from_wrapper(await wrapper.get_credentials())
         return await cls.create(
             token=credentials.developer_token,
             media_user_token=credentials.media_user_token,

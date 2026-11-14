@@ -308,7 +308,7 @@ class RipOptions:
         ),
     ] = None
     cookies_path: Annotated[str | None, option("--cookies-path", type=str)] = None
-    wrapper_url: Annotated[str, option("--wrapper-url", type=str)] = "http://127.0.0.1"
+    wrapper_url: Annotated[str, option("--wrapper-url", type=str)] = "http://127.0.0.1:40020"
     media_user_token: Annotated[
         str | None,
         option(
@@ -317,12 +317,6 @@ class RipOptions:
             help="Apple Music token (prefer YAML or environment variables)",
         ),
     ] = None
-    wrapper_decrypt_host: Annotated[str, option("--wrapper-decrypt-host", type=str)] = (
-        "127.0.0.1"
-    )
-    wrapper_decrypt_port: Annotated[
-        int, option("--wrapper-decrypt-port", type=click.IntRange(min=1, max=65535))
-    ] = 10020
     storefront: Annotated[str | None, option("--storefront", type=str)] = None
     language: Annotated[str, option("--language", type=str)] = "en-US"
     drm_backend: Annotated[

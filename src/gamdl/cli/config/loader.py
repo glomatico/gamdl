@@ -383,8 +383,6 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "cookies_path": a.cookies_path,
         "wrapper_url": a.wrapper_url,
         "media_user_token": a.media_user_token,
-        "wrapper_decrypt_host": a.wrapper_decrypt_host,
-        "wrapper_decrypt_port": a.wrapper_decrypt_port,
         "storefront": a.storefront,
         "language": a.language,
         "drm_backend": a.drm_backend,

@@ -9,7 +9,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::decrypt::Mp4Decryptor;
-use crate::wrapper::WrapperSession;
 use futures_util::{StreamExt, stream};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
@@ -359,7 +358,7 @@ pub(crate) struct NativeStream {
 #[pymethods]
 impl NativeStream {
     #[new]
-    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, wrapper=None, asset_song_cbcs=false, music_video_cbcs=false))]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, temari_context=None, asset_song_cbcs=false, music_video_cbcs=false))]
     fn new(
         parts: Vec<Part>,
         concurrency: usize,
@@ -368,34 +367,25 @@ impl NativeStream {
         decryption_key: Option<Vec<u8>>,
         key_id: Option<Vec<u8>>,
         enhanced_hls_song: bool,
-        wrapper: Option<(String, u16, String, String)>,
+        temari_context: Option<String>,
         asset_song_cbcs: bool,
         music_video_cbcs: bool,
     ) -> PyResult<Self> {
-        if wrapper.is_some() && (decryption_key.is_some() || key_id.is_some()) {
+        if temari_context.is_some() && (decryption_key.is_some() || key_id.is_some()) {
             return Err(PyValueError::new_err(
-                "Wrapper and AES key modes are mutually exclusive",
+                "Temari context and AES key modes are mutually exclusive",
             ));
         }
-        if let Some((ref host, port, ref media_id, ref skd)) = wrapper {
-            if host.trim().is_empty()
-                || port == 0
-                || media_id.is_empty()
-                || media_id.len() > u16::MAX as usize
-                || !skd.starts_with("skd://")
-                || skd.len() <= 6
-                || skd.len() > u16::MAX as usize
-            {
-                return Err(PyValueError::new_err(
-                    "Invalid wrapper sample delivery configuration",
-                ));
-            }
-        }
+        let temari_template = temari_context
+            .as_deref()
+            .map(temari::template_from_json)
+            .transpose()
+            .map_err(|_| PyValueError::new_err("Invalid Temari context profile or template"))?;
         let decryptor = Mp4Decryptor::new(
             decryption_key,
             key_id,
             enhanced_hls_song,
-            wrapper.is_some(),
+            temari_template.is_some(),
             asset_song_cbcs,
             music_video_cbcs,
         )
@@ -452,17 +442,6 @@ impl NativeStream {
         let worker_progress = Arc::clone(&progress);
         let job = pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
             let mut decryptor = decryptor;
-            let mut wrapper_session = if let Some((ref host, port, _, _)) = wrapper {
-                match WrapperSession::connect(host, port).await {
-                    Ok(session) => Some(session),
-                    Err(error) => {
-                        let _ = sender.send(Err(error)).await;
-                        return;
-                    }
-                }
-            } else {
-                None
-            };
             let budget = PAYLOAD_BUDGET
                 .get_or_init(|| Arc::new(Semaphore::new(MAX_BUFFERED_BYTES)))
                 .clone();
@@ -498,16 +477,8 @@ impl NativeStream {
                 match result {
                     Ok((mut bytes, permit)) => {
                         if let Some(ref mut handler) = decryptor {
-                            let media_id = wrapper.as_ref().map(|w| w.2.as_str()).unwrap_or("");
-                            let fairplay_key = wrapper.as_ref().map(|w| w.3.as_str()).unwrap_or("");
                             if let Err(error) = handler
-                                .decrypt_part_with_wrapper(
-                                    &mut bytes,
-                                    wrapper_session.as_mut(),
-                                    media_id,
-                                    fairplay_key,
-                                )
-                                .await
+                                .decrypt_part_with_temari(&mut bytes, temari_template.as_ref())
                             {
                                 let _ = sender.send(Err(error)).await;
                                 return;
@@ -533,9 +504,6 @@ impl NativeStream {
                         return;
                     }
                 }
-            }
-            if let Some(ref mut session) = wrapper_session {
-                session.finish().await;
             }
         });
         Ok(Self {

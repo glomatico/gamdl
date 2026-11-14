@@ -64,17 +64,21 @@ def media_user_token_from_cookies(path: str) -> str:
 
 
 def credentials_from_wrapper(account: dict) -> AppleMusicCredentials:
-    """Extract both Apple Music tokens from a wrapper ``/me`` response.
+    """Extract Apple Music tokens from a trusted local Wrapper response.
 
     Raises:
         GamdlAuthenticationError: Wrapper authentication data is incomplete.
     """
-    auth = account.get("auth", {})
-    if not isinstance(auth, dict):
+    if not isinstance(account, dict):
         raise GamdlAuthenticationError("Wrapper did not provide valid authentication")
-    developer_token = auth.get("dev_token")
-    media_user_token = auth.get("music_user_token")
-    if not developer_token or not media_user_token:
+    developer_token = account.get("dev_token")
+    media_user_token = account.get("music_user_token")
+    if (
+        not isinstance(developer_token, str)
+        or not developer_token
+        or not isinstance(media_user_token, str)
+        or not media_user_token
+    ):
         raise GamdlAuthenticationError("Wrapper authentication tokens are missing")
     return AppleMusicCredentials(developer_token, media_user_token)
 

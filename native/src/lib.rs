@@ -10,7 +10,6 @@ mod remux;
 mod stream;
 mod tags;
 mod video_mux;
-mod wrapper;
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {

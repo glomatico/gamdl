@@ -1294,6 +1294,12 @@ class Downloader:
                 resolved_tags=resolved_tags,
                 selected_song_stream=selected_song_stream,
             )
+            # Validate metadata before publishing the staged file. An unknown
+            # decryption method must never turn a successful publication into
+            # a reported download failure (and leave the destination behind).
+            decryption_methods = tuple(
+                DecryptionMethod(method) for method in prepared.methods
+            )
             # A newly created generated video slot must never be replaced
             # even when the user requested overwrite=True.
             publish_policy = (
@@ -1350,7 +1356,7 @@ class Downloader:
                     else MediaStatus.DOWNLOADED,
                     size,
                     prepared.codec,
-                    tuple(DecryptionMethod(method) for method in prepared.methods),
+                    decryption_methods,
                 )
                 if published
                 else DownloadResult(media.id, destination, MediaStatus.SKIPPED, 0, None)

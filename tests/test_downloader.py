@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, call, patch
 
 from gamdl.download import (
+    DecryptionMethod,
     Downloader,
     DownloadFinalizationError,
     DownloadProgress,
@@ -421,6 +422,39 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.bytes_written, output.stat().st_size)
         self.assertEqual(brands(output)[0], b"M4A ")
         self.assertEqual(list(output.parent.glob(".*.part")), [])
+
+    async def test_temari_download_reports_success_after_publication(self):
+        """Regression: published ALAC was incorrectly reported as a failure."""
+        downloader, _ = self.downloader()
+        original_save = downloader._save_track.side_effect
+
+        async def save_with_temari(*args, **kwargs):
+            await original_save(*args, **kwargs)
+            return "temari"
+
+        downloader._save_track.side_effect = save_with_temari
+        output = self.directory / "temari-song.m4a"
+        result = await downloader.download(self.song(), output, tag=False)
+
+        self.assertEqual(result.status, MediaStatus.DOWNLOADED)
+        self.assertEqual(result.decryption_methods, (DecryptionMethod.TEMARI,))
+        self.assertTrue(output.is_file())
+        self.assertEqual(result.bytes_written, output.stat().st_size)
+
+    async def test_unknown_decryption_method_is_rejected_before_publication(self):
+        downloader, _ = self.downloader()
+        original_save = downloader._save_track.side_effect
+
+        async def save_with_invalid_method(*args, **kwargs):
+            await original_save(*args, **kwargs)
+            return "unknown-decryption-method"
+
+        downloader._save_track.side_effect = save_with_invalid_method
+        output = self.directory / "bad-method.m4a"
+        with self.assertRaisesRegex(ValueError, "unknown-decryption-method"):
+            await downloader.download(self.song(), output, tag=False)
+
+        self.assertFalse(output.exists())
 
     async def test_database_early_skip_avoids_all_media_and_existing_sidecar_requests(
         self,

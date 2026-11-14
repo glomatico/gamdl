@@ -38,4 +38,4 @@ class DecryptionMethod(str, Enum):
     EXPLICIT_KEY = "explicit_key"
     WIDEVINE = "widevine"
     PLAYREADY = "playready"
-    WRAPPER = "wrapper"
+    TEMARI = "temari"

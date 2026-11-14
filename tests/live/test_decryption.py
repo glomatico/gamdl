@@ -266,7 +266,7 @@ class StreamDecryptionLiveTests(unittest.IsolatedAsyncioTestCase):
         if self.session.wrapper is None:
             self.skipTest("Authenticated wrapper instance required")
         source = await self.asset(StreamOrigin.ASSET_ENHANCED_HLS, SongCodec.ALAC_HIRES)
-        await self.download_and_check(source, auto=True, expected_method="wrapper")
+        await self.download_and_check(source, auto=True, expected_method="temari")
 
     async def test_web_all_other_codecs_with_content_key(self):
         for codec in WEB_CODECS:

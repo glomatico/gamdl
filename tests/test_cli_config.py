@@ -134,8 +134,13 @@ class CliConfigTests(unittest.TestCase):
                 self.assertIn("Invalid value", invalid.output)
             accepted = runner.invoke(
                 main,
-                [*args, "--lyrics-file-format", "enhanced-ttml",
-                 "--embedded-lyrics-format", "enhanced-ttml"],
+                [
+                    *args,
+                    "--lyrics-file-format",
+                    "enhanced-ttml",
+                    "--embedded-lyrics-format",
+                    "enhanced-ttml",
+                ],
             )
             self.assertEqual(accepted.exit_code, 0, accepted.output)
             self.assertEqual(captured[-1].lyrics_file_format, "enhanced-ttml")

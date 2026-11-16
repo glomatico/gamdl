@@ -116,8 +116,10 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
         with create_pipe_input() as pipe:
             task = asyncio.create_task(
                 select_search_results(
-                    {"songs": PageCache(load)}, "test",
-                    input=pipe, output=DummyOutput(),
+                    {"songs": PageCache(load)},
+                    "test",
+                    input=pipe,
+                    output=DummyOutput(),
                 )
             )
             await asyncio.sleep(0.08)
@@ -142,7 +144,9 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
             task = asyncio.create_task(
                 select_search_results(
                     {"songs": PageCache(load), "music-videos": PageCache(load)},
-                    "test", input=pipe, output=DummyOutput(),
+                    "test",
+                    input=pipe,
+                    output=DummyOutput(),
                 )
             )
             await asyncio.sleep(0.08)
@@ -164,8 +168,10 @@ class SearchBrowserTests(unittest.IsolatedAsyncioTestCase):
         with create_pipe_input() as pipe:
             task = asyncio.create_task(
                 select_search_results(
-                    {"songs": PageCache(load)}, "test",
-                    input=pipe, output=DummyOutput(),
+                    {"songs": PageCache(load)},
+                    "test",
+                    input=pipe,
+                    output=DummyOutput(),
                 )
             )
             await asyncio.sleep(0.08)

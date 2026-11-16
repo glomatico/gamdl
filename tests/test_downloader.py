@@ -1311,9 +1311,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         downloader = Downloader()
         self.mock_uploaded_download(downloader)
         output = self.directory / "uploads" / "Original Upload.m4v"
-        result = await downloader.download(
-            video, output, save_cover=True, tag=False
-        )
+        result = await downloader.download(video, output, save_cover=True, tag=False)
         self.assertEqual(result.status, "downloaded")
         self.assertEqual(result.cover.path, output.with_suffix(".jpg"))
         self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)

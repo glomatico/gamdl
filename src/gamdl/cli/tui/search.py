@@ -214,9 +214,7 @@ async def select_search_results(
 
     def controls() -> FormattedText:
         if state.category is None:
-            instructions = (
-                "↑/↓ Navigate · Enter/→ Open category · Enter on Download selected to confirm · Esc Cancel"
-            )
+            instructions = "↑/↓ Navigate · Enter/→ Open category · Enter on Download selected to confirm · Esc Cancel"
         else:
             instructions = (
                 "↑/↓ Navigate · ←/→ Pages · B types · Space Mark · Enter Download marked"

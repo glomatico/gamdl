@@ -476,7 +476,10 @@ class LyricsTests(unittest.TestCase):
         with self.assertRaises(LyricsFormatUnavailableError):
             standard.render("enhanced-ttml")
         self.assertEqual(standard.render("ttml"), TTML)
-        self.assertEqual(standard.render("enhanced-ttml", embedded=True), standard.to_lrc(enhanced=False))
+        self.assertEqual(
+            standard.render("enhanced-ttml", embedded=True),
+            standard.to_lrc(enhanced=False),
+        )
 
         line_only = Lyrics.from_ttml(
             '<tt><body><div><p begin="1s" end="2s">A line</p></div></body></tt>',

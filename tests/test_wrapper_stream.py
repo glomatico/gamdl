@@ -480,7 +480,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 ) as stream:
                     self.assertEqual(stream.decryption_method, "fixed_prefetch_key")
                     decoded = await stream.read()
-                self.assertEqual(mdats(decoded[len(init):]), expected)
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
                 self.assertEqual(self.wrapper.batches, [])
                 drm.get_keys.assert_not_awaited()
 
@@ -493,7 +493,7 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
         ) as stream:
             self.assertEqual(stream.decryption_method, "explicit_key")
             decoded = await stream.read()
-        self.assertEqual(mdats(decoded[len(init):]), expected)
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
         self.assertEqual(self.wrapper.batches, [])
 
     async def test_wrapper_has_priority_over_matching_widevine(self):

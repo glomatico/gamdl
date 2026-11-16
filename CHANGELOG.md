@@ -1,6 +1,6 @@
 # Changelog
 
-## 4.0.2 (unreleased)
+## 4.0.2
 
 - Add `enhanced-ttml` to external and embedded lyrics formats. Request Apple's original syllable-timed TTML instead of standard TTML, preserve the original XML, and refresh existing `.ttml` sidecars when switching between the two formats.
 - Use Gamdl's built-in enhanced-HLS prefetch key locally when an HLS song's only FairPlay key reference is Apple's generic `P000000000/s1/e1` URI, avoiding unnecessary Wrapper sample decryption and Widevine/PlayReady license requests.

@@ -119,7 +119,9 @@ def assert_legacy_chunk_offsets(data: bytes) -> None:
     top = list(atoms(data))
     assert [name for name, _ in top] == [b"ftyp", b"moov", b"mdat"]
     mdat_start = sum(len(body) + 8 for _, body in top[:2])
-    assert int.from_bytes(data[mdat_start : mdat_start + 4], "big") == len(top[2][1]) + 8
+    assert (
+        int.from_bytes(data[mdat_start : mdat_start + 4], "big") == len(top[2][1]) + 8
+    )
     payload_start = mdat_start + 8
     for table in sample_tables(data):
         assert b"stco" in table
@@ -129,8 +131,7 @@ def assert_legacy_chunk_offsets(data: bytes) -> None:
         assert count > 0
         assert len(payload) == 8 + count * 4
         offsets = [
-            int.from_bytes(payload[8 + i * 4 : 12 + i * 4], "big")
-            for i in range(count)
+            int.from_bytes(payload[8 + i * 4 : 12 + i * 4], "big") for i in range(count)
         ]
         assert offsets == sorted(offsets)
         assert all(payload_start <= offset < len(data) for offset in offsets)

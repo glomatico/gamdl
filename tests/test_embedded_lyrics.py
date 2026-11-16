@@ -309,7 +309,10 @@ class EmbeddedLyricsTests(unittest.IsolatedAsyncioTestCase):
 
         self.downloader._save_track.reset_mock()
         same = await self.downloader.download(
-            self.song, path, tag=False, save_lyrics=True,
+            self.song,
+            path,
+            tag=False,
+            save_lyrics=True,
             lyrics_file_format="enhanced-ttml",
         )
         self.assertEqual(same.status, MediaStatus.SKIPPED)
@@ -323,7 +326,10 @@ class EmbeddedLyricsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(path.with_suffix(".ttml").read_text(), standard_xml)
 
         enhanced_again = await self.downloader.download(
-            self.song, path, tag=False, save_lyrics=True,
+            self.song,
+            path,
+            tag=False,
+            save_lyrics=True,
             lyrics_file_format="enhanced-ttml",
         )
         self.assertEqual(enhanced_again.lyrics.status, FileStatus.OVERWRITTEN)
@@ -334,9 +340,7 @@ class EmbeddedLyricsTests(unittest.IsolatedAsyncioTestCase):
         standard = Lyrics.from_ttml(
             '<tt><body><div><p begin="1s" end="2s">First line</p></div></body></tt>'
         )
-        self.song.get_lyrics = AsyncMock(
-            side_effect=lambda *, syllable=False: standard
-        )
+        self.song.get_lyrics = AsyncMock(side_effect=lambda *, syllable=False: standard)
         output = self.root / "missing-syllable.m4a"
         result = await self.downloader.download(
             self.song,

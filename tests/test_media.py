@@ -450,14 +450,16 @@ class LyricsTests(unittest.TestCase):
             "[00:01.20]<00:01.20>Hello <00:01.70>world",
         )
         self.assertEqual(lyrics.render("ttml"), TTML)
+        self.assertEqual(lyrics.render("enhanced-ttml"), TTML)
         self.assertEqual(lyrics.render("text"), lyrics.to_plain_text())
         self.assertIn("00:00:01,200", lyrics.render("srt"))
         self.assertEqual(LyricsFormat.ENHANCED_LRC.extension, ".lrc")
         self.assertEqual(LyricsFormat.TTML.extension, ".ttml")
+        self.assertEqual(LyricsFormat.ENHANCED_TTML.extension, ".ttml")
 
     def test_external_no_fallback_and_embedded_fallback(self):
         plain = Lyrics(stanzas=[[LyricsLine("Just words")]])
-        for fmt in ("lrc", "enhanced-lrc", "srt", "ttml"):
+        for fmt in ("lrc", "enhanced-lrc", "srt", "ttml", "enhanced-ttml"):
             with self.subTest(format=fmt):
                 with self.assertRaises(LyricsFormatUnavailableError):
                     plain.render(fmt)
@@ -467,6 +469,22 @@ class LyricsTests(unittest.TestCase):
             timed.render("srt")
         self.assertEqual(timed.render("srt", embedded=True), "[00:01.23]Timed")
         self.assertEqual(timed.render("enhanced-lrc"), "[00:01.23]Timed")
+
+    def test_enhanced_ttml_requires_syllable_endpoint_with_actual_timing(self):
+        standard = Lyrics.from_ttml(TTML)
+        self.assertTrue(standard.is_syllable_synced)
+        with self.assertRaises(LyricsFormatUnavailableError):
+            standard.render("enhanced-ttml")
+        self.assertEqual(standard.render("ttml"), TTML)
+        self.assertEqual(standard.render("enhanced-ttml", embedded=True), standard.to_lrc(enhanced=False))
+
+        line_only = Lyrics.from_ttml(
+            '<tt><body><div><p begin="1s" end="2s">A line</p></div></body></tt>',
+            syllable=True,
+        )
+        with self.assertRaises(LyricsFormatUnavailableError):
+            line_only.render("enhanced-ttml")
+        self.assertEqual(line_only.render("ttml"), line_only.source_ttml)
 
     def test_nested_timed_spans_never_duplicate_lyrics(self):
         # Apple's TTML can contain an untimed wrapper span around background

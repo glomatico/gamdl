@@ -132,6 +132,22 @@ class CliConfigTests(unittest.TestCase):
                 invalid = runner.invoke(main, [*args, flag, "vtt"])
                 self.assertNotEqual(invalid.exit_code, 0)
                 self.assertIn("Invalid value", invalid.output)
+            accepted = runner.invoke(
+                main,
+                [*args, "--lyrics-file-format", "enhanced-ttml",
+                 "--embedded-lyrics-format", "enhanced-ttml"],
+            )
+            self.assertEqual(accepted.exit_code, 0, accepted.output)
+            self.assertEqual(captured[-1].lyrics_file_format, "enhanced-ttml")
+            self.assertEqual(captured[-1].embedded_lyrics_format, "enhanced-ttml")
+
+        self._write(
+            "output:\n  lyrics_file_format: enhanced-ttml\n"
+            "  embedded_lyrics_format: enhanced-ttml\n"
+        )
+        enhanced_config = load_config(self.path)
+        self.assertEqual(enhanced_config.output.lyrics_file_format, "enhanced-ttml")
+        self.assertEqual(enhanced_config.output.embedded_lyrics_format, "enhanced-ttml")
 
         for key in ("lyrics_file_format", "embedded_lyrics_format"):
             for bad in ("vtt", "LRC", "", 1, None):

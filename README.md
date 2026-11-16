@@ -399,7 +399,7 @@ output:
   embedded_lyrics_format: text
 ```
 
-Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these settings. Both accept `lrc`, `srt`, `ttml`, `text`, and `enhanced-lrc`.
+Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these settings. Both accept `lrc`, `srt`, `ttml`, `enhanced-ttml`, `text`, and `enhanced-lrc`.
 
 | Format | External extension | Behavior |
 | --- | --- | --- |
@@ -407,9 +407,10 @@ Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these sett
 | `enhanced-lrc` | `.lrc` | Word/syllable timestamps when available; otherwise standard line LRC |
 | `srt` | `.srt` | Subtitle cues from lines with start and end timestamps |
 | `ttml` | `.ttml` | Original Apple Music TTML |
+| `enhanced-ttml` | `.ttml` | Original syllable-timed Apple Music TTML; unavailable without syllable timing |
 | `text` | `.txt` | Plain lyrics without timing |
 
-**External files are strict:** if the selected format cannot be produced, Gamdl reports the lyrics sidecar as unavailable rather than silently saving a different type. The only exception is `enhanced-lrc` degrading to line LRC when syllable timing is missing. Existing media is reused when only a sidecar needs to be created or refreshed; an existing sidecar with a different extension is not mistaken for the requested format.
+**External files are strict:** if the selected format cannot be produced, Gamdl reports the lyrics sidecar as unavailable rather than silently saving a different type. The only exception is `enhanced-lrc` degrading to line LRC when syllable timing is missing. Existing media is reused when only a sidecar needs to be created or refreshed; an existing sidecar with a different extension is not mistaken for the requested format. Since `ttml` and `enhanced-ttml` share the same extension, Gamdl compares the requested XML before reusing an existing `.ttml` sidecar.
 
 **Embedded lyrics** use the standard `©lyr` text metadata atom, even when formatted as LRC, SRT or TTML. If the requested embedded representation is unavailable, Gamdl falls back to line LRC when synchronized, then plain text. Some players display embedded timestamps or XML as literal text instead of synchronized lyrics, so `text` remains the default.
 

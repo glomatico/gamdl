@@ -155,7 +155,7 @@ class EmbeddedLyricsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_external_format_unavailable_does_not_fallback(self):
         self.song.get_lyrics.return_value = Lyrics(stanzas=[[LyricsLine("No timing")]])
-        for fmt in ("lrc", "enhanced-lrc", "srt", "ttml"):
+        for fmt in ("lrc", "enhanced-lrc", "srt", "ttml", "enhanced-ttml"):
             with self.subTest(fmt=fmt):
                 output = self.root / f"unsynced-{fmt}.m4a"
                 result = await self.downloader.download(
@@ -272,6 +272,83 @@ class EmbeddedLyricsTests(unittest.IsolatedAsyncioTestCase):
         )
         self.song.get_lyrics.assert_any_await(syllable=True)
         self.song.get_lyrics.assert_any_await()
+
+    async def test_enhanced_ttml_uses_original_syllable_xml_for_file_and_embed(self):
+        standard_xml = (
+            '<tt><body><div><p begin="1s" end="2s">First line</p></div></body></tt>'
+        )
+        enhanced_xml = (
+            '<tt><body><div><p begin="1s" end="2s">'
+            '<span begin="1s" end="1.5s">First </span>'
+            '<span begin="1.5s" end="2s">line</span>'
+            "</p></div></body></tt>"
+        )
+        standard = Lyrics.from_ttml(standard_xml)
+        enhanced = Lyrics.from_ttml(enhanced_xml, syllable=True)
+        self.song.get_lyrics = AsyncMock(
+            side_effect=lambda *, syllable=False: enhanced if syllable else standard
+        )
+        path = self.root / "enhanced-ttml.m4a"
+        result = await self.downloader.download(
+            self.song,
+            path,
+            lyrics_file_format="enhanced-ttml",
+            embedded_lyrics_format="enhanced-ttml",
+            save_lyrics=True,
+        )
+        self.assertEqual(result.lyrics.status, FileStatus.CREATED)
+        self.assertEqual(path.with_suffix(".ttml").read_text(), enhanced_xml)
+        self.assertEqual(self.embedded_lyrics(path), enhanced_xml)
+        self.song.get_lyrics.assert_any_await(syllable=True)
+        self.assertTrue(
+            all(
+                call.kwargs.get("syllable") is True
+                for call in self.song.get_lyrics.await_args_list
+            )
+        )
+
+        self.downloader._save_track.reset_mock()
+        same = await self.downloader.download(
+            self.song, path, tag=False, save_lyrics=True,
+            lyrics_file_format="enhanced-ttml",
+        )
+        self.assertEqual(same.status, MediaStatus.SKIPPED)
+        self.assertEqual(same.lyrics.status, FileStatus.SKIPPED)
+        self.downloader._save_track.assert_not_awaited()
+
+        plain = await self.downloader.download(
+            self.song, path, tag=False, save_lyrics=True, lyrics_file_format="ttml"
+        )
+        self.assertEqual(plain.lyrics.status, FileStatus.OVERWRITTEN)
+        self.assertEqual(path.with_suffix(".ttml").read_text(), standard_xml)
+
+        enhanced_again = await self.downloader.download(
+            self.song, path, tag=False, save_lyrics=True,
+            lyrics_file_format="enhanced-ttml",
+        )
+        self.assertEqual(enhanced_again.lyrics.status, FileStatus.OVERWRITTEN)
+        self.assertEqual(path.with_suffix(".ttml").read_text(), enhanced_xml)
+        self.downloader._save_track.assert_not_awaited()
+
+    async def test_enhanced_ttml_missing_syllables_does_not_save_standard_xml(self):
+        standard = Lyrics.from_ttml(
+            '<tt><body><div><p begin="1s" end="2s">First line</p></div></body></tt>'
+        )
+        self.song.get_lyrics = AsyncMock(
+            side_effect=lambda *, syllable=False: standard
+        )
+        output = self.root / "missing-syllable.m4a"
+        result = await self.downloader.download(
+            self.song,
+            output,
+            save_lyrics=True,
+            lyrics_file_format="enhanced-ttml",
+            embedded_lyrics_format="enhanced-ttml",
+        )
+        self.assertEqual(result.lyrics.status, FileStatus.UNAVAILABLE)
+        self.assertFalse(output.with_suffix(".ttml").exists())
+        self.assertEqual(self.embedded_lyrics(output), "[00:01.00]First line")
+        self.song.get_lyrics.assert_any_await(syllable=True)
 
     async def test_requested_extension_does_not_skip_other_sidecar(self):
         output = self.root / "switch-type.m4a"

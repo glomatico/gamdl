@@ -16,6 +16,7 @@ class LyricsFormat(str, Enum):
     LRC = "lrc"
     SRT = "srt"
     TTML = "ttml"
+    ENHANCED_TTML = "enhanced-ttml"
     TEXT = "text"
     ENHANCED_LRC = "enhanced-lrc"
 
@@ -25,6 +26,7 @@ class LyricsFormat(str, Enum):
             LyricsFormat.LRC: ".lrc",
             LyricsFormat.SRT: ".srt",
             LyricsFormat.TTML: ".ttml",
+            LyricsFormat.ENHANCED_TTML: ".ttml",
             LyricsFormat.TEXT: ".txt",
             LyricsFormat.ENHANCED_LRC: ".lrc",
         }[self]
@@ -255,9 +257,15 @@ class Lyrics:
         def convert(target: LyricsFormat) -> str:
             if target == LyricsFormat.TEXT:
                 return self.to_plain_text()
-            if target == LyricsFormat.TTML:
+            if target in {LyricsFormat.TTML, LyricsFormat.ENHANCED_TTML}:
                 if self.source_ttml is None:
                     raise LyricsFormatUnavailableError("Original TTML is unavailable")
+                if target == LyricsFormat.ENHANCED_TTML and (
+                    not self.syllable or not self.is_syllable_synced
+                ):
+                    raise LyricsFormatUnavailableError(
+                        "Syllable-timed TTML is unavailable"
+                    )
                 return self.to_ttml()
             if target in {LyricsFormat.LRC, LyricsFormat.ENHANCED_LRC}:
                 if not self.is_synced:

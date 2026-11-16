@@ -71,7 +71,9 @@ class _SidecarError(Exception):
 
 
 async def _lyrics_for_format(media: Song, format: LyricsFormat):
-    """Use syllable lyrics for enhanced LRC, with line lyrics as fallback."""
+    """Request syllable TTML when needed; enhanced LRC may fall back to lines."""
+    if format == LyricsFormat.ENHANCED_TTML:
+        return await media.get_lyrics(syllable=True)
     if format == LyricsFormat.ENHANCED_LRC:
         enhanced = await media.get_lyrics(syllable=True)
         if enhanced is not None and enhanced.is_syllable_synced:
@@ -787,7 +789,7 @@ class Downloader:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
                     sidecar = destination.with_suffix(lyrics_file_format.extension)
                     existing_lyrics = sidecar.is_file()
-                    refresh_lrc = False
+                    refresh_lyrics = False
                     if (
                         existing_lyrics
                         and overwrite == OverwritePolicy.SKIP
@@ -798,7 +800,7 @@ class Downloader:
                         contains_syllables = bool(
                             re.search(r"<\d{2,}:\d{2}\.\d{2}>", old)
                         )
-                        refresh_lrc = (
+                        refresh_lyrics = (
                             lyrics_file_format == LyricsFormat.ENHANCED_LRC
                             and not contains_syllables
                         ) or (
@@ -806,9 +808,20 @@ class Downloader:
                             and contains_syllables
                         )
                     if (
+                        existing_lyrics
+                        and overwrite == OverwritePolicy.SKIP
+                        and lyrics_file_format
+                        in {LyricsFormat.TTML, LyricsFormat.ENHANCED_TTML}
+                    ):
+                        # Both formats use .ttml. Compare with the requested
+                        # endpoint's original XML before treating an existing
+                        # sidecar as current.
+                        old = sidecar.read_text(encoding="utf-8", errors="replace")
+                        refresh_lyrics = True
+                    if (
                         overwrite == OverwritePolicy.SKIP
                         and existing_lyrics
-                        and not refresh_lrc
+                        and not refresh_lyrics
                     ):
                         lyrics_result = FileResult(sidecar, FileStatus.SKIPPED)
                     else:
@@ -819,7 +832,11 @@ class Downloader:
                             except LyricsFormatUnavailableError:
                                 lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
                             else:
-                                if refresh_lrc and existing_lyrics and old == contents:
+                                if (
+                                    refresh_lyrics
+                                    and existing_lyrics
+                                    and old == contents
+                                ):
                                     lyrics_result = FileResult(
                                         sidecar, FileStatus.SKIPPED
                                     )
@@ -829,7 +846,7 @@ class Downloader:
                                         contents.encode("utf-8"),
                                         sidecar,
                                         overwrite=OverwritePolicy.REPLACE
-                                        if refresh_lrc
+                                        if refresh_lyrics
                                         else overwrite,
                                     )
                                     lyrics_result = FileResult(sidecar, status)

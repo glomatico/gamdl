@@ -211,8 +211,9 @@ impl TagFields {
     /// It updates the offset tables correctly; we then copy the untouched
     /// original mdat into a new file using an 8-KiB std::io::copy buffer.
     ///
-    /// Returns false for layouts other than ftyp+moov+64bit-mdat, so callers
-    /// can retain legacy tagging for arbitrary imported MP4 files.
+    /// Supports the regular 8-byte mdat box and its 16-byte large-size form.
+    /// Returns false for layouts other than ftyp+moov+mdat, so callers can
+    /// retain legacy tagging for arbitrary imported MP4 files.
     fn write_bounded(self, path: &str, proxy_path: &str, result_path: &str) -> PyResult<bool> {
         const MAX_HEADER_BYTES: u64 = 64 * 1024 * 1024;
         let mut source = File::open(path).map_err(PyOSError::new_err)?;
@@ -238,21 +239,35 @@ impl TagFields {
         let mdat_at = ftyp_size
             .checked_add(moov_size)
             .ok_or_else(|| PyValueError::new_err("Invalid MP4 metadata length"))?;
-        if source_len < mdat_at + 16 {
+        if source_len < mdat_at + 8 {
             return Ok(false);
         }
         source
             .seek(SeekFrom::Start(mdat_at))
             .map_err(PyOSError::new_err)?;
-        let mut header = [0u8; 16];
+        let mut header = [0u8; 8];
         source.read_exact(&mut header).map_err(PyOSError::new_err)?;
-        if &header[..4] != 1u32.to_be_bytes().as_slice()
-            || &header[4..8] != b"mdat"
-            || u64::from_be_bytes(header[8..16].try_into().expect("16-byte header"))
-                != source_len - mdat_at
-        {
+        if &header[4..8] != b"mdat" {
             return Ok(false);
         }
+        let size = u32::from_be_bytes(header[..4].try_into().expect("mdat box size"));
+        let mdat_header_len: usize = if size == 1 {
+            if source_len < mdat_at + 16 {
+                return Ok(false);
+            }
+            let mut extended = [0u8; 8];
+            source
+                .read_exact(&mut extended)
+                .map_err(PyOSError::new_err)?;
+            if u64::from_be_bytes(extended) != source_len - mdat_at {
+                return Ok(false);
+            }
+            16
+        } else if size >= 8 && u64::from(size) == source_len - mdat_at {
+            8
+        } else {
+            return Ok(false);
+        };
         source
             .seek(SeekFrom::Start(0))
             .map_err(PyOSError::new_err)?;
@@ -263,18 +278,21 @@ impl TagFields {
             .read_exact(&mut metadata)
             .map_err(PyOSError::new_err)?;
 
-        // Only a small header and an empty 16-byte mdat are visible to the
-        // existing mp4ameta writer, so metadata relocation cannot allocate
-        // the real payload length.
+        // Expose only metadata and a same-width empty mdat to mp4ameta.
+        // This keeps the sample offsets relative to the eventual media data
+        // without loading or rewriting the real payload into memory.
         let mut proxy = File::create(proxy_path).map_err(PyOSError::new_err)?;
         proxy.write_all(&metadata).map_err(PyOSError::new_err)?;
+        let proxy_size = if mdat_header_len == 8 { 8 } else { 1 };
         proxy
-            .write_all(&1u32.to_be_bytes())
+            .write_all(&(proxy_size as u32).to_be_bytes())
             .map_err(PyOSError::new_err)?;
         proxy.write_all(b"mdat").map_err(PyOSError::new_err)?;
-        proxy
-            .write_all(&16u64.to_be_bytes())
-            .map_err(PyOSError::new_err)?;
+        if mdat_header_len == 16 {
+            proxy
+                .write_all(&16u64.to_be_bytes())
+                .map_err(PyOSError::new_err)?;
+        }
         proxy.flush().map_err(PyOSError::new_err)?;
         drop(proxy);
         drop(metadata);
@@ -301,8 +319,8 @@ impl TagFields {
         )
         .map_err(|err| PyOSError::new_err(format!("Could not write MP4 metadata: {err}")))?;
 
-        // Recheck the tagged proxy's shape. Its co64 offsets have already
-        // been adjusted by mp4ameta for moov growth/shrinkage.
+        // Recheck the tagged proxy's shape. Its stco/co64 offsets have been
+        // adjusted by mp4ameta for moov growth/shrinkage.
         if std::fs::metadata(proxy_path)
             .map_err(PyOSError::new_err)?
             .len()
@@ -332,7 +350,7 @@ impl TagFields {
             .checked_add(moov_size)
             .ok_or_else(|| PyValueError::new_err("Invalid tagged moov size"))?;
         if proxy_data.get(ftyp + 4..ftyp + 8) != Some(b"moov")
-            || proxy_data.len() != payload_at + 16
+            || proxy_data.len() != payload_at + mdat_header_len
             || proxy_data.get(payload_at + 4..payload_at + 8) != Some(b"mdat")
         {
             return Err(PyValueError::new_err("Unexpected tagged proxy layout"));

@@ -945,6 +945,27 @@ class StreamLazyTests(unittest.IsolatedAsyncioTestCase):
                 "skd://itunes.apple.com/actual",
             )
 
+    async def test_fairplay_placeholder_used_when_only_key_reference(self):
+        """Apple's generic SKD can still be decrypted through Wrapper."""
+        placeholder = "skd://itunes.apple.com/P000000000/s1/e1"
+        playlist = (
+            "#EXTM3U\n"
+            f'#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT="com.apple.streamingkeydelivery",URI="{placeholder}"\n'
+            "#EXTINF:2,\nsegment.mp4\n"
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, text=playlist))
+        ) as client:
+            stream = HlsSongStream(
+                codec=SongCodec.AAC,
+                origin=StreamOrigin.WRAPPER_HLS,
+                url=BASE + "placeholder.m3u8",
+                transport=StreamTransport(client),
+            )
+            info = await stream.get_drm_info()
+            self.assertTrue(info.is_protected)
+            self.assertEqual(info.fairplay_streaming, placeholder)
+
     async def test_init_segment_respects_byte_range(self):
         playlist = (
             "#EXTM3U\n#EXT-X-VERSION:6\n"

@@ -34,6 +34,8 @@ from gamdl.media.exceptions import StreamManifestError
 
 from .progress import StreamProgress
 
+_GENERIC_FAIRPLAY_URI = "skd://itunes.apple.com/P000000000/s1/e1"
+
 
 def _range(raw: str | None, previous_end: int | None, *, init: bool = False):
     if not raw:
@@ -183,10 +185,23 @@ class Streamer(AsyncIterator[bytes]):
             key, kid = self._key, self._kid
             method = "explicit_key" if key is not None else "none"
             temari_context = None
-            if key is None and (self._context_provider is not None or self._drm is not None):
+            fixed_prefetch_key = False
+            if key is None and (
+                isinstance(self.source, HlsSongStream)
+                or self._context_provider is not None
+                or self._drm is not None
+            ):
                 info = await self.source.get_drm_info()
                 fairplay_uri = info.fairplay_streaming
                 if (
+                    isinstance(self.source, HlsSongStream)
+                    and fairplay_uri == _GENERIC_FAIRPLAY_URI
+                ):
+                    # The Rust engine already owns the fixed prefetch key.
+                    # Skip both Temari context and DRM license requests.
+                    fixed_prefetch_key = True
+                    method = "fixed_prefetch_key"
+                elif (
                     self._context_provider is not None
                     and isinstance(fairplay_uri, str)
                     and fairplay_uri.startswith("skd://")
@@ -259,6 +274,7 @@ class Streamer(AsyncIterator[bytes]):
                 and not isinstance(self.source, HlsSongStream)
                 and self.source.origin
                 in {StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS},
+                fixed_prefetch_key,
             )
             self._decryption_method = method
         finally:

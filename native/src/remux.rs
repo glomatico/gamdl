@@ -15,6 +15,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 type Result<T> = std::result::Result<T, &'static str>;
+type RemuxPlan = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<Sample>, u64);
 const BAD: &str = "Malformed fragmented MP4";
 const UNSUPPORTED: &str = "Unsupported fragmented MP4 remux layout";
 
@@ -527,6 +528,44 @@ fn parse_fragment(
 fn table(name: &[u8; 4], payload: &[u8]) -> Result<Vec<u8>> {
     fullbox(name, 0, payload)
 }
+
+/// ISO BMFF permits stco until an *actual chunk offset* exceeds u32::MAX.
+/// Older iPods may reject co64, so avoid it for ordinary audio/video files.
+pub(crate) fn chunk_offsets_box(offsets: &[u64]) -> Result<Vec<u8>> {
+    let fits_32 = offsets.iter().all(|offset| u32::try_from(*offset).is_ok());
+    let mut payload = Vec::new();
+    payload.extend(
+        u32::try_from(offsets.len())
+            .map_err(|_| UNSUPPORTED)?
+            .to_be_bytes(),
+    );
+    for &offset in offsets {
+        if fits_32 {
+            payload.extend((offset as u32).to_be_bytes());
+        } else {
+            payload.extend(offset.to_be_bytes());
+        }
+    }
+    table(if fits_32 { b"stco" } else { b"co64" }, &payload)
+}
+
+/// Prefer the standard 8-byte mdat header for legacy players. Large media
+/// data boxes must retain the 16-byte extended-size header.
+pub(crate) fn mdat_header(payload_size: u64) -> Result<Vec<u8>> {
+    if let Some(total) = payload_size.checked_add(8)
+        && let Ok(size) = u32::try_from(total)
+    {
+        let mut header = Vec::from(size.to_be_bytes());
+        header.extend(b"mdat");
+        return Ok(header);
+    }
+    let total = payload_size.checked_add(16).ok_or(UNSUPPORTED)?;
+    let mut header = Vec::from(1u32.to_be_bytes());
+    header.extend(b"mdat");
+    header.extend(total.to_be_bytes());
+    Ok(header)
+}
+
 fn sample_tables(samples: &[Sample], offsets: &[u64]) -> Result<Vec<Vec<u8>>> {
     let mut stts = Vec::new();
     let mut groups = Vec::<(u32, u32)>::new();
@@ -571,20 +610,11 @@ fn sample_tables(samples: &[Sample], offsets: &[u64]) -> Result<Vec<Vec<u8>>> {
                 .to_be_bytes(),
         );
     }
-    let mut co64 = Vec::new();
-    co64.extend(
-        u32::try_from(offsets.len())
-            .map_err(|_| UNSUPPORTED)?
-            .to_be_bytes(),
-    );
-    for off in offsets {
-        co64.extend(off.to_be_bytes());
-    }
     Ok(vec![
         table(b"stts", &stts)?,
         table(b"stsc", &stsc)?,
         table(b"stsz", &stsz)?,
-        table(b"co64", &co64)?,
+        chunk_offsets_box(offsets)?,
     ])
 }
 
@@ -679,7 +709,7 @@ fn rebuild(
     Ok(input.slice(atom.start..atom.end).ok_or(BAD)?.to_vec())
 }
 
-fn remux_plan(input: &(impl Input + ?Sized)) -> Result<(Vec<u8>, Vec<u8>, Vec<Sample>, u64)> {
+fn remux_plan(input: &(impl Input + ?Sized)) -> Result<RemuxPlan> {
     let top = atoms(input, 0, input.len())?;
     let _ftyp = top
         .iter()
@@ -718,34 +748,44 @@ fn remux_plan(input: &(impl Input + ?Sized)) -> Result<(Vec<u8>, Vec<u8>, Vec<Sa
     // The source's `iso5`/`hlsf` brands identify fragmented HLS media,
     // not the finished, standalone audio-only file.
     let ftyp_bytes = file_type(b"M4A ")?;
-    // co64 offsets are fixed width, so a dummy-offset pass determines moov size.
+    let payload_size = samples.iter().try_fold(0u64, |size, sample| {
+        size.checked_add(sample.bytes.len() as u64)
+            .ok_or(UNSUPPORTED)
+    })?;
+    let mdat = mdat_header(payload_size)?;
     let mut offsets = vec![0u64; samples.len()];
-    let dummy = rebuild(input, moov, &info, &samples, &offsets)?;
-    let mut cursor = u64::try_from(ftyp_bytes.len() + dummy.len() + 16).map_err(|_| UNSUPPORTED)?;
-    for (slot, s) in offsets.iter_mut().zip(&samples) {
-        *slot = cursor;
-        cursor = cursor
-            .checked_add(s.bytes.len() as u64)
+    // Metadata size depends on the offset table width. Start with the
+    // compact table and recalculate only if an offset needs co64; the table
+    // widths can only grow, so convergence is bounded.
+    for _ in 0..3 {
+        let dummy = rebuild(input, moov, &info, &samples, &offsets)?;
+        let mut cursor = u64::try_from(ftyp_bytes.len())
+            .map_err(|_| UNSUPPORTED)?
+            .checked_add(dummy.len() as u64)
+            .and_then(|value| value.checked_add(mdat.len() as u64))
             .ok_or(UNSUPPORTED)?;
+        let mut next = Vec::with_capacity(offsets.len());
+        for sample in &samples {
+            next.push(cursor);
+            cursor = cursor
+                .checked_add(sample.bytes.len() as u64)
+                .ok_or(UNSUPPORTED)?;
+        }
+        let rebuilt = rebuild(input, moov, &info, &samples, &next)?;
+        if rebuilt.len() == dummy.len() {
+            return Ok((ftyp_bytes, rebuilt, mdat, samples, cursor));
+        }
+        offsets = next;
     }
-    let rebuilt = rebuild(input, moov, &info, &samples, &offsets)?;
-    if rebuilt.len() != dummy.len() {
-        return Err(UNSUPPORTED);
-    }
-    Ok((ftyp_bytes, rebuilt, samples, cursor))
+    Err(UNSUPPORTED)
 }
 
 fn remux(input: &[u8], repair_alac: bool) -> Result<Vec<u8>> {
-    let (ftyp_bytes, rebuilt, samples, cursor) = remux_plan(input)?;
+    let (ftyp_bytes, rebuilt, mdat, samples, cursor) = remux_plan(input)?;
     let mut out = Vec::with_capacity(usize::try_from(cursor).map_err(|_| UNSUPPORTED)?);
     out.extend_from_slice(&ftyp_bytes);
     out.extend_from_slice(&rebuilt);
-    out.extend(1u32.to_be_bytes());
-    out.extend(b"mdat");
-    out.extend(
-        (cursor - u64::try_from(ftyp_bytes.len() + rebuilt.len()).map_err(|_| UNSUPPORTED)?)
-            .to_be_bytes(),
-    );
+    out.extend(mdat);
     for s in &samples {
         let start = out.len();
         out.extend_from_slice(&input[s.bytes.clone()]);
@@ -758,7 +798,7 @@ fn remux(input: &[u8], repair_alac: bool) -> Result<Vec<u8>> {
 
 /// Write samples from a staged source through a bounded scratch buffer.
 fn remux_to_file(input: &mut File, output: &str, repair_alac: bool) -> PyResult<()> {
-    let (ftyp, moov, samples, cursor) = {
+    let (ftyp, moov, mdat, samples, _cursor) = {
         let metadata = read_metadata(input)?;
         remux_plan(&metadata).map_err(PyValueError::new_err)?
     };
@@ -768,9 +808,7 @@ fn remux_to_file(input: &mut File, output: &str, repair_alac: bool) -> PyResult<
     let result = (|| -> std::io::Result<()> {
         writer.write_all(&ftyp)?;
         writer.write_all(&moov)?;
-        writer.write_all(&1u32.to_be_bytes())?;
-        writer.write_all(b"mdat")?;
-        writer.write_all(&(cursor - (ftyp.len() + moov.len()) as u64).to_be_bytes())?;
+        writer.write_all(&mdat)?;
         for sample in samples {
             if repair_alac
                 && sample.bytes.len() <= alac::MAX_PACKET
@@ -830,6 +868,38 @@ pub(crate) fn remux_mp4(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chunk_offset_tables_use_32_bits_until_an_offset_overflows() {
+        let short = chunk_offsets_box(&[100, u32::MAX as u64]).unwrap();
+        assert_eq!(&short[4..8], b"stco");
+        assert_eq!(&short[12..16], &2u32.to_be_bytes());
+        assert_eq!(&short[16..20], &100u32.to_be_bytes());
+        assert_eq!(&short[20..24], &u32::MAX.to_be_bytes());
+
+        let long = chunk_offsets_box(&[100, u32::MAX as u64 + 1]).unwrap();
+        assert_eq!(&long[4..8], b"co64");
+        assert_eq!(&long[12..16], &2u32.to_be_bytes());
+        assert_eq!(&long[16..24], &100u64.to_be_bytes());
+        assert_eq!(&long[24..32], &(u32::MAX as u64 + 1).to_be_bytes());
+    }
+
+    #[test]
+    fn mdat_header_uses_compact_size_when_possible() {
+        let short = mdat_header(1024).unwrap();
+        assert_eq!(short.len(), 8);
+        assert_eq!(&short[..4], &1032u32.to_be_bytes());
+        assert_eq!(&short[4..], b"mdat");
+
+        let compact_limit = mdat_header(u32::MAX as u64 - 8).unwrap();
+        assert_eq!(&compact_limit[..4], &u32::MAX.to_be_bytes());
+        let large = mdat_header(u32::MAX as u64 - 7).unwrap();
+        assert_eq!(large.len(), 16);
+        assert_eq!(&large[..4], &1u32.to_be_bytes());
+        assert_eq!(&large[4..8], b"mdat");
+        assert_eq!(&large[8..], &(u32::MAX as u64 + 9).to_be_bytes(),);
+        assert!(mdat_header(u64::MAX).is_err());
+    }
 
     #[test]
     fn alac_repair_requires_one_clear_supported_configuration() {

@@ -12,7 +12,7 @@ type Result<T> = std::result::Result<T, &'static str>;
 const MALFORMED: &str = "Malformed fragmented MP4 encryption metadata";
 const UNSUPPORTED: &str = "Unsupported fragmented MP4 encryption layout";
 // Legacy Gamdl 3.x fixed prefetch key used ONLY by enhanced-HLS CBCS songs.
-const ENHANCED_HLS_PREFETCH_KEY: [u8; 16] = [
+pub(crate) const ENHANCED_HLS_PREFETCH_KEY: [u8; 16] = [
     0x32, 0xb8, 0xad, 0xe1, 0x76, 0x9e, 0x26, 0xb1, 0xff, 0xb8, 0x98, 0x63, 0x52, 0x79, 0x3f, 0xc6,
 ];
 

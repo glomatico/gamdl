@@ -2,17 +2,27 @@
 
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 import yaml
 from click.testing import CliRunner
+from rich.console import Console
 
+from gamdl import __version__
 from gamdl.cli.config.loader import ConfigError, load_config
 from gamdl.cli.main import main
+from gamdl.cli.output import banner
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_banner_uses_full_dynamic_version(self):
+        output = StringIO()
+        with patch("gamdl.cli.output.__version__", "4.12.34"):
+            banner(Console(file=output, force_terminal=False))
+        self.assertIn("Gamdl 4.12.34", output.getvalue())
+
     def test_album_date_and_date_tag_template_defaults_yaml_and_cli(self):
         from gamdl.cli.config.loader import click_default_map
 
@@ -122,6 +132,27 @@ class CliConfigTests(unittest.TestCase):
                 invalid = runner.invoke(main, [*args, flag, "vtt"])
                 self.assertNotEqual(invalid.exit_code, 0)
                 self.assertIn("Invalid value", invalid.output)
+            accepted = runner.invoke(
+                main,
+                [
+                    *args,
+                    "--lyrics-file-format",
+                    "enhanced-ttml",
+                    "--embedded-lyrics-format",
+                    "enhanced-ttml",
+                ],
+            )
+            self.assertEqual(accepted.exit_code, 0, accepted.output)
+            self.assertEqual(captured[-1].lyrics_file_format, "enhanced-ttml")
+            self.assertEqual(captured[-1].embedded_lyrics_format, "enhanced-ttml")
+
+        self._write(
+            "output:\n  lyrics_file_format: enhanced-ttml\n"
+            "  embedded_lyrics_format: enhanced-ttml\n"
+        )
+        enhanced_config = load_config(self.path)
+        self.assertEqual(enhanced_config.output.lyrics_file_format, "enhanced-ttml")
+        self.assertEqual(enhanced_config.output.embedded_lyrics_format, "enhanced-ttml")
 
         for key in ("lyrics_file_format", "embedded_lyrics_format"):
             for bad in ("vtt", "LRC", "", 1, None):
@@ -466,11 +497,11 @@ class CliConfigTests(unittest.TestCase):
             main, ["--config", str(self.path), "config", "path"]
         )
         self.assertEqual(path_result.stdout.strip(), str(self.path))
-        self.assertIn("Gamdl 4.0", path_result.stderr)
-        self.assertIn("# Gamdl 4.0 configuration", content)
+        self.assertIn(f"Gamdl {__version__}", path_result.stderr)
+        self.assertIn(f"# Gamdl {__version__} configuration", content)
         version = runner.invoke(main, ["--version"])
         self.assertEqual(version.exit_code, 0, version.output)
-        self.assertIn("Gamdl, version 4.0", version.stdout)
+        self.assertIn(f"Gamdl, version {__version__}", version.stdout)
         self.assertEqual(
             runner.invoke(
                 main, ["--config", str(self.path), "config", "init"]

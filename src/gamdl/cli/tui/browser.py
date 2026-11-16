@@ -147,7 +147,7 @@ class ArtistBrowserState:
         return f"Unable to load page ({'HTTP ' + str(code) if code is not None else type(exc).__name__})"
 
     async def expand(self):
-        """Enter on a root category expands it; never triggers a download."""
+        """Enter/Right on a root category opens it without downloading."""
         if self.loading or self.category is not None or self.cursor == self.rows - 1:
             return
         kind = self.request.categories[self.cursor][0]
@@ -243,7 +243,7 @@ class ArtistBrowserState:
 async def browse_artist(
     request: ArtistBrowseRequest, *, input=None, output=None
 ) -> ArtistBrowseResult:
-    """Run full-screen Prompt Toolkit UI with explicit Download selected action."""
+    """Run full-screen artist browser with navigation and multi-select pages."""
     state = ArtistBrowserState(request)
     kb = KeyBindings()
     tasks: set[asyncio.Task] = set()
@@ -298,9 +298,13 @@ async def browse_artist(
 
     def footer() -> FormattedText:
         summary = f"{len(state.selected)} categories selected"
+        instructions = (
+            "↑/↓ navigate  ·  Enter/→ open category  ·  Space mark  ·  Enter on Download selected confirms"
+            if state.category is None
+            else "↑/↓ navigate  ·  ←/→ pages  ·  Space mark  ·  Enter download marked"
+        )
         return menu_footer(
-            summary
-            + "  ·  ↑/↓ navigate  ·  ←/→ pages  ·  Space mark  ·  Enter open/download",
+            summary + "  ·  " + instructions,
             "Ctrl+A select all  ·  Ctrl+D clear  ·  PgUp/PgDn jump  ·  Esc back  ·  Ctrl+C cancel",
         )
 
@@ -361,7 +365,11 @@ async def browse_artist(
 
     @kb.add("right")
     def right(event):
-        if state.category is not None and not state.loading:
+        if state.loading:
+            return
+        if state.category is None:
+            start_task(state.expand())
+        else:
             start_task(state.next_page())
 
     @kb.add("left")
@@ -372,15 +380,16 @@ async def browse_artist(
     def enter(event):
         if state.loading:
             return
-        if state.cursor == state.rows - 1:
-            if not state.selected:
-                state.error = "Select at least one item before downloading"
-                return
-            app.exit(result=state.result())
-        elif state.category is not None:
-            state.toggle()
-        else:
+        if state.category is None and state.cursor < len(state.request.categories):
+            # The category list is a navigation page, even if some categories
+            # have been marked with Space for downloading in bulk.
             start_task(state.expand())
+        elif not state.selected:
+            state.error = "Select at least one item before downloading (Space to mark)"
+        else:
+            # Item lists are multi-select pages; Enter confirms from any row.
+            # The root's explicit Download selected row also confirms.
+            app.exit(result=state.result())
 
     @kb.add("escape")
     @kb.add("backspace")

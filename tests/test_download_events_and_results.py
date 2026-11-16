@@ -71,7 +71,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.lyrics.status, FileStatus.CREATED)
         self.assertEqual(result.database.status, DatabaseStatus.INSERTED)
         self.assertEqual(result.playlist_file.status, PlaylistStatus.UPDATED)
-        self.assertEqual(result.cover.path, result.path.with_suffix(".jpg"))
+        self.assertEqual(result.cover.path, result.path.parent / "Cover.jpg")
         self.assertEqual(result.lyrics.path, result.path.with_suffix(".lrc"))
         expected = output_dir / "Lists/_DJ/_My Playlist (p.12).m3u8"
         self.assertEqual(result.playlist_file.path, expected)
@@ -209,7 +209,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcome.status, MediaStatus.SKIPPED)
         self.assertEqual(outcome.cover.status, FileStatus.CREATED)
         self.assertEqual(outcome.lyrics.status, FileStatus.CREATED)
-        self.assertTrue(filename.with_suffix(".jpg").is_file())
+        self.assertTrue((filename.parent / "Cover.jpg").is_file())
         self.assertTrue(filename.with_suffix(".lrc").is_file())
         self.assertEqual(filename.read_bytes(), b"existing media bytes")
         self.assertFalse(list(filename.parent.glob(".gamdl-*")))
@@ -237,7 +237,7 @@ class RichDownloadResultTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.partial_result.cover.status, FileStatus.CREATED)
         self.assertIsNone(error.partial_result.lyrics)
         self.assertTrue(target.exists())
-        self.assertTrue(target.with_suffix(".jpg").exists())
+        self.assertTrue((target.parent / "Cover.jpg").exists())
         self.assertEqual(
             [ev.state for ev in events if ev.stage == DownloadStage.SAVING_LYRICS],
             [EventState.STARTED, EventState.FAILED],

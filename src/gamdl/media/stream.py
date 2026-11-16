@@ -195,8 +195,14 @@ class HlsStream:
                     playready_pssh = _decode_data_uri(uri)
                     playready_uri = uri
                 elif kind == "com.apple.streamingkeydelivery":
-                    # Apple's universal placeholder is not a usable key URI.
-                    if uri != "skd://itunes.apple.com/P000000000/s1/e1":
+                    # Wrapper can decrypt FairPlay streams using Apple's
+                    # generic SKD URI as well. Keep it when it is the only
+                    # reference, but prefer a track-specific URI if present
+                    # in the same media playlist.
+                    if (
+                        uri != "skd://itunes.apple.com/P000000000/s1/e1"
+                        or fairplay_uri is None
+                    ):
                         fairplay_uri = uri
                 elif not kind or kind == "identity":
                     # Webplayback often provides a KEY with no KEYFORMAT.

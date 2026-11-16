@@ -20,9 +20,7 @@ class FakeApi:
 
 class AuthPriorityTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrapper_wins_over_token_and_cookies(self):
-        wrapper = type(
-            "FakeWrapper", (), {"session": {"state": "authenticated"}}
-        )()
+        wrapper = type("FakeWrapper", (), {"session": {"state": "authenticated"}})()
         api = FakeApi()
         settings = LiveSettings(
             media_user_token="secret-token",

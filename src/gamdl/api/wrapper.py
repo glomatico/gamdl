@@ -110,9 +110,7 @@ class WrapperApi:
             raise
 
     @staticmethod
-    async def get_session(
-        http: ApiHttpClient, base_url: str
-    ) -> dict[str, Any]:
+    async def get_session(http: ApiHttpClient, base_url: str) -> dict[str, Any]:
         return await http.request_json(
             "GET", f"{base_url}/session", operation="wrapper_session"
         )
@@ -150,7 +148,9 @@ class WrapperApi:
             ):
                 raise ValueError
         except (ValueError, KeyError, TypeError):
-            raise GamdlAuthenticationError("Wrapper returned an invalid login challenge") from None
+            raise GamdlAuthenticationError(
+                "Wrapper returned an invalid login challenge"
+            ) from None
         code = await invoke_prompt(get_2fa_code)
         reply = await http.request(
             "POST",
@@ -177,7 +177,8 @@ class WrapperApi:
         """Export Apple Music credentials; never cache or log the response."""
         async with self._native_lock:
             result = await self.http.request_json(
-                "GET", f"{self.base_url}/session/credentials",
+                "GET",
+                f"{self.base_url}/session/credentials",
                 operation="wrapper_credentials",
             )
         if not all(
@@ -205,5 +206,7 @@ class WrapperApi:
             or not all(isinstance(context.get(name), str) for name in ("ctx", "state"))
             or not all(isinstance(context.get(name), int) for name in ("bl", "r9b"))
         ):
-            raise GamdlApiResponseError("Wrapper returned an incompatible Temari context")
+            raise GamdlApiResponseError(
+                "Wrapper returned an incompatible Temari context"
+            )
         return context

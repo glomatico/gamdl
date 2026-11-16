@@ -397,7 +397,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(all(tid != main for ids in workers.values() for tid in ids))
         self.assertTrue(output.exists())
-        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertEqual((output.parent / "Cover.jpg").read_bytes(), JPEG)
         self.assertEqual(output.with_suffix(".txt").read_text(), "Test")
         self.assertTrue(playlist.exists())
         self.assertIsNotNone(db.get(output))
@@ -465,7 +465,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         media_path.parent.mkdir(parents=True)
         media_path.write_bytes(self.audio.read_bytes())
         media_path.with_suffix(".lrc").write_text("[00:01.00]Existing lyrics")
-        media_path.with_suffix(".jpg").write_bytes(JPEG)
+        (media_path.parent / "Cover.jpg").write_bytes(JPEG)
         db = MediaDatabase(self.directory / "fast.sqlite3")
         db.index_file(media_path, "songs", "111")
         downloader.database = db
@@ -861,7 +861,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             playlist_path=playlist,
         )
         self.assertEqual(result.status, "downloaded")
-        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertEqual((output.parent / "Cover.jpg").read_bytes(), JPEG)
         self.assertEqual(
             output.with_suffix(".lrc").read_text(), "[00:02.00]Sample synced line"
         )
@@ -872,7 +872,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"\xa9ART", mp4_tag_atoms(output))
         song.get_cover.assert_awaited_once()  # embedded art reused for sidecar
 
-        output.with_suffix(".jpg").unlink()
+        (output.parent / "Cover.jpg").unlink()
         output.with_suffix(".lrc").unlink()
         playlist.unlink()
         db.path.unlink()
@@ -884,7 +884,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retry.status, "skipped")
         downloader._read_track.assert_not_awaited()
         song.get_stream.assert_not_awaited()
-        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertEqual((output.parent / "Cover.jpg").read_bytes(), JPEG)
         self.assertTrue(output.with_suffix(".lrc").exists())
         self.assertTrue(playlist.exists())
         self.assertEqual(db.get(output)["media_id"], "111")
@@ -908,11 +908,11 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         cover.get_cover_bytes.assert_awaited_once_with(
             width=1200, height=1200, format="png"
         )
-        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
-        self.assertFalse(output.with_suffix(".jpg").exists())
+        self.assertEqual((output.parent / "Cover.png").read_bytes(), PNG)
+        self.assertFalse((output.parent / "Cover.jpg").exists())
         self.assertIn(b"covr", mp4_tag_atoms(output))
 
-        output.with_suffix(".png").unlink()
+        (output.parent / "Cover.png").unlink()
         cover.get_cover_bytes.reset_mock()
         song.get_stream.reset_mock()
         result = await downloader.download(
@@ -923,7 +923,41 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             width=1200, height=1200, format="png"
         )
         song.get_stream.assert_not_awaited()
-        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+        self.assertEqual((output.parent / "Cover.png").read_bytes(), PNG)
+
+    async def test_two_album_songs_share_one_cover_without_refetch(self):
+        downloader, _ = self.downloader()
+        folder = self.directory / "Artist" / "Album"
+        first = folder / "01 First.m4a"
+        second = folder / "02 Second.m4a"
+        first_song = self.song()
+        first_song.get_cover.return_value = Mock(
+            get_cover_bytes=AsyncMock(return_value=JPEG)
+        )
+        second_song = Song.from_id("112", api=Mock())
+        second_song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
+        second_song.get_cover = AsyncMock(
+            side_effect=AssertionError("Existing album cover must not be refetched")
+        )
+        second_song.get_lyrics = AsyncMock(return_value=None)
+
+        first_result = await downloader.download(
+            first_song, first, tag=False, save_cover=True
+        )
+        second_result = await downloader.download(
+            second_song, second, tag=False, save_cover=True
+        )
+        shared = folder / "Cover.jpg"
+        self.assertEqual(first_result.cover.path, shared)
+        self.assertEqual(first_result.cover.status, "created")
+        self.assertEqual(second_result.cover.path, shared)
+        self.assertEqual(second_result.cover.status, "skipped")
+        self.assertEqual(shared.read_bytes(), JPEG)
+        self.assertTrue(first.is_file())
+        self.assertTrue(second.is_file())
+        self.assertFalse(first.with_suffix(".jpg").exists())
+        self.assertFalse(second.with_suffix(".jpg").exists())
+        second_song.get_cover.assert_not_awaited()
 
     async def test_embedded_and_file_cover_sizes_are_independent(self):
         downloader, _ = self.downloader()
@@ -941,7 +975,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             save_cover=True,
         )
         self.assertEqual(result.status, "downloaded")
-        self.assertEqual(destination.with_suffix(".png").read_bytes(), PNG)
+        self.assertEqual((destination.parent / "Cover.png").read_bytes(), PNG)
         self.assertIn(b"covr", mp4_tag_atoms(destination))
         cover.get_cover_bytes.assert_has_awaits(
             [
@@ -951,7 +985,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(cover.get_cover_bytes.await_count, 2)
 
-        destination.with_suffix(".png").unlink()
+        (destination.parent / "Cover.png").unlink()
         cover.get_cover_bytes.reset_mock()
         result = await downloader.download(
             song,
@@ -999,7 +1033,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             save_cover=True,
         )
         self.assertIn(b"covr", mp4_tag_atoms(destination))
-        self.assertEqual(destination.with_suffix(".png").read_bytes(), PNG)
+        self.assertEqual((destination.parent / "Cover.png").read_bytes(), PNG)
         cover.get_cover_bytes.assert_has_awaits(
             [
                 call(width=600, height=600, format="png"),
@@ -1008,7 +1042,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(cover.get_cover_bytes.await_count, 2)
 
-        destination.with_suffix(".png").unlink()
+        (destination.parent / "Cover.png").unlink()
         cover.get_cover_bytes.reset_mock()
         result = await downloader.download(
             song,
@@ -1169,7 +1203,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             lyrics_file_format="text",
         )
         self.assertEqual(output.with_suffix(".txt").read_text(), "Hello")
-        self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+        self.assertEqual((output.parent / "Cover.png").read_bytes(), PNG)
         self.assertFalse(output.with_suffix(".lrc").exists())
 
     async def test_video_sidecar_and_explicit_playlist_position(self):
@@ -1187,6 +1221,7 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.status, "downloaded")
         self.assertEqual(output.with_suffix(".png").read_bytes(), PNG)
+        self.assertFalse((output.parent / "Cover.png").exists())
         self.assertEqual(playlist.read_text(), "#EXTM3U\n\n\nalbum/video.m4v\n")
         with self.assertRaises(ValueError):
             await downloader.download(video, output, save_lyrics=True)
@@ -1301,6 +1336,20 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
         second = await downloader.download(video, out)
         self.assertEqual(second.status, "skipped")
         downloader._save_track.assert_not_awaited()
+
+    async def test_uploaded_video_cover_keeps_media_file_stem(self):
+        video = self.uploaded_video()
+        video.get_cover = AsyncMock(
+            return_value=Mock(get_cover_bytes=AsyncMock(return_value=JPEG))
+        )
+        downloader = Downloader()
+        self.mock_uploaded_download(downloader)
+        output = self.directory / "uploads" / "Original Upload.m4v"
+        result = await downloader.download(video, output, save_cover=True, tag=False)
+        self.assertEqual(result.status, "downloaded")
+        self.assertEqual(result.cover.path, output.with_suffix(".jpg"))
+        self.assertEqual(output.with_suffix(".jpg").read_bytes(), JPEG)
+        self.assertFalse((output.parent / "Cover.jpg").exists())
 
     async def test_uploaded_video_auto_paths_index_and_collision(self):
         db = MediaDatabase(self.directory / "index.sqlite3")

@@ -114,6 +114,29 @@ def sample_tables(data: bytes) -> list[dict[bytes, bytes]]:
     return tables
 
 
+def assert_legacy_chunk_offsets(data: bytes) -> None:
+    """Small Gamdl outputs use valid 32-bit tables and a compact mdat header."""
+    top = list(atoms(data))
+    assert [name for name, _ in top] == [b"ftyp", b"moov", b"mdat"]
+    mdat_start = sum(len(body) + 8 for _, body in top[:2])
+    assert (
+        int.from_bytes(data[mdat_start : mdat_start + 4], "big") == len(top[2][1]) + 8
+    )
+    payload_start = mdat_start + 8
+    for table in sample_tables(data):
+        assert b"stco" in table
+        assert b"co64" not in table
+        payload = table[b"stco"]
+        count = int.from_bytes(payload[4:8], "big")
+        assert count > 0
+        assert len(payload) == 8 + count * 4
+        offsets = [
+            int.from_bytes(payload[8 + i * 4 : 12 + i * 4], "big") for i in range(count)
+        ]
+        assert offsets == sorted(offsets)
+        assert all(payload_start <= offset < len(data) for offset in offsets)
+
+
 def description_fixture(data: bytes, distinct: bool = False) -> bytes:
     """Model HLS key rotation: three entries, trex default and tfhd switches."""
 
@@ -351,12 +374,14 @@ class NativeAvMuxTests(unittest.TestCase):
                 container="mp4",
             ),
         )
+        assert_legacy_chunk_offsets(output.read_bytes())
         self.assertEqual(track_hashes(self.video, "v"), track_hashes(output, "v"))
         self.assertEqual(track_hashes(self.audio, "a"), track_hashes(output, "a"))
 
     def test_file_mux_tagging_uses_bounded_path_without_changing_samples(self):
         output = self.directory / "bounded.m4v"
         Muxer().mux_file(video=self.video, audio=self.audio, destination=output)
+        assert_legacy_chunk_offsets(output.read_bytes())
         # Uppercase V excludes attached-picture artwork streams in FFprobe.
         original_video = track_hashes(output, "V")
         original_audio = track_hashes(output, "a")
@@ -379,6 +404,7 @@ class NativeAvMuxTests(unittest.TestCase):
             )
             Muxer().tag(output, tags=Tags(title="Thriller (updated)"))
         self.assertEqual(bounded.call_count, 2)
+        assert_legacy_chunk_offsets(output.read_bytes())
         self.assertGreater(output.stat().st_size, original_bytes)
         self.assertEqual(track_hashes(output, "V"), original_video)
         self.assertEqual(track_hashes(output, "a"), original_audio)
@@ -521,6 +547,7 @@ class NativeAvMuxTests(unittest.TestCase):
 
     def test_video_audio_lossless_mux_with_b_frames(self):
         output = self.mux()
+        assert_legacy_chunk_offsets(output.read_bytes())
         self.assertEqual(brands(output), (b"M4V ", [b"M4V ", b"mp42", b"isom"]))
         self.assertEqual(
             [kind for kind, _ in atoms(output.read_bytes())],
@@ -552,6 +579,7 @@ class NativeAvMuxTests(unittest.TestCase):
 
     def test_explicit_mp4_brand_keeps_encoded_samples_unchanged(self):
         default = self.mux()
+        assert_legacy_chunk_offsets(default.read_bytes())
         standard = self.directory / "standard.mp4"
         standard.write_bytes(
             Muxer().mux(
@@ -560,6 +588,7 @@ class NativeAvMuxTests(unittest.TestCase):
                 container="mp4",
             )
         )
+        assert_legacy_chunk_offsets(standard.read_bytes())
         self.assertEqual(brands(default)[0], b"M4V ")
         self.assertEqual(
             brands(standard),
@@ -695,6 +724,7 @@ class NativeMp4RemuxTests(unittest.TestCase):
                 )
                 top = [kind for kind, _ in atoms(finished.read_bytes())]
                 self.assertEqual(top, [b"ftyp", b"moov", b"mdat"])
+                assert_legacy_chunk_offsets(finished.read_bytes())
                 self.assertEqual(packet_hashes(original), packet_hashes(finished))
                 result = subprocess.run(
                     [
@@ -737,7 +767,9 @@ class NativeMp4RemuxTests(unittest.TestCase):
         original = self.fixture("aac")
         dest = self.directory / "taggable.m4a"
         dest.write_bytes(self.muxer.remux(original.read_bytes()))
+        assert_legacy_chunk_offsets(dest.read_bytes())
         self.muxer.tag(dest, tags=Tags(title="Remuxed AAC", artist="Gamdl"))
+        assert_legacy_chunk_offsets(dest.read_bytes())
         self.assertEqual(mp4_tag_atoms(dest)[b"\xa9nam"], [(1, b"Remuxed AAC")])
         self.assertEqual(packet_hashes(original), packet_hashes(dest))
 

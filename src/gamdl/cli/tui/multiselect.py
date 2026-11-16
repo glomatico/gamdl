@@ -135,9 +135,7 @@ async def select_many(
 
     @keys.add("enter")
     def confirm(event):
-        if state.cursor < len(choices):
-            state.toggle()
-        elif state.selected:
+        if state.selected:
             app.exit(result=state.result())
         else:
             state.error = "Select at least one item before downloading"

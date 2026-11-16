@@ -188,7 +188,7 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
                 browse_artist(self.request, input=pipe, output=DummyOutput())
             )
             await asyncio.sleep(0.07)
-            pipe.send_text("\r")  # Expand first category
+            pipe.send_text("\x1b[C")  # Right: expand first category
             await asyncio.sleep(0.12)
             pipe.send_text("\x1b[C")  # Right: next page
             await asyncio.sleep(0.12)
@@ -197,13 +197,13 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.08)
             pipe.send_text("\x1b")  # Back to category list
             await asyncio.sleep(0.60)
-            pipe.send_text("\x1b[F\r")
+            pipe.send_text("\x1b[F\r")  # Enter on Download selected confirms
             result = await asyncio.wait_for(task, timeout=3)
         self.assertEqual(result.selections, (ArtistCategorySelection(MAIN, (2,)),))
         self.assertEqual(self.calls, [(MAIN, 0), (MAIN, 1)])
 
-    async def test_real_ptk_keyboard_space_enter_and_download_action(self):
-        """Exercise the terminal event loop rather than just calling state methods."""
+    async def test_root_enter_opens_highlighted_category_even_when_marked(self):
+        """The category hub is a normal menu, not a multi-select item page."""
         with create_pipe_input() as pipe:
             task = asyncio.create_task(
                 browse_artist(self.request, input=pipe, output=DummyOutput())
@@ -212,13 +212,51 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             pipe.send_text(" ")  # Space: whole category, without API calls
             await asyncio.sleep(0.03)
             self.assertEqual(self.calls, [])
-            pipe.send_text("\r")  # Enter: expand, not download
+            pipe.send_text("\r")  # Enter opens highlighted category, not download
             await asyncio.sleep(0.12)
             self.assertEqual(self.calls, [(MAIN, 0)])
-            pipe.send_text("\x01")  # Ctrl+A: mark all in category
-            pipe.send_text("\x1b")  # Escape: go back to categories
-            await asyncio.sleep(0.60)  # VT100 escape disambiguation timeout
-            pipe.send_text("\x1b[F")  # End: Download selected
-            pipe.send_text("\r")
+            self.assertFalse(task.done())
+            pipe.send_text("\r")  # Inside items, Enter confirms marked category
             result = await asyncio.wait_for(task, timeout=3)
         self.assertEqual(result.selections, (ArtistCategorySelection(MAIN),))
+        self.assertEqual(self.calls, [(MAIN, 0)])
+
+    async def test_root_download_action_confirms_marked_category(self):
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                browse_artist(self.request, input=pipe, output=DummyOutput())
+            )
+            await asyncio.sleep(0.07)
+            pipe.send_text(" \x1b[F\r")  # Mark category, navigate to Download
+            result = await asyncio.wait_for(task, timeout=3)
+        self.assertEqual(result.selections, (ArtistCategorySelection(MAIN),))
+        self.assertEqual(self.calls, [])
+
+    async def test_enter_on_highlighted_artist_item_confirms_without_toggling(self):
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                browse_artist(self.request, input=pipe, output=DummyOutput())
+            )
+            await asyncio.sleep(0.07)
+            pipe.send_text("\x1b[C")  # Right: open albums
+            await asyncio.sleep(0.12)
+            pipe.send_text(" \r")  # Space marks first item; Enter confirms it
+            result = await asyncio.wait_for(task, timeout=3)
+        self.assertEqual(result.selections, (ArtistCategorySelection(MAIN, (0,)),))
+
+    async def test_enter_without_marks_opens_category_but_does_not_download_items(self):
+        with create_pipe_input() as pipe:
+            task = asyncio.create_task(
+                browse_artist(self.request, input=pipe, output=DummyOutput())
+            )
+            await asyncio.sleep(0.07)
+            pipe.send_text("\r")  # Root is a normal menu: open category
+            await asyncio.sleep(0.08)
+            self.assertFalse(task.done())
+            self.assertEqual(self.calls, [(MAIN, 0)])
+            pipe.send_text("\r")  # No marks on multi-select page: stay
+            await asyncio.sleep(0.04)
+            self.assertFalse(task.done())
+            pipe.send_text(" \r")  # Mark first item with Space, then confirm
+            result = await asyncio.wait_for(task, timeout=3)
+        self.assertEqual(result.selections, (ArtistCategorySelection(MAIN, (0,)),))

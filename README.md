@@ -280,10 +280,17 @@ Gamdl matches tracks by catalog ID using the local SQLite index and embedded med
 
 | Key | Action |
 | --- | --- |
-| Arrow keys | Navigate options |
-| Space | Toggle an item in a multi-select menu |
+| Up / Down | Move between options |
+| Left / Right | Browse pages; Right opens artist/search categories |
+| Space | Mark or unmark items in a multi-select menu (artist categories may also be marked) |
 | Ctrl + A | Select all items where supported |
-| Enter | Confirm or open the selected item |
+| Enter | Open/confirm the highlighted option on navigation and single-choice menus; start downloading the marked items on multi-select item pages |
+| B | Return to media types in the search browser |
+
+In artist and search category lists, Enter opens the highlighted category.
+Use Space to mark items (or entire artist categories), then Enter from a
+multi-select item page to download the marked selection. On category lists,
+the explicit **Download selected** row confirms any previously marked items.
 
 <a name="configuration"></a>
 
@@ -394,7 +401,7 @@ output:
   embedded_lyrics_format: text
 ```
 
-Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these settings. Both accept `lrc`, `srt`, `ttml`, `text`, and `enhanced-lrc`.
+Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these settings. Both accept `lrc`, `srt`, `ttml`, `enhanced-ttml`, `text`, and `enhanced-lrc`.
 
 | Format | External extension | Behavior |
 | --- | --- | --- |
@@ -402,9 +409,10 @@ Use `--lyrics-file-format` and `--embedded-lyrics-format` to override these sett
 | `enhanced-lrc` | `.lrc` | Word/syllable timestamps when available; otherwise standard line LRC |
 | `srt` | `.srt` | Subtitle cues from lines with start and end timestamps |
 | `ttml` | `.ttml` | Original Apple Music TTML |
+| `enhanced-ttml` | `.ttml` | Original syllable-timed Apple Music TTML; unavailable without syllable timing |
 | `text` | `.txt` | Plain lyrics without timing |
 
-**External files are strict:** if the selected format cannot be produced, Gamdl reports the lyrics sidecar as unavailable rather than silently saving a different type. The only exception is `enhanced-lrc` degrading to line LRC when syllable timing is missing. Existing media is reused when only a sidecar needs to be created or refreshed; an existing sidecar with a different extension is not mistaken for the requested format.
+**External files are strict:** if the selected format cannot be produced, Gamdl reports the lyrics sidecar as unavailable rather than silently saving a different type. The only exception is `enhanced-lrc` degrading to line LRC when syllable timing is missing. Existing media is reused when only a sidecar needs to be created or refreshed; an existing sidecar with a different extension is not mistaken for the requested format. Since `ttml` and `enhanced-ttml` share the same extension, Gamdl compares the requested XML before reusing an existing `.ttml` sidecar.
 
 **Embedded lyrics** use the standard `©lyr` text metadata atom, even when formatted as LRC, SRT or TTML. If the requested embedded representation is unavailable, Gamdl falls back to line LRC when synchronized, then plain text. Some players display embedded timestamps or XML as literal text instead of synchronized lyrics, so `text` remains the default.
 
@@ -556,6 +564,8 @@ output:
 Use `--embedded-cover-size` and `--file-cover-size` to override these per command. Either value may also be `max`, which requests the maximum artwork Apple offers using `10000x0w-999.jpg` or `10000x0w-999.png` instead of a square pixel dimension. For example, `file_cover_size: max` saves the highest-resolution available cover while retaining smaller embedded artwork. The returned dimensions depend on Apple's source image.
 
 If the sizes match (including both set to `max`), Gamdl reuses the artwork bytes for the saved cover. If the sizes differ, it fetches separate resolutions from Apple Music. `--exclude-tags cover` affects only embedded artwork, not the external cover. `--no-tag` disables embedding, while `--save-cover` still saves an external image.
+
+External artwork for songs uses the shared filename `Cover.jpg` (or `Cover.png`) inside the album folder, including when downloading individual songs or playlist tracks. Music videos and uploaded videos instead use the media filename, for example `Video.m4v` and `Video.jpg`. When overwrite is disabled, an existing shared album cover is reused rather than fetched and replaced for every track.
 
 ### Files and Folders
 
@@ -781,7 +791,7 @@ Some media-related tests also require FFmpeg and FFprobe.
 
 The [publishing workflow](.github/workflows/python-publish.yml) builds a source distribution and precompiled ABI3 wheels for Linux (x86_64/ARM64), Windows (x86_64/ARM64), and macOS (universal2). Every wheel is installed and smoke-tested, and the full artifact set is checked before publication.
 
-Run **Publish Python Package** manually from GitHub Actions to build and inspect artifacts **without publishing**. Publishing occurs only when a GitHub Release is published with a tag matching `pyproject.toml` (for example, `v4.0.1`). The workflow must be present on the repository's default branch for the release trigger to work.
+Run **Publish Python Package** manually from GitHub Actions to build and inspect artifacts **without publishing**. Publishing occurs only when a GitHub Release is published with a tag matching `pyproject.toml` (for example, `v4.0.2`). The workflow must be present on the repository's default branch for the release trigger to work.
 
 PyPI [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) must be configured for repository `glomatico/gamdl`, workflow `python-publish.yml`, and GitHub environment `pypi`. No long-lived PyPI token is needed. Configure GitHub environment protection rules as desired before publishing a release.
 

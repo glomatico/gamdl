@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, Mock
 
 from gamdl.api.wrapper import WrapperApi
+from gamdl.drm import ContentKey, Drm
 from gamdl.transport import ApiHttpClient
 from gamdl.media import (
     HlsSongStream,
@@ -26,7 +27,7 @@ from gamdl.media import (
     StreamOrigin,
 )
 from gamdl.stream import Streamer
-from tests.test_cbcs_stream import CT1, CT2, PREFETCH_CT, fixture, mdats
+from tests.test_cbcs_stream import CT1, CT2, KEY, KID, PREFETCH_CT, fixture, mdats
 from tests.test_native_stream import HttpHandler, fixture_playlist, manifest_url
 
 SYNTHETIC_CONTEXT = json.loads(
@@ -67,15 +68,19 @@ class TemariStreamTests(unittest.IsolatedAsyncioTestCase):
         self.api.get_context = AsyncMock(return_value=SYNTHETIC_CONTEXT)
         self.addAsyncCleanup(self.api.aclose)
 
-    def source(self, *,
-               origin=StreamOrigin.ASSET_STANDARD_HLS,
-               hls_type=HlsType.STANDARD,
-               fairplay_uri="skd://local/test"):
+    def source(
+        self,
+        *,
+        origin=StreamOrigin.ASSET_STANDARD_HLS,
+        hls_type=HlsType.STANDARD,
+        fairplay_uri="skd://local/test",
+    ):
         transport = Mock()
         key = (
             '#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT="com.apple.streamingkeydelivery",'
             f'URI="{fairplay_uri}"\n'
-            if fairplay_uri is not None else ""
+            if fairplay_uri is not None
+            else ""
         )
         transport.get_manifest = AsyncMock(
             return_value=manifest_url(
@@ -98,11 +103,13 @@ class TemariStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_context_decrypts_locally_without_sample_socket(self):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"init": init, "segment": fragment})
-        async with Streamer(self.source(), wrapper_api=self.api, chunk_size=1024) as stream:
+        async with Streamer(
+            self.source(), wrapper_api=self.api, chunk_size=1024
+        ) as stream:
             self.assertEqual(stream.decryption_method, "temari")
             decoded = await stream.read()
         expected = PLAINTEXT + b"tail" + b"ABCD" + PLAINTEXT + b"end"
-        self.assertEqual(mdats(decoded[len(init):]), expected)
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
         self.assertNotIn(b"enca", decoded)
         self.api.get_context.assert_awaited_once_with("1559885421", "skd://local/test")
 
@@ -130,7 +137,9 @@ class TemariStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_clear_hls_does_not_request_context(self):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"init": init, "segment": fragment})
-        async with Streamer(self.source(fairplay_uri=None), wrapper_api=self.api) as stream:
+        async with Streamer(
+            self.source(fairplay_uri=None), wrapper_api=self.api
+        ) as stream:
             self.assertEqual(stream.decryption_method, "none")
         self.api.get_context.assert_not_awaited()
 
@@ -146,7 +155,7 @@ class TemariStreamTests(unittest.IsolatedAsyncioTestCase):
                 fixture_playlist(
                     "#EXTINF:1,\nsegment\n#EXTINF:1,\nsecond\n",
                     prefix=(
-                        '#EXT-X-KEY:METHOD=SAMPLE-AES,'
+                        "#EXT-X-KEY:METHOD=SAMPLE-AES,"
                         'KEYFORMAT="com.apple.streamingkeydelivery",'
                         'URI="skd://local/test"\n'
                         '#EXT-X-MAP:URI="init"\n'
@@ -158,10 +167,57 @@ class TemariStreamTests(unittest.IsolatedAsyncioTestCase):
             decoded = await stream.read()
         temari_expected = PLAINTEXT + b"tail" + b"ABCD" + PLAINTEXT + b"end"
         self.assertEqual(
-            mdats(decoded[len(init):]),
+            mdats(decoded[len(init) :]),
             first_expected + temari_expected,
         )
         self.api.get_context.assert_awaited_once()
+
+    async def test_generic_fairplay_uses_fixed_key_without_temari_or_license(self):
+        """A sole P000000000 reference must not request a Temari context."""
+        init, fragment, expected = fixture()
+        fragment = fragment.replace(CT1 + CT2, PREFETCH_CT)
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        uri = "skd://itunes.apple.com/P000000000/s1/e1"
+        for use_services in (True, False):
+            with self.subTest(use_services=use_services):
+                source = self.source(fairplay_uri=uri)
+                drm = Drm.from_widevine(Mock())
+                drm.get_keys = AsyncMock(
+                    side_effect=AssertionError("Fixed prefetch must skip licenses")
+                )
+                async with Streamer(
+                    source,
+                    wrapper_api=self.api if use_services else None,
+                    drm=drm if use_services else None,
+                ) as stream:
+                    self.assertEqual(stream.decryption_method, "fixed_prefetch_key")
+                    decoded = await stream.read()
+                self.assertEqual(mdats(decoded[len(init) :]), expected)
+                self.api.get_context.assert_not_awaited()
+                drm.get_keys.assert_not_awaited()
+
+    async def test_explicit_key_overrides_generic_fairplay_uri(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        source = self.source(fairplay_uri="skd://itunes.apple.com/P000000000/s1/e1")
+        async with Streamer(
+            source, wrapper_api=self.api, decryption_key=ContentKey(KID, KEY)
+        ) as stream:
+            self.assertEqual(stream.decryption_method, "explicit_key")
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init) :]), expected)
+        self.api.get_context.assert_not_awaited()
+
+    async def test_missing_and_invalid_fairplay_do_not_request_temari_context(self):
+        init, fragment, _ = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        for uri in (None, "not-an-skd", "skd://"):
+            with self.subTest(uri=uri):
+                source = self.source(fairplay_uri=uri)
+                async with Streamer(source, wrapper_api=self.api) as stream:
+                    self.assertEqual(stream.decryption_method, "none")
+                    self.assertEqual(await stream.read(), init + fragment)
+                self.api.get_context.assert_not_awaited()
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ class OverwritePolicy(str, Enum):
 class DecryptionMethod(str, Enum):
     NONE = "none"
     EXPLICIT_KEY = "explicit_key"
+    FIXED_PREFETCH_KEY = "fixed_prefetch_key"
     WIDEVINE = "widevine"
     PLAYREADY = "playready"
     TEMARI = "temari"

@@ -71,12 +71,28 @@ class _SidecarError(Exception):
 
 
 async def _lyrics_for_format(media: Song, format: LyricsFormat):
-    """Use syllable lyrics for enhanced LRC, with line lyrics as fallback."""
+    """Request syllable TTML when needed; enhanced LRC may fall back to lines."""
+    if format == LyricsFormat.ENHANCED_TTML:
+        return await media.get_lyrics(syllable=True)
     if format == LyricsFormat.ENHANCED_LRC:
         enhanced = await media.get_lyrics(syllable=True)
         if enhanced is not None and enhanced.is_syllable_synced:
             return enhanced
     return await media.get_lyrics()
+
+
+def _external_cover_path(
+    media: Song | MusicVideo | UploadedVideo, destination: Path, extension: str
+) -> Path:
+    """Use one shared cover per song folder, or a per-file video cover.
+
+    This follows Gamdl 3.x: songs use Cover.jpg / Cover.png even when a
+    single track is requested; music videos and uploaded videos use the
+    media filename as their artwork sidecar's stem.
+    """
+    if isinstance(media, Song):
+        return destination.parent / f"Cover{extension}"
+    return destination.with_suffix(extension)
 
 
 def _tag_bytes(
@@ -715,8 +731,10 @@ class Downloader:
         if save_cover:
             try:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_COVER):
-                    existing_cover = destination.with_suffix(
-                        ".jpg" if cover_format == CoverFormat.JPG else ".png"
+                    existing_cover = _external_cover_path(
+                        media,
+                        destination,
+                        ".jpg" if cover_format == CoverFormat.JPG else ".png",
                     )
                     if overwrite == OverwritePolicy.SKIP and existing_cover.is_file():
                         # A known media file needs no Apple artwork request
@@ -748,7 +766,9 @@ class Downloader:
                                 raise ValueError(
                                     "Cover sidecar must contain JPEG or PNG bytes"
                                 )
-                            cover_path = destination.with_suffix(extension)
+                            cover_path = _external_cover_path(
+                                media, destination, extension
+                            )
                             status = await _complete_write(
                                 publish_bytes_result,
                                 cover_bytes,
@@ -769,7 +789,7 @@ class Downloader:
                 with self._stage(event_callback, media.id, DownloadStage.SAVING_LYRICS):
                     sidecar = destination.with_suffix(lyrics_file_format.extension)
                     existing_lyrics = sidecar.is_file()
-                    refresh_lrc = False
+                    refresh_lyrics = False
                     if (
                         existing_lyrics
                         and overwrite == OverwritePolicy.SKIP
@@ -780,7 +800,7 @@ class Downloader:
                         contains_syllables = bool(
                             re.search(r"<\d{2,}:\d{2}\.\d{2}>", old)
                         )
-                        refresh_lrc = (
+                        refresh_lyrics = (
                             lyrics_file_format == LyricsFormat.ENHANCED_LRC
                             and not contains_syllables
                         ) or (
@@ -788,9 +808,20 @@ class Downloader:
                             and contains_syllables
                         )
                     if (
+                        existing_lyrics
+                        and overwrite == OverwritePolicy.SKIP
+                        and lyrics_file_format
+                        in {LyricsFormat.TTML, LyricsFormat.ENHANCED_TTML}
+                    ):
+                        # Both formats use .ttml. Compare with the requested
+                        # endpoint's original XML before treating an existing
+                        # sidecar as current.
+                        old = sidecar.read_text(encoding="utf-8", errors="replace")
+                        refresh_lyrics = True
+                    if (
                         overwrite == OverwritePolicy.SKIP
                         and existing_lyrics
-                        and not refresh_lrc
+                        and not refresh_lyrics
                     ):
                         lyrics_result = FileResult(sidecar, FileStatus.SKIPPED)
                     else:
@@ -801,7 +832,11 @@ class Downloader:
                             except LyricsFormatUnavailableError:
                                 lyrics_result = FileResult(None, FileStatus.UNAVAILABLE)
                             else:
-                                if refresh_lrc and existing_lyrics and old == contents:
+                                if (
+                                    refresh_lyrics
+                                    and existing_lyrics
+                                    and old == contents
+                                ):
                                     lyrics_result = FileResult(
                                         sidecar, FileStatus.SKIPPED
                                     )
@@ -811,7 +846,7 @@ class Downloader:
                                         contents.encode("utf-8"),
                                         sidecar,
                                         overwrite=OverwritePolicy.REPLACE
-                                        if refresh_lrc
+                                        if refresh_lyrics
                                         else overwrite,
                                     )
                                     lyrics_result = FileResult(sidecar, status)

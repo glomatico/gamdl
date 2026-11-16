@@ -2,7 +2,8 @@
 
 ## 4.0.2 (unreleased)
 
-- Fix AAC downloads with Apple's generic FairPlay SKD URI (`P000000000/s1/e1`): preserve the URI for Wrapper decryption when no track-specific key reference exists instead of passing encrypted audio through to the MP4 remuxer.
+- Use Gamdl's built-in enhanced-HLS prefetch key locally when an HLS song's only FairPlay key reference is Apple's generic `P000000000/s1/e1` URI, avoiding unnecessary Wrapper sample decryption and Widevine/PlayReady license requests.
+- Fix AAC downloads with Apple's generic FairPlay SKD URI (`P000000000/s1/e1`): recognize the URI when no track-specific reference exists instead of passing encrypted audio through to the MP4 remuxer.
 - Restore legacy iPod-compatible MP4 chunk offsets: use 32-bit `stco` tables and standard 8-byte `mdat` headers for audio and video when their sizes permit, rather than unconditionally using `co64` and extended `mdat`. Keep 64-bit offsets/headers for genuinely large files, and retain bounded-memory tagging of both layouts without changing encoded samples.
 - Fix interactive selection behavior (issue #362): Enter opens/confirms the highlighted option on category-navigation and single-choice screens, but starts downloading the Space-marked items on multi-select item pages. On category screens, the explicit **Download selected** row confirms marked items. Enter no longer silently toggles a track; Right Arrow still opens categories/advances pages, and B returns to media types in search.
 - Display the complete installed Gamdl version in the CLI banner and generated configuration comments, rather than always showing `Gamdl 4.0`.

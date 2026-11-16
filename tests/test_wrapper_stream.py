@@ -460,17 +460,41 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(source._transport.get_manifest.await_count, 1)
                 self.assertEqual(self.wrapper.batches, [])
 
-    async def test_placeholder_fairplay_uses_wrapper_decryption(self):
-        """The generic Apple SKD URI is usable for some short AAC tracks."""
+    async def test_placeholder_fairplay_uses_fixed_key_without_wrapper_or_license(self):
+        """Generic Apple SKD songs decrypt locally without Wrapper/Widevine I/O."""
         init, fragment, expected = fixture()
+        fragment = fragment.replace(CT1 + CT2, PREFETCH_CT)
         self.http.fixtures.update({"init": init, "segment": fragment})
         uri = "skd://itunes.apple.com/P000000000/s1/e1"
-        source = self.source(fairplay_uri=uri)
-        async with Streamer(source, wrapper_api=self.api) as stream:
-            self.assertEqual(stream.decryption_method, "wrapper")
+        for use_services in (True, False):
+            with self.subTest(use_services=use_services):
+                source = self.source(fairplay_uri=uri)
+                drm = Drm.from_widevine(Mock())
+                drm.get_keys = AsyncMock(
+                    side_effect=AssertionError("Fixed prefetch must skip licenses")
+                )
+                async with Streamer(
+                    source,
+                    wrapper_api=self.api if use_services else None,
+                    drm=drm if use_services else None,
+                ) as stream:
+                    self.assertEqual(stream.decryption_method, "fixed_prefetch_key")
+                    decoded = await stream.read()
+                self.assertEqual(mdats(decoded[len(init):]), expected)
+                self.assertEqual(self.wrapper.batches, [])
+                drm.get_keys.assert_not_awaited()
+
+    async def test_explicit_key_overrides_generic_fairplay_uri(self):
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        source = self.source(fairplay_uri="skd://itunes.apple.com/P000000000/s1/e1")
+        async with Streamer(
+            source, wrapper_api=self.api, decryption_key=ContentKey(KID, KEY)
+        ) as stream:
+            self.assertEqual(stream.decryption_method, "explicit_key")
             decoded = await stream.read()
         self.assertEqual(mdats(decoded[len(init):]), expected)
-        self.assertEqual(self.wrapper.batches, [(b"1559885421", uri.encode(), 2)])
+        self.assertEqual(self.wrapper.batches, [])
 
     async def test_wrapper_has_priority_over_matching_widevine(self):
         init, fragment, expected = fixture()

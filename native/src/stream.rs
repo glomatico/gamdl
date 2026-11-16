@@ -8,7 +8,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::decrypt::Mp4Decryptor;
+use crate::decrypt::{ENHANCED_HLS_PREFETCH_KEY, Mp4Decryptor};
 use crate::wrapper::WrapperSession;
 use futures_util::{StreamExt, stream};
 use pyo3::exceptions::{PyOSError, PyValueError};
@@ -359,7 +359,7 @@ pub(crate) struct NativeStream {
 #[pymethods]
 impl NativeStream {
     #[new]
-    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, wrapper=None, asset_song_cbcs=false, music_video_cbcs=false))]
+    #[pyo3(signature = (parts, concurrency=8, chunk_size=262144, retries=3, decryption_key=None, key_id=None, enhanced_hls_song=false, wrapper=None, asset_song_cbcs=false, music_video_cbcs=false, fixed_prefetch_key=false))]
     fn new(
         parts: Vec<Part>,
         concurrency: usize,
@@ -371,7 +371,14 @@ impl NativeStream {
         wrapper: Option<(String, u16, String, String)>,
         asset_song_cbcs: bool,
         music_video_cbcs: bool,
+        fixed_prefetch_key: bool,
     ) -> PyResult<Self> {
+        if fixed_prefetch_key && (decryption_key.is_some() || key_id.is_some() || wrapper.is_some())
+        {
+            return Err(PyValueError::new_err(
+                "Fixed prefetch key, explicit AES key, and Wrapper modes are mutually exclusive",
+            ));
+        }
         if wrapper.is_some() && (decryption_key.is_some() || key_id.is_some()) {
             return Err(PyValueError::new_err(
                 "Wrapper and AES key modes are mutually exclusive",
@@ -392,7 +399,11 @@ impl NativeStream {
             }
         }
         let decryptor = Mp4Decryptor::new(
-            decryption_key,
+            if fixed_prefetch_key {
+                Some(ENHANCED_HLS_PREFETCH_KEY.to_vec())
+            } else {
+                decryption_key
+            },
             key_id,
             enhanced_hls_song,
             wrapper.is_some(),

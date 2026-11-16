@@ -33,6 +33,8 @@ from gamdl.media.exceptions import StreamManifestError
 
 from .progress import StreamProgress
 
+_GENERIC_FAIRPLAY_URI = "skd://itunes.apple.com/P000000000/s1/e1"
+
 
 def _range(raw: str | None, previous_end: int | None, *, init: bool = False):
     if not raw:
@@ -189,10 +191,24 @@ class Streamer(AsyncIterator[bytes]):
             key, kid = self._key, self._kid
             method = "explicit_key" if key is not None else "none"
             wrapper = None
-            if key is None and (self._wrapper is not None or self._drm is not None):
+            fixed_prefetch_key = False
+            if key is None and (
+                isinstance(self.source, HlsSongStream)
+                or self._wrapper is not None
+                or self._drm is not None
+            ):
                 info = await self.source.get_drm_info()
                 fairplay_uri = info.fairplay_streaming
                 if (
+                    isinstance(self.source, HlsSongStream)
+                    and fairplay_uri == _GENERIC_FAIRPLAY_URI
+                ):
+                    # This is Apple's fixed-key prefetch rendition. The Rust
+                    # engine already owns that key, so skip both the Wrapper
+                    # sample socket and a Widevine/PlayReady license request.
+                    fixed_prefetch_key = True
+                    method = "fixed_prefetch_key"
+                elif (
                     self._wrapper is not None
                     and isinstance(fairplay_uri, str)
                     and fairplay_uri.startswith("skd://")
@@ -253,6 +269,7 @@ class Streamer(AsyncIterator[bytes]):
                 and not isinstance(self.source, HlsSongStream)
                 and self.source.origin
                 in {StreamOrigin.ITUNES_HLS, StreamOrigin.WRAPPER_HLS},
+                fixed_prefetch_key,
             )
             self._decryption_method = method
         finally:

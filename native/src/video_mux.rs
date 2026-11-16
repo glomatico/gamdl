@@ -15,11 +15,12 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 use crate::remux::{
-    Atom, atoms, boxed, children, copy_range, file_type, find, fullbox, normalize_stsd,
-    set_duration, u32_at, u64_at,
+    Atom, atoms, boxed, children, chunk_offsets_box, copy_range, file_type, find, fullbox,
+    mdat_header, normalize_stsd, set_duration, u32_at, u64_at,
 };
 
 type Result<T> = std::result::Result<T, &'static str>;
+type MuxPlan = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<Track>, u64);
 const BAD: &str = "Malformed fragmented MP4 for audio/video mux";
 const UNSUPPORTED: &str = "Unsupported audio/video fragmented MP4 mux layout";
 const MOVIE_SCALE: u32 = 1000;
@@ -496,16 +497,7 @@ fn sample_tables(track: &Track, offsets: &[u64]) -> Result<Vec<Vec<u8>>> {
         );
     }
     result.push(table(b"stsz", &stsz)?);
-    let mut co64 = Vec::new();
-    co64.extend(
-        u32::try_from(offsets.len())
-            .map_err(|_| UNSUPPORTED)?
-            .to_be_bytes(),
-    );
-    for offset in offsets {
-        co64.extend(offset.to_be_bytes());
-    }
-    result.push(table(b"co64", &co64)?);
+    result.push(chunk_offsets_box(offsets)?);
     Ok(result)
 }
 
@@ -648,11 +640,7 @@ fn rebuild_trak(
     }
     boxed(b"trak", &body)
 }
-fn mux_plan<I: Input + ?Sized>(
-    video: &I,
-    audio: &I,
-    mp4_brand: bool,
-) -> Result<(Vec<u8>, Vec<u8>, Vec<Track>, u64)> {
+fn mux_plan<I: Input + ?Sized>(video: &I, audio: &I, mp4_brand: bool) -> Result<MuxPlan> {
     let (_, video_moov) = locate(video)?;
     let (_, audio_moov) = locate(audio)?;
     // M4V is the Gamdl default even for HEVC; mp42 is an explicit opt-in.
@@ -681,41 +669,57 @@ fn mux_plan<I: Input + ?Sized>(
         .into_iter()
         .min()
         .ok_or(UNSUPPORTED)?;
+    let payload_size =
+        tracks
+            .iter()
+            .flat_map(|track| &track.packets)
+            .try_fold(0u64, |total, packet| {
+                total
+                    .checked_add(packet.bytes.len() as u64)
+                    .ok_or(UNSUPPORTED)
+            })?;
+    let mdat = mdat_header(payload_size)?;
     let mut offsets = tracks
         .iter()
         .map(|t| vec![0u64; t.packets.len()])
         .collect::<Vec<_>>();
-    // Build with fixed-width co64 tables: dummy offsets give the exact moov size.
     // Track data is laid out contiguously: video, optional captions, audio.
-    let initial = movie_with_inputs(inputs, video_moov, &tracks, &offsets, start_ms)?;
-    let mut at = u64::try_from(ftyp.len() + initial.len() + 16).map_err(|_| UNSUPPORTED)?;
-    for (track, positions) in tracks.iter().zip(&mut offsets) {
-        for (packet, offset) in track.packets.iter().zip(positions) {
-            *offset = at;
-            at = at
-                .checked_add(packet.bytes.len() as u64)
-                .ok_or(UNSUPPORTED)?;
+    // The moov size may increase when any track requires co64 rather than
+    // stco. Replan until the widths stabilize (each can only grow once).
+    for _ in 0..=tracks.len() {
+        let initial = movie_with_inputs(inputs, video_moov, &tracks, &offsets, start_ms)?;
+        let mut at = u64::try_from(ftyp.len())
+            .map_err(|_| UNSUPPORTED)?
+            .checked_add(initial.len() as u64)
+            .and_then(|value| value.checked_add(mdat.len() as u64))
+            .ok_or(UNSUPPORTED)?;
+        let mut next = Vec::with_capacity(tracks.len());
+        for track in &tracks {
+            let mut positions = Vec::with_capacity(track.packets.len());
+            for packet in &track.packets {
+                positions.push(at);
+                at = at
+                    .checked_add(packet.bytes.len() as u64)
+                    .ok_or(UNSUPPORTED)?;
+            }
+            next.push(positions);
         }
+        let moov = movie_with_inputs(inputs, video_moov, &tracks, &next, start_ms)?;
+        if initial.len() == moov.len() {
+            return Ok((ftyp, moov, mdat, tracks, at));
+        }
+        offsets = next;
     }
-    let moov = movie_with_inputs(inputs, video_moov, &tracks, &offsets, start_ms)?;
-    if initial.len() != moov.len() {
-        return Err(UNSUPPORTED);
-    }
-    Ok((ftyp, moov, tracks, at))
+    Err(UNSUPPORTED)
 }
 
 fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
-    let (ftyp, moov, tracks, at) = mux_plan(video, audio, mp4_brand)?;
-    let mdat_length = at
-        .checked_sub((ftyp.len() + moov.len()) as u64)
-        .ok_or(BAD)?;
+    let (ftyp, moov, mdat, tracks, at) = mux_plan(video, audio, mp4_brand)?;
     let inputs = [video, audio];
     let mut out = Vec::with_capacity(usize::try_from(at).map_err(|_| UNSUPPORTED)?);
     out.extend_from_slice(&ftyp);
     out.extend(moov);
-    out.extend(1u32.to_be_bytes());
-    out.extend(b"mdat");
-    out.extend(mdat_length.to_be_bytes());
+    out.extend(mdat);
     for track in &tracks {
         for packet in &track.packets {
             out.extend_from_slice(&inputs[track.src][packet.bytes.clone()]);
@@ -725,12 +729,11 @@ fn mux(video: &[u8], audio: &[u8], mp4_brand: bool) -> Result<Vec<u8>> {
 }
 
 fn mux_to_file(video: &mut File, audio: &mut File, output: &str, mp4_brand: bool) -> PyResult<()> {
-    let (ftyp, moov, tracks, at) = {
+    let (ftyp, moov, mdat, tracks, _at) = {
         let video_metadata = read_metadata(video)?;
         let audio_metadata = read_metadata(audio)?;
         mux_plan(&video_metadata, &audio_metadata, mp4_brand).map_err(PyValueError::new_err)?
     };
-    let mdat_length = at - (ftyp.len() + moov.len()) as u64;
     let mut inputs = [video, audio];
     let file = File::create(output).map_err(PyOSError::new_err)?;
     let mut writer = BufWriter::with_capacity(256 * 1024, file);
@@ -738,9 +741,7 @@ fn mux_to_file(video: &mut File, audio: &mut File, output: &str, mp4_brand: bool
     let result = (|| -> std::io::Result<()> {
         writer.write_all(&ftyp)?;
         writer.write_all(&moov)?;
-        writer.write_all(&1u32.to_be_bytes())?;
-        writer.write_all(b"mdat")?;
-        writer.write_all(&mdat_length.to_be_bytes())?;
+        writer.write_all(&mdat)?;
         for track in tracks {
             for packet in track.packets {
                 copy_range(

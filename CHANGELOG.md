@@ -2,6 +2,7 @@
 
 ## 4.0.2 (unreleased)
 
+- Restore legacy iPod-compatible MP4 chunk offsets: use 32-bit `stco` tables and standard 8-byte `mdat` headers for audio and video when their sizes permit, rather than unconditionally using `co64` and extended `mdat`. Keep 64-bit offsets/headers for genuinely large files, and retain bounded-memory tagging of both layouts without changing encoded samples.
 - Fix interactive selection behavior (issue #362): Enter opens/confirms the highlighted option on category-navigation and single-choice screens, but starts downloading the Space-marked items on multi-select item pages. On category screens, the explicit **Download selected** row confirms marked items. Enter no longer silently toggles a track; Right Arrow still opens categories/advances pages, and B returns to media types in search.
 - Display the complete installed Gamdl version in the CLI banner and generated configuration comments, rather than always showing `Gamdl 4.0`.
 - Restore Gamdl 3.x external artwork naming: song and album tracks share `Cover.jpg` (or `Cover.png`) in their album folder, while music videos and uploaded videos retain artwork files matching their media filenames. Reuse an existing album cover without an additional download when overwrite is disabled.

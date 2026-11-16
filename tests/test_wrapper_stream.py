@@ -444,14 +444,13 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
             self.wrapper.batches, [(b"1559885421", b"skd://local/test", 2)]
         )
 
-    async def test_missing_invalid_and_placeholder_fairplay_pass_through(self):
+    async def test_missing_and_invalid_fairplay_pass_through(self):
         init, fragment, _ = fixture()
         self.http.fixtures.update({"init": init, "segment": fragment})
         for uri in (
             None,
             "not-an-skd",
             "skd://",
-            "skd://itunes.apple.com/P000000000/s1/e1",
         ):
             with self.subTest(uri=uri):
                 source = self.source(fairplay_uri=uri)
@@ -460,6 +459,18 @@ class WrapperStreamTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(await stream.read(), init + fragment)
                 self.assertEqual(source._transport.get_manifest.await_count, 1)
                 self.assertEqual(self.wrapper.batches, [])
+
+    async def test_placeholder_fairplay_uses_wrapper_decryption(self):
+        """The generic Apple SKD URI is usable for some short AAC tracks."""
+        init, fragment, expected = fixture()
+        self.http.fixtures.update({"init": init, "segment": fragment})
+        uri = "skd://itunes.apple.com/P000000000/s1/e1"
+        source = self.source(fairplay_uri=uri)
+        async with Streamer(source, wrapper_api=self.api) as stream:
+            self.assertEqual(stream.decryption_method, "wrapper")
+            decoded = await stream.read()
+        self.assertEqual(mdats(decoded[len(init):]), expected)
+        self.assertEqual(self.wrapper.batches, [(b"1559885421", uri.encode(), 2)])
 
     async def test_wrapper_has_priority_over_matching_widevine(self):
         init, fragment, expected = fixture()

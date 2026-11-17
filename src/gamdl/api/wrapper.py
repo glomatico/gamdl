@@ -21,7 +21,10 @@ from .exceptions import GamdlApiResponseError, GamdlAuthenticationError
 
 WRAPPER_VERSION = "1.0.0"
 WRAPPER_PROTOCOL = 1
-TEMARI_PROFILE = "apple-music-3.6.0.1109-x86_64-research-v1"
+TEMARI_PROFILES = {
+    "x86_64": "apple-music-1109-x86_64",
+    "arm64-v8a": "apple-music-1109-arm64-v8a",
+}
 
 CredentialsPrompt = Callable[[], tuple[str, str] | Awaitable[tuple[str, str]]]
 TwoFactorPrompt = Callable[[], str | Awaitable[str]]
@@ -41,10 +44,12 @@ class WrapperApi:
         base_url: str,
         *,
         session: dict[str, Any],
+        architecture: str | None = None,
     ) -> None:
         self.http = http
         self.base_url = base_url.rstrip("/")
         self.session = session
+        self.architecture = architecture
         self._native_lock = asyncio.Lock()
 
     async def __aenter__(self) -> WrapperApi:
@@ -58,10 +63,16 @@ class WrapperApi:
 
     @staticmethod
     def validate_info(info: dict[str, Any]) -> None:
+        architecture = info.get("architecture")
+        expected_profile = (
+            TEMARI_PROFILES.get(architecture) if isinstance(architecture, str) else None
+        )
         if (
             info.get("version") != WRAPPER_VERSION
             or info.get("protocol_version") != WRAPPER_PROTOCOL
-            or info.get("profile") != TEMARI_PROFILE
+            or expected_profile is None
+            or info.get("profile") != expected_profile
+            or info.get("context_supported") is not True
             or info.get("context_format") != "temari"
             or info.get("decryption") != "client_side"
         ):
@@ -104,7 +115,7 @@ class WrapperApi:
                 session = await cls.get_session(http, base_url)
             if session.get("state") != "authenticated":
                 raise GamdlAuthenticationError("Wrapper is not authenticated")
-            return cls(http, base_url, session=session)
+            return cls(http, base_url, session=session, architecture=info["architecture"])
         except BaseException:
             await http.aclose()
             raise
@@ -201,10 +212,15 @@ class WrapperApi:
                 operation="wrapper_context",
                 params={"adamId": media_id, "uri": key_uri},
             )
+        expected_profile = TEMARI_PROFILES.get(self.architecture)
         if (
-            context.get("profile") != TEMARI_PROFILE
+            expected_profile is None
+            or context.get("profile") != expected_profile
             or not all(isinstance(context.get(name), str) for name in ("ctx", "state"))
-            or not all(isinstance(context.get(name), int) for name in ("bl", "r9b"))
+            or (self.architecture == "x86_64" and not all(
+                type(context.get(name)) is int and 0 <= context[name] <= 255
+                for name in ("bl", "r9b")
+            ))
         ):
             raise GamdlApiResponseError(
                 "Wrapper returned an incompatible Temari context"

@@ -21,4 +21,4 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 futures-util = "0.3"
 aes = "0.8"
 ctr = "0.9"
-temari = { git = "https://github.com/glomatico/Temari.git", rev = "dfdbb8bd0fcbce82b23e56c527556b185e832dbd" }
+temari = { git = "https://github.com/glomatico/Temari.git", rev = "884bc41466cf6c847598f57bb304b7258c9f1a44" }

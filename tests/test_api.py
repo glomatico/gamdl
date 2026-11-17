@@ -681,6 +681,55 @@ class ItunesTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WrapperTests(unittest.IsolatedAsyncioTestCase):
+    def test_architecture_specific_temari_profiles(self):
+        common = {
+            "version": "1.0.0",
+            "protocol_version": 1,
+            "context_format": "temari",
+            "context_supported": True,
+            "decryption": "client_side",
+        }
+        for architecture, profile in (
+            ("x86_64", "apple-music-1109-x86_64"),
+            ("arm64-v8a", "apple-music-1109-arm64-v8a"),
+        ):
+            info = {**common, "architecture": architecture, "profile": profile}
+            WrapperApi.validate_info(info)
+            for changes in (
+                {"profile": "apple-music-1109-arm64-v8a" if architecture == "x86_64" else "apple-music-1109-x86_64"},
+                {"context_supported": False},
+                {"architecture": "riscv64"},
+                {"architecture": []},
+            ):
+                with self.assertRaises(GamdlApiResponseError):
+                    WrapperApi.validate_info({**info, **changes})
+
+    async def test_architecture_specific_context_shapes(self):
+        for architecture, profile in (
+            ("x86_64", "apple-music-1109-x86_64"),
+            ("arm64-v8a", "apple-music-1109-arm64-v8a"),
+        ):
+            valid = {"profile": profile, "ctx": "AA==", "state": "AA=="}
+            if architecture == "x86_64":
+                valid.update(bl=5, r9b=17)
+            current = [valid]
+
+            async with mock_client(lambda _: httpx.Response(200, json=current[0])) as client:
+                async with WrapperApi(
+                    ApiHttpClient("wrapper", client=client),
+                    "http://wrapper.test",
+                    session={"state": "authenticated"},
+                    architecture=architecture,
+                ) as api:
+                    self.assertEqual(await api.get_context("123", "skd://local/test"), valid)
+                    current[0] = dict(valid, profile="wrong-architecture")
+                    with self.assertRaises(GamdlApiResponseError):
+                        await api.get_context("123", "skd://local/test")
+                    if architecture == "x86_64":
+                        current[0] = dict(valid, bl=256)
+                        with self.assertRaises(GamdlApiResponseError):
+                            await api.get_context("123", "skd://local/test")
+
     async def test_apple_music_auth_uses_exported_wrapper_tokens(self):
         wrapper = type("MockWrapper", (), {})()
         wrapper.get_credentials = AsyncMock(
@@ -710,7 +759,9 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
                     json={
                         "version": "1.0.0",
                         "protocol_version": 1,
-                        "profile": "apple-music-3.6.0.1109-x86_64-research-v1",
+                        "profile": "apple-music-1109-x86_64",
+                        "architecture": "x86_64",
+                        "context_supported": True,
                         "context_format": "temari",
                         "decryption": "client_side",
                     },

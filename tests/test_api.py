@@ -681,6 +681,48 @@ class ItunesTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WrapperTests(unittest.IsolatedAsyncioTestCase):
+    def test_reports_exact_wrapper_version_mismatch(self):
+        info = {
+            "version": "1.0.0",
+            "protocol_version": 1,
+            "architecture": "x86_64",
+            "profile": "apple-music-1109-x86_64",
+            "context_supported": True,
+            "context_format": "temari",
+            "decryption": "client_side",
+        }
+        for version in ("0.9.9", "1.0.1", "1.1.0"):
+            with self.subTest(version=version):
+                with self.assertRaises(GamdlApiResponseError) as raised:
+                    WrapperApi.validate_info({**info, "version": version})
+                self.assertEqual(
+                    str(raised.exception),
+                    f"Unsupported Wrapper v2 version: {version}. "
+                    "Gamdl requires Wrapper v2 1.0.0.",
+                )
+
+        # Avoid interpolating untrusted /info data into user-visible errors.
+        for version in (None, "1.1.0\nsecret", "A" * 1000):
+            with self.subTest(invalid_version=version):
+                with self.assertRaises(GamdlApiResponseError) as raised:
+                    WrapperApi.validate_info({**info, "version": version})
+                self.assertIn("version: missing or invalid", str(raised.exception))
+                self.assertNotIn("secret", str(raised.exception))
+
+        for protocol, expected in (
+            (2, "2"),
+            (None, "missing or invalid"),
+            (True, "missing or invalid"),
+        ):
+            with self.subTest(protocol=protocol):
+                with self.assertRaises(GamdlApiResponseError) as raised:
+                    WrapperApi.validate_info({**info, "protocol_version": protocol})
+                self.assertEqual(
+                    str(raised.exception),
+                    f"Unsupported Wrapper v2 protocol version: {expected}. "
+                    "Gamdl requires protocol 1.",
+                )
+
     def test_architecture_specific_temari_profiles(self):
         common = {
             "version": "1.0.0",
@@ -696,7 +738,11 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
             info = {**common, "architecture": architecture, "profile": profile}
             WrapperApi.validate_info(info)
             for changes in (
-                {"profile": "apple-music-1109-arm64-v8a" if architecture == "x86_64" else "apple-music-1109-x86_64"},
+                {
+                    "profile": "apple-music-1109-arm64-v8a"
+                    if architecture == "x86_64"
+                    else "apple-music-1109-x86_64"
+                },
                 {"context_supported": False},
                 {"architecture": "riscv64"},
                 {"architecture": []},
@@ -714,14 +760,18 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
                 valid.update(bl=5, r9b=17)
             current = [valid]
 
-            async with mock_client(lambda _: httpx.Response(200, json=current[0])) as client:
+            async with mock_client(
+                lambda _: httpx.Response(200, json=current[0])
+            ) as client:
                 async with WrapperApi(
                     ApiHttpClient("wrapper", client=client),
                     "http://wrapper.test",
                     session={"state": "authenticated"},
                     architecture=architecture,
                 ) as api:
-                    self.assertEqual(await api.get_context("123", "skd://local/test"), valid)
+                    self.assertEqual(
+                        await api.get_context("123", "skd://local/test"), valid
+                    )
                     current[0] = dict(valid, profile="wrong-architecture")
                     with self.assertRaises(GamdlApiResponseError):
                         await api.get_context("123", "skd://local/test")
@@ -834,14 +884,22 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_rejects_wrong_version(self):
-        async with mock_client(
-            lambda _: httpx.Response(
-                200, json={"version": "0.0.1", "auth": {"state": "logged_in"}}
-            )
-        ) as client:
-            with self.assertRaises(GamdlApiResponseError):
-                await WrapperApi.create(client=client)
+    async def test_rejects_wrong_version_before_authentication(self):
+        visited = []
+
+        def handler(request):
+            visited.append(request.url.path)
+            return httpx.Response(200, json={"version": "1.1.0"})
+
+        async with mock_client(handler) as client:
+            prompt = AsyncMock(return_value=("user", "password"))
+            with self.assertRaisesRegex(
+                GamdlApiResponseError,
+                r"Unsupported Wrapper v2 version: 1\.1\.0.*requires Wrapper v2 1\.0\.0",
+            ):
+                await WrapperApi.create(client=client, get_credentials=prompt)
+            prompt.assert_not_awaited()
+        self.assertEqual(visited, ["/info"])
 
 
 class LoggingTests(unittest.TestCase):

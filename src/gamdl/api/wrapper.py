@@ -9,6 +9,7 @@ extension. Do not expose an unauthenticated Wrapper server to the network.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -25,6 +26,18 @@ TEMARI_PROFILES = {
     "x86_64": "apple-music-1109-x86_64",
     "arm64-v8a": "apple-music-1109-arm64-v8a",
 }
+
+
+def _reported_value(value: object) -> str:
+    """Display only short, harmless server metadata in compatibility errors."""
+    if isinstance(value, str) and re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}", value
+    ):
+        return value
+    if type(value) is int and 0 <= value <= 9999:
+        return str(value)
+    return "missing or invalid"
+
 
 CredentialsPrompt = Callable[[], tuple[str, str] | Awaitable[tuple[str, str]]]
 TwoFactorPrompt = Callable[[], str | Awaitable[str]]
@@ -63,21 +76,49 @@ class WrapperApi:
 
     @staticmethod
     def validate_info(info: dict[str, Any]) -> None:
+        if not isinstance(info, dict):
+            raise GamdlApiResponseError("Invalid Wrapper v2 /info response")
+
+        version = info.get("version")
+        if version != WRAPPER_VERSION:
+            raise GamdlApiResponseError(
+                f"Unsupported Wrapper v2 version: {_reported_value(version)}. "
+                f"Gamdl requires Wrapper v2 {WRAPPER_VERSION}."
+            )
+
+        protocol = info.get("protocol_version")
+        if type(protocol) is not int or protocol != WRAPPER_PROTOCOL:
+            raise GamdlApiResponseError(
+                f"Unsupported Wrapper v2 protocol version: {_reported_value(protocol)}. "
+                f"Gamdl requires protocol {WRAPPER_PROTOCOL}."
+            )
+
         architecture = info.get("architecture")
         expected_profile = (
             TEMARI_PROFILES.get(architecture) if isinstance(architecture, str) else None
         )
-        if (
-            info.get("version") != WRAPPER_VERSION
-            or info.get("protocol_version") != WRAPPER_PROTOCOL
-            or expected_profile is None
-            or info.get("profile") != expected_profile
-            or info.get("context_supported") is not True
-            or info.get("context_format") != "temari"
-            or info.get("decryption") != "client_side"
-        ):
+        if expected_profile is None:
             raise GamdlApiResponseError(
-                f"Unsupported Wrapper-v2 API or Temari profile (requires {WRAPPER_VERSION})"
+                f"Unsupported Wrapper v2 architecture: {_reported_value(architecture)}. "
+                f"Supported architectures: {', '.join(TEMARI_PROFILES)}."
+            )
+        if info.get("profile") != expected_profile:
+            raise GamdlApiResponseError(
+                f"Unsupported Wrapper v2 Temari profile: "
+                f"{_reported_value(info.get('profile'))}. "
+                f"Expected {expected_profile} for {architecture}."
+            )
+        if info.get("context_supported") is not True:
+            raise GamdlApiResponseError("Wrapper v2 does not support Temari contexts")
+        if info.get("context_format") != "temari":
+            raise GamdlApiResponseError(
+                f"Unsupported Wrapper v2 context format: "
+                f"{_reported_value(info.get('context_format'))}. Expected temari."
+            )
+        if info.get("decryption") != "client_side":
+            raise GamdlApiResponseError(
+                f"Unsupported Wrapper v2 decryption mode: "
+                f"{_reported_value(info.get('decryption'))}. Expected client_side."
             )
 
     @classmethod
@@ -115,7 +156,9 @@ class WrapperApi:
                 session = await cls.get_session(http, base_url)
             if session.get("state") != "authenticated":
                 raise GamdlAuthenticationError("Wrapper is not authenticated")
-            return cls(http, base_url, session=session, architecture=info["architecture"])
+            return cls(
+                http, base_url, session=session, architecture=info["architecture"]
+            )
         except BaseException:
             await http.aclose()
             raise
@@ -217,10 +260,13 @@ class WrapperApi:
             expected_profile is None
             or context.get("profile") != expected_profile
             or not all(isinstance(context.get(name), str) for name in ("ctx", "state"))
-            or (self.architecture == "x86_64" and not all(
-                type(context.get(name)) is int and 0 <= context[name] <= 255
-                for name in ("bl", "r9b")
-            ))
+            or (
+                self.architecture == "x86_64"
+                and not all(
+                    type(context.get(name)) is int and 0 <= context[name] <= 255
+                    for name in ("bl", "r9b")
+                )
+            )
         ):
             raise GamdlApiResponseError(
                 "Wrapper returned an incompatible Temari context"

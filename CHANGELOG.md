@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.1.0 — 2026-11-19
+
+This release integrates the rewritten [Wrapper v2 1.0.0](https://github.com/glomatico/wrapper-v2/releases/tag/1.0.0) and Temari for local FairPlay decryption, and restores downloading URLs from text files without requiring a separate flag.
+
+### Wrapper v2 1.0.0 and Temari integration
+
+- Integrate Temari-compatible decryption contexts for supported Apple Music AAC and ALAC streams. Gamdl decrypts the media locally instead of sending encrypted samples to a Wrapper server for decryption.
+- Use Wrapper v2's rewritten HTTP API for authenticated sessions, two-factor login, playback metadata and credentials. The former sample-decryption socket and legacy `/decrypt` workflow are no longer supported.
+- Support the validated x86-64 and ARM64 Wrapper v2 profiles and their architecture-specific Temari context formats.
+- **Require Wrapper v2 1.0.0 exactly.** Check `/info` before authentication, reject incompatible versions and protocol/profile capabilities, and report the specific mismatch in the CLI.
+- Recognize successful Temari decryption before publishing a downloaded media file, preventing encrypted output from being treated as a finished download.
+- The existing cookies and direct Media User Token authentication methods, with their separate Widevine/PlayReady DRM backends, remain available.
+
+### CLI improvements
+
+- Restore support for URL list files to `gamdl rip` **automatically**, without the old `--read-urls-as-txt` flag. Any argument not beginning with `http://`, `https://` or `isrc:` is interpreted as a local file path.
+- Accept multiple files mixed with direct URLs and ISRCs, preserve input order and duplicate entries, and support UTF-8 with optional BOM, empty lines and `#` comments. File references are not expanded recursively.
+- Fail early, before authentication, when a file is missing, unreadable, empty or contains an invalid input. Automatic file detection is exclusive to `gamdl rip`; `search` and `library` are unchanged.
+
+### Compatibility notes
+
+- **Wrapper users must upgrade to Wrapper v2 1.0.0.** Older Wrapper versions are incompatible with the new Temari workflow. The Docker Compose setup for Wrapper v2 listens on `http://127.0.0.1:8080` by default; set Gamdl's `auth.wrapper_url` or `--wrapper-url` accordingly if it is not already configured.
+- See the [Wrapper v2 changelog](https://github.com/glomatico/wrapper-v2/blob/main/CHANGELOG.md) for its breaking changes, supported Apple Music APK build and private Docker installation instructions.
+
 ## 4.0.2
 
 - Add `enhanced-ttml` to external and embedded lyrics formats. Request Apple's original syllable-timed TTML instead of standard TTML, preserve the original XML, and refresh existing `.ttml` sidecars when switching between the two formats.
@@ -10,10 +34,6 @@
 - Display the complete installed Gamdl version in the CLI banner and generated configuration comments, rather than always showing `Gamdl 4.0`.
 - Restore Gamdl 3.x external artwork naming: song and album tracks share `Cover.jpg` (or `Cover.png`) in their album folder, while music videos and uploaded videos retain artwork files matching their media filenames. Reuse an existing album cover without an additional download when overwrite is disabled.
 - Relocate shared album artwork (`Cover.jpg`, `folder.jpg`, and PNG/JPEG variants) when `organize` moves all media from one legacy folder to a single destination. Preserve existing artwork and unrelated files, and remove vacated directories only when empty. Fixes #361.
-
-## Planned for a future release
-
-- Integrate Temari-based local AAC/ALAC decryption with the rewritten Wrapper-v2 1.0.0 context and authentication APIs. This work is being developed separately on the `temari` branch and is **not part of 4.0.2**.
 
 ## 4.0.1
 

@@ -370,7 +370,14 @@ class RipCliSettingsTests(unittest.TestCase):
         self.assertNotEqual(missing.exit_code, 0)
         self.assertIn("Provide at least one Apple Music URL", missing.output)
         invalid = CliRunner().invoke(
-            main, ["--no-config", "rip", "URL", "--artist-auto-select", "invalid"]
+            main,
+            [
+                "--no-config",
+                "rip",
+                "https://music.apple.com/us/song/test/123",
+                "--artist-auto-select",
+                "invalid",
+            ],
         )
         self.assertNotEqual(invalid.exit_code, 0)
         self.assertIn("--artist-auto-select", invalid.output)

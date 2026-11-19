@@ -100,7 +100,7 @@ class SelectionOptionsTests(unittest.TestCase):
                 [
                     "--no-config",
                     "rip",
-                    "URL",
+                    "https://music.apple.com/us/song/test/123",
                     "--select",
                     "--artist-auto-select",
                     "main-albums",

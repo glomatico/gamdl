@@ -135,6 +135,24 @@ gamdl rip isrc:USUM71703085
 
 The lookup uses the current authenticated storefront. Apple's response may reference alternate releases in `meta.filters.isrc`; for now Gamdl resolves only the returned `data` matches, not every alternate release ID. Empty results mean no matching resource was returned in that storefront.
 
+### URL Lists from Local Files
+
+`gamdl rip` automatically recognizes local files alongside direct URLs and `isrc:` inputs—no extra flag is needed:
+
+```bash
+gamdl rip songs.txt albums.txt "https://music.apple.com/us/song/example/123456789"
+```
+
+Each file contains one Apple Music URL or `isrc:` input per line. Empty lines and lines starting with `#` are ignored; UTF-8 files (including those with a BOM) are supported:
+
+```text
+# Favorite songs
+https://music.apple.com/us/song/example/123456789
+isrc:USUM71703085
+```
+
+Files can have any extension, and entries are processed in order, including duplicates. File references *inside* URL lists are not expanded recursively. Inputs that do not begin with `http://`, `https://`, or `isrc:` are treated as file paths; missing files produce an “Invalid URL or file containing URLs not found” error. This behavior applies only to `gamdl rip`.
+
 ### Browse Your Library (`library`)
 
 Browse your saved albums, playlists, songs, and music videos:

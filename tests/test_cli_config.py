@@ -15,6 +15,8 @@ from gamdl.cli.config.loader import ConfigError, load_config
 from gamdl.cli.main import main
 from gamdl.cli.output import banner
 
+TEST_URL = "https://music.apple.com/us/song/test/123"
+
 
 class CliConfigTests(unittest.TestCase):
     def test_banner_uses_full_dynamic_version(self):
@@ -51,7 +53,7 @@ class CliConfigTests(unittest.TestCase):
             patch("gamdl.cli.commands.library.require_terminal"),
             patch("gamdl.cli.commands.search.require_terminal"),
         ):
-            for command in (["rip", "URL"], ["library"], ["search", "music"]):
+            for command in (["rip", TEST_URL], ["library"], ["search", "music"]):
                 with self.subTest(command=command):
                     base = ["--config", str(self.path), *command]
                     result = CliRunner().invoke(main, base)
@@ -110,7 +112,7 @@ class CliConfigTests(unittest.TestCase):
 
         with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
             runner = CliRunner()
-            args = ["--config", str(self.path), "rip", "URL"]
+            args = ["--config", str(self.path), "rip", TEST_URL]
             base = runner.invoke(main, args)
             self.assertEqual(base.exit_code, 0, base.output)
             self.assertEqual(captured[-1].lyrics_file_format, "enhanced-lrc")
@@ -184,7 +186,7 @@ class CliConfigTests(unittest.TestCase):
             patch("gamdl.cli.commands.search.require_terminal"),
         ):
             runner = CliRunner()
-            for subcommand in (["rip", "URL"], ["library"], ["search", "video"]):
+            for subcommand in (["rip", TEST_URL], ["library"], ["search", "video"]):
                 with self.subTest(subcommand=subcommand):
                     base = ["--config", str(self.path), *subcommand]
                     result = runner.invoke(main, base)
@@ -329,7 +331,7 @@ class CliConfigTests(unittest.TestCase):
             patch("gamdl.cli.commands.search.require_terminal"),
         ):
             runner = CliRunner()
-            for command in (["rip", "URL"], ["library"], ["search", "music"]):
+            for command in (["rip", TEST_URL], ["library"], ["search", "music"]):
                 with self.subTest(command=command):
                     base = ["--config", str(self.path), *command]
                     result = runner.invoke(main, base)
@@ -561,7 +563,7 @@ class CliConfigTests(unittest.TestCase):
 
         with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
             runner = CliRunner()
-            args = ["--config", str(self.path), "rip", "URL"]
+            args = ["--config", str(self.path), "rip", TEST_URL]
             for extra, expected in (
                 ([], True),
                 (["--no-overwrite"], False),
@@ -571,7 +573,7 @@ class CliConfigTests(unittest.TestCase):
                     result = runner.invoke(main, [*args, *extra])
                     self.assertEqual(result.exit_code, 0, result.output)
                     self.assertIs(received[-1], expected)
-            default = runner.invoke(main, ["--no-config", "rip", "URL"])
+            default = runner.invoke(main, ["--no-config", "rip", TEST_URL])
             self.assertEqual(default.exit_code, 0, default.output)
             self.assertIs(received[-1], False)
 
@@ -707,7 +709,7 @@ class CliConfigTests(unittest.TestCase):
         ):
             runner = CliRunner()
             for command in (
-                ["rip", "URL"],
+                ["rip", TEST_URL],
                 ["library"],
                 ["search", "example"],
             ):
@@ -736,7 +738,7 @@ class CliConfigTests(unittest.TestCase):
                         ("h265", "h264"),
                     )
 
-            result = runner.invoke(main, ["--config", str(self.path), "rip", "URL"])
+            result = runner.invoke(main, ["--config", str(self.path), "rip", TEST_URL])
             self.assertEqual(result.exit_code, 0, result.output)
             self.assertEqual(
                 received[-1].song_codec_priority, ("alac-hires", "aac-web")
@@ -751,7 +753,7 @@ class CliConfigTests(unittest.TestCase):
                 with self.subTest(option=option, bad=bad):
                     result = runner.invoke(
                         main,
-                        ["--no-config", "rip", "URL", option, bad],
+                        ["--no-config", "rip", TEST_URL, option, bad],
                     )
                     self.assertNotEqual(result.exit_code, 0)
                     self.assertIn("Invalid value", result.output)
@@ -788,7 +790,7 @@ class CliConfigTests(unittest.TestCase):
             patch("gamdl.cli.commands.search.require_terminal"),
         ):
             runner = CliRunner()
-            for command in (["rip", "URL"], ["library"], ["search", "example"]):
+            for command in (["rip", TEST_URL], ["library"], ["search", "example"]):
                 with self.subTest(command=command):
                     base = ["--config", str(self.path), *command]
                     result = runner.invoke(main, base)
@@ -929,7 +931,7 @@ class CliConfigTests(unittest.TestCase):
 
     def test_invalid_click_option_uses_same_error_style(self):
         result = CliRunner().invoke(
-            main, ["--no-config", "rip", "URL", "--song-codec", "invalid"]
+            main, ["--no-config", "rip", TEST_URL, "--song-codec", "invalid"]
         )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("✗", result.output)
@@ -943,7 +945,7 @@ class CliConfigTests(unittest.TestCase):
                 [
                     "--no-config",
                     "rip",
-                    "URL",
+                    TEST_URL,
                     "--ask-song-codec",
                     "--song-codec",
                     "alac-hires",

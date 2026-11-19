@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.1 — 2026-11-19
+
+- Change the default Wrapper v2 URL to `http://127.0.0.1:8080` in the CLI, YAML configuration, Python API, and live test utilities, matching Wrapper v2 1.0.0's default Docker Compose port.
+- Preserve explicitly configured Wrapper URLs when upgrading. If an existing `~/.gamdl/config.yml` still specifies `http://127.0.0.1` but Wrapper runs on port 8080, update `auth.wrapper_url` or pass `--wrapper-url http://127.0.0.1:8080`.
+
 ## 4.1.0 — 2026-11-19
 
 This release integrates the rewritten [Wrapper v2 1.0.0](https://github.com/glomatico/wrapper-v2/releases/tag/1.0.0) and Temari for local FairPlay decryption, and restores downloading URLs from text files without requiring a separate flag.

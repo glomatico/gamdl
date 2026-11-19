@@ -19,6 +19,59 @@ TEST_URL = "https://music.apple.com/us/song/test/123"
 
 
 class CliConfigTests(unittest.TestCase):
+    def test_wrapper_url_8080_default_and_existing_config_preservation(self):
+        from gamdl.cli.config.loader import click_default_map
+        from gamdl.cli.options import RipOptions
+
+        default_url = "http://127.0.0.1:8080"
+        self.assertEqual(RipOptions().wrapper_url, default_url)
+        self.assertEqual(load_config(None).auth.wrapper_url, default_url)
+        self.assertEqual(
+            click_default_map(load_config(None))["wrapper_url"], default_url
+        )
+
+        received = []
+
+        async def fake_run(options):
+            received.append(options.wrapper_url)
+            return 0
+
+        with patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run):
+            runner = CliRunner()
+            fresh = runner.invoke(main, ["--no-config", "rip", TEST_URL])
+            self.assertEqual(fresh.exit_code, 0, fresh.output)
+            self.assertEqual(received[-1], default_url)
+
+            # Older installations may have saved their former default as an
+            # explicit YAML setting. Do not silently migrate or override it.
+            self._write("auth:\n  wrapper_url: http://127.0.0.1\n")
+            self.assertEqual(
+                load_config(self.path).auth.wrapper_url, "http://127.0.0.1"
+            )
+            configured = runner.invoke(
+                main, ["--config", str(self.path), "rip", TEST_URL]
+            )
+            self.assertEqual(configured.exit_code, 0, configured.output)
+            self.assertEqual(received[-1], "http://127.0.0.1")
+            self.assertEqual(
+                yaml.safe_load(self.path.read_text())["auth"]["wrapper_url"],
+                "http://127.0.0.1",
+            )
+
+            overridden = runner.invoke(
+                main,
+                [
+                    "--config",
+                    str(self.path),
+                    "rip",
+                    TEST_URL,
+                    "--wrapper-url",
+                    "http://localhost:9090",
+                ],
+            )
+            self.assertEqual(overridden.exit_code, 0, overridden.output)
+            self.assertEqual(received[-1], "http://localhost:9090")
+
     def test_banner_uses_full_dynamic_version(self):
         output = StringIO()
         with patch("gamdl.cli.output.__version__", "4.12.34"):

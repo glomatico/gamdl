@@ -308,7 +308,9 @@ class RipOptions:
         ),
     ] = None
     cookies_path: Annotated[str | None, option("--cookies-path", type=str)] = None
-    wrapper_url: Annotated[str, option("--wrapper-url", type=str)] = "http://127.0.0.1"
+    wrapper_url: Annotated[str, option("--wrapper-url", type=str)] = (
+        "http://127.0.0.1:8080"
+    )
     media_user_token: Annotated[
         str | None,
         option(

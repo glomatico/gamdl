@@ -681,6 +681,20 @@ class ItunesTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WrapperTests(unittest.IsolatedAsyncioTestCase):
+    async def test_default_wrapper_url_uses_compose_port(self):
+        urls = []
+
+        def handler(request):
+            urls.append(str(request.url))
+            return httpx.Response(200, json={"version": "0.0.0"})
+
+        async with mock_client(handler) as client:
+            with self.assertRaisesRegex(
+                GamdlApiResponseError, "Unsupported Wrapper v2 version"
+            ):
+                await WrapperApi.create(client=client)
+        self.assertEqual(urls, ["http://127.0.0.1:8080/info"])
+
     def test_reports_exact_wrapper_version_mismatch(self):
         info = {
             "version": "1.0.0",

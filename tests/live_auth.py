@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class LiveSettings:
     """Local test configuration; repr intentionally excludes credentials."""
 
-    wrapper_url: str = "http://127.0.0.1"
+    wrapper_url: str = "http://127.0.0.1:8080"
     storefront: str = "br"
     developer_token: str | None = None
     media_user_token: str | None = None
@@ -39,7 +39,7 @@ class LiveSettings:
         """Load the local .env only for explicitly requested live tests."""
         load_dotenv(ROOT / ".env", override=False)
         return cls(
-            wrapper_url=os.getenv("GAMDL_WRAPPER_URL", "http://127.0.0.1"),
+            wrapper_url=os.getenv("GAMDL_WRAPPER_URL", "http://127.0.0.1:8080"),
             storefront=os.getenv("GAMDL_APPLE_STOREFRONT", "br"),
             developer_token=os.getenv("GAMDL_APPLE_DEVELOPER_TOKEN") or None,
             media_user_token=os.getenv("GAMDL_APPLE_MEDIA_USER_TOKEN") or None,

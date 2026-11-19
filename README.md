@@ -238,7 +238,7 @@ The wizard validates your selected method and saves it to the YAML configuration
 
 #### Wrapper
 
-Connect to the rewritten [Wrapper-v2](https://github.com/glomatico/wrapper-v2) 1.0.0 server. **Gamdl requires exactly Wrapper v2 1.0.0** and checks its version, protocol, and Temari profile before authentication; unsupported versions are rejected with a specific error. It authenticates your Apple Music account, exports the developer and media-user tokens to Gamdl, and provides Temari-compatible contexts for local sample decryption. No separate browser login, decryption socket, or API bearer token is required. Gamdl's default URL is `http://127.0.0.1` (port 80); for the new Wrapper's default Docker Compose setup, configure `http://127.0.0.1:8080` instead.
+Connect to the rewritten [Wrapper-v2](https://github.com/glomatico/wrapper-v2) 1.0.0 server. **Gamdl requires exactly Wrapper v2 1.0.0** and checks its version, protocol, and Temari profile before authentication; unsupported versions are rejected with a specific error. It authenticates your Apple Music account, exports the developer and media-user tokens to Gamdl, and provides Temari-compatible contexts for local sample decryption. No separate browser login, decryption socket, or API bearer token is required. Gamdl's default URL is `http://127.0.0.1:8080`, matching Wrapper v2's default Docker Compose setup. Existing configured URLs are preserved on upgrade.
 
 **Keep Wrapper local and private.** Its `/session/credentials` endpoint exports live Apple Music tokens without HTTP authentication. Do not expose its HTTP port (8080 for the default Docker Compose setup) to the internet, and do not put untrusted containers on its Docker network.
 
@@ -343,7 +343,7 @@ Choose `wrapper`, `cookies`, or `media-user-token`. The default is `null`, which
 
 #### Credentials and Wrapper Connection
 
-`auth.cookies_path` / `--cookies-path` specifies the cookies file. `auth.media_user_token` / `--media-user-token` supplies a token directly. `auth.wrapper_url` / `--wrapper-url` sets Wrapper-v2's HTTP address (default `http://127.0.0.1`, port 80). When using Wrapper, Gamdl retrieves Apple Music tokens from `/session/credentials` and FairPlay contexts from `/key`. The old sample-decryption TCP host/port options have been removed.
+`auth.cookies_path` / `--cookies-path` specifies the cookies file. `auth.media_user_token` / `--media-user-token` supplies a token directly. `auth.wrapper_url` / `--wrapper-url` sets Wrapper-v2's HTTP address (default `http://127.0.0.1:8080`). Existing YAML settings are not automatically overridden. When using Wrapper, Gamdl retrieves Apple Music tokens from `/session/credentials` and FairPlay contexts from `/key`. The old sample-decryption TCP host/port options have been removed.
 
 Avoid passing secrets on the command line when possible, as they may be recorded in shell history.
 
@@ -809,7 +809,7 @@ Some media-related tests also require FFmpeg and FFprobe.
 
 The [publishing workflow](.github/workflows/python-publish.yml) builds a source distribution and precompiled ABI3 wheels for Linux (x86_64/ARM64), Windows (x86_64/ARM64), and macOS (universal2). Every wheel is installed and smoke-tested, and the full artifact set is checked before publication.
 
-Run **Publish Python Package** manually from GitHub Actions to build and inspect artifacts **without publishing**. Publishing occurs only when a GitHub Release is published with a tag matching `pyproject.toml` (for example, `v4.1.0`). The workflow must be present on the repository's default branch for the release trigger to work.
+Run **Publish Python Package** manually from GitHub Actions to build and inspect artifacts **without publishing**. Publishing occurs only when a GitHub Release is published with a tag matching `pyproject.toml` (for example, `v4.1.1`). The workflow must be present on the repository's default branch for the release trigger to work.
 
 PyPI [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) must be configured for repository `glomatico/gamdl`, workflow `python-publish.yml`, and GitHub environment `pypi`. No long-lived PyPI token is needed. Configure GitHub environment protection rules as desired before publishing a release.
 

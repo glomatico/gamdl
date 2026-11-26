@@ -1,4 +1,4 @@
-"""Standalone Wrapper-v2 1.0.0 client: sessions, playback and Temari contexts.
+"""Standalone Wrapper-v2 1.x client: sessions, playback and Temari contexts.
 
 The wrapper exports Apple Music tokens to the trusted local client but never
 decrypts media samples.
@@ -20,7 +20,7 @@ from gamdl.transport import ApiHttpClient, RequestPacer
 from .auth import invoke_prompt
 from .exceptions import GamdlApiResponseError, GamdlAuthenticationError
 
-WRAPPER_VERSION = "1.0.0"
+WRAPPER_VERSION = ">=1.0.0,<2.0.0"
 WRAPPER_PROTOCOL = 1
 TEMARI_PROFILES = {
     "x86_64": "apple-music-1109-x86_64",
@@ -80,7 +80,9 @@ class WrapperApi:
             raise GamdlApiResponseError("Invalid Wrapper v2 /info response")
 
         version = info.get("version")
-        if version != WRAPPER_VERSION:
+        if not isinstance(version, str) or not re.fullmatch(
+            r"1\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version
+        ):
             raise GamdlApiResponseError(
                 f"Unsupported Wrapper v2 version: {_reported_value(version)}. "
                 f"Gamdl requires Wrapper v2 {WRAPPER_VERSION}."

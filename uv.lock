@@ -786,7 +786,7 @@ wheels = [
 
 [[package]]
 name = "gamdl"
-version = "4.1.1"
+version = "4.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "async-lru" },

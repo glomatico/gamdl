@@ -695,7 +695,7 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
                 await WrapperApi.create(client=client)
         self.assertEqual(urls, ["http://127.0.0.1:8080/info"])
 
-    def test_reports_exact_wrapper_version_mismatch(self):
+    def test_wrapper_stable_major_version_compatibility(self):
         info = {
             "version": "1.0.0",
             "protocol_version": 1,
@@ -705,14 +705,20 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
             "context_format": "temari",
             "decryption": "client_side",
         }
-        for version in ("0.9.9", "1.0.1", "1.1.0"):
+        for version in ("1.0.0", "1.0.1", "1.1.0", "1.99.42"):
+            with self.subTest(version=version):
+                WrapperApi.validate_info({**info, "version": version})
+
+        for version in (
+            "0.9.9", "2.0.0", "1.0.1-rc.1", "1.01.0", "1.1", "1.0.0.dev1"
+        ):
             with self.subTest(version=version):
                 with self.assertRaises(GamdlApiResponseError) as raised:
                     WrapperApi.validate_info({**info, "version": version})
                 self.assertEqual(
                     str(raised.exception),
                     f"Unsupported Wrapper v2 version: {version}. "
-                    "Gamdl requires Wrapper v2 1.0.0.",
+                    "Gamdl requires Wrapper v2 >=1.0.0,<2.0.0.",
                 )
 
         # Avoid interpolating untrusted /info data into user-visible errors.
@@ -903,13 +909,13 @@ class WrapperTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(request):
             visited.append(request.url.path)
-            return httpx.Response(200, json={"version": "1.1.0"})
+            return httpx.Response(200, json={"version": "2.0.0"})
 
         async with mock_client(handler) as client:
             prompt = AsyncMock(return_value=("user", "password"))
             with self.assertRaisesRegex(
                 GamdlApiResponseError,
-                r"Unsupported Wrapper v2 version: 1\.1\.0.*requires Wrapper v2 1\.0\.0",
+                r"Unsupported Wrapper v2 version: 2\.0\.0.*requires Wrapper v2 >=1\.0\.0,<2\.0\.0",
             ):
                 await WrapperApi.create(client=client, get_credentials=prompt)
             prompt.assert_not_awaited()

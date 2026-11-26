@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.1.2 — 2026-11-26
+
+- Accept stable Wrapper v2 1.x releases instead of requiring exactly 1.0.0. Protocol and runtime profile validation remain unchanged.
+
 ## 4.1.1 — 2026-11-19
 
 - Change the default Wrapper v2 URL to `http://127.0.0.1:8080` in the CLI, YAML configuration, Python API, and live test utilities, matching Wrapper v2 1.0.0's default Docker Compose port.

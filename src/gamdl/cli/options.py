@@ -1,5 +1,6 @@
 """Dataclass-Click option schema for the rip command."""
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, make_dataclass
 from typing import Annotated
@@ -41,6 +42,28 @@ class CoverSizeType(click.ParamType):
         if size > 0:
             return size
         self.fail("Expected a positive integer or 'max'", param, ctx)
+
+
+class NonnegativeFloatType(click.ParamType):
+    """Parse a finite nonnegative number of seconds."""
+
+    name = "seconds"
+
+    def convert(self, value, param, ctx):
+        if type(value) is bool:
+            self.fail("Expected a finite nonnegative number", param, ctx)
+        if type(value) in (int, float):
+            number = float(value)
+        elif isinstance(value, str):
+            try:
+                number = float(value)
+            except ValueError:
+                self.fail("Expected a finite nonnegative number", param, ctx)
+        else:
+            self.fail("Expected a finite nonnegative number", param, ctx)
+        if not math.isfinite(number) or number < 0:
+            self.fail("Expected a finite nonnegative number", param, ctx)
+        return number
 
 
 def option(*names, **kwargs):
@@ -117,6 +140,14 @@ class RipOptions:
             help="Media items in parallel",
         ),
     ] = 2
+    download_delay: Annotated[
+        float,
+        option(
+            "--download-delay",
+            type=NonnegativeFloatType(),
+            help="Minimum delay in seconds between starting media downloads",
+        ),
+    ] = 0.0
     song_codec: Annotated[
         str | None,
         option("--song-codec", type=click.Choice([c.value for c in SongCodec])),

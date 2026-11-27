@@ -1006,3 +1006,109 @@ class CliConfigTests(unittest.TestCase):
             )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("--ask-song-codec conflicts", result.output)
+
+    def test_download_delay_defaults_yaml_cli_env_and_validation(self):
+        from gamdl.cli.config.loader import click_default_map
+        from gamdl.cli.config.models import AppConfig
+        from gamdl.cli.options import RipOptions
+
+        default_config = load_config(None)
+        self.assertEqual(default_config.download.download_delay, 0.0)
+        self.assertIs(type(default_config.download.download_delay), float)
+        self.assertEqual(AppConfig().download.download_delay, 0.0)
+        self.assertEqual(RipOptions().download_delay, 0.0)
+        self.assertEqual(click_default_map(default_config)["download_delay"], 0.0)
+
+        generated = CliRunner().invoke(
+            main, ["--config", str(self.path), "config", "init"]
+        )
+        self.assertEqual(generated.exit_code, 0, generated.output)
+        self.assertEqual(
+            yaml.safe_load(self.path.read_text())["download"]["download_delay"], 0.0
+        )
+
+        # Integer YAML values are accepted without rewriting the file on reload.
+        normalized = yaml.safe_load(self.path.read_text())
+        normalized["download"]["download_delay"] = 2
+        normalized_text = yaml.safe_dump(normalized, sort_keys=False)
+        self._write(normalized_text)
+        int_config = load_config(self.path)
+        self.assertEqual(int_config.download.download_delay, 2.0)
+        self.assertIs(type(int_config.download.download_delay), float)
+        self.assertEqual(self.path.read_text(), normalized_text)
+
+        self._write("download:\n  download_delay: 1.5\n")
+        configured = load_config(self.path)
+        self.assertEqual(configured.download.download_delay, 1.5)
+        self.assertEqual(click_default_map(configured)["download_delay"], 1.5)
+
+        captured = []
+
+        async def fake_run(options):
+            captured.append(options)
+            return 0
+
+        with (
+            patch("gamdl.cli.commands.runner.run_rip", side_effect=fake_run),
+            patch("gamdl.cli.commands.library.require_terminal"),
+            patch("gamdl.cli.commands.search.require_terminal"),
+        ):
+            runner = CliRunner()
+            for command, env_var in (
+                (["rip", TEST_URL], "GAMDL_RIP_DOWNLOAD_DELAY"),
+                (["library"], "GAMDL_LIBRARY_DOWNLOAD_DELAY"),
+                (["search", "music"], "GAMDL_SEARCH_DOWNLOAD_DELAY"),
+            ):
+                with self.subTest(command=command):
+                    base = ["--config", str(self.path), *command]
+                    result = runner.invoke(main, base)
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    self.assertEqual(captured[-1].download_delay, 1.5)
+
+                    overridden = runner.invoke(main, [*base, "--download-delay", "0"])
+                    self.assertEqual(overridden.exit_code, 0, overridden.output)
+                    self.assertEqual(captured[-1].download_delay, 0.0)
+
+                    fractional = runner.invoke(
+                        main, [*base, "--download-delay", "2.25"]
+                    )
+                    self.assertEqual(fractional.exit_code, 0, fractional.output)
+                    self.assertEqual(captured[-1].download_delay, 2.25)
+
+                    from_env = runner.invoke(main, base, env={env_var: "0.75"})
+                    self.assertEqual(from_env.exit_code, 0, from_env.output)
+                    self.assertEqual(captured[-1].download_delay, 0.75)
+
+                    no_cfg = runner.invoke(main, ["--no-config", *command])
+                    self.assertEqual(no_cfg.exit_code, 0, no_cfg.output)
+                    self.assertEqual(captured[-1].download_delay, 0.0)
+
+                    for bad_cli in ("-1", "-0.1", "abc", "nan", "inf", "-inf"):
+                        invalid = runner.invoke(
+                            main, ["--no-config", *command, "--download-delay", bad_cli]
+                        )
+                        self.assertNotEqual(invalid.exit_code, 0, bad_cli)
+                        self.assertIn("Invalid value", invalid.output)
+
+        sync_help = CliRunner().invoke(
+            main, ["--no-config", "sync", "playlists", "--help"]
+        )
+        self.assertEqual(sync_help.exit_code, 0, sync_help.output)
+        self.assertNotIn("--download-delay", sync_help.output)
+
+        for bad_yaml in (
+            "download:\n  download_delay: -1\n",
+            "download:\n  download_delay: -0.5\n",
+            "download:\n  download_delay: true\n",
+            "download:\n  download_delay: false\n",
+            'download:\n  download_delay: "2"\n',
+            "download:\n  download_delay: null\n",
+            "download:\n  download_delay: .nan\n",
+            "download:\n  download_delay: .inf\n",
+            "download:\n  download_delay: -.inf\n",
+        ):
+            with self.subTest(bad_yaml=bad_yaml):
+                self._write(bad_yaml)
+                with self.assertRaisesRegex(ConfigError, "download.download_delay"):
+                    load_config(self.path)
+                self.assertEqual(self.path.read_text(), bad_yaml)

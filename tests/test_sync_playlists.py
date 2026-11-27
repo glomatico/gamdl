@@ -833,3 +833,155 @@ class PlaylistSyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(code, 1)
         self.assertEqual(self.playlist.read_bytes(), before)
         self.assertEqual(len(PlaylistSnapshot.read(other, self.root).entries), 2)
+
+    async def test_download_delay_skipped_on_dry_run_and_no_download(self):
+        from gamdl.download import DownloadPacer
+
+        self.add_media("101", "01 First.m4a")
+        self.set_playlist("101")
+        api = FakeAPI([resource("101"), resource("999")])
+
+        async def fake_auth(*args, **kwargs):
+            return api, None
+
+        original = AppConfig()
+        settings = replace(
+            original,
+            database=replace(original.database, path=str(self.db)),
+            download=replace(original.download, download_delay=5.0),
+            ui=replace(original.ui, no_progress=True),
+        )
+        with (
+            patch(
+                "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
+            ),
+            patch("gamdl.cli.commands.sync.playlists.Downloader") as constructor,
+            mock_patch.object(
+                DownloadPacer, "_sleep", new_callable=AsyncMock
+            ) as mocked_sleep,
+        ):
+            dry_code = await _run(
+                settings,
+                root=self.root,
+                selected=(self.playlist,),
+                limit=None,
+                dry_run=True,
+                no_download=False,
+                yes=False,
+            )
+            no_dl_code = await _run(
+                settings,
+                root=self.root,
+                selected=(self.playlist,),
+                limit=None,
+                dry_run=False,
+                no_download=True,
+                yes=False,
+            )
+        self.assertEqual(dry_code, 0)
+        self.assertEqual(no_dl_code, 1)
+        constructor.assert_not_called()
+        mocked_sleep.assert_not_awaited()
+
+    async def test_download_delay_forwarded_and_staggered_in_sync_playlists(self):
+        from gamdl.download import Downloader, DownloadPacer, PathFormatter, Tags
+        from gamdl.download.downloader import _PreparedFile
+        from gamdl.media import SongCodec
+
+        self.add_media("101", "01 First.m4a")
+        self.set_playlist("101")
+        api = FakeAPI(
+            [resource("101"), resource("777"), resource("888"), resource("999")]
+        )
+
+        async def fake_auth(*args, **kwargs):
+            return api, None
+
+        original = AppConfig()
+        settings = replace(
+            original,
+            database=replace(original.database, path=str(self.db)),
+            download=replace(
+                original.download, concurrent_downloads=2, download_delay=1.75
+            ),
+            output=replace(original.output, no_lyrics_file=True),
+            ui=replace(original.ui, no_progress=True),
+        )
+        now = 200.0
+        sleeps = []
+        created_delays = []
+
+        async def fake_sleep(seconds):
+            nonlocal now
+            sleeps.append(seconds)
+            now += seconds
+            await asyncio.sleep(0)
+
+        def build_downloader(**kwargs):
+            created_delays.append(kwargs.get("download_delay"))
+            resolver = Mock()
+            resolver.get_tags = AsyncMock(
+                side_effect=lambda media, **_kw: Tags(
+                    title=f"Track {media.id}",
+                    artist="Artist",
+                    title_id=int(media.id),
+                )
+            )
+            dl = Downloader(
+                tag_resolver=resolver,
+                path_formatter=PathFormatter(self.root),
+                database=kwargs.get("database"),
+                concurrency=kwargs.get("concurrency", 8),
+                download_delay=kwargs.get("download_delay", 0.0),
+            )
+
+            async def fake_prepare_file(media, directory, **_kw):
+                staged = directory / "media.m4a"
+                staged.write_bytes(b"synced-" + media.id.encode())
+                return _PreparedFile(staged, SongCodec.AAC, ("none",), None, None)
+
+            dl._prepare_file = AsyncMock(side_effect=fake_prepare_file)
+            return dl
+
+        stream = StringIO()
+        with (
+            patch(
+                "gamdl.cli.commands.sync.playlists.authenticate", side_effect=fake_auth
+            ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.create_drm",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.ItunesApi.create",
+                new_callable=AsyncMock,
+                return_value=FakeItunes(),
+            ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.Downloader",
+                side_effect=build_downloader,
+            ),
+            patch(
+                "gamdl.cli.commands.sync.playlists.console",
+                return_value=Console(file=stream, width=110, color_system=None),
+            ),
+            mock_patch.object(DownloadPacer, "_now", side_effect=lambda: now),
+            mock_patch.object(DownloadPacer, "_sleep", side_effect=fake_sleep),
+        ):
+            code = await _run(
+                settings,
+                root=self.root,
+                selected=(self.playlist,),
+                limit=None,
+                dry_run=False,
+                no_download=False,
+                yes=False,
+            )
+
+        self.assertEqual(code, 0, stream.getvalue())
+        self.assertEqual(created_delays, [1.75])
+        # 3 missing tracks (777, 888, 999): 1st starts immediately, 2nd & 3rd wait 1.75s.
+        self.assertEqual(sleeps, [1.75, 1.75])
+        self.assertEqual(
+            len(PlaylistSnapshot.read(self.playlist, self.root).entries), 4
+        )

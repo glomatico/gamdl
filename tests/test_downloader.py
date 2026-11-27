@@ -1597,3 +1597,279 @@ class DownloaderTests(unittest.IsolatedAsyncioTestCase):
             await downloader.get_bytes(video, codec=SongCodec.AAC)
         with self.assertRaises(ValueError):
             await downloader.get_bytes(self.song(), quality=UploadedVideoQuality.SD)
+
+    def test_download_delay_validation(self):
+        from gamdl.download import DownloadPacer
+
+        self.assertEqual(Downloader(download_delay=2).download_delay, 2.0)
+        self.assertEqual(DownloadPacer(0).delay, 0.0)
+        for bad in (
+            -0.1,
+            -1,
+            True,
+            False,
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            "1",
+            None,
+        ):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    DownloadPacer(bad)
+                with self.assertRaises(ValueError):
+                    Downloader(download_delay=bad)
+
+    async def test_download_delay_zero_never_sleeps(self):
+        from gamdl.download import DownloadPacer
+
+        downloader, resolver = self.downloader()
+        downloader.path_formatter = PathFormatter(self.directory / "Music")
+        resolver.get_tags = AsyncMock(
+            side_effect=lambda media, **_kw: Tags(
+                title=f"Track {media.id}", artist="Artist", title_id=int(media.id)
+            )
+        )
+        songs = []
+        for media_id in ("101", "102"):
+            song = Song.from_id(media_id, api=Mock())
+            song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
+            song.get_cover = AsyncMock(return_value=None)
+            song.get_lyrics = AsyncMock(return_value=None)
+            songs.append(song)
+
+        with patch.object(
+            DownloadPacer, "_sleep", new_callable=AsyncMock
+        ) as mocked_sleep:
+            for song in songs:
+                await downloader.download(song)
+        mocked_sleep.assert_not_awaited()
+
+    async def test_download_delay_skips_first_last_and_skipped_items(self):
+        from gamdl.download import DownloadPacer
+
+        downloader, resolver = self.downloader()
+        formatter = PathFormatter(self.directory / "Music")
+        database = MediaDatabase(self.directory / "index.sqlite3")
+        downloader = Downloader(
+            tag_resolver=resolver,
+            path_formatter=formatter,
+            database=database,
+            download_delay=1.5,
+        )
+
+        async def save(
+            _media_id, _source, track, destination, _callback, *, event_callback=None
+        ):
+            shutil.copyfile(self.video if track == "video" else self.audio, destination)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
+        resolver.get_tags = AsyncMock(
+            side_effect=lambda media, **_kw: Tags(
+                title=f"Track {media.id}", artist="Artist", title_id=int(media.id)
+            )
+        )
+
+        def make_song(media_id: str) -> Song:
+            song = Song.from_id(media_id, api=Mock())
+            song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
+            song.get_cover = AsyncMock(return_value=None)
+            song.get_lyrics = AsyncMock(return_value=None)
+            return song
+
+        # Pre-populate track 100 on disk (unindexed) and track 102 in DB.
+        disk_existing = formatter.get_media_path(
+            make_song("100"),
+            Tags(title="Track 100", artist="Artist", title_id=100),
+            extension=".m4a",
+        )
+        disk_existing.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.audio, disk_existing)
+
+        db_existing = formatter.get_media_path(
+            make_song("102"),
+            Tags(title="Track 102", artist="Artist", title_id=102),
+            extension=".m4a",
+        )
+        shutil.copyfile(self.audio, db_existing)
+        database.index_file(db_existing, "songs", "102")
+
+        now = 100.0
+        sleeps = []
+
+        async def fake_sleep(seconds):
+            nonlocal now
+            sleeps.append(seconds)
+            now += seconds
+            await asyncio.sleep(0)
+
+        with (
+            patch.object(DownloadPacer, "_now", side_effect=lambda: now),
+            patch.object(DownloadPacer, "_sleep", side_effect=fake_sleep),
+        ):
+            # 100 (disk skip) -> 101 (1st real DL, no sleep) -> 102 (DB skip)
+            # -> 103 (2nd real DL, sleeps 1.5s) -> 102 (DB skip, no trailing sleep).
+            statuses = []
+            for media_id in ("100", "101", "102", "103", "102"):
+                result = await downloader.download(make_song(media_id))
+                statuses.append(result.status)
+
+            self.assertEqual(
+                statuses,
+                [
+                    MediaStatus.SKIPPED,
+                    MediaStatus.DOWNLOADED,
+                    MediaStatus.SKIPPED,
+                    MediaStatus.DOWNLOADED,
+                    MediaStatus.SKIPPED,
+                ],
+            )
+            self.assertEqual(sleeps, [1.5])
+
+            # overwrite=True bypasses skip checks and triggers another staggered DL.
+            overwritten = await downloader.download(make_song("100"), overwrite=True)
+            self.assertEqual(overwritten.status, MediaStatus.OVERWRITTEN)
+            self.assertEqual(sleeps, [1.5, 1.5])
+
+    async def test_download_delay_paces_music_video_once_per_item(self):
+        from gamdl.download import DownloadPacer
+
+        downloader, resolver = self.downloader()
+        downloader = Downloader(
+            tag_resolver=resolver,
+            path_formatter=PathFormatter(self.directory / "Music"),
+            download_delay=2.0,
+        )
+
+        async def save(
+            _media_id, _source, track, destination, _callback, *, event_callback=None
+        ):
+            shutil.copyfile(self.video if track == "video" else self.audio, destination)
+            return "none"
+
+        downloader._save_track = AsyncMock(side_effect=save)
+        resolver.get_tags = AsyncMock(
+            side_effect=lambda media, **_kw: Tags(
+                title=f"Video {media.id}", artist="Artist", title_id=int(media.id)
+            )
+        )
+
+        def make_video(media_id: str) -> MusicVideo:
+            video = MusicVideo.from_id(media_id, api=Mock())
+            video.get_streams = AsyncMock(
+                return_value=MusicVideoStreams(
+                    video=Mock(codec=MusicVideoCodec.H264),
+                    audio=Mock(codec=SongCodec.AAC),
+                )
+            )
+            video.get_cover = AsyncMock(return_value=None)
+            return video
+
+        now = 50.0
+        sleeps = []
+
+        async def fake_sleep(seconds):
+            nonlocal now
+            sleeps.append(seconds)
+            now += seconds
+            await asyncio.sleep(0)
+
+        with (
+            patch.object(DownloadPacer, "_now", side_effect=lambda: now),
+            patch.object(DownloadPacer, "_sleep", side_effect=fake_sleep),
+        ):
+            await downloader.download(make_video("201"))
+            await downloader.download(make_video("202"))
+        self.assertEqual(sleeps, [2.0])
+
+    async def test_download_delay_staggers_concurrent_starts_and_releases_lock(self):
+        from gamdl.download import DownloadPacer
+
+        downloader, resolver = self.downloader()
+        downloader = Downloader(
+            tag_resolver=resolver,
+            path_formatter=PathFormatter(self.directory / "Music"),
+            download_delay=1.0,
+        )
+        resolver.get_tags = AsyncMock(
+            side_effect=lambda media, **_kw: Tags(
+                title=f"Track {media.id}", artist="Artist", title_id=int(media.id)
+            )
+        )
+        first_in_transfer = asyncio.Event()
+        both_overlapping = asyncio.Event()
+        active = 0
+        peak = 0
+
+        async def save(
+            media_id, _source, track, destination, _callback, *, event_callback=None
+        ):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            if media_id == "301":
+                first_in_transfer.set()
+                await asyncio.wait_for(both_overlapping.wait(), timeout=2)
+            else:
+                both_overlapping.set()
+            try:
+                shutil.copyfile(
+                    self.video if track == "video" else self.audio, destination
+                )
+                return "none"
+            finally:
+                active -= 1
+
+        downloader._save_track = AsyncMock(side_effect=save)
+
+        def make_song(media_id: str) -> Song:
+            song = Song.from_id(media_id, api=Mock())
+            song.get_stream = AsyncMock(return_value=Mock(codec=SongCodec.AAC))
+            song.get_cover = AsyncMock(return_value=None)
+            song.get_lyrics = AsyncMock(return_value=None)
+            return song
+
+        now = 10.0
+        sleeps = []
+
+        async def fake_sleep(seconds):
+            nonlocal now
+            sleeps.append(seconds)
+            now += seconds
+            await asyncio.sleep(0)
+
+        with (
+            patch.object(DownloadPacer, "_now", side_effect=lambda: now),
+            patch.object(DownloadPacer, "_sleep", side_effect=fake_sleep),
+        ):
+            t1 = asyncio.create_task(downloader.download(make_song("301")))
+            await asyncio.wait_for(first_in_transfer.wait(), timeout=2)
+            t2 = asyncio.create_task(downloader.download(make_song("302")))
+            await asyncio.wait_for(asyncio.gather(t1, t2), timeout=2)
+
+        self.assertEqual(sleeps, [1.0])
+        self.assertEqual(peak, 2)
+
+    async def test_download_pacer_cancellation_releases_lock(self):
+        from gamdl.download import DownloadPacer
+
+        pacer = DownloadPacer(5.0)
+        await pacer.wait()  # First slot sets _next_start without sleeping.
+
+        waiting = asyncio.Event()
+
+        async def blocking_sleep(_seconds):
+            waiting.set()
+            await asyncio.sleep(10)
+
+        with patch.object(DownloadPacer, "_sleep", side_effect=blocking_sleep):
+            cancelled = asyncio.create_task(pacer.wait())
+            await asyncio.wait_for(waiting.wait(), timeout=1)
+            cancelled.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await cancelled
+
+        # Lock must be free for subsequent callers after cancellation.
+        pacer._next_start = 0.0
+        await asyncio.wait_for(pacer.wait(), timeout=1)

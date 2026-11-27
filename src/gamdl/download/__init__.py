@@ -1,6 +1,6 @@
 """Metadata, safe publication, and single-item download orchestration."""
 
-from .downloader import Downloader, DownloadProgress
+from .downloader import Downloader, DownloadPacer, DownloadProgress
 from .models import DownloadResult, FileResult, PlaylistResult, DatabaseResult
 from .enums import (
     MediaStatus,
@@ -20,6 +20,7 @@ from .tags import Tags
 
 __all__ = [
     "Downloader",
+    "DownloadPacer",
     "DownloadProgress",
     "DownloadResult",
     "FileResult",

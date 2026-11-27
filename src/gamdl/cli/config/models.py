@@ -32,6 +32,7 @@ class DownloadConfig:
     use_album_date: bool = False
     segment_concurrency: int = 8
     concurrent_downloads: int = 2
+    download_delay: float = 0.0
     song_codec: str | None = None
     song_codec_priority: list[str] = field(default_factory=lambda: ["aac"])
     music_video_codec: str | None = None

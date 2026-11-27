@@ -1280,3 +1280,217 @@ class CliRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(round(ui._last_percent[1]), 50)
             ui.finish(2, "Another", "skipped")
             self.assertNotIn(1, ui._rows)
+
+    async def test_download_delay_is_forwarded_and_validated(self):
+        song = Song.from_id("1001", api=self.api)
+        song.get_metadata = AsyncMock(return_value={"attributes": {"name": "Song 0"}})
+
+        class Resolver:
+            def __init__(self, api, **kwargs):
+                pass
+
+            async def from_url(self, url):
+                yield song
+
+        downloader = Mock(itunes_api=None)
+        downloader.download = AsyncMock(
+            return_value=DownloadResult(
+                song.id, Path("song.m4a"), MediaStatus.DOWNLOADED, 1024, SongCodec.AAC
+            )
+        )
+        with (
+            patch(
+                "gamdl.cli.commands.runner._authenticate",
+                new_callable=AsyncMock,
+                return_value=(self.api, None),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.create_drm",
+                new_callable=AsyncMock,
+                return_value=Mock(),
+            ),
+            patch(
+                "gamdl.cli.commands.runner.Downloader", return_value=downloader
+            ) as make,
+            patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
+        ):
+            code = await run_rip(
+                RipOptions(
+                    ("https://music.apple.com/br/song/test/1001",),
+                    output_dir="Test Music",
+                    download_delay=1.25,
+                    no_progress=True,
+                )
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(make.call_args.kwargs["download_delay"], 1.25)
+
+        for bad in (-1, float("nan"), float("inf"), True):
+            with self.subTest(bad=bad):
+                with self.assertRaises(click.UsageError):
+                    await run_rip(
+                        RipOptions(
+                            ("https://music.apple.com/br/song/test/1001",),
+                            output_dir="Test Music",
+                            download_delay=bad,
+                        )
+                    )
+
+    async def test_fail_fast_cancels_worker_waiting_in_download_delay(self):
+        from gamdl.download import DownloadPacer
+
+        pacer = DownloadPacer(5.0)
+        second_waiting = asyncio.Event()
+        second_cancelled = asyncio.Event()
+
+        async def interruptible_sleep(_seconds):
+            second_waiting.set()
+            await asyncio.sleep(10)
+
+        async def download(media, **kwargs):
+            if media.id == "1000":
+                await pacer.wait()
+                await asyncio.wait_for(second_waiting.wait(), timeout=1)
+                raise StreamNotAvailableError("Unavailable")
+            try:
+                await pacer.wait()
+            except asyncio.CancelledError:
+                second_cancelled.set()
+                raise
+
+        with patch.object(DownloadPacer, "_sleep", side_effect=interruptible_sleep):
+            code, _ = await asyncio.wait_for(
+                self._run_workers(download, count=2, concurrency=2, fail_fast=True),
+                timeout=1,
+            )
+        self.assertEqual(code, 1)
+        self.assertTrue(second_cancelled.is_set())
+
+    async def test_interactive_ask_does_not_hold_terminal_lease_during_download_delay(
+        self,
+    ):
+        from gamdl.cli.terminal import TerminalController
+        from gamdl.download import Downloader, DownloadPacer, PathFormatter, Tags
+        from gamdl.media import MediaResolver
+
+        songs = [
+            Song.from_metadata(
+                {
+                    "id": str(1000 + i),
+                    "type": "songs",
+                    "attributes": {"name": f"Song {i}"},
+                },
+                api=self.api,
+            )
+            for i in range(2)
+        ]
+
+        async def fake_stream(*, selector, **_kw):
+            chosen = selector(object())
+            if asyncio.iscoroutine(chosen):
+                await chosen
+            return Mock(codec=SongCodec.AAC)
+
+        for song in songs:
+            song.get_stream = AsyncMock(side_effect=fake_stream)
+            song.get_cover = AsyncMock(return_value=None)
+            song.get_lyrics = AsyncMock(return_value=None)
+
+        now = 10.0
+        sleeps = []
+        lease_held_during_sleep = []
+        terminal_holder = None
+
+        class Resolver(MediaResolver):
+            def __init__(self, api, **kwargs):
+                pass
+
+            async def from_url(self, url):
+                for song in songs:
+                    yield song
+
+        tag_resolver = Mock()
+        tag_resolver.get_tags = AsyncMock(
+            side_effect=lambda media, **_kw: Tags(
+                title=f"Song {media.id}", artist="Artist", title_id=int(media.id)
+            )
+        )
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = Downloader(
+                tag_resolver=tag_resolver,
+                path_formatter=PathFormatter(Path(tmp) / "Music"),
+                download_delay=2.0,
+            )
+
+            async def fake_prepare_file(media, directory, **_kw):
+                from gamdl.download.downloader import _PreparedFile
+
+                out = directory / "media.m4a"
+                out.write_bytes(b"audio-" + media.id.encode())
+                return _PreparedFile(out, SongCodec.AAC, ("none",), None, None)
+
+            downloader._prepare_file = AsyncMock(side_effect=fake_prepare_file)
+
+            original_acquire = TerminalController.acquire
+
+            async def tracked_acquire(self_tc):
+                nonlocal terminal_holder
+                lease = await original_acquire(self_tc)
+                terminal_holder = lease
+                orig_release = lease.release
+
+                def tracked_release():
+                    nonlocal terminal_holder
+                    orig_release()
+                    terminal_holder = None
+
+                lease.release = tracked_release
+                return lease
+
+            async def fake_sleep(seconds):
+                nonlocal now
+                lease_held_during_sleep.append(terminal_holder is not None)
+                sleeps.append(seconds)
+                now += seconds
+                await asyncio.sleep(0)
+
+            async def choose(_, *, media_title):
+                return 0
+
+            console = Console(file=StringIO(), force_terminal=False)
+            with (
+                patch("gamdl.cli.commands.runner.output_console", return_value=console),
+                patch(
+                    "gamdl.cli.commands.runner._authenticate",
+                    new_callable=AsyncMock,
+                    return_value=(self.api, None),
+                ),
+                patch("gamdl.cli.commands.runner.create_drm", new_callable=AsyncMock),
+                patch("gamdl.cli.commands.runner.Downloader", return_value=downloader),
+                patch("gamdl.cli.commands.runner.MediaResolver", Resolver),
+                patch("gamdl.cli.commands.runner.select_stream", side_effect=choose),
+                patch("gamdl.cli.commands.runner.interactive", return_value=True),
+                patch.object(TerminalController, "acquire", tracked_acquire),
+                patch.object(DownloadPacer, "_now", side_effect=lambda: now),
+                patch.object(DownloadPacer, "_sleep", side_effect=fake_sleep),
+            ):
+                code = await asyncio.wait_for(
+                    run_rip(
+                        RipOptions(
+                            ("https://music.apple.com/br/album/test/111",),
+                            output_dir=str(Path(tmp) / "Music"),
+                            ask_song_codec=True,
+                            concurrent_downloads=2,
+                            download_delay=2.0,
+                            no_progress=True,
+                        )
+                    ),
+                    timeout=2,
+                )
+
+        self.assertEqual(code, 0, console.file.getvalue())
+        self.assertEqual(sleeps, [2.0])
+        self.assertEqual(lease_held_during_sleep, [False])

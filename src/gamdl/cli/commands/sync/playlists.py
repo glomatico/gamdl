@@ -549,6 +549,7 @@ async def _run(
                     if not settings.database.disabled
                     else None,
                     concurrency=settings.download.segment_concurrency,
+                    download_delay=settings.download.download_delay,
                 )
                 failures = await _download_missing(
                     settings=settings,

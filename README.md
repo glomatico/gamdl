@@ -512,6 +512,10 @@ These are Apple Music asset names, not guaranteed resolutions or bitrates. Gamdl
 
 `segment_concurrency` controls parallel media-segment HTTP requests for an individual track (**default:** `8`); it does not directly limit Apple Music metadata or playback API requests. `concurrent_downloads` controls how many media items download simultaneously (**default:** `2`). Higher parallelism can indirectly result in overlapping API calls.
 
+#### Download Delay (`download.download_delay` / `--download-delay`)
+
+Wait a minimum number of seconds between starting consecutive media downloads (**default:** `0.0`). Set `download.download_delay` in YAML or pass `--download-delay SECONDS` to stagger new downloads when ripping albums, playlists, or running `gamdl sync playlists`. The first download starts immediately, skipped items (already indexed or present on disk without `--overwrite`) do not wait, and no extra delay is added after the last download.
+
 #### Existing Files (`download.overwrite` / `--overwrite`)
 
 Existing files are skipped by default (`download.overwrite: false`). Use the `--overwrite` flag or set `download.overwrite: true` to replace them. `--no-overwrite` overrides a YAML `true` value for one command. Songs use their configured filename directly; music videos can receive numbered suffixes (`Title 2.m4v`) to avoid filename collisions.

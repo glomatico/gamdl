@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections import Counter
 from contextlib import AsyncExitStack, aclosing
 from dataclasses import dataclass
@@ -101,6 +102,12 @@ def _print_failures(console, failures: list[_Failure]) -> None:
 
 
 def _check_options(options: RipOptions) -> None:
+    if (
+        type(options.download_delay) not in (int, float)
+        or not math.isfinite(options.download_delay)
+        or options.download_delay < 0
+    ):
+        raise click.UsageError("--download-delay must be a finite nonnegative number")
     if (
         any(
             (
@@ -294,6 +301,7 @@ async def run_rip(options: RipOptions) -> int:
                 if options.database and options.database_path
                 else None,
                 concurrency=options.segment_concurrency,
+                download_delay=options.download_delay,
             )
             with RipProgress(
                 enabled=not options.no_progress,

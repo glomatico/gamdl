@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import shutil
 import tempfile
 from dataclasses import asdict, replace
@@ -101,6 +102,14 @@ def _validate(config: dict[str, Any]) -> AppConfig:
                     validate_cover_size(value, name=path)
                 except ValueError as exc:
                     raise ConfigError(str(exc)) from exc
+            elif isinstance(hint, float):
+                if (
+                    type(value) not in (int, float)
+                    or not math.isfinite(value)
+                    or value < 0
+                ):
+                    raise ConfigError(f"{path} must be a nonnegative number")
+                config[section][key] = float(value)
             elif isinstance(hint, int):
                 if type(value) is not int or value < 1:
                     raise ConfigError(f"{path} must be a positive integer")
@@ -394,6 +403,7 @@ def click_default_map(config: AppConfig) -> dict[str, Any]:
         "use_album_date": d.use_album_date,
         "segment_concurrency": d.segment_concurrency,
         "concurrent_downloads": d.concurrent_downloads,
+        "download_delay": d.download_delay,
         "song_codec": d.song_codec,
         "song_codec_priority": tuple(d.song_codec_priority),
         "music_video_codec": d.music_video_codec,

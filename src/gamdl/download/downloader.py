@@ -7,6 +7,7 @@ object, any DRM/wrapper services, output options, and optional UI callbacks.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import re
 import warnings
@@ -154,6 +155,40 @@ class _PreparedFile:
     resolved_tags: Tags | None = None
 
 
+def _validate_download_delay(value: float) -> float:
+    if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+        raise ValueError("download_delay must be a finite nonnegative number")
+    return float(value)
+
+
+class DownloadPacer:
+    """Stagger the start of real media transfers by a minimum delay."""
+
+    def __init__(self, delay: float = 0.0) -> None:
+        self.delay = _validate_download_delay(delay)
+        self._lock = asyncio.Lock()
+        self._next_start: float | None = None
+
+    @staticmethod
+    def _now() -> float:
+        return asyncio.get_running_loop().time()
+
+    @staticmethod
+    async def _sleep(seconds: float) -> None:
+        await asyncio.sleep(seconds)
+
+    async def wait(self) -> None:
+        """Wait until the next download slot opens, then release the lock."""
+        if self.delay <= 0:
+            return
+        async with self._lock:
+            if self._next_start is not None:
+                remaining = self._next_start - self._now()
+                if remaining > 0:
+                    await self._sleep(remaining)
+            self._next_start = self._now() + self.delay
+
+
 class Downloader:
     """Download, decrypt and tag Song, MusicVideo or UploadedVideo.
 
@@ -180,11 +215,14 @@ class Downloader:
         path_formatter: PathFormatter | None = None,
         concurrency: int = 8,
         temp_path: str | os.PathLike[str] | None = None,
+        download_delay: float = 0.0,
     ) -> None:
         if type(concurrency) is not int or concurrency < 1:
             raise ValueError("concurrency must be a positive integer")
         if temp_path is not None and not os.fspath(temp_path).strip():
             raise ValueError("temp_path must be a nonempty path or None")
+        self._pacer = DownloadPacer(download_delay)
+        self.download_delay = self._pacer.delay
         self.drm = drm
         self.wrapper_api = wrapper_api
         self.itunes_api = itunes_api
@@ -1298,6 +1336,8 @@ class Downloader:
                 resolved_tags=resolved_tags,
                 event_callback=event_callback,
             )
+
+        await self._pacer.wait()
 
         # System temporary directories may be RAM-backed (e.g. /tmp on Arch).
         # Default to the destination filesystem for bounded-RAM staging and
